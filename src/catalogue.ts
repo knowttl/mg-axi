@@ -11,11 +11,27 @@ export const DESCRIPTION = "Inspect Microsoft Graph capabilities, read-only by d
 type Flag = { description: string; value?: string; default?: string; required?: true };
 type Leaf = { path: string; description: string; flags: Record<string, Flag>; examples: string[]; operation?: string };
 const common = {
-  profile: { value: "name", description: "Select a profile (authentication ships later)" },
+  profile: { value: "name", description: "Select a configured profile" },
   "api-version": { value: API_VERSIONS.join("|"), default: "v1.0", description: "Explicit API version; no fallback" },
 };
 export const LEAVES: Leaf[] = [
-  { path: "home", description: "Show local shell status without a tenant", flags: {}, examples: ["mg-axi", "mg-axi home"] },
+  { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
+  { path: "profile create", description: "Create a dedicated-app delegated profile without signing in", flags: {
+    name: { value: "name", required: true, description: "New profile name; existing identities cannot be overwritten" },
+    tenant: { value: "tenant-id", required: true, description: "Explicit workforce tenant UUID" },
+    client: { value: "client-id", required: true, description: "Organization-owned public client application UUID" },
+    cloud: { value: "commercial", required: true, description: "Explicit cloud; only commercial is supported" },
+    "allow-device-code": { description: "Opt in only when permitted by organization policy; never enables fallback" },
+  }, examples: ["mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial", "mg-axi profile create --help"] },
+  { path: "profile list", description: "List configured profiles without accessing credentials", flags: {}, examples: ["mg-axi profile list", "mg-axi profile list --help"] },
+  { path: "profile show", description: "Show profile policy and credential reference, never credentials", flags: {
+    profile: common.profile,
+  }, examples: ["mg-axi profile show --profile soc", "mg-axi profile show"] },
+  { path: "login", description: "Explicit delegated login; browser by default, no automatic device-code fallback", flags: {
+    profile: common.profile,
+    method: { value: "browser|device-code", default: "browser", description: "Device code additionally requires profile opt-in" },
+    scopes: { value: "comma-separated-Graph-scopes", required: true, description: "Explicit delegated permissions using full https://graph.microsoft.com/ scope names" },
+  }, examples: ["mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read", "mg-axi login --profile soc --method device-code --scopes https://graph.microsoft.com/User.Read"] },
   { path: "entra user list", description: "List users (scheduled for READ-01; not executable yet)", operation: "GET:/users", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; incompatible with --all" },
@@ -80,9 +96,9 @@ export function home() {
   return {
     bin: bin.startsWith(`${homedir()}${sep}`) ? `~${bin.slice(homedir().length)}` : bin,
     description: DESCRIPTION,
-    profile: "unavailable: authentication is not implemented",
+    profile: "unavailable: no profile configured",
     tenant: "unavailable: no tenant selected",
-    domains: [{ name: "entra", status: "scheduled", summary: "Tenant summaries are unavailable in CLI-01" }],
+    domains: [{ name: "entra", status: "scheduled", summary: "Tenant summaries await Graph execution" }],
     help: ["mg-axi entra user list --help", "mg-axi entra user show --help"],
   };
 }

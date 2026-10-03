@@ -29,7 +29,8 @@ test("top help lists only the shell catalogue", () => {
   const result = run(["--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /entra user list/);
-  assert.doesNotMatch(result.stdout, /Upgrade|login/);
+  assert.match(result.stdout, /login/);
+  assert.doesNotMatch(result.stdout, /Upgrade/);
 });
 
 test("leaf help includes flags, defaults and examples without requiring an ID", () => {

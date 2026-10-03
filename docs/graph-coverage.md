@@ -111,11 +111,7 @@ Deprecated multicloud permissions management is recorded as deprecated rather th
 Credential values, device recovery keys, LAPS passwords and secret minting are explicit blocked dispositions for the initial supported surface, separate from useful metadata.
 Mail/files and other non-Entra content are disabled unless explicitly enabled for raw read access; named future packs remain separately authorized work.
 
-The first build slice pins an operation-level metadata/OpenAPI inventory and records a disposition for every scoped operation.
-`gh-axi api repos/microsoftgraph/msgraph-metadata/commits/master --jq .sha` returned `7b2914c8ad1340129f52aa785f13c074cb46fd7c` during research.
-This identifies a candidate snapshot, not a completed enumeration or an approved runtime compatibility promise.
 The metadata inventory is not a substitute for permissions/licensing documentation.
-Dispositions are named command, reviewed raw read, scheduled, intentionally blocked, deprecated, or unavailable in the selected version.
 Report named coverage and raw reachability separately.
 No coverage percentage is claimed before a complete denominator exists.
 The final full-Entra milestone cannot close while agreed operations remain merely scheduled.

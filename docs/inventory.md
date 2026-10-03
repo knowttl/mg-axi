@@ -1,11 +1,11 @@
 # INV-01 discovery contract
 
-The machine-readable [inventory](../inventory/operations.json) pins Microsoft Graph OpenAPI at `7b2914c8ad1340129f52aa785f13c074cb46fd7c`.
+The machine-readable [inventory](../inventory/operations.json) records the pinned Microsoft Graph OpenAPI revision.
 Both `openapi/v1.0/openapi.yaml` and `openapi/beta/openapi.yaml` are inputs.
 The inventory records their exact byte sizes and SHA-256 hashes, along with the upstream repository, revision and check date.
 These are discovery inputs, not runtime compatibility guarantees or permission grants.
 The [JSON Schema](../inventory/schema.json) defines the public discovery format.
-Schema version 2 records every discovered operation, including explicit excluded rows.
+The discovery schema records every discovered operation, including explicit excluded rows.
 The [offline discovery tool](../tools/inventory.py) owns boundary classification and deterministic generation.
 Generated operation rows must be regenerated rather than edited manually.
 
@@ -75,6 +75,7 @@ Trust-framework key-set surfaces remain blocked because keys and secret-bearing 
 Beta writes and external-customer-only user-flow surfaces remain intentionally blocked.
 Documented lookup, membership-check, evaluation and validation POST actions keep their family owner and are not denied as beta writes.
 `READ_ACTION_SOURCES` records their operation-effect evidence, shared across route aliases and both disposition and ownership decisions.
+Only explicitly listed POST actions are classified as reads; unknown POST actions remain writes, regardless of name prefixes.
 Multicloud permissions management and upstream-deprecated operations are recorded as deprecated.
 These route dispositions do not replace later field/query redaction or the Graph session's policy checks.
 For example, a scheduled application or user GET is not permission to project credential values from it.

@@ -55,7 +55,7 @@ Sovereign clouds, external-customer launch support and named Security/Intune/M36
 ## Per-slice handoff
 
 Each implementation handoff contains its slice ID, prerequisite commit(s), exact operation inventory rows, in-scope commands, accepted API versions/auth modes/clouds, documented access/licence constraints, and acceptance behavior.
-Use existing repository conventions once the shell exists.
+Use existing repository conventions.
 Do not add a separate fixture system, generic endpoint wrapper, dynamic plugin framework, or abstraction merely to facilitate a test.
 Revalidate cited upstream contracts at implementation time and record the check date.
 Use the repository's validation/shipping gate before publishing each change.

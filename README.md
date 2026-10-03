@@ -7,7 +7,7 @@ CLI-01 provides a local TypeScript/AXI shell, strict command catalogue, leaf hel
 Authentication and Graph execution are scheduled for later [build slices](docs/build-plan.md).
 No tenant, credentials or network access are required to use this shell.
 
-Use Node 22.12 or newer and the pinned pnpm version:
+Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
 
 ```sh
 corepack pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false
@@ -27,7 +27,7 @@ Data and structured errors use TOON on stdout; diagnostics belong on stderr.
 Bare `-v`, `-V` and `--version` print only the package version without importing the catalogue.
 
 Run `corepack pnpm build`, `corepack pnpm test` and `corepack pnpm lint` for shell validation.
-CI builds and tests on Ubuntu and Windows with Node 22 and 24, and validates the existing Python inventory tooling separately.
+The [CI workflow](.github/workflows/ci.yml) defines the platform/runtime matrix for shell build, test and lint checks, and validates the Python inventory tooling separately.
 The [implementation plan](PLAN.md) remains the design authority.
 Generated skill, setup and capability reporting ship in PACK-01; no session hooks are installed by ordinary commands.
 

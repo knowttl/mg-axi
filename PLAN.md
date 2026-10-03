@@ -1,10 +1,7 @@
 # mg-axi implementation plan
 
 Approved planning baseline: 2026-10-03.
-This repository contains the approved plan and the CLI-01 local shell.
-Authentication and Graph execution are not implemented yet.
-The intended package is `@knowttl/mg-axi`, with executable `mg-axi`.
-Implementation is authorized separately from this docs change.
+See [README.md](README.md) for the current package, installation and CLI behavior.
 
 ## Outcome and scope
 
@@ -95,7 +92,7 @@ mg-axi entra application show --id <object-id>
 mg-axi api GET /users --profile soc
 ```
 
-These are proposed contracts for implementation, not commands already installed by this change.
+These are target contracts; [README.md](README.md) describes the current CLI surface.
 The inventory and strict leaf schema define every supported command before publication.
 
 | AXI principle | Contract |
@@ -172,7 +169,7 @@ Raw API writes, unreviewed actions, secret-returning operations and beta writes 
 
 ## Maintainability and extension procedure
 
-1. Update the pinned operation inventory with the area's exact version, auth mode, access/licence/cloud constraints and source.
+1. Select exact rows from the [pinned discovery inventory](docs/inventory.md) and record reviewed version, auth-mode, access/licence/cloud constraints and sources in the implementation catalogue.
 2. Add a strict command declaration and local operation mapping in the Entra pack.
 3. Use the shared Graph session and existing output boundary; add a mutation contract only for a separately reviewed named write.
 4. Add fixture evidence through the lowest real interface observing behavior, including realistic denial/partial results.
@@ -208,7 +205,7 @@ Do not use real-tenant validation to close that distinction.
 
 ## Risks and release gates
 
-The operation-level full map is the first implementation gate, not completed research in this docs change.
+The [discovery inventory](docs/inventory.md) defines the operation-level boundary; reviewed access and implementation coverage remain later-slice gates.
 Graph and licensing documentation can change; verify every added operation against its current primary source.
 Read permissions can still expose personal or sensitive information.
 Local pack policy does not revoke broad app consent.

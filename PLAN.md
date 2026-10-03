@@ -118,7 +118,8 @@ Unsupported advanced-query combinations fail early instead of forwarding a misle
 
 Use Microsoft's authentication libraries with Graph HTTP rather than a PowerShell subprocess backend.
 The dedicated app registration defines client identity and consent.
-Delegated browser sign-in is the analyst default; device code may be offered explicitly when organization policy permits it.
+Delegated browser sign-in is the analyst default.
+Device code is an optional alternative, off by default, explicitly selected when a local browser callback is impractical and only if organization policy permits it; it is never an automatic fallback.
 Both remain delegated access and require the client's appropriate delegated consent plus the signed-in user's required role.
 Application access uses client credentials with certificate or workload federation, admin-consented application permissions and no user context.
 See [authentication providers](https://learn.microsoft.com/en-us/graph/sdks/choose-authentication-providers), [delegated access](https://learn.microsoft.com/en-us/graph/auth-v2-user), [application access](https://learn.microsoft.com/en-us/graph/auth-v2-service), and [device code](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code).

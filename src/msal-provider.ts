@@ -6,11 +6,14 @@ import type { DelegatedProfile } from "./profiles.js";
 // Only this adapter touches Microsoft authentication and OS credential storage.
 export class MsalProvider implements CredentialProvider {
   storage: "os-protected" | "session-only" = "session-only";
-  private sessions = new Map<string, PublicClientApplication>();
+  private sessions = new Map<string, { app: PublicClientApplication; storage: "os-protected" | "session-only" }>();
   private async application(profile: DelegatedProfile) {
     const key = JSON.stringify([profile.credentialRef.key, profile.tenantId, profile.clientId, profile.cloud]);
-    let app = this.sessions.get(key);
-    if (app) return app;
+    const existing = this.sessions.get(key);
+    if (existing) {
+      this.storage = existing.storage;
+      return existing.app;
+    }
     let keytar: typeof import("keytar") | undefined;
     try {
       const module = await import("keytar");
@@ -20,20 +23,27 @@ export class MsalProvider implements CredentialProvider {
     } catch { keytar = undefined; }
     this.storage = keytar ? "os-protected" : "session-only";
     const store = keytar;
-    app = new PublicClientApplication({
+    const app = new PublicClientApplication({
       auth: { clientId: profile.clientId, authority: `https://login.microsoftonline.com/${profile.tenantId}` },
       system: { loggerOptions: { loggerCallback: () => {}, piiLoggingEnabled: false } },
       cache: store ? { cachePlugin: {
         beforeCacheAccess: async context => {
-          const saved = await store.getPassword("mg-axi", key);
+          if (session.storage === "session-only") return;
+          let saved: string | null;
+          try { saved = await store.getPassword("mg-axi", key); }
+          catch { session.storage = this.storage = "session-only"; return; }
           if (saved) context.tokenCache.deserialize(saved);
         },
         afterCacheAccess: async context => {
-          if (context.cacheHasChanged) await store.setPassword("mg-axi", key, context.tokenCache.serialize());
+          if (!context.cacheHasChanged || session.storage === "session-only") return;
+          const saved = context.tokenCache.serialize();
+          try { await store.setPassword("mg-axi", key, saved); }
+          catch { session.storage = this.storage = "session-only"; }
         },
       } } : undefined,
     });
-    this.sessions.set(key, app);
+    const session = { app, storage: this.storage };
+    this.sessions.set(key, session);
     return app;
   }
   async login(profile: DelegatedProfile, method: LoginMethod, scopes: string[]) {

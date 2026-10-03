@@ -101,6 +101,9 @@ The plan therefore selects a supported read permission for required fields rathe
 
 ## Full-family inventory and truthful coverage
 
+INV-01's pinned machine-readable discovery inventory, boundary, evidence states and offline checks are documented in [the inventory contract](inventory.md).
+It records discovered operations and later-slice ownership without claiming implemented or reviewed raw coverage.
+
 The [current Entra Graph map](https://learn.microsoft.com/en-us/graph/api/resources/identity-network-access-overview?view=graph-rest-1.0) is broader than the initial SOC list.
 The inventory must cover directory/tenant administration; users/groups/relationships/extensions/deleted objects; apps/service principals/consent/credential metadata; authentication and sign-in policy; directory/group PIM; access reviews, entitlements and lifecycle workflows; external identities and user flows; cross-tenant policies and provisioning; identity/workload risk and reporting; agent identity/governance; network access; partner GDAP and contracts.
 The map identifies beta-only areas including network access and selected backup, user-flow, policy and tenant-setting surfaces.
@@ -108,11 +111,7 @@ Deprecated multicloud permissions management is recorded as deprecated rather th
 Credential values, device recovery keys, LAPS passwords and secret minting are explicit blocked dispositions for the initial supported surface, separate from useful metadata.
 Mail/files and other non-Entra content are disabled unless explicitly enabled for raw read access; named future packs remain separately authorized work.
 
-The first build slice pins an operation-level metadata/OpenAPI inventory and records a disposition for every scoped operation.
-`gh-axi api repos/microsoftgraph/msgraph-metadata/commits/master --jq .sha` returned `7b2914c8ad1340129f52aa785f13c074cb46fd7c` during research.
-This identifies a candidate snapshot, not a completed enumeration or an approved runtime compatibility promise.
 The metadata inventory is not a substitute for permissions/licensing documentation.
-Dispositions are named command, reviewed raw read, scheduled, intentionally blocked, deprecated, or unavailable in the selected version.
 Report named coverage and raw reachability separately.
 No coverage percentage is claimed before a complete denominator exists.
 The final full-Entra milestone cannot close while agreed operations remain merely scheduled.

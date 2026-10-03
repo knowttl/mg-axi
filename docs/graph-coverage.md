@@ -101,6 +101,9 @@ The plan therefore selects a supported read permission for required fields rathe
 
 ## Full-family inventory and truthful coverage
 
+INV-01's pinned machine-readable discovery inventory, boundary, evidence states and offline checks are documented in [the inventory contract](inventory.md).
+It records discovered operations and later-slice ownership without claiming implemented or reviewed raw coverage.
+
 The [current Entra Graph map](https://learn.microsoft.com/en-us/graph/api/resources/identity-network-access-overview?view=graph-rest-1.0) is broader than the initial SOC list.
 The inventory must cover directory/tenant administration; users/groups/relationships/extensions/deleted objects; apps/service principals/consent/credential metadata; authentication and sign-in policy; directory/group PIM; access reviews, entitlements and lifecycle workflows; external identities and user flows; cross-tenant policies and provisioning; identity/workload risk and reporting; agent identity/governance; network access; partner GDAP and contracts.
 The map identifies beta-only areas including network access and selected backup, user-flow, policy and tenant-setting surfaces.

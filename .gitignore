@@ -1,2 +1,4 @@
 /.lavish/
 /.reference/
+.cache/
+__pycache__/

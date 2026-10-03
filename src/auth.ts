@@ -48,5 +48,5 @@ export class DelegatedAuth {
     if (!credential.token || !credential.accountId || credential.tenantId.toLowerCase() !== profile.tenantId.toLowerCase() || credential.clientId.toLowerCase() !== profile.clientId.toLowerCase() || !Number.isFinite(credential.expiresAt) || credential.expiresAt <= this.now() + 60_000) throw new Error("Invalid credential context");
     return { ...credential };
   }
-  private failure(code: string) { return new AxiError("Authentication unavailable for the configured identity; no interactive fallback was attempted", code, ["mg-axi login --profile <name> --scopes <comma-separated-Graph-scopes>", "Check dedicated app consent and organization sign-in policy"]); }
+  private failure(code: string) { return new AxiError("Authentication unavailable for the configured identity; no interactive fallback was attempted", code, ["mg-axi login --profile <name> --scopes <comma-separated-Graph-scopes>", "Check dedicated app consent and organization sign-in policy", "Restore OS credential store access before retrying login; prior stored accounts must be invalidated before replacement"]); }
 }

@@ -14,41 +14,31 @@ export class MsalProvider implements CredentialProvider {
       this.storage = existing.storage;
       return existing;
     }
-    let keytar: typeof import("keytar") | undefined;
-    let persisted = false;
-    try {
-      const module = await import("keytar");
-      keytar = module.default;
-      // Probe the actual store, not just availability of the native module.
-      persisted = !!await keytar.getPassword("mg-axi", key);
-    } catch { keytar = undefined; }
-    this.storage = keytar ? "os-protected" : "session-only";
-    const store = keytar;
+    const store = await import("keytar").then(module => module.default).catch(() => undefined);
+    this.storage = store ? "os-protected" : "session-only";
     const app = new PublicClientApplication({
       auth: { clientId: profile.clientId, authority: `https://login.microsoftonline.com/${profile.tenantId}` },
       system: { loggerOptions: { loggerCallback: () => {}, piiLoggingEnabled: false } },
       cache: store ? { cachePlugin: {
         beforeCacheAccess: async context => {
           if (session.storage === "session-only") return;
-          let saved: string | null;
-          try { saved = await store.getPassword("mg-axi", key); }
-          catch { session.storage = this.storage = "session-only"; return; }
-          persisted = !!saved;
+          const saved = await store.getPassword("mg-axi", key);
           if (saved) context.tokenCache.deserialize(saved);
         },
         afterCacheAccess: async context => {
           if (!context.cacheHasChanged || session.storage === "session-only") return;
           const saved = context.tokenCache.serialize();
-          try { await store.setPassword("mg-axi", key, saved); persisted = true; }
-          catch { session.storage = this.storage = "session-only"; }
+          if (process.platform === "win32" && Buffer.byteLength(saved, "utf8") > 2560) {
+            await session.invalidate();
+            session.storage = this.storage = "session-only";
+            return;
+          }
+          await store.setPassword("mg-axi", key, saved);
         },
       } } : undefined,
     });
     const session = { app, storage: this.storage, invalidate: async () => {
-      if (persisted && store) {
-        await store.deletePassword("mg-axi", key);
-        persisted = false;
-      }
+      if (store) await store.deletePassword("mg-axi", key);
     } };
     this.sessions.set(key, session);
     return session;
@@ -57,8 +47,9 @@ export class MsalProvider implements CredentialProvider {
     const session = await this.application(profile);
     const app = session.app;
     // A new explicit login replaces the old account, never silently selects it.
-    for (const account of await app.getTokenCache().getAllAccounts()) await app.getTokenCache().removeAccount(account);
+    const accounts = await app.getTokenCache().getAllAccounts();
     await session.invalidate();
+    for (const account of accounts) await app.getTokenCache().removeAccount(account);
     const result = method === "browser"
       ? await app.acquireTokenInteractive({ scopes, openBrowser: async url => { await open(url); }, prompt: "select_account", errorTemplate: "Sign-in failed. Return to mg-axi for recovery guidance." })
       : await app.acquireTokenByDeviceCode({ scopes, deviceCodeCallback: response => {

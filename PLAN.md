@@ -1,7 +1,8 @@
 # mg-axi implementation plan
 
 Approved planning baseline: 2026-10-03.
-This repository currently contains a plan, not a working CLI.
+This repository contains the approved plan and the CLI-01 local shell.
+Authentication and Graph execution are not implemented yet.
 The intended package is `@knowttl/mg-axi`, with executable `mg-axi`.
 Implementation is authorized separately from this docs change.
 

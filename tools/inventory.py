@@ -72,7 +72,7 @@ READ_ACTION_SOURCES = {
     "validateCredentials": "synchronization-synchronizationjob-validatecredentials",
     "validatePassword": "user-validatepassword",
     "parseExpression": "synchronization-synchronizationschema-parseexpression",
-    "managedTenants.tenantSearch": "managedtenants-tenantgroup-tenantsearch",
+    "previewTaskFailures": "identitygovernance-workflow-previewtaskfailures",
     "tenantSearch": "managedtenants-tenantgroup-tenantsearch",
 }
 MANAGED_TENANT_NAV = set("auditEvents conditionalAccessPolicyCoverages credentialUserRegistrationsSummaries myRoles tenantGroups tenantTags tenants tenantsCustomizedInformation tenantsDetailedInformation".split())
@@ -183,7 +183,7 @@ def parse_path(block):
 def make_row(version, path, method, operation):
     owner = scoped_slice(path)
     disposition, reason = "scheduled", "No implemented command or reviewed raw contract yet."
-    action = path.rsplit("/", 1)[-1].removeprefix("microsoft.graph.")
+    action = path.rsplit("/", 1)[-1].rsplit(".", 1)[-1]
     read_source = READ_ACTION_SOURCES.get(action) if method == "POST" else None
     mutates = method not in {"GET", "HEAD", "OPTIONS"} and read_source is None
     lower = path.lower()

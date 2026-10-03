@@ -10,6 +10,56 @@ from inventory import ROOT, build, make_row, scoped_slice, validate
 
 
 class InventoryTests(unittest.TestCase):
+    def test_restored_entra_families_have_dispositions_and_owners(self):
+        for version in ("v1.0", "beta"):
+            for path, owner in [
+                ("/roleManagement/entitlementManagement/roleDefinitions", "EXT-02"),
+                ("/roleManagement/entitlementManagement/roleAssignments/{id}/principal", "EXT-02"),
+                ("/settings", "EXT-01"),
+                ("/filteringPolicies/{id}/policyRules", "EXT-04"),
+                ("/templates/deviceTemplates/{id}", "READ-10"),
+                ("/admin/entra/uxSetting", "EXT-01"),
+            ]:
+                with self.subTest(version=version, path=path):
+                    row = make_row(version, path, "GET", {"operationId": "fixture"})
+                    self.assertEqual((row["disposition"], row["owningSlice"]), ("scheduled", owner))
+
+    def test_read_actions_keep_family_ownership_in_both_versions(self):
+        for version in ("v1.0", "beta"):
+            for prefix, owner, actions in [
+                ("/users", "READ-01", ["getAvailableExtensionProperties", "getUserOwnedObjects", "validateProperties"]),
+                ("/groups", "READ-02", ["getAvailableExtensionProperties", "getUserOwnedObjects", "validateProperties", "evaluateDynamicMembership"]),
+                ("/users/{user-id}", "READ-01", ["getMemberGroups", "getMemberObjects", "checkMemberGroups", "checkMemberObjects"]),
+                ("/me", "READ-01", ["getMemberGroups", "getMemberObjects", "checkMemberGroups", "checkMemberObjects"]),
+                ("/directoryObjects", "EXT-01", ["getByIds", "getAvailableExtensionProperties", "getUserOwnedObjects", "validateProperties"]),
+                ("/groups/{group-id}", "READ-02", ["checkGrantedPermissionsForApp", "evaluateDynamicMembership"]),
+                ("/identity/conditionalAccess", "READ-03", ["evaluate"]),
+            ]:
+                for action in actions:
+                    for qualifier in ("", "microsoft.graph."):
+                        path = f"{prefix}/{qualifier}{action}"
+                        with self.subTest(version=version, path=path):
+                            row = make_row(version, path, "POST", {"operationId": "fixture"})
+                            self.assertEqual((row["disposition"], row["owningSlice"]), ("scheduled", owner))
+
+    def test_cross_pack_descendants_are_excluded_before_owner_dispatch(self):
+        for prefix in [
+            "/authenticationMethodDevices/{id}/assignedTo",
+            "/directory/deletedItems/{id}/graph.user",
+            "/identityGovernance/entitlementManagement/accessPackageAssignments/{id}/target",
+            "/invitations/invitedUser", "/me/manager",
+            "/networkAccess/logs/traffic/{id}/user", "/users/{id}/directReports/{id}",
+        ]:
+            for version in ("v1.0", "beta"):
+                for method in ("GET", "PATCH"):
+                    with self.subTest(prefix=prefix, version=version, method=method):
+                        self.assertIsNone(make_row(version, f"{prefix}/mailboxSettings", method, {"operationId": "fixture"}))
+        for nav in ["cloudPcDevices", "managedDeviceCompliances", "windowsProtectionStates", "windowsDeviceMalwareStates", "managementTemplates"]:
+            with self.subTest(nav=nav):
+                self.assertIsNone(scoped_slice(f"/tenantRelationships/managedTenants/{nav}/{{id}}"))
+        self.assertEqual(scoped_slice("/tenantRelationships/managedTenants/conditionalAccessPolicyCoverages"), "EXT-04")
+        self.assertEqual(scoped_slice("/tenantRelationships/delegatedAdminRelationships/{id}/accessAssignments"), "EXT-04")
+
     def test_identity_boundary_excludes_other_packs(self):
         for path, expected in [
             ("/users/{user-id}/authentication/methods", "READ-04"),

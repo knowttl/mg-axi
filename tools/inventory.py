@@ -22,6 +22,7 @@ ROOT_SLICES = {
     "directoryRoles": "READ-09", "directoryRoleTemplates": "READ-09",
     "devices": "READ-10", "directory": "EXT-01", "directoryObjects": "EXT-01",
     "directorySettings": "EXT-01", "directorySettingTemplates": "EXT-01",
+    "settings": "EXT-01", "filteringPolicies": "EXT-04",
     "groupSettings": "EXT-01", "groupSettingTemplates": "EXT-01",
     "organization": "EXT-01", "organizationSettings": "EXT-01",
     "domains": "EXT-01", "subscribedSkus": "EXT-01", "companySubscriptions": "EXT-01",
@@ -55,12 +56,38 @@ ROOT_SLICES = {
 }
 USER_ACTIONS = set("assignLicense changePassword checkMemberGroups checkMemberObjects convertExternalToInternalMemberUser deletePasswordSingleSignOnCredentials exportPersonalData getMemberGroups getMemberObjects getPasswordSingleSignOnCredentials invalidateAllRefreshTokens reprocessLicenseAssignment restore retryServiceProvisioning revokeSignInSessions validatePassword".split())
 GROUP_ACTIONS = set("assignLicense checkGrantedPermissionsForApp checkMemberGroups checkMemberObjects deletePasswordSingleSignOnCredentials evaluateDynamicMembership getMemberGroups getMemberObjects getPasswordSingleSignOnCredentials getByIds renew restore retryServiceProvisioning validateProperties".split())
+DIRECTORY_READ_ACTIONS = set("checkMemberGroups checkMemberObjects getMemberGroups getMemberObjects getByIds getAvailableExtensionProperties getUserOwnedObjects validateProperties".split())
+USER_ACTIONS |= DIRECTORY_READ_ACTIONS
+GROUP_ACTIONS |= DIRECTORY_READ_ACTIONS
+READ_ACTION_SOURCES = {
+    **{action: f"directoryobject-{action.lower()}" for action in DIRECTORY_READ_ACTIONS},
+    "getUserOwnedObjects": "directory-deleteditems-getuserownedobjects",
+    "evaluateDynamicMembership": "group-evaluatedynamicmembership",
+    "checkGrantedPermissionsForApp": "group-checkgrantedpermissionsforapp",
+    "evaluate": "conditionalaccessroot-evaluate",
+    "getPasswordSingleSignOnCredentials": "serviceprincipal-getpasswordsinglesignoncredentials",
+    "getApplicablePolicyRequirements": "accesspackage-getapplicablepolicyrequirements",
+    "validateAuthenticationConfiguration": "customauthenticationextension-validateauthenticationconfiguration",
+    "validateCredentials": "synchronization-synchronizationjob-validatecredentials",
+    "validatePassword": "user-validatepassword",
+    "parseExpression": "synchronization-synchronizationschema-parseexpression",
+}
+MANAGED_TENANT_NAV = set("auditEvents conditionalAccessPolicyCoverages credentialUserRegistrationsSummaries myRoles tenantGroups tenantTags tenants tenantsCustomizedInformation tenantsDetailedInformation".split())
 
 
 def scoped_slice(path):
     """Return the owning family, or None for a separately authorized domain."""
     parts = path.strip("/").split("/")
+    segments = {part.removeprefix("microsoft.graph.").split("(")[0] for part in parts}
+    if segments & {"mailboxSettings", "setMobileDeviceManagementAuthority", "contactInsights", "itemInsights", "peopleInsights", "microsoftApplicationDataAccess"}:
+        return None
     root = parts[0].split("(")[0]
+    if root == "tenantRelationships" and len(parts) > 1 and parts[1] == "managedTenants":
+        return "EXT-04" if len(parts) > 2 and parts[2].split("(")[0] in MANAGED_TENANT_NAV else None
+    if root == "templates":
+        return "READ-10" if len(parts) > 1 and parts[1] == "deviceTemplates" else None
+    if root == "admin":
+        return "EXT-01" if parts[1:3] == ["entra", "uxSetting"] else None
     if root == "me":
         root = "users"
         parts = ["users", "{user-id}", *parts[1:]]
@@ -73,7 +100,7 @@ def scoped_slice(path):
             tail = tail[1:]
         if tail:
             first = tail[0].removeprefix("microsoft.graph.").split("(")[0]
-            if first not in nav | actions | {"$count", "delta", "getByIds"}:
+            if first not in nav | actions | {"$count", "delta"}:
                 return None
             if first == "authentication":
                 return "READ-04"
@@ -81,6 +108,8 @@ def scoped_slice(path):
                 return "READ-08"
         return owner
     if root == "roleManagement":
+        if len(parts) > 1 and parts[1] == "entitlementManagement":
+            return "EXT-02"
         return "READ-09" if len(parts) == 1 or parts[1] == "directory" else None
     if root == "privilegedAccess":
         return "READ-09" if len(parts) == 1 or parts[1].startswith(("aad", "microsoft.graph.aad")) else None
@@ -138,6 +167,9 @@ def make_row(version, path, method, operation):
     if owner is None:
         return None
     disposition, reason = "scheduled", "No implemented command or reviewed raw contract yet."
+    action = path.rsplit("/", 1)[-1].removeprefix("microsoft.graph.")
+    read_source = READ_ACTION_SOURCES.get(action) if method == "POST" else None
+    mutates = method not in {"GET", "HEAD", "OPTIONS"} and read_source is None
     lower = path.lower()
     secret = any(word in lower for word in ("addpassword", "passwordprofile", "getpassword", "resetpassword", "generatepassword", "uploadsecret", "getsecret", "/secrets", "devicelocalcredentials/", "bitlocker/recoverykeys/")) and not lower.endswith("/$count")
     secret = secret or (method == "POST" and "temporaryaccesspassmethods" in lower)
@@ -145,11 +177,11 @@ def make_row(version, path, method, operation):
         disposition, reason = "deprecated", "Deprecated metadata or multicloud permissions management."
     elif secret or "trustframework/keysets" in lower:
         disposition, reason = "intentionally-blocked", "Credential values, recovery keys, LAPS passwords or secret minting."
-    elif version == "beta" and method != "GET":
+    elif version == "beta" and mutates:
         disposition, reason = "intentionally-blocked", "Beta writes are denied by the approved plan."
     elif any(word in lower for word in ("b2c", "authenticationeventsflows", "trustframework/policies")):
         disposition, reason = "intentionally-blocked", "External-customer launch support requires separate authorization."
-    if method != "GET":
+    if mutates:
         owner = "WRITE-N"
         if method == "PATCH" and path == "/users/{user-id}":
             owner = "WRITE-02"
@@ -162,7 +194,7 @@ def make_row(version, path, method, operation):
         elif path.endswith(("/riskyUsers/microsoft.graph.dismiss", "/riskyUsers/dismiss")):
             owner = "WRITE-05"
     doc = operation.get("externalDocs", {}).get("url")
-    source = doc or MAP_SOURCE
+    source = doc or (f"https://learn.microsoft.com/en-us/graph/api/{read_source}?view=graph-rest-{'beta' if version == 'beta' else '1.0'}" if read_source else MAP_SOURCE)
     return {
         "id": f"{version}:{method}:{path}", "operationId": operation["operationId"],
         "version": version, "method": method, "path": path, "cloud": "commercial",

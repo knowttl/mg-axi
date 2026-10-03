@@ -18,13 +18,15 @@ A commercial context is not a claim that every discovered route is available the
 The boundary follows the approved [Entra map](https://learn.microsoft.com/en-us/graph/api/resources/identity-network-access-overview?view=graph-rest-1.0), checked on 2026-10-03.
 It includes directory objects, users, groups and identity relationships; applications and service principals; requested and granted permissions; policies and authentication; tenant configuration, domains and licences; directory and group PIM; governance; external identities and provisioning; identity risk and reporting; agent identity; network access; and partner tenant administration.
 Legacy root aliases, alternate-key paths, casts, actions, count routes and `/me` identity routes remain separate discovered operations.
-`ROOT_SLICES`, `USER_NAV`, `GROUP_NAV`, action sets and the small exceptional branches in `scoped_slice` are the exact executable boundary.
+`ROOT_SLICES`, `USER_NAV`, `GROUP_NAV`, `MANAGED_TENANT_NAV`, action sets and the small exceptional branches in `scoped_slice` are the exact executable boundary.
 New upstream roots or navigation properties require an explicit boundary review.
 
 Mail, calendar, files, Teams, contacts belonging to a user's mailbox, Intune, Security-pack endpoints and other separately authorized domains are excluded.
 Organizational `/contacts` are directory contacts and remain included.
 Users and groups have explicit identity navigation/action allowlists because their nested routes also expose other products.
-Directory roles under `/roleManagement/directory` are included; Intune, Exchange and Cloud PC role-management branches are excluded.
+Mailbox settings are excluded at every descendant depth, as are M365 insight settings and Intune authority changes.
+Managed-tenant navigation is limited to identity coverage, audit and partner tenant administration; Cloud PC, device compliance, Windows protection and general management templates are excluded.
+Directory roles under `/roleManagement/directory` and entitlement roles under `/roleManagement/entitlementManagement` are included; Intune, Exchange and Cloud PC role-management branches are excluded.
 Entra registration/authentication/identity reports are included; M365 usage and Intune reports are excluded.
 Each input records the total number of discovered operations and excluded counts by root, making the boundary's exclusions visible without calling them implemented capabilities.
 The inventory describes the pinned metadata and this explicit boundary, rather than promising that metadata contains every product feature.
@@ -40,7 +42,7 @@ Absence from one metadata file is not sufficient evidence of runtime unavailabil
 Every row records independent delegated and application `authModes`, plus `permissions`, `roles`, `licences` and `cloudAvailability` evidence records.
 An evidence record has `status: not-reviewed` and one or more primary-source URLs.
 When upstream supplies `externalDocs`, its exact operation-documentation URL is retained as `documentation` and used as the access-review source.
-When it does not, `documentation` is null and the Entra overview is an explicit discovery fallback, not operation-level access evidence.
+When it does not, `documentation` is null and a documented read action uses its `READ_ACTION_SOURCES` reference; other operations use the Entra overview as an explicit discovery fallback, not operation-level access evidence.
 Licence review also points at the Entra licensing overview.
 No permission names, administrator roles, licence entitlement or auth-mode support are inferred from OpenAPI discovery.
 These references identify where the owning slice must verify access, including premium properties and national-cloud tables, before implementing an operation.
@@ -65,6 +67,8 @@ Credential values, secret minting, LAPS credential detail and BitLocker recovery
 Metadata collection/count routes remain scheduled for a future reviewed safe projection.
 Trust-framework key-set surfaces remain blocked because keys and secret-bearing operations require explicit safety contracts.
 Beta writes and external-customer-only user-flow surfaces remain intentionally blocked.
+Documented lookup, membership-check, evaluation and validation POST actions keep their family owner and are not denied as beta writes.
+`READ_ACTION_SOURCES` records their operation-effect evidence, shared across route aliases and both disposition and ownership decisions.
 Multicloud permissions management and upstream-deprecated operations are recorded as deprecated.
 These route dispositions do not replace later field/query redaction or the Graph session's policy checks.
 For example, a scheduled application or user GET is not permission to project credential values from it.

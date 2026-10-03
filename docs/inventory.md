@@ -5,6 +5,7 @@ Both `openapi/v1.0/openapi.yaml` and `openapi/beta/openapi.yaml` are inputs.
 The inventory records their exact byte sizes and SHA-256 hashes, along with the upstream repository, revision and check date.
 These are discovery inputs, not runtime compatibility guarantees or permission grants.
 The [JSON Schema](../inventory/schema.json) defines the public discovery format.
+Schema version 2 records every discovered operation, including explicit excluded rows.
 The [offline discovery tool](../tools/inventory.py) owns boundary classification and deterministic generation.
 Generated operation rows must be regenerated rather than edited manually.
 
@@ -18,17 +19,21 @@ A commercial context is not a claim that every discovered route is available the
 The boundary follows the approved [Entra map](https://learn.microsoft.com/en-us/graph/api/resources/identity-network-access-overview?view=graph-rest-1.0), checked on 2026-10-03.
 It includes directory objects, users, groups and identity relationships; applications and service principals; requested and granted permissions; policies and authentication; tenant configuration, domains and licences; directory and group PIM; governance; external identities and provisioning; identity risk and reporting; agent identity; network access; and partner tenant administration.
 Legacy root aliases, alternate-key paths, casts, actions, count routes and `/me` identity routes remain separate discovered operations.
-`ROOT_SLICES`, `USER_NAV`, `GROUP_NAV`, `MANAGED_TENANT_NAV`, action sets and the small exceptional branches in `scoped_slice` are the exact executable boundary.
+`ROOT_SLICES`, `USER_NAV`, `GROUP_NAV`, `MANAGED_TENANT_NAV`, `EXCLUDED_NAV`, action sets and the small exceptional branches in `scoped_slice` are the exact executable boundary.
 New upstream roots or navigation properties require an explicit boundary review.
 
-Mail, calendar, files, Teams, contacts belonging to a user's mailbox, Intune, Security-pack endpoints and other separately authorized domains are excluded.
+Mail, calendar, files, Teams, contacts belonging to a user's mailbox, Intune, Security-pack endpoints and other separately authorized domains are excluded from the scoped Entra surface.
 Organizational `/contacts` are directory contacts and remain included.
 Users and groups have explicit identity navigation/action allowlists because their nested routes also expose other products.
 Mailbox settings are excluded at every descendant depth, as are M365 insight settings and Intune authority changes.
+`EXCLUDED_NAV` stops cross-pack descendant acceptance before family ownership is assigned and supplies the out-of-pack domain reason.
 Managed-tenant navigation is limited to identity coverage, audit and partner tenant administration; Cloud PC, device compliance, Windows protection and general management templates are excluded.
 Directory roles under `/roleManagement/directory` and entitlement roles under `/roleManagement/entitlementManagement` are included; Intune, Exchange and Cloud PC role-management branches are excluded.
 Entra registration/authentication/identity reports are included; M365 usage and Intune reports are excluded.
+Provisioning schema aliases `/filterOperators` and `/functions` are included alongside application and service-principal synchronization routes.
 Each input records the total number of discovered operations and excluded counts by root, making the boundary's exclusions visible without calling them implemented capabilities.
+Each discovered version/method/path has exactly one row, including excluded operations with explicit out-of-pack or unscoped reasons.
+The validator checks that row totals match discovery totals, exclusion counts match excluded rows, and cross-pack operations cannot have scoped dispositions.
 The inventory describes the pinned metadata and this explicit boundary, rather than promising that metadata contains every product feature.
 
 ## Row identity and evidence
@@ -45,7 +50,7 @@ When upstream supplies `externalDocs`, its exact operation-documentation URL is 
 When it does not, `documentation` is null and a documented read action uses its `READ_ACTION_SOURCES` reference; other operations use the Entra overview as an explicit discovery fallback, not operation-level access evidence.
 Licence review also points at the Entra licensing overview.
 No permission names, administrator roles, licence entitlement or auth-mode support are inferred from OpenAPI discovery.
-These references identify where the owning slice must verify access, including premium properties and national-cloud tables, before implementing an operation.
+For scoped operations, these references identify where the owning slice must verify access, including premium properties and national-cloud tables, before implementing an operation.
 The existing [coverage research](graph-coverage.md) provides useful representative contracts, but cannot safely be applied to every route in a family.
 An unreviewed value is never interpreted as unsupported, unrestricted, Free or supported.
 
@@ -55,8 +60,9 @@ The discovery inventory remains reproducible independently of that implementatio
 
 ## Dispositions and ownership
 
-The six disposition names are `named-command`, `reviewed-raw-read`, `scheduled`, `intentionally-blocked`, `deprecated` and `unavailable`.
-Every row has a nonempty `reason` and `owningSlice` from the dispatch plan.
+The disposition names are `named-command`, `reviewed-raw-read`, `scheduled`, `intentionally-blocked`, `deprecated`, `unavailable` and `excluded`.
+Every row has a nonempty `reason`; scoped rows have an `owningSlice` from the dispatch plan.
+An `excluded` row has `owningSlice: null`, carries no dispatch authorization, and remains visible solely for discovery accounting.
 `scheduled` means discovery is assigned to a later implementation slice, not that the operation works or its access is verified.
 Extended slice IDs are family dispatch templates and must be split into the approved small subfamily changes.
 `WRITE-N` is likewise a dispatch template rather than authorization to implement all mutations.
@@ -77,7 +83,8 @@ No row currently claims a named command or reviewed raw read.
 The validator rejects those dispositions for this discovery-only artifact.
 `unavailable` is reserved for an explicitly sourced version/cloud limitation, rather than inferred from a missing route.
 There is no completeness percentage.
-Future capability reports must count named, raw, scheduled, blocked, deprecated and unavailable operations separately and cannot count scheduled work as complete.
+Future capability reports must count named, raw, scheduled, blocked, deprecated and unavailable scoped operations separately and cannot count scheduled work as complete.
+Excluded rows must be counted separately from scoped capabilities.
 
 ## Offline verification and refresh
 

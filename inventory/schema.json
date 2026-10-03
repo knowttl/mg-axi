@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "repository", "revision", "checkedOn", "sources", "operations"],
   "properties": {
-    "schemaVersion": {"const": 1},
+    "schemaVersion": {"const": 2},
     "repository": {"const": "microsoftgraph/msgraph-metadata"},
     "revision": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
     "checkedOn": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
@@ -59,10 +59,13 @@
         "roles": {"$ref": "#/$defs/evidence"},
         "licences": {"$ref": "#/$defs/evidence"},
         "cloudAvailability": {"$ref": "#/$defs/evidence"},
-        "disposition": {"enum": ["named-command", "reviewed-raw-read", "scheduled", "intentionally-blocked", "deprecated", "unavailable"]},
+        "disposition": {"enum": ["named-command", "reviewed-raw-read", "scheduled", "intentionally-blocked", "deprecated", "unavailable", "excluded"]},
         "reason": {"$ref": "#/$defs/text"},
-        "owningSlice": {"enum": ["READ-01", "READ-02", "READ-03", "READ-04", "READ-05", "READ-06", "READ-07", "READ-08", "READ-09", "READ-10", "EXT-01", "EXT-02", "EXT-03", "EXT-04", "WRITE-01", "WRITE-02", "WRITE-03", "WRITE-04", "WRITE-05", "WRITE-N"]}
-      }
+        "owningSlice": {"enum": [null, "READ-01", "READ-02", "READ-03", "READ-04", "READ-05", "READ-06", "READ-07", "READ-08", "READ-09", "READ-10", "EXT-01", "EXT-02", "EXT-03", "EXT-04", "WRITE-01", "WRITE-02", "WRITE-03", "WRITE-04", "WRITE-05", "WRITE-N"]}
+      },
+      "if": {"properties": {"disposition": {"const": "excluded"}}},
+      "then": {"properties": {"owningSlice": {"type": "null"}}},
+      "else": {"properties": {"owningSlice": {"type": "string"}}}
     }
   }
 }

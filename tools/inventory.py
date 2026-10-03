@@ -23,6 +23,7 @@ ROOT_SLICES = {
     "devices": "READ-10", "directory": "EXT-01", "directoryObjects": "EXT-01",
     "directorySettings": "EXT-01", "directorySettingTemplates": "EXT-01",
     "settings": "EXT-01", "filteringPolicies": "EXT-04",
+    "filterOperators": "EXT-03", "functions": "EXT-03",
     "groupSettings": "EXT-01", "groupSettingTemplates": "EXT-01",
     "organization": "EXT-01", "organizationSettings": "EXT-01",
     "domains": "EXT-01", "subscribedSkus": "EXT-01", "companySubscriptions": "EXT-01",
@@ -71,15 +72,32 @@ READ_ACTION_SOURCES = {
     "validateCredentials": "synchronization-synchronizationjob-validatecredentials",
     "validatePassword": "user-validatepassword",
     "parseExpression": "synchronization-synchronizationschema-parseexpression",
+    "managedTenants.tenantSearch": "managedtenants-tenantgroup-tenantsearch",
+    "tenantSearch": "managedtenants-tenantgroup-tenantsearch",
 }
 MANAGED_TENANT_NAV = set("auditEvents conditionalAccessPolicyCoverages credentialUserRegistrationsSummaries myRoles tenantGroups tenantTags tenants tenantsCustomizedInformation tenantsDetailedInformation".split())
+EXCLUDED_NAV = {
+    "Mail": set("mailboxSettings messages mailFolders calendars calendar contactFolders outlook".split()),
+    "Files": {"drive", "drives"},
+    "Teams": set("joinedTeams chats teamwork".split()),
+    "Intune": set("managedDevices managedAppRegistrations deviceManagement setMobileDeviceManagementAuthority cloudPcConnections cloudPcDevices cloudPcsOverview aggregatedPolicyCompliances appPerformances deviceAppPerformances deviceCompliancePolicySettingStateSummaries deviceHealthStatuses managedDeviceComplianceTrends managedDeviceCompliances".split()),
+    "Security": {"security", "windowsDeviceMalwareStates", "windowsProtectionStates"},
+    "M365": set("contactInsights itemInsights peopleInsights microsoftApplicationDataAccess managedTenantAlertLogs managedTenantAlertRuleDefinitions managedTenantAlertRules managedTenantAlerts managedTenantApiNotifications managedTenantEmailNotifications managedTenantTicketingEndpoints managementActionTenantDeploymentStatuses managementActions managementIntents managementTemplateCollectionTenantSummaries managementTemplateCollections managementTemplateStepTenantSummaries managementTemplateStepVersions managementTemplateSteps managementTemplates".split()),
+}
+
+
+def exclusion_reason(path):
+    segments = {part.removeprefix("microsoft.graph.").split("(")[0] for part in path.strip("/").split("/")}
+    for domain, navigations in EXCLUDED_NAV.items():
+        if segments & navigations:
+            return f"Out-of-pack {domain} navigation requires separate authorization."
+    return None
 
 
 def scoped_slice(path):
     """Return the owning family, or None for a separately authorized domain."""
     parts = path.strip("/").split("/")
-    segments = {part.removeprefix("microsoft.graph.").split("(")[0] for part in parts}
-    if segments & {"mailboxSettings", "setMobileDeviceManagementAuthority", "contactInsights", "itemInsights", "peopleInsights", "microsoftApplicationDataAccess"}:
+    if exclusion_reason(path):
         return None
     root = parts[0].split("(")[0]
     if root == "tenantRelationships" and len(parts) > 1 and parts[1] == "managedTenants":
@@ -164,8 +182,6 @@ def parse_path(block):
 
 def make_row(version, path, method, operation):
     owner = scoped_slice(path)
-    if owner is None:
-        return None
     disposition, reason = "scheduled", "No implemented command or reviewed raw contract yet."
     action = path.rsplit("/", 1)[-1].removeprefix("microsoft.graph.")
     read_source = READ_ACTION_SOURCES.get(action) if method == "POST" else None
@@ -173,7 +189,9 @@ def make_row(version, path, method, operation):
     lower = path.lower()
     secret = any(word in lower for word in ("addpassword", "passwordprofile", "getpassword", "resetpassword", "generatepassword", "uploadsecret", "getsecret", "/secrets", "devicelocalcredentials/", "bitlocker/recoverykeys/")) and not lower.endswith("/$count")
     secret = secret or (method == "POST" and "temporaryaccesspassmethods" in lower)
-    if operation.get("deprecated") or "permissionsmanagement" in lower:
+    if owner is None:
+        disposition, reason = "excluded", exclusion_reason(path) or "Unscoped operation outside the accepted Entra boundary."
+    elif operation.get("deprecated") or "permissionsmanagement" in lower:
         disposition, reason = "deprecated", "Deprecated metadata or multicloud permissions management."
     elif secret or "trustframework/keysets" in lower:
         disposition, reason = "intentionally-blocked", "Credential values, recovery keys, LAPS passwords or secret minting."
@@ -181,7 +199,7 @@ def make_row(version, path, method, operation):
         disposition, reason = "intentionally-blocked", "Beta writes are denied by the approved plan."
     elif any(word in lower for word in ("b2c", "authenticationeventsflows", "trustframework/policies")):
         disposition, reason = "intentionally-blocked", "External-customer launch support requires separate authorization."
-    if mutates:
+    if mutates and owner is not None:
         owner = "WRITE-N"
         if method == "PATCH" and path == "/users/{user-id}":
             owner = "WRITE-02"
@@ -217,15 +235,14 @@ def build(sources):
         for path, method, operation in discover(source):
             discovered += 1
             row = make_row(version, path, method, operation)
-            if row:
-                rows.append(row)
-            else:
+            rows.append(row)
+            if row["disposition"] == "excluded":
                 root = path.split("/")[1].split("(")[0]
                 excluded[root] = excluded.get(root, 0) + 1
         pins[-1]["discoveredOperations"] = discovered
         pins[-1]["excludedByRoot"] = dict(sorted(excluded.items()))
     rows.sort(key=lambda row: row["id"])
-    return {"schemaVersion": 1, "repository": "microsoftgraph/msgraph-metadata", "revision": REVISION, "checkedOn": "2026-10-03", "sources": pins, "operations": rows}
+    return {"schemaVersion": 2, "repository": "microsoftgraph/msgraph-metadata", "revision": REVISION, "checkedOn": "2026-10-03", "sources": pins, "operations": rows}
 
 
 def validate(inventory):
@@ -238,12 +255,21 @@ def validate(inventory):
         ids.add(row["id"])
         if row["disposition"] in {"named-command", "reviewed-raw-read"}:
             raise ValueError("Discovery alone cannot claim implementation or reviewed raw access")
+        if (scoped_slice(row["path"]) is None) != (row["disposition"] == "excluded"):
+            raise ValueError("Boundary mismatch: out-of-scope operations must be excluded")
     if {source["version"] for source in inventory["sources"]} != {"v1.0", "beta"}:
         raise ValueError("Both metadata versions must be pinned independently")
     for source in inventory["sources"]:
-        scoped_count = sum(row["version"] == source["version"] for row in inventory["operations"])
-        if scoped_count + sum(source["excludedByRoot"].values()) != source["discoveredOperations"]:
-            raise ValueError("Missing operation: scoped and excluded counts must reconcile")
+        rows = [row for row in inventory["operations"] if row["version"] == source["version"]]
+        if len(rows) != source["discoveredOperations"]:
+            raise ValueError("Missing operation: every discovered operation must have a row")
+        excluded = {}
+        for row in rows:
+            if row["disposition"] == "excluded":
+                root = row["path"].split("/")[1].split("(")[0]
+                excluded[root] = excluded.get(root, 0) + 1
+        if excluded != source["excludedByRoot"]:
+            raise ValueError("Excluded operation counts must reconcile with rows")
 
 
 def main():

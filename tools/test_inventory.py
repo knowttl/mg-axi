@@ -10,6 +10,29 @@ from inventory import ROOT, build, make_row, scoped_slice, validate
 
 
 class InventoryTests(unittest.TestCase):
+    def test_provisioning_schema_routes_have_owners_in_both_versions(self):
+        for version in ("v1.0", "beta"):
+            for root in ("filterOperators", "functions"):
+                for suffix, method, owner, disposition in [
+                    ("", "GET", "EXT-03", "scheduled"),
+                    ("/{id}", "GET", "EXT-03", "scheduled"),
+                    ("/$count", "GET", "EXT-03", "scheduled"),
+                    ("", "POST", "WRITE-N", "scheduled"),
+                    ("/{id}", "PATCH", "WRITE-N", "scheduled"),
+                    ("/{id}", "DELETE", "WRITE-N", "scheduled"),
+                ]:
+                    with self.subTest(version=version, root=root, suffix=suffix, method=method):
+                        row = make_row(version, f"/{root}{suffix}", method, {"operationId": "fixture"})
+                        self.assertEqual(row["owningSlice"], owner)
+                        self.assertEqual(row["disposition"], "intentionally-blocked" if version == "beta" and method != "GET" else disposition)
+
+    def test_tenant_search_is_a_read_for_each_action_representation(self):
+        for action in ("tenantSearch", "microsoft.graph.tenantSearch", "microsoft.graph.managedTenants.tenantSearch"):
+            with self.subTest(action=action):
+                row = make_row("beta", f"/tenantRelationships/managedTenants/tenantGroups/{action}", "POST", {"operationId": "fixture"})
+                self.assertEqual((row["disposition"], row["owningSlice"]), ("scheduled", "EXT-04"))
+                self.assertEqual(row["permissions"]["sources"], ["https://learn.microsoft.com/en-us/graph/api/managedtenants-tenantgroup-tenantsearch?view=graph-rest-beta"])
+
     def test_restored_entra_families_have_dispositions_and_owners(self):
         for version in ("v1.0", "beta"):
             for path, owner in [
@@ -53,10 +76,13 @@ class InventoryTests(unittest.TestCase):
             for version in ("v1.0", "beta"):
                 for method in ("GET", "PATCH"):
                     with self.subTest(prefix=prefix, version=version, method=method):
-                        self.assertIsNone(make_row(version, f"{prefix}/mailboxSettings", method, {"operationId": "fixture"}))
+                        row = make_row(version, f"{prefix}/mailboxSettings", method, {"operationId": "fixture"})
+                        self.assertEqual((row["disposition"], row["owningSlice"]), ("excluded", None))
+                        self.assertEqual(row["reason"], "Out-of-pack Mail navigation requires separate authorization.")
         for nav in ["cloudPcDevices", "managedDeviceCompliances", "windowsProtectionStates", "windowsDeviceMalwareStates", "managementTemplates"]:
             with self.subTest(nav=nav):
-                self.assertIsNone(scoped_slice(f"/tenantRelationships/managedTenants/{nav}/{{id}}"))
+                row = make_row("beta", f"/tenantRelationships/managedTenants/{nav}/{{id}}", "GET", {"operationId": "fixture"})
+                self.assertEqual((row["disposition"], row["owningSlice"]), ("excluded", None))
         self.assertEqual(scoped_slice("/tenantRelationships/managedTenants/conditionalAccessPolicyCoverages"), "EXT-04")
         self.assertEqual(scoped_slice("/tenantRelationships/delegatedAdminRelationships/{id}/accessAssignments"), "EXT-04")
 
@@ -102,6 +128,12 @@ paths:
   /users/{user-id}/messages:
     get:
       operationId: users.ListMessages
+  /invitations/invitedUser/mailboxSettings:
+    patch:
+      operationId: invitations.UpdateMailboxSettings
+  /unscoped:
+    get:
+      operationId: unscoped.List
 components:
   schemas: {}
 """
@@ -111,10 +143,29 @@ components:
             inventory = build({"v1.0": source, "beta": source})
             validate(inventory)
         self.assertEqual([row["id"] for row in inventory["operations"]], [
-            "beta:GET:/users", "beta:PATCH:/users/{user-id}",
-            "v1.0:GET:/users", "v1.0:PATCH:/users/{user-id}",
+            "beta:GET:/unscoped", "beta:GET:/users", "beta:GET:/users/{user-id}/messages",
+            "beta:PATCH:/invitations/invitedUser/mailboxSettings", "beta:PATCH:/users/{user-id}",
+            "v1.0:GET:/unscoped", "v1.0:GET:/users", "v1.0:GET:/users/{user-id}/messages",
+            "v1.0:PATCH:/invitations/invitedUser/mailboxSettings", "v1.0:PATCH:/users/{user-id}",
         ])
-        self.assertEqual(inventory["sources"][0]["excludedByRoot"], {"users": 1})
+        self.assertEqual(inventory["sources"][0]["excludedByRoot"], {"invitations": 1, "unscoped": 1, "users": 1})
+        self.assertEqual([(row["disposition"], row["owningSlice"]) for row in inventory["operations"] if row["path"] in {"/unscoped", "/users/{user-id}/messages", "/invitations/invitedUser/mailboxSettings"}], [("excluded", None)] * 6)
+        for path in ("/unscoped", "/users"):
+            incomplete = copy.deepcopy(inventory)
+            incomplete["operations"] = [row for row in incomplete["operations"] if row["path"] != path]
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, "Missing operation"):
+                validate(incomplete)
+        cross_pack = copy.deepcopy(inventory)
+        cross_pack["operations"][2].update(disposition="scheduled", owningSlice="READ-01")
+        with self.assertRaisesRegex(ValueError, "Boundary mismatch"):
+            validate(cross_pack)
+
+    def test_excluded_operations_cannot_have_dispatch_owners(self):
+        inventory = json.loads((ROOT / "inventory/operations.json").read_text())
+        inventory["operations"][0] = make_row("beta", "/users/{id}/mailboxSettings", "GET", {"operationId": "fixture"})
+        inventory["operations"][0]["owningSlice"] = "READ-01"
+        with self.assertRaises(ValidationError):
+            validate(inventory)
 
     def test_duplicate_operation_is_rejected(self):
         inventory = json.loads((ROOT / "inventory/operations.json").read_text())

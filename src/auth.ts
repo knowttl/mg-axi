@@ -40,7 +40,7 @@ export class DelegatedAuth {
     } catch { throw this.failure("AUTH_REQUIRED"); }
   }
   private scopes(scopes: string[]) {
-    if (!scopes.length || scopes.some(scope => !/^https:\/\/graph\.microsoft\.com\/[A-Za-z][A-Za-z.]+$/.test(scope) || scope.endsWith("/.default"))) throw new AxiError("Explicit delegated Graph scopes are required", "VALIDATION_ERROR", ["mg-axi login --profile <name> --scopes <comma-separated-Graph-scopes>"]);
+    if (!scopes.length || scopes.some(scope => !/^https:\/\/graph\.microsoft\.com\/[A-Za-z][A-Za-z.-]+$/.test(scope) || scope.endsWith("/.default"))) throw new AxiError("Explicit delegated Graph scopes are required", "VALIDATION_ERROR", ["mg-axi login --profile <name> --scopes <comma-separated-Graph-scopes>"]);
     return [...new Set(scopes)].sort();
   }
   private key(profile: DelegatedProfile, scopes: string[]) { return JSON.stringify([profile.credentialRef, profile.tenantId, profile.clientId, profile.cloud, scopes]); }

@@ -107,9 +107,27 @@ test("explicit account login invalidates cached credentials for all previous sco
   assert.equal(f.calls[2][0], "silent");
 });
 
-for (const requested of [[], ["https://graph.microsoft.com/.default"], ["https://example.invalid/User.Read"]]) test(`unsupported delegated scopes ${JSON.stringify(requested)} fail before credentials`, async () => {
+for (const method of ["browser", "device-code"]) test(`${method} accepts a hyphenated delegated Graph permission`, async () => {
+  const f = fixture();
+  const selected = { ...profile, allowDeviceCode: true };
+  const requested = ["https://graph.microsoft.com/User-LifeCycleInfo.Read.All"];
+  const result = await f.auth.login(selected, method, requested);
+  assert.equal(result.status, "authenticated");
+  assert.deepEqual(f.calls, [["login", selected, method, requested]]);
+});
+
+test("silent acquisition accepts a hyphenated delegated Graph permission", async () => {
+  const f = fixture();
+  const requested = ["https://graph.microsoft.com/User-LifeCycleInfo.Read.All"];
+  const result = await f.auth.credential(profile, requested);
+  assert.equal(result.accountId, "synthetic-account");
+  assert.deepEqual(f.calls, [["silent", profile, requested]]);
+});
+
+for (const requested of [[], ["https://graph.microsoft.com/.default"], ["https://example.invalid/User.Read"], ["https://example.invalid/User-LifeCycleInfo.Read.All"], ["https://graph.microsoft.com/User-LifeCycleInfo.Read.All", "https://graph.microsoft.com/.default"]]) test(`unsupported delegated scopes ${JSON.stringify(requested)} fail before credentials`, async () => {
   const f = fixture();
   await assert.rejects(f.auth.login(profile, "browser", requested), { code: "VALIDATION_ERROR" });
+  await assert.rejects(f.auth.credential(profile, requested), { code: "VALIDATION_ERROR" });
   assert.equal(f.calls.length, 0);
 });
 

@@ -26,3 +26,7 @@ The deletion test favors a deep Graph session and mutation coordinator because r
 A pass-through wrapper around every endpoint would be shallow and is not proposed.
 Existing az-axi's body-only request convenience and independent effect/global state patterns are not automatically copied; their relevance must be assessed at the chosen seam.
 No refactoring of az-axi is authorized by this planning task.
+
+CLI-01 rechecked az-axi `origin/main` at `17125324b00cc97e0445d1a7eb170553f707ce9c` on 2026-10-03.
+Its package, leaf registry/parser, executable, no-mistakes configuration and CI informed the shell conventions.
+mg-axi uses the AXI SDK fast-path export and retains its own scheduled INV-01 operation identities without copying ARM authentication or endpoint policy.

@@ -1,0 +1,42 @@
+commands:
+  prepare: 'corepack pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false'
+  test: 'corepack pnpm run build && corepack pnpm test'
+  lint: 'corepack pnpm run lint'
+
+document:
+  instructions: |
+    README.md owns installation, current usage and observable CLI behavior.
+    The future skills/mg-axi/SKILL.md is the packaged agent skill surface; generate
+    it from the command catalogue in PACK-01 rather than maintaining parallel help.
+    PLAN.md and docs/build-plan.md are the approved design and slice authority.
+    docs/inventory.md and inventory/schema.json own discovery semantics; scheduled
+    operations and unresolved evidence never count as implemented capabilities.
+review:
+  path_instructions:
+    - path: "src/**/auth*.ts"
+      instructions: |
+        Dedicated tenant/client/cloud identity is mandatory. Delegated and
+        application modes must remain separate; no implicit login or fallback.
+        Tests must never sign in to a tenant or call real Graph endpoints.
+    - path: "src/**/token*.ts"
+      instructions: |
+        Tokens are opaque. Never decode JWTs to establish identity or put tokens,
+        secrets or private keys in argv, profile JSON, diagnostics or output.
+    - path: "src/**/redact*.ts"
+      instructions: |
+        Protected values must be redacted from success output, errors, previews,
+        logs and audit payloads. Full output never disables redaction.
+    - path: "src/**/policy*.ts"
+      instructions: |
+        Unknown operations fail closed. Raw writes, secret-returning operations
+        and beta writes stay blocked. Forced read-only always wins; read overrides
+        cannot broaden immutable tenant and operation write scope.
+    - path: "src/**/write*.ts"
+      instructions: |
+        Follow docs/execution.md: hand enablement, immutable scope, preview,
+        execute and confirmation gates, durable audit-before-send and no blind
+        replay after unknown outcomes. Do not assume universal ETags or rollback.
+auto_fix:
+  review: 1
+  test: 3
+  lint: 0

@@ -89,7 +89,7 @@ Excluded rows must be counted separately from scoped capabilities.
 
 ## Offline verification and refresh
 
-Build tooling uses Python 3, PyYAML and jsonschema, independently of the later TypeScript runtime shell.
+Build tooling uses Python 3, PyYAML and jsonschema, independently of the TypeScript runtime shell.
 Install the pinned tooling dependencies with `python3 -m pip install -r tools/requirements.txt` in your development environment.
 The repository's validation commands need no sign-in, credentials or tenant traffic:
 

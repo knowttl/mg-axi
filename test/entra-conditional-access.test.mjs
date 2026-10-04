@@ -186,12 +186,12 @@ function overridesFor(mode, handler, calls = []) {
   };
 }
 
-function runCaCli(args, state, mode, denied = false) {
+function runCaCli(args, state, mode, denied = false, input = "") {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-ca-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
   ], {
-    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000,
+    encoding: "utf8", input, timeout: 30000,
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
@@ -201,6 +201,40 @@ function runCaCli(args, state, mode, denied = false) {
 }
 
 for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+  for (const [family, key, field, detail] of [
+    ["policy", "policies", "conditions", { applications: { applicationFilter: { mode: "include", rule: "x".repeat(4096) } } }],
+    ["named-location", "namedLocations", "ipRanges", [{ cidrAddress: "x".repeat(4096) }]],
+  ]) {
+    test(`${mode} executable resumes large ${family} cursors through stdin`, async () => {
+      const state = setupProfiles();
+      try {
+        const rows = Array.from({ length: 40 }, (_, index) => ({ id: `row-${index}`, [field]: detail }));
+        const { overrides } = overridesFor(mode, transport(() => json(200, { value: rows })));
+        const command = ["entra", "conditional-access", family, "list", "--profile", profile];
+        const first = await executeArgv([...command, "--limit", "1", "--select", `id,${field}`], overrides);
+        assert.ok(Buffer.byteLength(first.cursor) > 128 * 1024);
+        assert.ok(first.help.some(hint => hint.includes("--cursor -") && hint.includes("stdin")));
+
+        const resumed = runCaCli([...command, "--cursor", "-", "--all", "--full"], state, mode, false, first.cursor);
+        assert.equal(resumed.status, 0, resumed.stdout);
+        assert.equal(resumed.stderr, "");
+        const output = decode(resumed.stdout);
+        assert.deepEqual(output[key], rows.slice(1));
+        assert.deepEqual(output.count, { returned: 39, complete: true });
+
+        const truncated = runCaCli([...command, "--cursor", "-", "--limit", "1"], state, mode, false, first.cursor);
+        assert.equal(truncated.status, 0, truncated.stdout);
+        const hints = decode(truncated.stdout).help;
+        assert.ok(hints.some(hint => hint.includes("--full") && hint.includes("--cursor -")));
+        assert.ok(hints.some(hint => hint.includes("original input cursor on stdin")));
+        assert.ok(hints.every(hint => !hint.includes(first.cursor)));
+        const replayed = runCaCli([...command, "--cursor", "-", "--limit", "1", "--full"], state, mode, false, first.cursor);
+        assert.equal(replayed.status, 0, replayed.stdout);
+        assert.deepEqual(decode(replayed.stdout)[key], [rows[1]]);
+      } finally { teardownProfiles(state); }
+    });
+  }
+
   test(`${mode} lists policies with compact rows preserving null and missing`, async () => {
     const state = setupProfiles();
     try {

@@ -93,7 +93,7 @@ const caRead = {
   select: { value: "comma-separated-properties", description: "Request server properties; policy and location detail needs Policy.Read.All in both modes plus a supported Conditional Access role for delegated access" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
   full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
-  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  cursor: { value: "opaque-cursor|-", description: "Resume a capped collection losslessly; - reads the token from stdin (16 MB ceiling for either input); repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Policy.Read.All" },
 };
 export const LEAVES: Leaf[] = [
@@ -502,7 +502,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (flag!.value) {
       const value = match![2] ?? argv[++i];
       if (!value?.trim() || (value.startsWith("-") && !(name === "cursor" && value === "-"
-        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list")))) fail(`--${name} requires a non-empty value`);
+        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list")))) fail(`--${name} requires a non-empty value`);
       flags[name] = value!;
     } else {
       if (match![2] !== undefined) fail(`--${name} does not take a value`);

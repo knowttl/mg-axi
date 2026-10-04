@@ -85,6 +85,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     if (!operation || operation.method !== "GET") {
       throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
     }
+    if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
     let delegated = overrides.delegated;
     let application = overrides.application;
     if (!delegated) {

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
-import { decode, encode } from "@toon-format/toon";
+import { decode } from "@toon-format/toon";
 import { executeArgv } from "../dist/cli.js";
 import { Profiles } from "../dist/profiles.js";
+import { DelegatedAuth } from "../dist/auth.js";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
@@ -132,11 +133,144 @@ function overridesFor(mode, handler, calls = []) {
   };
 }
 
-const exitCode = error => (error?.code === "VALIDATION_ERROR" ? 2 : 1);
-
 function hintArgv(hint) {
   const command = `"${process.execPath}" -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' ${hint.slice("mg-axi ".length)}`;
   return JSON.parse(execFileSync("/bin/sh", ["-c", command], { encoding: "utf8" }));
+}
+
+function runReadCli(args, state, mode, rows = directory, denied = false) {
+  return spawnSync(process.execPath, [
+    "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
+    "--import", resolve("test/fixtures/read-cli.mjs"), resolve("dist/bin/mg-axi.js"), ...args,
+  ], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000,
+    env: {
+      HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
+      MG_AXI_CONFIG: join(state.dir, "config.json"),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, directory: rows, denied }),
+    },
+  });
+}
+
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+  test(`${mode} executable lists basic users with null and missing values`, () => {
+    const state = setupProfiles();
+    try {
+      const result = runReadCli(["entra", "user", "list", "--profile", profile], state, mode);
+      assert.equal(result.status, 0, result.stdout);
+      assert.equal(result.stderr, "");
+      const output = decode(result.stdout);
+      assert.deepEqual(output.users, [
+        { id: u1.id, displayName: u1.displayName, userPrincipalName: u1.userPrincipalName, mail: u1.mail },
+        { id: u2.id, displayName: u2.displayName, userPrincipalName: u2.userPrincipalName, mail: null },
+        { id: u3.id, displayName: u3.displayName, userPrincipalName: u3.userPrincipalName },
+      ]);
+      assert.deepEqual(output.count, { returned: 3, complete: true });
+      assert.ok(output.help.length);
+      assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
+    } finally { teardownProfiles(state); }
+  });
+
+  test(`${mode} executable shows richer user properties`, () => {
+    const state = setupProfiles();
+    try {
+      const result = runReadCli(["entra", "user", "show", "--id", u1.id, "--profile", profile], state, mode);
+      assert.equal(result.status, 0, result.stdout);
+      assert.equal(result.stderr, "");
+      assert.deepEqual(decode(result.stdout), { user: u1 });
+      assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
+    } finally { teardownProfiles(state); }
+  });
+
+  for (const full of [false, true]) {
+    test(`${mode} executable ${full ? "full view" : "compact view"} preserves scalar and phone-array values`, () => {
+      const state = setupProfiles();
+      try {
+        const long = "x".repeat(600);
+        const rows = [{ ...u1, department: long, businessPhones: ["425-555-0100", long] }, u2, u3];
+        const args = ["entra", "user", "show", "--id", u1.id, "--profile", profile,
+          "--select", "id,department,businessPhones", ...(full ? ["--full"] : [])];
+        const result = runReadCli(args, state, mode, rows);
+        assert.equal(result.status, 0, result.stdout);
+        assert.equal(result.stderr, "");
+        const output = decode(result.stdout);
+        const expected = full ? long : `${"x".repeat(500)}... (truncated, 600 chars total)`;
+        assert.deepEqual(output.user, { id: u1.id, department: expected, businessPhones: ["425-555-0100", expected] });
+        assert.equal(output.help?.length ?? 0, full ? 0 : 1);
+        assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
+      } finally { teardownProfiles(state); }
+    });
+  }
+
+  for (const [action, args] of [["list", []], ["show", ["--id", u1.id]]]) {
+    test(`${mode} executable denied ${action} is an operational error on stdout`, () => {
+      const state = setupProfiles();
+      try {
+        const result = runReadCli(["entra", "user", action, ...args, "--profile", profile], state, mode, directory, true);
+        assert.equal(result.status, 1, result.stdout);
+        assert.equal(result.stderr, "");
+        const output = decode(result.stdout);
+        assert.equal(output.code, "GRAPH_ERROR");
+        assert.match(output.error, /grant, role, licence or policy/);
+        assert.ok(output.help.length);
+        assert.equal(output.users, undefined);
+        assert.equal(output.user, undefined);
+        assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
+      } finally { teardownProfiles(state); }
+    });
+  }
+
+  test(`${mode} executable resumes a capped list through its opaque cursor`, () => {
+    const state = setupProfiles();
+    try {
+      const first = runReadCli(["entra", "user", "list", "--profile", profile, "--limit", "1"], state, mode);
+      assert.equal(first.status, 0, first.stdout);
+      assert.equal(first.stderr, "");
+      const partial = decode(first.stdout);
+      assert.equal(partial.count.complete, false);
+      assert.equal(typeof partial.cursor, "string");
+      const second = runReadCli(["entra", "user", "list", "--profile", profile, "--cursor", partial.cursor], state, mode);
+      assert.equal(second.status, 0, second.stdout);
+      assert.equal(second.stderr, "");
+      const resumed = decode(second.stdout);
+      assert.deepEqual([...partial.users, ...resumed.users].map(user => user.id), [u1.id, u2.id, u3.id]);
+      assert.deepEqual(resumed.count, { returned: 2, complete: true });
+      assert.ok(!second.stdout.includes(`opaque-fixture-${mode}-token`));
+    } finally { teardownProfiles(state); }
+  });
+
+  test(`${mode} executable rejects invalid scope arguments as a usage error`, () => {
+    const state = setupProfiles();
+    try {
+      const scopes = mode === "delegated" ? "https://example.invalid/User.Read" : delegatedScopes[0];
+      const result = runReadCli(["entra", "user", "list", "--profile", profile, "--scopes", scopes], state, mode);
+      assert.equal(result.status, 2, result.stdout);
+      assert.equal(result.stderr, "");
+      const output = decode(result.stdout);
+      assert.equal(output.code, "VALIDATION_ERROR");
+      assert.ok(output.help.length);
+    } finally { teardownProfiles(state); }
+  });
+}
+
+for (const [action, args] of [["list", []], ["show", ["--id", u1.id]]]) {
+  for (const scopes of [",", "https://example.invalid/User.Read", "https://graph.microsoft.com/.default"]) {
+    test(`${action} rejects delegated scopes ${scopes} before provider acquisition`, async () => {
+      const state = setupProfiles();
+      try {
+        const calls = [];
+        const { overrides, requests } = overridesFor("delegated");
+        overrides.delegated = new DelegatedAuth({
+          storage: "session-only",
+          login: async () => { throw new Error("Unexpected interactive login"); },
+          silent: async (...args) => { calls.push(args); throw new Error("Unexpected credential acquisition"); },
+        });
+        await assert.rejects(executeArgv(["entra", "user", action, ...args, "--profile", "soc", "--scopes", scopes], overrides), { code: "VALIDATION_ERROR" });
+        assert.deepEqual(calls, []);
+        assert.deepEqual(requests, []);
+      } finally { teardownProfiles(state); }
+    });
+  }
 }
 
 test("delegated list returns compact basic rows with a complete count and show hint", async () => {
@@ -155,8 +289,6 @@ test("delegated list returns compact basic rows with a complete count and show h
     assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-delegated-token"));
     assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/users?"));
     assert.ok(!JSON.stringify(result).includes("opaque-fixture-delegated-token"));
-    const roundTrip = decode(`${encode(result)}\n`);
-    assert.deepEqual(roundTrip.users, result.users);
   } finally {
     teardownProfiles(state);
   }
@@ -314,14 +446,12 @@ test("denied reads surface as operational failures, never as empty results", asy
     const overrides = { transport: denied.send, delegated: credential, application: credentialService("application", []) };
     await assert.rejects(executeArgv(["entra", "user", "list", "--profile", "soc"], overrides), error => {
       assert.equal(error.code, "GRAPH_ERROR");
-      assert.equal(exitCode(error), 1);
       return /grant, role, licence/.test(error.message);
     });
     const missing = transport(() => json(404, { error: { code: "Request_ResourceNotFound", message: "gone" } }));
     const missingOverrides = { transport: missing.send, delegated: credential, application: credentialService("application", []) };
     await assert.rejects(executeArgv(["entra", "user", "show", "--id", u1.id, "--profile", "soc"], missingOverrides), error => {
       assert.equal(error.code, "GRAPH_ERROR");
-      assert.equal(exitCode(error), 1);
       return /not found or inaccessible/.test(error.message);
     });
   } finally {
@@ -353,7 +483,6 @@ test("application mode rejects delegated scopes before HTTP", async () => {
       executeArgv(["entra", "user", "list", "--profile", "batch", "--scopes", delegatedScopes[0]], overrides),
       error => {
         assert.equal(error.code, "VALIDATION_ERROR");
-        assert.equal(exitCode(error), 2);
         return /Graph \.default audience/.test(error.message);
       },
     );

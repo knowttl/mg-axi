@@ -93,41 +93,17 @@ function scopesFor(flags: UserFlags, profile: AnyProfile, help: string): string[
     .split(",")
     .map(scope => scope.trim())
     .filter(scope => scope.length > 0);
-  if (
-    !scopes.length ||
-    scopes.some(scope => !/^https:\/\/graph\.microsoft\.com\/[A-Za-z][A-Za-z.-]+$/.test(scope) || scope.endsWith("/.default"))
-  ) {
-    throw new AxiError("Explicit delegated Graph scopes are required", "VALIDATION_ERROR", [
-      help,
-      "mg-axi login --profile <name> --scopes <comma-separated-Graph-scopes>",
-    ]);
-  }
-  return [...new Set(scopes)].sort();
+  return scopes;
 }
 
 function truncateValue(value: unknown, full: boolean): { value: unknown; truncated: boolean } {
-  if (typeof value === "string") {
-    if (full || value.length <= TRUNCATE_AT) return { value, truncated: false };
-    return { value: `${value.slice(0, TRUNCATE_AT)}... (truncated, ${value.length} chars total)`, truncated: true };
-  }
-  if (Array.isArray(value)) {
-    let truncated = false;
-    const projected = value.map(entry => {
-      const result = truncateValue(entry, full);
-      truncated = truncated || result.truncated;
-      return result.value;
-    });
-    return { value: projected, truncated };
-  }
-  if (value !== null && typeof value === "object") {
-    let truncated = false;
-    const projected: Record<string, unknown> = {};
-    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-      const result = truncateValue(entry, full);
-      truncated = truncated || result.truncated;
-      projected[key] = result.value;
-    }
-    return { value: projected, truncated };
+  const truncate = (text: string) => full || text.length <= TRUNCATE_AT
+    ? { value: text, truncated: false }
+    : { value: `${text.slice(0, TRUNCATE_AT)}... (truncated, ${text.length} chars total)`, truncated: true };
+  if (typeof value === "string") return truncate(value);
+  if (Array.isArray(value) && value.every(entry => typeof entry === "string")) {
+    const projected = value.map(truncate);
+    return { value: projected.map(entry => entry.value), truncated: projected.some(entry => entry.truncated) };
   }
   return { value, truncated: false };
 }

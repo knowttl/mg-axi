@@ -506,8 +506,8 @@ test("write status follows the catalogue, not hard-coded prose", () => {
   const coverage = capabilityDocument();
   const shipped = coverage.split("Shipped initial writes: ")[1]?.split(".\n")[0] ?? "";
   const pending = coverage.split("Pending initial writes: ")[1]?.split(".\n")[0] ?? "";
-  for (const slice of ["WRITE-01", "WRITE-02", "WRITE-03", "WRITE-05"]) assert.ok(shipped.includes(slice), `${slice} reads shipped`);
-  for (const slice of ["WRITE-04"]) assert.ok(pending.includes(slice), `${slice} reads pending`);
+  for (const slice of ["WRITE-01", "WRITE-02", "WRITE-03", "WRITE-04", "WRITE-05"]) assert.ok(shipped.includes(slice), `${slice} reads shipped`);
+  assert.ok(pending === "none", `no initial write reads pending, got: ${pending}`);
   assert.doesNotMatch(coverage, /later writes \(WRITE-04 and beyond\)/);
 });
 

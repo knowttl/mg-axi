@@ -65,6 +65,22 @@ const roleRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to the operation's least-privileged read scope" },
 };
+const deviceRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph with ConsistencyLevel eventual; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties; directory-device reads need Device.Read.All" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Device.Read.All" },
+};
+const auRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph with ConsistencyLevel eventual; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties; administrative-unit reads need AdministrativeUnit.Read.All" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to AdministrativeUnit.Read.All, hidden members need Member.Read.Hidden" },
+};
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
   { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
@@ -197,6 +213,53 @@ export const LEAVES: Leaf[] = [
     cursor: roleRead.cursor,
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to RoleAssignmentSchedule.Read.Directory; delegated callers also need a supported PIM read role; PIM needs P2 or ID Governance" },
   }, examples: ["mg-axi entra pim active list --profile soc", "mg-axi entra pim active list --profile soc --filter \"assignmentType eq 'Activated'\""] },
+  { path: "entra device list", description: "List directory devices with compact properties (id, displayName, operatingSystem, accountEnabled). Directory-device scope only; Intune managed devices are a separately authorized surface", operation: "GET:/devices", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: deviceRead.filter,
+    select: deviceRead.select,
+    fields: deviceRead.fields,
+    full: deviceRead.full,
+    cursor: deviceRead.cursor,
+    scopes: deviceRead.scopes,
+  }, examples: ["mg-axi entra device list --profile soc", "mg-axi entra device list --profile soc --limit 10", "mg-axi entra device list --profile soc --filter \"isCompliant eq true\" --select id,displayName,isCompliant"] },
+  { path: "entra device show", description: "Show one directory device with the full reviewed property set; deviceId is the directory device identifier and id is the object ID", operation: "GET:/devices/{device-id}", flags: {
+    ...common, id: { value: "device-id", required: true, description: "Device object ID" },
+    select: deviceRead.select,
+    fields: deviceRead.fields,
+    full: deviceRead.full,
+    scopes: deviceRead.scopes,
+  }, examples: ["mg-axi entra device show --id <device-id> --profile soc", "mg-axi entra device show --id <device-id> --profile soc --full"] },
+  { path: "entra administrative-unit list", description: "List administrative units with compact properties (id, displayName, visibility, membershipType)", operation: "GET:/directory/administrativeUnits", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: auRead.filter,
+    select: auRead.select,
+    fields: auRead.fields,
+    full: auRead.full,
+    cursor: auRead.cursor,
+    scopes: auRead.scopes,
+  }, examples: ["mg-axi entra administrative-unit list --profile soc", "mg-axi entra administrative-unit list --profile soc --limit 10", "mg-axi entra administrative-unit list --profile soc --filter \"visibility eq 'HiddenMembership'\""] },
+  { path: "entra administrative-unit show", description: "Show one administrative unit with the full reviewed property set including visibility and membership rule", operation: "GET:/directory/administrativeUnits/{administrativeUnit-id}", flags: {
+    ...common, id: { value: "administrative-unit-id", required: true, description: "Administrative unit object ID" },
+    select: auRead.select,
+    fields: auRead.fields,
+    full: auRead.full,
+    scopes: auRead.scopes,
+  }, examples: ["mg-axi entra administrative-unit show --id <administrative-unit-id> --profile soc", "mg-axi entra administrative-unit show --id <administrative-unit-id> --profile soc --full"] },
+  { path: "entra administrative-unit member list", description: "List administrative-unit members (users, groups, devices). Hidden memberships are omitted without Member.Read.Hidden; app callers with narrow consent receive limited-information rows", operation: "GET:/directory/administrativeUnits/{administrativeUnit-id}/members", flags: {
+    ...common, "administrative-unit": { value: "administrative-unit-id", required: true, description: "Administrative unit object ID whose members are listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: auRead.filter,
+    select: { value: "comma-separated-properties", description: "Request server properties from id, displayName, mail; richer member fields need single-object reads" },
+    fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+    full: auRead.full,
+    cursor: auRead.cursor,
+    scopes: auRead.scopes,
+  }, examples: ["mg-axi entra administrative-unit member list --administrative-unit <administrative-unit-id> --profile soc", "mg-axi entra administrative-unit member list --administrative-unit <administrative-unit-id> --profile soc --limit 10"] },
   { path: "entra sign-in list", description: "List sign-ins in a bounded time window (AuditLog.Read.All; delegated callers also need Global Reader, Reports Reader, Security Administrator, Security Operator or Security Reader; conservative P1/P2 deployment prerequisite)", operation: "GET:/auditLogs/signIns", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

@@ -113,6 +113,27 @@ Denied reads name that role requirement instead of only the generic grant/role/l
 Built-in roles are base inventory and custom role assignments need P1; PIM reads need P2 or ID Governance.
 Role assignment, activation and every other PIM mutation belongs to later write slices, never to these reads.
 
+Log in with `https://graph.microsoft.com/Device.Read.All` or `https://graph.microsoft.com/AdministrativeUnit.Read.All`, then inspect directory devices and administrative units:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Device.Read.All
+mg-axi entra device list --profile soc --limit 10
+mg-axi entra device show --profile soc --id <device-id>
+mg-axi entra administrative-unit list --profile soc
+mg-axi entra administrative-unit show --profile soc --id <administrative-unit-id>
+mg-axi entra administrative-unit member list --profile soc --administrative-unit <administrative-unit-id>
+```
+
+`entra device list` defaults to compact properties (`id`, `displayName`, `operatingSystem`, `accountEnabled`); `entra device show --id <device-id>` defaults to the full reviewed device set with `deviceId` distinct from the object `id`.
+Directory devices are Entra directory objects; Intune managed devices and device actions are a separately authorized surface, never these commands.
+`entra administrative-unit list` defaults to `id`, `displayName`, `visibility` and `membershipType`; `entra administrative-unit show --id <administrative-unit-id>` defaults to the full reviewed unit set including the membership rule.
+Dynamic units carry a P1 licensing hint on show; scoped administration needs P1 while members are Free.
+`entra administrative-unit member list --administrative-unit <administrative-unit-id>` lists member users, groups and devices with the same `id`/`displayName`/`mail` selection, `@odata.type` preservation, hidden-membership and limited-information behavior as group relationships.
+Device and unit lists return `devices` and `administrativeUnits`, member lists return `members`, and single-object reads return `device` and `administrativeUnit`.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to device and administrative-unit reads.
+Delegated device reads default to `https://graph.microsoft.com/Device.Read.All` and unit reads to `https://graph.microsoft.com/AdministrativeUnit.Read.All`, while application profiles use the configured `.default` audience; hidden unit memberships need `Member.Read.Hidden`.
+`--filter` on these collections is sent with `$count=true` and `ConsistencyLevel: eventual`.
+
 Log in with `https://graph.microsoft.com/AuditLog.Read.All`, then query sign-ins and directory audits in bounded time windows:
 
 ```sh

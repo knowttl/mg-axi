@@ -37,6 +37,8 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra service-principal list/);
   assert.match(result.stdout, /entra directory-role list/);
   assert.match(result.stdout, /entra pim active list/);
+  assert.match(result.stdout, /entra device list/);
+  assert.match(result.stdout, /entra administrative-unit list/);
   assert.match(result.stdout, /login/);
   assert.doesNotMatch(result.stdout, /Upgrade/);
 });
@@ -61,7 +63,9 @@ for (const [name, args, error] of [
   ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
   ["transitive on application list", ["entra", "application", "list", "--transitive"], /unknown flag/],
+  ["missing required administrative unit", ["entra", "administrative-unit", "member", "list"], /--administrative-unit is required/],
   ["transitive on group list", ["entra", "group", "list", "--transitive"], /unknown flag/],
+  ["transitive on device list", ["entra", "device", "list", "--transitive"], /unknown flag/],
   ["empty ID", ["entra", "user", "show", "--id="], /non-empty/],
   ["extra positional", ["entra", "user", "show", "--id", "fixture", "extra"], /unexpected/],
   ["duplicate flag", ["entra", "user", "list", "--all", "--all"], /duplicate/],
@@ -132,6 +136,15 @@ test("pim eligible list leaf help marks eligibility as not active", () => {
   assert.equal(result.stderr, "");
   assert.match(result.stdout, /not active/);
   assert.match(result.stdout, /RoleEligibilitySchedule\.Read\.Directory/);
+});
+
+test("administrative-unit member list leaf help advertises the relationship flags", () => {
+  const result = run(["entra", "administrative-unit", "member", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /--administrative-unit.*required/);
+  assert.match(result.stdout, /--cursor/);
+  assert.match(result.stdout, /Member\.Read\.Hidden/);
 });
 
 test("group member list without a profile fails operationally on stdout", () => {

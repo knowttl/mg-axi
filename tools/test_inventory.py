@@ -20,7 +20,7 @@ class InventoryTests(unittest.TestCase):
                     row = make_row(version, f"/identity/identityProviders{suffix}", "GET", {"operationId": "fixture"})
                     self.assertEqual((row["disposition"], row["owningSlice"], row["reason"]), ("scheduled", "EXT-03", reason))
 
-    def test_invitation_reads_are_unavailable_without_a_read_scope(self):
+    def test_invitation_reads_are_unavailable_without_a_documented_get_contract(self):
         for suffix in ("", "/$count", "/invitedUser", "/invitedUser/serviceProvisioningErrors", "/invitedUser/serviceProvisioningErrors/$count", "/invitedUserSponsors", "/invitedUserSponsors/$count", "/invitedUserSponsors/{directoryObject-id}"):
             with self.subTest(suffix=suffix):
                 row = make_row("v1.0", f"/invitations{suffix}", "GET", {"operationId": "fixture"})

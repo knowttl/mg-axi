@@ -138,7 +138,7 @@ export function capabilityDocument(): string {
     "",
     "Firstmate decision (mg-ext-03b inbox 001): do not implement these reads and add no scope.",
     "The eight v1.0 invitation reads below carry an explicit reviewed unavailable disposition; no new commands or raw access are approved.",
-    "Microsoft documents invitation as create-only and the sole documented permission is the invite-action User.Invite.All, so no read scope can consent these reads.",
+    "The [v1.0 invitation resource documentation](https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md) lists Create only in its Methods table and provides no documented GET contract for these invitation reads.",
     "Workforce B2B context only; no invitation creation or any mutation is claimed here.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",

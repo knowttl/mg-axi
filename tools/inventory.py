@@ -235,7 +235,7 @@ def make_row(version, path, method, operation):
         if version == "beta":
             reason = "Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review."
     if owner == "EXT-03" and method == "GET" and version == "v1.0" and disposition == "scheduled" and (path == "/invitations" or path.startswith("/invitations/")):
-        disposition, reason = "unavailable", "Marked unavailable by firstmate EXT-03b decision: Microsoft documents invitation as create-only (the resource Methods table lists Create only; no List/Get operation pages exist) and the sole documented permission is the invite-action User.Invite.All, so no read scope can consent these reads."
+        disposition, reason = "unavailable", "Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md)."
     if mutates and owner is not None:
         owner = "WRITE-N"
         if method == "PATCH" and path == "/users/{user-id}":

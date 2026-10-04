@@ -11,7 +11,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 ## Counts
 
 - implemented read leaves: 40 (38 named Entra reads plus reviewed raw api get and doctor health check)
-- implemented write leaves: 1 (named gated mutations below)
+- implemented write leaves: 2 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
 - inventory reviewed-raw-read: 0
@@ -73,7 +73,8 @@ Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, i
 | Command | Operation | Owning slice |
 |---|---|---|
 | `mg-axi entra user update` | `PATCH:/users/{user-id}` | WRITE-02 |
+| `mg-axi entra group member add` | `POST:/groups/{group-id}/members/$ref` | WRITE-01 |
 
-Extended families (EXT-01 through EXT-04), later writes (WRITE-00 and
+Extended families (EXT-01 through EXT-04), later writes (WRITE-03 and
 beyond) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining
 scheduled rows; see docs/build-plan.md for their dispatch.

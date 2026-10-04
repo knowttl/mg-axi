@@ -1,6 +1,6 @@
 ---
 name: mg-axi
-description: Use mg-axi for Microsoft Entra inspection and gated account-state updates - users, groups, roles, devices, sign-ins, applications, consent grants, risk and Conditional Access through agent-ergonomic TOON output.
+description: Use mg-axi for Microsoft Entra inspection and gated writes (account-state updates, user group membership adds) - users, groups, roles, devices, sign-ins, applications, consent grants, risk and Conditional Access through agent-ergonomic TOON output.
 user-invocable: false
 ---
 
@@ -8,8 +8,8 @@ user-invocable: false
 
 Agent-ergonomic CLI for Microsoft Graph, read-only by default.
 Entra SOC reads through token-efficient TOON output.
-The named `entra user update` write enables or disables one account through a separately gated mutation coordinator; raw API remains read-only.
-See [README.md](../../README.md) for account-state usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.
+Two gated write leaves exist (`entra user update` for account enable/disable, `entra group member add` for user membership) through a separately gated mutation coordinator; raw API remains read-only and every other mutation is refused.
+See [README.md](../../README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.
 
 From a built checkout, run commands from the repository root with `node dist/bin/mg-axi.js`.
 Throughout this skill and CLI output, substitute that invocation for `mg-axi` unless you have separately installed the executable on PATH.
@@ -20,7 +20,7 @@ See [README.md](../../README.md#release) for doctor profile selection, checks an
 
 The exact current leaf registry is `src/catalogue.ts`.
 Its capability label is `native` (implemented by an mg-axi handler).
-Its effect is `read` for Graph read leaves and the doctor health check, `write` for the gated account update, or `local` for home, profile, login and setup views.
+Its effect is `read` for Graph read leaves and the doctor health check, `write` for the gated named writes, or `local` for home, profile, login and setup views.
 Doctor acquires credentials silently and contacts Graph; only its help view stays offline.
 The list below records current executable leaves; it makes no coverage claim for other Graph operations.
 See `docs/coverage.md` for the per-operation disposition records.
@@ -45,6 +45,7 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra group show` | native | read |
 | `mg-axi entra group member list` | native | read |
 | `mg-axi entra group member-of list` | native | read |
+| `mg-axi entra group member add` | native | write |
 | `mg-axi entra directory-role list` | native | read |
 | `mg-axi entra directory-role show` | native | read |
 | `mg-axi entra role-assignment list` | native | read |

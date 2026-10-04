@@ -3,8 +3,9 @@
 ## Named writes
 
 Only named, approved pack commands can mutate; raw API remains read-only.
-WRITE-00 implements the [mutation coordinator](../src/mutations.ts); WRITE-02 adds the named `entra user update` account-state command and its production mutation transport.
-Account-state usage, confirmation, identity pinning, permissions, concurrency limitations and profile configuration are documented in [README.md](../README.md).
+WRITE-00 provides the shared [mutation coordinator](../src/mutations.ts).
+WRITE-01 ships the first named command (`entra group member add`) with a production POST transport; WRITE-02 adds the named `entra user update` account-state command and its production mutation transport; later families still ship independently with their own contracts.
+Profile enablement and environment configuration are documented in [README.md](../README.md); account-state usage, confirmation, identity pinning, permissions and concurrency limitations are documented there as well.
 The coordinator snapshots the validated profile's tenant, identity and approved-operation scope at creation; later profile edits cannot widen that scope.
 It checks forced read-only and profile enablement before preview, and the sender checks forced read-only again before credential acquisition and immediately before transport handoff.
 Preview redacts current state and proposed payload using the shared Graph redaction boundary.
@@ -19,7 +20,7 @@ The journal contains redacted metadata, never payloads, headers or response bodi
 The journal directory is created before intent reservation; directory fsync is skipped on native Windows, where the journal file is pre-created and fsynced instead.
 After intent reservation, a failed fresh read, a newly satisfied desired state or a sender gate failure records `NOT_SENT`.
 Outcome audit failure after sending preserves the possibility that the mutation occurred.
-HTTP 4xx responses other than 408 record `FAILED`; transport failures, HTTP 408 and server errors return `kind: unknown` and record `OUTCOME_UNKNOWN`, with guidance to read back the target before doing anything else.
+HTTP 4xx responses other than 408 record `FAILED`, except a WRITE-01 duplicate-reference 400 (Graph reporting the membership already exists), which records `NOOP` and returns a no-op instead of a failure; transport failures, HTTP 408 and server errors return `kind: unknown` and record `OUTCOME_UNKNOWN`, with guidance to read back the target before doing anything else.
 An accepted 2xx response records `SUCCESS` even if its response body cannot be decoded.
 No mutation is automatically retried or replayed; an already reserved intent ID is refused even after an outcome was recorded.
 Unknown actions, raw writes, secret-returning endpoints, and unsupported beta writes fail closed.
@@ -55,8 +56,8 @@ Slice IDs and dependencies are defined in the [dispatch plan](build-plan.md).
 
 | Slice | Operation and permission | Material constraints |
 |---|---|---|
-| WRITE-01 Membership | [POST /groups/{id}/members/$ref](https://learn.microsoft.com/en-us/graph/api/group-post-members?view=graph-rest-1.0), D/A GroupMember.ReadWrite.All for user members | Start with supported non-role-assignable groups; other member types have additional permissions; role-assignable groups add RoleManagement.ReadWrite.Directory and applicable roles. |
-| WRITE-02 Account state | [PATCH /users/{id}](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0) | See [README.md](../README.md) for the implemented command's permission pair and target-role hierarchy. |
+| WRITE-01 Membership | [POST /groups/{id}/members/$ref](https://learn.microsoft.com/en-us/graph/api/group-post-members?view=graph-rest-1.0) | Shipped; supported targets and permission requirements are documented in [README.md](../README.md). |
+| WRITE-02 Account state | [PATCH /users/{id}](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0), D/A User.EnableDisableAccount.All + User.Read.All for accountEnabled | Sensitive-target role hierarchy also applies, including documented app-role requirements for app-only sensitive updates. |
 | WRITE-03 Revoke sessions | [POST /users/{id}/revokeSignInSessions](https://learn.microsoft.com/en-us/graph/api/user-revokesigninsessions?view=graph-rest-1.0), D/A User.RevokeSessions.All | Preview the action, do not invent a state diff or promise immediate universal session termination; no automatic replay of ambiguous requests. |
 | WRITE-04 CA policy update | [PATCH /identity/conditionalAccess/policies/{id}](https://learn.microsoft.com/en-us/graph/api/conditionalaccesspolicy-update?view=graph-rest-1.0), D/A Policy.Read.All + Policy.ReadWrite.ConditionalAccess | P1, P2 for risk-based features; delegated administrator role; review lockout risk and concurrency limitations. |
 | WRITE-05 Risk dismissal | [POST /identityProtection/riskyUsers/dismiss](https://learn.microsoft.com/en-us/graph/api/riskyuser-dismiss?view=graph-rest-1.0), D/A IdentityRiskyUser.ReadWrite.All | P2; initially one explicit user; confirmation targets the user, not the collection action; dismissal is not remediation. |
@@ -65,3 +66,9 @@ Slice IDs and dependencies are defined in the [dispatch plan](build-plan.md).
 Each write ships independently after the shared coordinator and its own contract pass offline checks.
 The table describes permission choices, not automatic consent or authority.
 Raw writes remain denied even after named writes ship.
+
+The WRITE-01 implementation in [entra-group-member-add](../src/entra-group-member-add.ts) classifies membership adds as disruptive; command usage, enablement and permission requirements are owned by [README.md](../README.md).
+The $ref body carries exactly `{"@odata.id": "https://graph.microsoft.com/v1.0/directoryObjects/<user-id>"}`; both identifiers must be object IDs.
+The user is verified through `GET:/users/{user-id}` with `$select=id` before preview or no-op detection and again before sending; failed or malformed user reads block the operation.
+Group `isAssignableToRole` must be explicitly false or null; true, missing and malformed values are refused.
+Desired state is read through `GET:/groups/{group-id}/members` in the preview and rechecked before the single send; an incomplete member window proceeds to the POST where a duplicate 400 lands as a no-op.

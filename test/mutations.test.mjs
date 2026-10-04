@@ -457,12 +457,15 @@ test("recreated coordinator refuses an intent recorded without a terminal outcom
   assert.equal(f.requests.length, 0);
 });
 
-test("every catalogue leaf stays a read except the reviewed WRITE-02 account write", () => {
+test("every catalogue leaf stays a read except the reviewed named writes", () => {
   const operations = LEAVES.filter(leaf => leaf.operation).map(leaf => leaf.operation);
   assert.ok(operations.length > 0);
-  // WRITE-02 ships the first named write; anything else non-GET is unreviewed.
+  assert.ok(operations.includes("POST:/groups/{group-id}/members/$ref"), "WRITE-01 leaf is catalogued");
+  assert.ok(operations.includes("PATCH:/users/{user-id}"), "WRITE-02 leaf is catalogued");
+  const reviewed = new Set(["POST:/groups/{group-id}/members/$ref", "PATCH:/users/{user-id}"]);
   for (const operation of operations) {
-    if (!operation.startsWith("GET:")) assert.equal(operation, "PATCH:/users/{user-id}", `unreviewed write leaf in catalogue: ${operation}`);
+    if (reviewed.has(operation)) continue;
+    assert.match(operation, /^GET:/, `write leaf in catalogue: ${operation}`);
   }
 });
 

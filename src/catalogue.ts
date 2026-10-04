@@ -240,6 +240,14 @@ export const LEAVES: Leaf[] = [
     cursor: groupRead.cursor,
     scopes: groupRead.scopes,
   }, examples: ["mg-axi entra group member-of list --group <group-id> --profile soc", "mg-axi entra group member-of list --group <group-id> --transitive --profile soc"] },
+  { path: "entra group member add", description: "Add one user to a non-role-assignable security or Microsoft 365 group (WRITE-01). User members need D/A GroupMember.ReadWrite.All; delegated callers additionally need a groups role such as Groups Administrator. Role-assignable, dynamic and distribution groups are refused before sending; an already-member user is a no-op", operation: "POST:/groups/{group-id}/members/$ref", flags: {
+    ...common,
+    group: { value: "group-id", required: true, description: "Group object ID that gains the member; --confirm repeats this ID" },
+    user: { value: "user-object-id", required: true, description: "User object ID verified before preview and sending; user reads need delegated User.ReadBasic.All or application User.Read.All; the write uses a directoryObjects $ref; UPNs are not resolved" },
+    execute: { description: "Send after preview; without it only previews and journals nothing" },
+    confirm: { value: "group-id", description: "Required with --execute: repeat the --group ID to confirm this access change" },
+    scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to GroupMember.ReadWrite.All" },
+  }, examples: ["mg-axi entra group member add --group <group-id> --user <user-id> --profile soc", "mg-axi entra group member add --group <group-id> --user <user-id> --profile soc --execute --confirm <group-id>"] },
   { path: "entra directory-role list", description: "List activated directory roles (id, displayName, description, roleTemplateId); roles appear only after activation", operation: "GET:/directoryRoles", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

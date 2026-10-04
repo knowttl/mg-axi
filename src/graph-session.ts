@@ -151,7 +151,7 @@ function matchRoute(route: string, pathname: string): Record<string, string> | n
 function sensitiveArea(route: string): string | null {
   const segments = splitPath(route).map(segment => segment.toLowerCase());
   if (segments.some(segment => segment === "messages" || segment === "mailfolders")) return "mail";
-  if (segments.some(segment => segment === "drive" || segment === "drives" || segment === "files") || segments[0] === "shares") return "files";
+  if (segments.some(segment => segment === "drive" || segment === "drives" || segment === "file" || segment === "files") || segments[0] === "shares") return "files";
   return null;
 }
 

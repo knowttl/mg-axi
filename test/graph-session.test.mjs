@@ -185,6 +185,28 @@ for (const [version, resource] of [["beta", "accessPackageResources"], ["v1.0", 
   }
 }
 
+for (const version of ["beta", "v1.0"]) {
+  for (const root of ["/agreements", "/identityGovernance/termsOfUse/agreements"]) {
+    for (const [suffix, params] of [
+      ["/file", { "agreement-id": "agreement-id" }],
+      ["/file/localizations/{agreementFileLocalization-id}/versions/{agreementFileVersion-id}", {
+        "agreement-id": "agreement-id", "agreementFileLocalization-id": "localization-id", "agreementFileVersion-id": "version-id",
+      }],
+    ]) {
+      const operation = resolveSessionOperation(version, "GET", `${root}/{agreement-id}${suffix}`);
+      for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) test(`${profile.mode} agreement file route ${operation.id} is denied before credentials`, async () => {
+        const f = fixture(json(200, {}));
+        await assert.rejects(
+          f.session.execute({ profile: { ...profile, preview: true }, operation, params, ...scopeArgs }),
+          error => error.code === "POLICY_DENIED" && /Sensitive area files/.test(error.message),
+        );
+        assert.equal(f.credentialCalls.length, 0);
+        assert.equal(f.requests.length, 0);
+      });
+    }
+  }
+}
+
 test("application profiles cannot use /me", async () => {
   const f = fixture(json(200, {}));
   await assert.rejects(f.session.execute({ profile: appProfile, operation: me }), { code: "POLICY_DENIED" });

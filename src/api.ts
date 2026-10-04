@@ -1,6 +1,7 @@
 import { AxiError } from "axi-sdk-js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
+import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
@@ -195,6 +196,25 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
   { id: "v1.0:GET:/directory/administrativeUnits/{administrativeUnit-id}", kind: "single", query: SINGLE_QUERY, fields: AU_FIELDS,
     access: "D/A AdministrativeUnit.Read.All. Delegated callers pass it as --scopes.",
     sources: ["https://learn.microsoft.com/graph/api/administrativeunit-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/organization", kind: "collection", query: ["$select"], fields: KNOWN_ORGANIZATION_FIELDS,
+    access: "D User.Read for restricted basics (id, displayName and verifiedDomains only; other properties return null) or Organization.Read.All for full metadata; A Organization.Read.All. Delegated callers pass it as --scopes and additionally need a supported Entra role (Directory Readers and Global Reader are among the supported least-privilege roles). No P1/P2 prerequisite is stated for this list; contact fields are personal data.",
+    note: "Graph documents $select only on the organization list; $filter/$top are not reviewed here. Exactly one organization exists per tenant.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/organization-list?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/organization/{organization-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_ORGANIZATION_FIELDS,
+    access: "D User.Read for restricted basics (id, displayName and verifiedDomains only; other properties return null) or Organization.Read.All for full metadata; A Organization.Read.All. Delegated callers pass it as --scopes and additionally need a supported Entra role (Directory Readers and Global Reader are among the supported least-privilege roles). No P1/P2 prerequisite is stated for this read; contact fields are personal data.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/organization-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/organization/{organization-id}/branding", kind: "single", query: SINGLE_QUERY, fields: KNOWN_BRANDING_FIELDS,
+    access: "D User.Read least-privileged or the purpose-built OrganizationalBranding.Read.All (Organization.Read.All also works). Delegated callers pass it as --scopes and additionally need Global Reader or Organizational Branding Administrator; A OrganizationalBranding.Read.All. No P1/P2 prerequisite is stated for this read, but configuring custom branding needs P1/P2. A 404 may indicate unconfigured branding or a missing or inaccessible organization.",
+    note: "The session sends Accept-Language: 0 to read the default branding; only non-Stream properties are reviewed here and Stream image bytes are refused.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/organizationalbranding-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/organization/{organization-id}/branding/localizations", kind: "collection", query: ["$select"], fields: KNOWN_BRANDING_FIELDS,
+    access: "D User.Read least-privileged or the purpose-built OrganizationalBranding.Read.All (Organization.Read.All also works). Delegated callers pass it as --scopes and additionally need Global Reader or Organizational Branding Administrator; A OrganizationalBranding.Read.All. No P1/P2 prerequisite is stated for this list.",
+    note: "Graph documents $select only on the localization list; $filter/$top are not reviewed here.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/organizationalbranding-list-localizations?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/organization/{organization-id}/branding/localizations/{organizationalBrandingLocalization-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_BRANDING_FIELDS,
+    access: "D User.Read least-privileged or the purpose-built OrganizationalBranding.Read.All (Organization.Read.All also works). Delegated callers pass it as --scopes and additionally need Global Reader or Organizational Branding Administrator; A OrganizationalBranding.Read.All. No P1/P2 prerequisite is stated for this read.",
+    note: "Only non-Stream properties are reviewed here; Stream image bytes are refused.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/organizationalbrandinglocalization-get?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/domains", kind: "collection", query: ["$select"], fields: DOMAIN_FIELDS,
     access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; a supported Entra role is also required (Domain Name Administrator or Global Reader are least-privileged). No P1/P2 prerequisite is stated for domain reads.",
     note: "Graph documents a known issue with $search, $top and $filter on domain lists; only $select is reviewed here.",

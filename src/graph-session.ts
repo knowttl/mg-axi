@@ -447,10 +447,12 @@ interface CursorState {
   next?: string;
   buffered: unknown[];
   seen: string[];
+  query: Record<string, string>;
+  consistencyLevel?: "eventual";
 }
 
 function encodeCursor(operation: SessionOperation, state: CursorState): string {
-  const payload = { v: 1, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN) };
+  const payload = { v: 2, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN), query: state.query, consistencyLevel: state.consistencyLevel ?? null };
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
@@ -461,23 +463,25 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   } catch {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
-  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown };
-  if (record.v !== 1 || record.op !== operation.id || !(record.next === null || typeof record.next === "string") || !Array.isArray(record.buffered) || !Array.isArray(record.seen)) {
+  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown; query?: unknown; consistencyLevel?: unknown };
+  if (!record || typeof record !== "object" || record.v !== 2 || record.op !== operation.id || !(record.next === null || typeof record.next === "string") || !Array.isArray(record.buffered) || !Array.isArray(record.seen) || !record.query || typeof record.query !== "object" || Array.isArray(record.query) || !(record.consistencyLevel === null || record.consistencyLevel === "eventual")) {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
   if (record.seen.length > MAX_SEEN || record.seen.some(entry => typeof entry !== "string" || !/^[0-9a-f]{16}$/.test(entry))) {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
   if (record.buffered.length > 5000) throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["The cursor buffers at most one fetched page"]);
-  return { next: record.next ?? undefined, buffered: record.buffered, seen: [...record.seen] };
+  const query = record.query as Record<string, string>;
+  const consistencyLevel = record.consistencyLevel ?? undefined;
+  buildQuery(query);
+  checkQueryContext(query, consistencyLevel);
+  return { next: record.next ?? undefined, buffered: record.buffered, seen: [...record.seen], query, consistencyLevel };
 }
 
 function nextLinkOf(body: unknown): string | undefined {
   if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
-  for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
-    if (key.toLowerCase() === "@odata.nextlink" && typeof value === "string" && value) return value;
-  }
-  return undefined;
+  const value = (body as Record<string, unknown>)["@odata.nextLink"];
+  return typeof value === "string" && value ? value : undefined;
 }
 
 function valuesOf(operation: SessionOperation, body: unknown): unknown[] {
@@ -538,19 +542,23 @@ export class GraphSession {
     }
     const profile = validateProfile(args.profile);
     this.authorizePolicy(profile, operation);
-    const query = args.query ?? {};
-    checkQueryContext(query, args.consistencyLevel);
     checkLimit(args.limit);
     const budget = checkBudget(args.budget);
     if (args.cursor !== undefined && (typeof args.cursor !== "string" || !args.cursor)) {
       throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
     }
     const resumed = args.cursor === undefined ? undefined : decodeCursor(operation, args.cursor);
+    const query = args.query ?? resumed?.query ?? {};
+    const consistencyLevel = args.consistencyLevel ?? resumed?.consistencyLevel;
+    checkQueryContext(query, consistencyLevel);
+    if (resumed && ((args.query !== undefined && buildQuery(args.query) !== buildQuery(resumed.query)) || (args.consistencyLevel !== undefined && args.consistencyLevel !== resumed.consistencyLevel))) {
+      throw new AxiError("Resume arguments conflict with collection cursor context", "VALIDATION_ERROR", ["Resume with the cursor's original query and consistency level, or omit those arguments"]);
+    }
     const params = args.params ?? {};
     const clock = args.clock ?? systemClock;
     const signal = args.signal;
     const startUrl = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params)}${buildQuery(query)}`;
-    const resumeUrl = resumed?.next === undefined ? undefined : authorizeUrl(operation, params, resumed.next, undefined, args.consistencyLevel);
+    const resumeUrl = resumed?.next === undefined ? undefined : authorizeUrl(operation, params, resumed.next, undefined, consistencyLevel);
     const token =
       profile.mode === "delegated"
         ? (await this.deps.delegated.credential(validateDelegatedProfile(profile), args.scopes ?? [])).token
@@ -559,7 +567,7 @@ export class GraphSession {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
       "client-request-id": randomUUID(),
-      ...(args.consistencyLevel === "eventual" ? { ConsistencyLevel: "eventual" } : {}),
+      ...(consistencyLevel === "eventual" ? { ConsistencyLevel: "eventual" } : {}),
     });
     const deadline = clock.now() + budget.deadlineMs;
     let pending: unknown[] = resumed ? [...resumed.buffered] : [];
@@ -582,7 +590,7 @@ export class GraphSession {
       value: results,
       complete: false,
       reason,
-      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList] }),
+      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel }),
       requests,
       bytes,
     });
@@ -625,7 +633,7 @@ export class GraphSession {
           const location = header(response.headers, "location");
           if (!location) throw new AxiError(`Graph redirect for ${operation.id} is missing its target`, "GRAPH_ERROR", ["A redirect without a target cannot be re-authorized"]);
           if (hops >= MAX_REDIRECTS) throw denied(operation, `the redirect exceeds ${MAX_REDIRECTS} hops`);
-          const target = authorizeUrl(operation, params, location, fetchUrl, args.consistencyLevel);
+          const target = authorizeUrl(operation, params, location, fetchUrl, consistencyLevel);
           if (seen.has(digestUrl(target)) || redirects.has(digestUrl(target))) return partial("continuation cycle detected; result is partial, never complete", target, pending);
           redirects.add(digestUrl(target));
           fetchUrl = target;
@@ -663,7 +671,7 @@ export class GraphSession {
         }
         const rows = valuesOf(operation, parsed);
         const rawNext = nextLinkOf(parsed);
-        const nextUrl = rawNext ? authorizeUrl(operation, params, rawNext, fetchUrl, args.consistencyLevel) : undefined;
+        const nextUrl = rawNext ? authorizeUrl(operation, params, rawNext, fetchUrl, consistencyLevel) : undefined;
         remember(current);
         remember(fetchUrl);
         current = nextUrl;

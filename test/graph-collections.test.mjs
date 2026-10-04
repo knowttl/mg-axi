@@ -322,7 +322,7 @@ test("invalid budgets fail before credential or HTTP", async () => {
 for (const next of ["https://example.invalid/", "https://graph.microsoft.com/v1.0/applications", "https://graph.microsoft.com/v1.0/users/other"]) {
   test(`cursor destination is authorized before credentials: ${next}`, async () => {
     const f = fixture(json(200, { value: [] }));
-    const cursor = Buffer.from(JSON.stringify({ v: 1, op: users.id, next, buffered: [], seen: [] })).toString("base64url");
+    const cursor = Buffer.from(JSON.stringify({ v: 2, op: users.id, next, buffered: [], seen: [], query: {}, consistencyLevel: null })).toString("base64url");
     await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor }), { code: "POLICY_DENIED" });
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
@@ -421,7 +421,7 @@ for (const [query, code] of [
   const target = `https://graph.microsoft.com/v1.0/users?${query}`;
   test(`cursor validates query context: ${query}`, async () => {
     const f = fixture(json(200, { value: [] }));
-    const cursor = Buffer.from(JSON.stringify({ v: 1, op: users.id, next: target, buffered: [], seen: [] })).toString("base64url");
+    const cursor = Buffer.from(JSON.stringify({ v: 2, op: users.id, next: target, buffered: [], seen: [], query: {}, consistencyLevel: "eventual" })).toString("base64url");
     await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor, consistencyLevel: "eventual" }), { code });
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
@@ -453,3 +453,102 @@ for (const method of ["collect", "execute"]) {
     assert.equal(f.requests.length, 1);
   });
 }
+
+for (const retainedSearch of [false, true]) {
+  for (const [name, options, throttled] of [
+    ["row cap", { limit: 1 }, false],
+    ["request budget", { budget: { maxRequests: 1 } }, false],
+    ["byte budget", { budget: { maxBytes: 1 } }, false],
+    ["throttle", {}, true],
+    ["deadline", { budget: { deadlineMs: 1000 } }, true],
+  ]) {
+    test(`${name} preserves search context across repeated resumes, retained search: ${retainedSearch}`, async () => {
+      const next = `https://graph.microsoft.com/v1.0/users?$skiptoken=opaque${retainedSearch ? '&$search=%22displayName%3Aana%22' : ""}`;
+      const f = fixture((request, count) => throttled && count === 1
+        ? json(429, {}, { "retry-after": "120" })
+        : count === (throttled ? 2 : 1)
+          ? json(200, { value: [{ id: "a" }, { id: "b" }], "@odata.nextLink": next })
+          : json(200, { value: [{ id: "c" }, { id: "d" }] }));
+      const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, query: { $search: '"displayName:ana"' }, consistencyLevel: "eventual", ...options });
+      assert.equal(first.complete, false);
+      const second = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor, limit: 1 });
+      assert.equal(second.complete, false);
+      const third = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: second.cursor });
+      assert.equal(third.complete, true);
+      assert.deepEqual([...first.value, ...second.value, ...third.value], [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }]);
+      assert.ok(f.requests.every(request => request.headers.ConsistencyLevel === "eventual"));
+      assert.equal(f.requests.at(-1).url, next);
+    });
+  }
+}
+
+for (const query of [{ $count: "true" }, {}]) {
+  test(`resume preserves eventual consistency through a redirect for ${JSON.stringify(query)}`, async () => {
+    const f = fixture((request, count) => count === 1
+      ? json(200, { value: [{ id: "a" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$skiptoken=one" })
+      : count === 2 ? json(302, {}, { location: "/v1.0/users?$skiptoken=two" })
+        : json(200, { value: [{ id: "b" }] }));
+    const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, query, consistencyLevel: "eventual", limit: 1 });
+    const second = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor });
+    assert.equal(second.complete, true);
+    assert.deepEqual(second.value, [{ id: "b" }]);
+    assert.ok(f.requests.every(request => request.headers.ConsistencyLevel === "eventual"));
+  });
+}
+
+for (const overrides of [{ query: { $filter: "id eq 'other'" } }, { consistencyLevel: "eventual" }]) {
+  test(`conflicting resume context fails before credentials: ${JSON.stringify(overrides)}`, async () => {
+    const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
+    const first = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, query: { $select: "id" }, limit: 1 });
+    const f = fixture(json(200, { value: [] }));
+    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor, ...overrides }), { code: "VALIDATION_ERROR" });
+    assert.equal(f.credentialCalls.length, 0);
+    assert.equal(f.requests.length, 0);
+  });
+}
+
+test("matching resume context accepts query keys in a different order", async () => {
+  const f = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
+  const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, query: { $search: "ana", $select: "id" }, consistencyLevel: "eventual", limit: 1 });
+  const second = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor, query: { $select: "id", $search: "ana" }, consistencyLevel: "eventual" });
+  assert.deepEqual(second.value, [{ id: "b" }]);
+  assert.equal(second.complete, true);
+});
+
+for (const context of [
+  { query: { $search: "ana" }, consistencyLevel: null },
+  { query: { $top: 5 }, consistencyLevel: null },
+  { query: { unsupported: "value" }, consistencyLevel: null },
+  { query: {}, consistencyLevel: "strong" },
+  { query: [], consistencyLevel: null },
+]) {
+  test(`invalid saved cursor context fails before credentials: ${JSON.stringify(context)}`, async () => {
+    const f = fixture(json(200, { value: [] }));
+    const cursor = Buffer.from(JSON.stringify({ v: 2, op: users.id, next: null, buffered: [{ id: "a" }], seen: [], ...context })).toString("base64url");
+    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor }), { code: "VALIDATION_ERROR" });
+    assert.equal(f.credentialCalls.length, 0);
+    assert.equal(f.requests.length, 0);
+  });
+}
+
+for (const budget of [undefined, { maxBytes: 1 }]) {
+  test(`only the exact nextLink annotation is followed, byte cap: ${Boolean(budget)}`, async () => {
+    const next = "https://graph.microsoft.com/v1.0/users?$skiptoken=exact";
+    const f = fixture((request, count) => count === 1
+      ? json(200, { value: [{ id: "a" }], "@ODATA.NEXTLINK": "https://example.invalid/", "@odata.nextLink": next })
+      : json(200, { value: [{ id: "b" }] }));
+    const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, budget });
+    const result = budget ? await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor }) : first;
+    assert.equal(result.complete, true);
+    assert.deepEqual(result.value, [{ id: "a" }, { id: "b" }]);
+    assert.equal(f.requests[1].url, next);
+  });
+}
+
+test("alternate nextLink capitalization is ignored", async () => {
+  const f = fixture(json(200, { value: [{ id: "a" }], "@odata.nextlink": "https://example.invalid/" }));
+  const result = await f.session.collect({ profile: delegatedProfile, operation: users, scopes });
+  assert.equal(result.complete, true);
+  assert.deepEqual(result.value, [{ id: "a" }]);
+  assert.equal(f.requests.length, 1);
+});

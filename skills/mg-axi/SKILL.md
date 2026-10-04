@@ -18,7 +18,7 @@ See [README.md](../../README.md#release) for doctor profile selection, checks an
 ## Orientation
 
 The exact current leaf registry is `src/catalogue.ts`.
-Its capability label is `native` (implemented by an mg-axi handler) and its effect is `read` for Graph leaves and the doctor health check or `local` for home, profile, login and setup views.
+The generated table below records each leaf's capability and effect.
 Doctor acquires credentials silently and contacts Graph; only its help view stays offline.
 The list below records current executable leaves; it makes no coverage claim for other Graph operations.
 See `docs/coverage.md` for the per-operation disposition records.

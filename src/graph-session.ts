@@ -200,6 +200,13 @@ function secretKey(key: string): boolean {
   return name === "sas" || name === "authorization" || SECRET_KEY.test(name) || KEY_SUFFIX.test(name);
 }
 
+// Shared redaction for reads, mutation previews and audit metadata: secret
+// key names and sentinel values become the marker before buffering, output
+// or journaling. WRITE-00 reuses this so previews never leak secrets.
+export function redactGraphValue(value: unknown): unknown {
+  return redact(value);
+}
+
 function redact(value: unknown): unknown {
   if (typeof value === "string") return SECRET_VALUE.some(pattern => pattern.test(value)) ? REDACTED : value;
   if (Array.isArray(value)) return value.map(redact);

@@ -290,6 +290,12 @@ Unknown fields, unsupported versions/clouds and inlined credential material are 
 Creation never overwrites an existing profile.
 Preview is disabled and sensitive areas are empty in newly created profiles.
 
+Writes stay disabled unless a human hand-edits a `writes` object into the profile file: `{ "allowWrites": true, "operations": ["<operation-name>"] }`.
+No command writes that object, and `MG_AXI_READ_ONLY=1` overrides any opt-in.
+WRITE-00 enables no mutation family or command; the coordinator exists for fixture-driven tests only, capturing the profile tenant and operation list at creation, previewing the redacted change, requiring explicit execution plus target confirmation for disruptive effects, and journaling intent before send and outcome before reporting to `~/.mg-axi/writes.log` (`MG_AXI_WRITE_LOG` overrides).
+A recorded intent is never replayed automatically.
+Directory fsync is skipped where the platform cannot provide it (native Windows); the journal directory is created before any intent is reserved and the file itself is still fsynced there.
+
 Browser login uses Microsoft's [MSAL interactive API](https://learn.microsoft.com/en-us/entra/msal/javascript/node/acquire-token-requests) and PKCE.
 Request delegated Graph scope names explicitly with `--scopes`, separated by commas.
 Use full `https://graph.microsoft.com/` scope names; delegated login rejects `.default`.

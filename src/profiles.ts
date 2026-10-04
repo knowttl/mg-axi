@@ -4,11 +4,19 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { AxiError } from "axi-sdk-js";
 
+// WRITE-00 hand-edited write opt-in. Absent or { allowWrites: false } keeps
+// the profile read-only. No CLI command writes this object; it is added by
+// editing the configuration file, and later named writes bind to it.
+export type WritePolicy = Readonly<{
+  allowWrites: boolean;
+  operations: readonly string[];
+}>;
 export type DelegatedProfile = Readonly<{
   mode: "delegated"; tenantId: string; clientId: string; cloud: "commercial";
   enabledPacks: readonly "entra"[]; preview: boolean; sensitiveAreas: readonly string[];
   credentialRef: Readonly<{ provider: "os-or-session"; key: string }>;
   allowDeviceCode: boolean;
+  writes?: WritePolicy;
 }>;
 export type ApplicationProfile = Readonly<{
   mode: "application"; tenantId: string; clientId: string; cloud: "commercial";
@@ -18,6 +26,7 @@ export type ApplicationProfile = Readonly<{
     | { provider: "federated"; key: string }
   >;
   allowDeviceCode: false;
+  writes?: WritePolicy;
 }>;
 export type AnyProfile = DelegatedProfile | ApplicationProfile;
 export type AppCredential = { token: string; expiresAt: number; tenantId: string; clientId: string };
@@ -31,7 +40,18 @@ function invalid(message: string): never {
 }
 
 const thumbprint = /^[0-9a-f]{40}$/i;
-const sharedKeys = ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "credentialRef", "allowDeviceCode"];
+const sharedKeys = ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "credentialRef", "allowDeviceCode", "writes"];
+const MAX_WRITE_OPERATIONS = 64;
+const MAX_WRITE_OPERATION_LENGTH = 256;
+function validateWrites(value: unknown): WritePolicy | undefined {
+  if (value === undefined) return undefined;
+  if (!object(value) || !exact(value, ["allowWrites", "operations"]) || typeof value.allowWrites !== "boolean" ||
+    !Array.isArray(value.operations) || value.operations.length === 0 || value.operations.length > MAX_WRITE_OPERATIONS ||
+    value.operations.some(entry => typeof entry !== "string" || !entry.length || entry.length > MAX_WRITE_OPERATION_LENGTH)) {
+    invalid("Invalid write policy; hand-edit a writes object with boolean allowWrites and a nonempty operations array of nonempty operation names");
+  }
+  return Object.freeze({ allowWrites: value.allowWrites as boolean, operations: Object.freeze([...(value.operations as string[])]) });
+}
 const sharedIdentity = (value: Record<string, unknown>) =>
   value.cloud === "commercial" && typeof value.tenantId === "string" && guid.test(value.tenantId) &&
   typeof value.clientId === "string" && guid.test(value.clientId) && typeof value.preview === "boolean" &&
@@ -43,9 +63,10 @@ export function validateDelegatedProfile(value: unknown): DelegatedProfile {
     !object(value.credentialRef) || !exact(value.credentialRef, ["provider", "key"]) || value.credentialRef.provider !== "os-or-session" ||
     typeof value.credentialRef.key !== "string" || !guid.test(value.credentialRef.key)) invalid("Invalid delegated profile; explicit tenant/client IDs and commercial cloud are required, with credentials only by reference");
   const profile = value as unknown as DelegatedProfile;
+  const writes = validateWrites((value as Record<string, unknown>).writes);
   return Object.freeze({ mode: "delegated" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const, preview: profile.preview,
     allowDeviceCode: profile.allowDeviceCode, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
-    credentialRef: Object.freeze({ provider: "os-or-session" as const, key: profile.credentialRef.key }) });
+    credentialRef: Object.freeze({ provider: "os-or-session" as const, key: profile.credentialRef.key }), ...(writes === undefined ? {} : { writes }) });
 }
 
 export function validateApplicationProfile(value: unknown): ApplicationProfile {
@@ -53,16 +74,18 @@ export function validateApplicationProfile(value: unknown): ApplicationProfile {
     !object(value.credentialRef)) invalid("Invalid application profile; explicit tenant/client IDs and commercial cloud are required, with credentials only by reference");
   const profile = value as unknown as Omit<ApplicationProfile, "credentialRef"> & { credentialRef: Record<string, unknown> };
   const ref = profile.credentialRef;
+  const writes = validateWrites((value as Record<string, unknown>).writes);
+  const writeFields = writes === undefined ? {} : { writes };
   if (ref.provider === "certificate" && exact(ref, ["provider", "key", "thumbprint"]) && typeof ref.key === "string" && guid.test(ref.key) &&
     typeof ref.thumbprint === "string" && thumbprint.test(ref.thumbprint)) {
     return Object.freeze({ mode: "application" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const,
       preview: profile.preview, allowDeviceCode: false as const, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
-      credentialRef: Object.freeze({ provider: "certificate" as const, key: ref.key, thumbprint: ref.thumbprint.toLowerCase() }) });
+      credentialRef: Object.freeze({ provider: "certificate" as const, key: ref.key, thumbprint: ref.thumbprint.toLowerCase() }), ...writeFields });
   }
   if (ref.provider === "federated" && exact(ref, ["provider", "key"]) && typeof ref.key === "string" && guid.test(ref.key)) {
     return Object.freeze({ mode: "application" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const,
       preview: profile.preview, allowDeviceCode: false as const, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
-      credentialRef: Object.freeze({ provider: "federated" as const, key: ref.key }) });
+      credentialRef: Object.freeze({ provider: "federated" as const, key: ref.key }), ...writeFields });
   }
   invalid("Invalid application profile; credentialRef must be a certificate or federated reference, never inlined key material");
 }

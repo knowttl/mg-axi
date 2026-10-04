@@ -54,7 +54,21 @@ After login, use:
 mg-axi entra user list --profile soc --limit 10
 mg-axi entra user list --profile soc --select id,displayName,department --fields id,department
 mg-axi entra user show --profile soc --id <user-id-or-upn> --full
+mg-axi entra group list --profile soc --limit 10
+mg-axi entra group show --profile soc --id <group-id>
+mg-axi entra group member list --profile soc --group <group-id>
+mg-axi entra group member list --profile soc --group <group-id> --transitive
+mg-axi entra group member-of list --profile soc --group <group-id> --transitive
 ```
+
+`entra group list` defaults to compact properties (`id`, `displayName`, `mail`, `groupTypes`); `entra group show --id <group-id>` defaults to the richer reviewed group set including `isAssignableToRole`, which marks groups eligible for role assignment.
+Role-assignable membership changes need role-management permission and belong to a later write slice, never to these reads.
+`entra group member list --group <group-id>` lists direct members and `entra group member-of list --group <group-id>` lists direct memberships; `--transitive` selects the flat nested closure instead.
+Relationship rows keep `@odata.type` alongside the requested properties, so member kinds stay visible.
+Hidden members are omitted without `Member.Read.Hidden`, and narrow application consent yields limited-information rows carrying only id and type; both are reported in help rather than mistaken for empty results, and completion describes pagination, not visibility.
+Direct member results always carry the [v1.0 service-principal limitation](docs/graph-coverage.md#licensing-and-completeness-findings) warning; there is no silent beta or expansion fallback.
+`--filter` on group collections is sent with `ConsistencyLevel: eventual`, which the relationship endpoints require.
+Delegated group reads default to `https://graph.microsoft.com/GroupMember.Read.All`; hidden members need `Member.Read.Hidden` and richer group properties may need `Group.Read.All`, while application profiles use the configured `.default` audience.
 
 Configure the registration's Mobile and desktop applications redirect URI as `http://localhost` for browser login.
 The first created profile is the default; `--profile` selects another identity explicitly.

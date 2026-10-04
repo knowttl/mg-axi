@@ -5,6 +5,7 @@ import { VERSION } from "./version.js";
 import { Profiles } from "./profiles.js";
 import { GraphSession, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
+import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
 import { fetchTransport } from "./api.js";
 import type { DelegatedAuth } from "./auth.js";
 import type { ApplicationAuth } from "./app-auth.js";
@@ -116,6 +117,38 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     return leaf.path === "entra user list"
       ? listUsers(session, flags, selected.profile, operation, leafHelp(leaf), selected.name)
       : showUser(session, flags, selected.profile, operation, leafHelp(leaf), selected.name);
+  }
+  if (leaf.path === "entra group list" || leaf.path === "entra group show" || leaf.path === "entra group member list" || leaf.path === "entra group member-of list") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const template = flags.transitive === true
+      ? (() => {
+        const alternate = TRANSITIVE_OPERATION[leaf.operation!];
+        if (!alternate) throw new AxiError("--transitive is available for group member and member-of lists only", "VALIDATION_ERROR", [leafHelp(leaf)]);
+        return alternate;
+      })()
+      : leaf.operation!;
+    const operation = operationFor({ ...leaf, operation: template }, String(flags["api-version"] ?? "v1.0"));
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    if (leaf.path === "entra group list") return listGroups(session, flags, selected.profile, operation, leafHelp(leaf), selected.name);
+    if (leaf.path === "entra group show") return showGroup(session, flags, selected.profile, operation, leafHelp(leaf), selected.name);
+    return leaf.path === "entra group member list"
+      ? listGroupMembers(session, flags, selected.profile, operation, leafHelp(leaf), selected.name)
+      : listGroupMemberOf(session, flags, selected.profile, operation, leafHelp(leaf), selected.name);
   }
   const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
   throw new AxiError(`Command is not executable: ${operation?.disposition ?? "unavailable"} (${operation?.owningSlice ?? "no inventory mapping"})`, "NOT_IMPLEMENTED", [leafHelp(leaf)]);

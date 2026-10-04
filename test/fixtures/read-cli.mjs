@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { Socket } from "node:net";
 import { mock } from "node:test";
 
-const { mode, directory, denied } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const { mode, directory, denied, scopes, groups, members, memberOf } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const expectedDelegated = scopes ?? "https://graph.microsoft.com/User.Read.All";
 const [major, minor] = process.versions.node.split(".").map(Number);
 const exportOption = major >= 26 || (major === 25 && minor >= 9) || (major === 24 && minor >= 15)
   ? "exports" : "namedExports";
@@ -15,7 +16,7 @@ function credential(profile, scopes, expectedMode) {
   assert.equal(profile.mode, expectedMode);
   assert.deepEqual(scopes, [mode === "application"
     ? "https://graph.microsoft.com/.default"
-    : "https://graph.microsoft.com/User.Read.All"]);
+    : expectedDelegated]);
   return {
     token: `opaque-fixture-${mode}-token`,
     expiresAt: Date.now() + 3_600_000,
@@ -52,6 +53,19 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
       body = url.searchParams.has("$skiptoken")
         ? { value: directory.slice(2) }
         : { value: directory.slice(0, 2), "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?%24skiptoken=page2" };
+    } else if (groups !== undefined && url.pathname === "/v1.0/groups") {
+      if (url.searchParams.has("$filter")) assert.equal(request.headers.ConsistencyLevel, "eventual");
+      body = url.searchParams.has("$skiptoken")
+        ? { value: groups.slice(2) }
+        : { value: groups.slice(0, 2), "@odata.nextLink": "https://graph.microsoft.com/v1.0/groups?%24skiptoken=page2" };
+    } else if (groups !== undefined && /^\/v1\.0\/groups\/[^/]+\/(members|transitiveMembers|memberOf|transitiveMemberOf)$/.test(url.pathname)) {
+      if (url.searchParams.has("$filter")) assert.equal(request.headers.ConsistencyLevel, "eventual");
+      const relationship = url.pathname.endsWith("memberOf") || url.pathname.endsWith("transitiveMemberOf") ? memberOf : members;
+      body = { value: relationship };
+    } else if (groups !== undefined && /^\/v1\.0\/groups\/[^/]+$/.test(url.pathname)) {
+      const group = groups.find(row => url.pathname === `/v1.0/groups/${row.id}`);
+      assert.ok(group, "Unexpected group route");
+      body = group;
     } else {
       const user = directory.find(row => url.pathname === `/v1.0/users/${row.id}`);
       assert.ok(user, "Unexpected user route");

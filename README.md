@@ -39,7 +39,7 @@ Partial lists report `count.complete: false`, a reason and an opaque `cursor` pr
 Resume with `--cursor <cursor-from-output>` using the same profile, authentication scopes and API version; original `--select` and `--filter` values may be repeated or omitted, and conflicting values fail validation.
 Repeat `--fields` and `--full` when the same local view is wanted; these are not saved in the cursor.
 Delegated user reads default to `https://graph.microsoft.com/User.Read.All` with `--scopes` available for least-privilege basics; application profiles use the configured Graph `.default` audience and reject delegated scopes.
-All delegated reads, including raw reads and cursor resumes, reject scopes outside the documented read choices in [Graph coverage](docs/graph-coverage.md) and the additional `Policy.Read.ConditionalAccess` choice documented below, before credential acquisition.
+All delegated reads, including raw reads and cursor resumes, reject scopes outside `READ_SCOPES` in the [shared session](src/graph-session.ts) before credential acquisition; [Graph coverage](docs/graph-coverage.md) explains the operation-specific read permission choices.
 Write scopes are refused with `VALIDATION_ERROR` and a list of supported read scopes.
 User reads acquire credentials silently; a resume containing only buffered rows can finish without another Graph request.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
@@ -192,7 +192,8 @@ Denied log reads name the operation's supported directory roles and the conserva
 Credential collections expose only expiry metadata (`keyId`, `displayName`, `startDateTime`, `endDateTime`); the shared session drops every other credential subfield before output or cursor buffering and applies the same filtering to buffered rows on resume, including older cursors.
 Non-array credential collections become empty arrays, and non-object entries are dropped; other properties retain the null/missing behavior described above.
 Secret-minting routes are never constructed.
-`entra application owner list --application <application-object-id>` and `entra service-principal owner list --service-principal <service-principal-object-id>` list owners; rows carry `@odata.type` naming the owner kind, and consent grants stay out - they belong to READ-08.
+`entra application owner list --application <application-object-id>` and `entra service-principal owner list --service-principal <service-principal-object-id>` list owners; rows carry `@odata.type` naming the owner kind.
+For consent grants, use the service-principal grant commands described above.
 Application lists return `applications`, service-principal lists return `servicePrincipals`, owner lists return `owners`, and single-object reads return `application` or `servicePrincipal`.
 App and service-principal `--select` accepts the [reviewed property sets](src/entra-apps.ts); `--fields` must be a subset of the fetched selection.
 Owner rows default to `id`, `displayName` and `mail`, the only selectable owner properties; rows without non-null descriptive properties are preserved with a hint about limited consent or unset properties.

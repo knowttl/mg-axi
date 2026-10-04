@@ -86,7 +86,7 @@ See [Identity Protection](https://learn.microsoft.com/en-us/entra/id-protection/
 Risky sign-in investigation uses sign-in risk properties and detections; there is no invented `/riskySignIns` endpoint in this design.
 
 The licensing overview makes base sign-in/audit logs available on Free, while [Graph access guidance](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-access-activity-logs) describes P1/P2 tenants.
-This contract exposes this distinction and proposes a conservative P1/P2 Graph deployment prerequisite rather than flattening the documentation into an unconditional licence claim.
+This contract exposes this distinction and adopts a conservative P1/P2 Graph deployment prerequisite rather than flattening the documentation into an unconditional licence claim.
 Retention, premium fields, and licences for the generating feature remain separate constraints.
 Never diagnose licence solely from HTTP 403.
 

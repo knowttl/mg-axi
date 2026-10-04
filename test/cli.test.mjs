@@ -187,6 +187,14 @@ test("access-review decision list leaf help marks decisions read-only with paren
   assert.match(result.stdout, /--instance.*required/);
 });
 
+test("organization list leaf help names the singular organization route", () => {
+  const result = run(["entra", "organization", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /--filter is unsupported on \/organization /);
+  assert.ok(!result.stdout.includes("/organizations"));
+});
+
 test("administrative-unit member list leaf help advertises the relationship flags", () => {
   const result = run(["entra", "administrative-unit", "member", "list", "--help"]);
   assert.equal(result.status, 0);

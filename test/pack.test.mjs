@@ -98,6 +98,15 @@ test("setup reports unconfigured state without writing configuration", () => {
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
+test("setup capability prose lists the shipped read families from the catalogue", () => {
+  const home = dir();
+  try {
+    const output = decode(runPlain(["setup"], home).stdout);
+    assert.equal(output.capabilities.api,
+      "Entra user, registration, group, directory-role/PIM, device, administrative-unit, organization and branding, domain and domain DNS, sign-in/directory-audit, application/service-principal and consent grants, risk, Conditional Access and access-review reads plus reviewed raw api get, one gated group-membership write, one gated account enable/disable write, one gated session-revocation write and one gated risky-user dismissal write; every other operation is scheduled, blocked, deprecated or excluded");
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
 test("setup reports configured profiles without credential material", () => {
   const home = dir();
   try {

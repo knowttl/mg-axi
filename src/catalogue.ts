@@ -389,7 +389,7 @@ export const LEAVES: Leaf[] = [
     cursor: auRead.cursor,
     scopes: auRead.scopes,
   }, examples: ["mg-axi entra administrative-unit member list --administrative-unit <administrative-unit-id> --profile soc", "mg-axi entra administrative-unit member list --administrative-unit <administrative-unit-id> --profile soc --limit 10"] },
-  { path: "entra organization list", description: "List tenant organizations with compact properties (id, displayName, tenantType, verifiedDomains); exactly one row exists per tenant; --filter is unsupported on /organizations (Graph documents $select only)", operation: "GET:/organization", flags: {
+  { path: "entra organization list", description: "List tenant organizations with compact properties (id, displayName, tenantType, verifiedDomains); exactly one row exists per tenant; --filter is unsupported on /organization (Graph documents $select only)", operation: "GET:/organization", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
     all: { description: "Follow pages within request, byte and deadline budgets" },

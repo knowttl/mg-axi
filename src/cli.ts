@@ -14,6 +14,8 @@ import { listAppRoleAssignments, listOAuth2Grants } from "./entra-grants.js";
 import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection } from "./entra-risk.js";
 import { listPolicies, showPolicy, listNamedLocations, showNamedLocation } from "./entra-conditional-access.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
+import { addGroupMember, mutationFetchTransport } from "./entra-group-member-add.js";
+import type { MutationTransport } from "./mutations.js";
 import { fetchTransport } from "./api.js";
 import { doctorTargets, runDoctor } from "./doctor.js";
 import { setupView } from "./setup.js";
@@ -42,6 +44,7 @@ function localHome(name?: string) {
 // transports. Production callers pass no overrides and reach MSAL + HTTPS.
 export interface DispatchOverrides {
   transport?: GraphTransport;
+  mutationTransport?: MutationTransport;
   delegated?: DelegatedAuth;
   application?: ApplicationAuth;
 }
@@ -234,6 +237,36 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     return leaf.path === "entra group member list"
       ? listGroupMembers(session, flags, selected.profile, operation, leafHelp(leaf), selected.name)
       : listGroupMemberOf(session, flags, selected.profile, operation, leafHelp(leaf), selected.name);
+  }
+  if (leaf.path === "entra group member add") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
+    if (!operation || operation.method !== "POST") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    return addGroupMember({
+      session,
+      profile: selected.profile,
+      delegated,
+      application,
+      transport: overrides.mutationTransport ?? mutationFetchTransport,
+      flags,
+      profileName: selected.name,
+      help: leafHelp(leaf),
+    });
   }
   if (leaf.path === "entra directory-role list" || leaf.path === "entra directory-role show" || leaf.path === "entra role-assignment list" || leaf.path === "entra pim eligible list" || leaf.path === "entra pim active list"
     || leaf.path === "entra device list" || leaf.path === "entra device show"

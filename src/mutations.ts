@@ -70,12 +70,17 @@ export type MutationExecuteOptions = {
   scopes?: string[];
   readState: () => unknown | Promise<unknown>;
   isNoop?: (current: unknown) => boolean;
+  /** Idempotency classifier (WRITE-01): when the send fails with an error
+      this recognizes as already-applied (for example a duplicate-reference
+      400), the outcome records NOOP and execute returns noop instead of
+      failed. Anything else keeps the default 4xx-means-failed mapping. */
+  isDuplicate?: (error: unknown) => boolean;
   intentId?: string;
 };
 
 export type MutationResult =
   | { kind: "dry-run"; preview: MutationPreview }
-  | { kind: "noop"; preview: MutationPreview }
+  | { kind: "noop"; preview: MutationPreview; auditId?: string; duplicate?: boolean }
   | { kind: "success"; preview: MutationPreview; auditId: string; status: number; response: unknown }
   | { kind: "failed"; preview: MutationPreview; auditId: string; status: number }
   | { kind: "unknown"; preview: MutationPreview; auditId: string; httpStatus: number; guidance: string };
@@ -154,7 +159,7 @@ function assertMutationDestination(url: string): void {
 }
 
 function mutationFailure(
-  message: string, code: string, suggestions: string[], details: { httpStatus: number; accepted?: boolean },
+  message: string, code: string, suggestions: string[], details: { httpStatus: number; accepted?: boolean; graphCode?: string; graphMessage?: string },
 ): AxiError {
   return Object.assign(new AxiError(message, code, suggestions), { details });
 }
@@ -180,13 +185,42 @@ export function mutationAccepted(error: unknown): boolean {
   return false;
 }
 
+export function mutationGraphFault(error: unknown): { code: string; message: string } | null {
+  if (error && typeof error === "object" && "details" in error) {
+    const details = (error as { details?: unknown }).details;
+    if (details && typeof details === "object") {
+      const record = details as { graphCode?: unknown; graphMessage?: unknown };
+      if (typeof record.graphCode === "string" || typeof record.graphMessage === "string") {
+        return { code: typeof record.graphCode === "string" ? record.graphCode : "", message: typeof record.graphMessage === "string" ? record.graphMessage : "" };
+      }
+    }
+  }
+  return null;
+}
 const mutationsNotSent = new WeakSet<object>();
 
 export function mutationNotSent(error: unknown): boolean {
   return error instanceof Error && mutationsNotSent.has(error);
 }
 
+// Graph error code/message carried on mutation failures for idempotency
+// classifiers (WRITE-01 duplicate detection). Never secrets: only the
+// error code and a truncated message, matching the read faultBody shape.
+function graphFaultDetail(body: string): { code: string; message: string } | null {
+  if (!body) return null;
+  try {
+    const parsed = JSON.parse(body) as { error?: { code?: unknown; message?: unknown } };
+    const code = typeof parsed?.error?.code === "string" ? parsed.error.code : "";
+    const message = typeof parsed?.error?.message === "string" ? parsed.error.message.slice(0, 300) : "";
+    return code || message ? { code, message } : null;
+  } catch {
+    return null;
+  }
+}
+
 function decodeMutationBody(response: MutationTransportResponse): unknown {
+  const fault = graphFaultDetail(response.body);
+  const faultDetails = fault === null ? {} : { graphCode: fault.code, graphMessage: fault.message };
   if (response.status === 401) {
     throw mutationFailure(`Graph rejected the mutation credential (401)`, "AUTH_REQUIRED", [
       "mg-axi login --profile <name> --scopes <comma-separated-Graph-scopes>",
@@ -207,7 +241,7 @@ function decodeMutationBody(response: MutationTransportResponse): unknown {
   if (response.status < 200 || response.status > 299) {
     throw mutationFailure(`Graph mutation returned status ${response.status}`, "GRAPH_ERROR", [
       "Read back the target before doing anything else; never replay this intent",
-    ], { httpStatus: response.status });
+    ], { httpStatus: response.status, ...faultDetails });
   }
   try {
     return response.body ? JSON.parse(response.body) as unknown : {};
@@ -589,6 +623,13 @@ export function createMutationCoordinator(args: {
       if (httpStatus > 0 && mutationAccepted(error)) {
         recordAudit({ ...meta, kind: "outcome", httpStatus, outcome: "SUCCESS" });
         return { kind: "success", preview: seen, auditId: id, status: httpStatus, response: {} };
+      }
+      // Idempotent already-applied outcome (WRITE-01 duplicate reference):
+      // the desired state holds, so this is a no-op, not a failure. The
+      // intent still cannot replay: the recorded intent blocks any resend.
+      if (httpStatus > 0 && options.isDuplicate?.(error) === true) {
+        recordAudit({ ...meta, kind: "outcome", httpStatus, outcome: "NOOP" });
+        return { kind: "noop", preview: seen, auditId: id, duplicate: true };
       }
       if (httpStatus >= 400 && httpStatus < 500 && httpStatus !== 408) {
         recordAudit({ ...meta, kind: "outcome", httpStatus, outcome: "FAILED" });

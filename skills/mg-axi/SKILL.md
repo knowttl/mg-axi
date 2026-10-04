@@ -8,7 +8,7 @@ user-invocable: false
 
 Agent-ergonomic CLI for Microsoft Graph, read-only by default.
 Entra SOC reads through token-efficient TOON output.
-No write leaf exists: every mutation is refused by the read-only session.
+One gated write leaf exists (`entra group member add`); every other mutation is refused.
 
 From a built checkout, run commands from the repository root with `node dist/bin/mg-axi.js`.
 Throughout this skill and CLI output, substitute that invocation for `mg-axi` unless you have separately installed the executable on PATH.
@@ -42,6 +42,7 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra group show` | native | read |
 | `mg-axi entra group member list` | native | read |
 | `mg-axi entra group member-of list` | native | read |
+| `mg-axi entra group member add` | native | write |
 | `mg-axi entra directory-role list` | native | read |
 | `mg-axi entra directory-role show` | native | read |
 | `mg-axi entra role-assignment list` | native | read |

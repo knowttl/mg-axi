@@ -11,7 +11,8 @@ import { Profiles } from "./profiles.js";
 export function setupView(store: Profiles): Record<string, unknown> {
   const items = store.list();
   const implemented = LEAVES.map(leaf => leaf.path);
-  const reads = LEAVES.filter(leaf => leaf.operation !== undefined || leaf.path === "api get" || leaf.path === "doctor").length;
+  const reads = LEAVES.filter(leaf => (leaf.operation !== undefined && leaf.operation.startsWith("GET:")) || leaf.path === "api get" || leaf.path === "doctor").length;
+  const writes = LEAVES.filter(leaf => leaf.operation !== undefined && !leaf.operation.startsWith("GET:")).length;
   return {
     command: "mg-axi setup",
     config: store.path,
@@ -33,8 +34,9 @@ export function setupView(store: Profiles): Record<string, unknown> {
     capabilities: {
       implemented,
       reads,
-      local: implemented.length - reads,
-      api: "Entra user, group, directory-role/PIM, device, administrative-unit, sign-in/directory-audit, application/service-principal, consent-grant, risk and Conditional Access reads plus reviewed raw api get; every other operation is scheduled, blocked, deprecated or excluded",
+      writes,
+      local: implemented.length - reads - writes,
+      api: "Entra user, group, directory-role/PIM, device, administrative-unit, sign-in/directory-audit, application/service-principal, consent-grant, risk and Conditional Access reads plus reviewed raw api get and one gated group-membership write; every other operation is scheduled, blocked, deprecated or excluded",
       report: "docs/coverage.md",
     },
     integration: "Install skills/mg-axi/SKILL.md explicitly through your agent's skill installation mechanism; setup only shows guidance and installs no skills or hooks",

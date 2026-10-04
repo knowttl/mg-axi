@@ -48,29 +48,30 @@ export const KNOWN_ASSIGNMENT_FIELDS: readonly string[] = [
   "roleDefinitionId",
   "directoryScopeId",
   "appScopeId",
-  "createdDateTime",
 ];
-export const KNOWN_PIM_FIELDS: readonly string[] = [
+export const KNOWN_ELIGIBLE_FIELDS: readonly string[] = [
   "id",
   "principalId",
   "roleDefinitionId",
   "directoryScopeId",
   "appScopeId",
-  "assignmentType",
   "memberType",
   "startDateTime",
   "endDateTime",
 ];
+export const KNOWN_ACTIVE_FIELDS: readonly string[] = [...KNOWN_ELIGIBLE_FIELDS, "assignmentType"];
 const ROLE_KNOWN = new Set(KNOWN_ROLE_FIELDS);
 const ASSIGNMENT_KNOWN = new Set(KNOWN_ASSIGNMENT_FIELDS);
-const PIM_KNOWN = new Set(KNOWN_PIM_FIELDS);
+const ELIGIBLE_KNOWN = new Set(KNOWN_ELIGIBLE_FIELDS);
+const ACTIVE_KNOWN = new Set(KNOWN_ACTIVE_FIELDS);
 
 // Compact rows: identifiers plus the correlation keys. For built-in roles
 // the unified roleDefinitionId matches the directory-role roleTemplateId.
 const DEFAULT_ROLE_LIST_SELECT = ["id", "displayName", "description", "roleTemplateId"];
 const DEFAULT_ROLE_SHOW_SELECT = [...KNOWN_ROLE_FIELDS];
 const DEFAULT_ASSIGNMENT_SELECT = ["id", "principalId", "roleDefinitionId", "directoryScopeId"];
-const DEFAULT_PIM_SELECT = ["id", "principalId", "roleDefinitionId", "assignmentType", "memberType"];
+const DEFAULT_ELIGIBLE_SELECT = ["id", "principalId", "roleDefinitionId", "memberType"];
+const DEFAULT_ACTIVE_SELECT = ["id", "principalId", "roleDefinitionId", "assignmentType", "memberType"];
 export const DEFAULT_ROLE_SCOPES = ["https://graph.microsoft.com/RoleManagement.Read.Directory"];
 export const DEFAULT_ELIGIBLE_SCOPES = ["https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory"];
 export const DEFAULT_ACTIVE_SCOPES = ["https://graph.microsoft.com/RoleAssignmentSchedule.Read.Directory"];
@@ -248,9 +249,9 @@ const ASSIGNMENT_LIST: CollectionShape = {
 const PIM_ELIGIBLE: CollectionShape = {
   command: "entra pim eligible list",
   key: "eligibleAssignments",
-  known: PIM_KNOWN,
-  knownList: KNOWN_PIM_FIELDS,
-  defaultSelect: DEFAULT_PIM_SELECT,
+  known: ELIGIBLE_KNOWN,
+  knownList: KNOWN_ELIGIBLE_FIELDS,
+  defaultSelect: DEFAULT_ELIGIBLE_SELECT,
   defaultScopes: DEFAULT_ELIGIBLE_SCOPES,
   denialHints: ELIGIBLE_DENIAL_HINTS,
   scopeNote: "Eligible assignments are not active; activation is a PIM workflow outside these reads",
@@ -260,9 +261,9 @@ const PIM_ELIGIBLE: CollectionShape = {
 const PIM_ACTIVE: CollectionShape = {
   command: "entra pim active list",
   key: "activeAssignments",
-  known: PIM_KNOWN,
-  knownList: KNOWN_PIM_FIELDS,
-  defaultSelect: DEFAULT_PIM_SELECT,
+  known: ACTIVE_KNOWN,
+  knownList: KNOWN_ACTIVE_FIELDS,
+  defaultSelect: DEFAULT_ACTIVE_SELECT,
   defaultScopes: DEFAULT_ACTIVE_SCOPES,
   denialHints: ACTIVE_DENIAL_HINTS,
   scopeNote: "Active covers directly assigned (assignmentType Assigned) and activated eligible (assignmentType Activated); the direct-only view is role-assignment list",

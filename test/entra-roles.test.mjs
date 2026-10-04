@@ -38,7 +38,6 @@ const a1 = {
   roleDefinitionId: "62e90394-69f5-4237-9190-012177145e10",
   directoryScopeId: "/",
   appScopeId: null,
-  createdDateTime: "2024-01-01T00:00:00Z",
 };
 const assignments = [a1];
 
@@ -139,8 +138,14 @@ function roleTransport(denied = false) {
       const found = roles.find(role => role.id === decodeURIComponent(single[1]));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such role" } });
     }
-    if (path === "/v1.0/roleManagement/directory/roleAssignments") return json(200, { value: assignments });
-    if (path === "/v1.0/roleManagement/directory/roleEligibilityScheduleInstances") return json(200, { value: eligible });
+    if (path === "/v1.0/roleManagement/directory/roleAssignments") {
+      assert.ok(!url.searchParams.get("$select")?.split(",").includes("createdDateTime"));
+      return json(200, { value: assignments });
+    }
+    if (path === "/v1.0/roleManagement/directory/roleEligibilityScheduleInstances") {
+      assert.ok(!url.searchParams.get("$select")?.split(",").includes("assignmentType"));
+      return json(200, { value: eligible });
+    }
     if (path === "/v1.0/roleManagement/directory/roleAssignmentScheduleInstances") return json(200, { value: active });
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
@@ -239,6 +244,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, { returned: 1, complete: true });
       assert.ok(result.help.some(hint => hint.includes("not active")));
       assert.ok(new URL(requests[0].url).pathname.endsWith("/roleManagement/directory/roleEligibilityScheduleInstances"));
+      assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,principalId,roleDefinitionId,memberType");
     } finally {
       teardownProfiles(state);
     }
@@ -298,6 +304,51 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       teardownProfiles(state);
     }
   });
+
+  test(`${mode} executable lists pim eligible end to end on the fake transport`, async () => {
+    const state = setupProfiles();
+    try {
+      const result = runRolesCli(
+        ["entra", "pim", "eligible", "list", "--profile", profile],
+        state, mode, "https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory");
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, 0, result.stdout);
+      assert.equal(result.stderr, "");
+      const output = decode(result.stdout);
+      assert.deepEqual(output.eligibleAssignments, [
+        { id: e1.id, principalId: e1.principalId, roleDefinitionId: e1.roleDefinitionId, memberType: "Direct" },
+      ]);
+      assert.deepEqual(output.count, { returned: 1, complete: true });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  for (const [command, property] of [
+    [["entra", "pim", "eligible", "list"], "assignmentType"],
+    [["entra", "role-assignment", "list"], "createdDateTime"],
+  ]) {
+    for (const flag of ["select", "fields"]) {
+      test(`${mode} ${command.join(" ")} rejects ${property} in --${flag} before credentials`, async () => {
+        const state = setupProfiles();
+        try {
+          const { requests, calls, overrides } = overridesFor(mode);
+          await assert.rejects(
+            executeArgv([...command, "--profile", profile, `--${flag}`, `id,${property}`], overrides),
+            error => {
+              assert.equal(error.code, "VALIDATION_ERROR");
+              assert.equal(error.message, `Unknown property ${property} in --${flag}`);
+              return true;
+            },
+          );
+          assert.equal(calls.length, 0);
+          assert.equal(requests.length, 0);
+        } finally {
+          teardownProfiles(state);
+        }
+      });
+    }
+  }
 }
 
 test("delegated role reads truncate long descriptions with a --full hint", async () => {
@@ -361,4 +412,3 @@ test("delegated role reads reject unknown properties before credentials", async 
     teardownProfiles(state);
   }
 });
-

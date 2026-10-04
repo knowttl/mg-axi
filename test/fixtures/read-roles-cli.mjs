@@ -60,8 +60,10 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
         ? { value: roles.slice(2) }
         : { value: roles.slice(0, 2), "@odata.nextLink": "https://graph.microsoft.com/v1.0/directoryRoles?%24skiptoken=page2" };
     } else if (url.pathname === "/v1.0/roleManagement/directory/roleAssignments") {
+      assert.ok(!url.searchParams.get("$select")?.split(",").includes("createdDateTime"));
       body = { value: assignments };
     } else if (url.pathname === "/v1.0/roleManagement/directory/roleEligibilityScheduleInstances") {
+      assert.ok(!url.searchParams.get("$select")?.split(",").includes("assignmentType"));
       body = { value: eligible };
     } else if (url.pathname === "/v1.0/roleManagement/directory/roleAssignmentScheduleInstances") {
       body = { value: active };

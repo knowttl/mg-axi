@@ -45,6 +45,7 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra administrative-unit list/);
   assert.match(result.stdout, /entra conditional-access policy list/);
   assert.match(result.stdout, /entra conditional-access named-location list/);
+  assert.match(result.stdout, /entra group member add/);
   assert.match(result.stdout, /login/);
   assert.doesNotMatch(result.stdout, /Upgrade/);
 });
@@ -67,7 +68,9 @@ for (const [name, args, error] of [
   ["missing required role ID", ["entra", "directory-role", "show"], /--id is required/],
   ["missing required policy ID", ["entra", "conditional-access", "policy", "show"], /--id is required/],
   ["missing required location ID", ["entra", "conditional-access", "named-location", "show"], /--id is required/],
-  ["missing required group", ["entra", "group", "member", "list"], /--group is required/],
+  ["missing required group for member add", ["entra", "group", "member", "add"], /--group is required/],
+  ["missing required user for member add", ["entra", "group", "member", "add", "--group", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"], /--user is required/],
+  ["unknown flag on member add", ["entra", "group", "member", "add", "--transitive"], /unknown flag/],
   ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
   ["missing required user", ["entra", "user", "authentication-method", "list"], /--user is required/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],

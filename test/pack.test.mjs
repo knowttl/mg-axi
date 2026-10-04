@@ -92,6 +92,7 @@ test("setup reports unconfigured state without writing configuration", () => {
     assert.ok(output.capabilities.implemented.includes("mg-axi setup") || output.capabilities.implemented.includes("setup"));
     assert.ok(output.capabilities.implemented.includes("entra user list"));
     assert.equal(output.capabilities.reads, 40);
+    assert.equal(output.capabilities.writes, 1);
     assert.equal(output.capabilities.local, 6);
     assert.ok(!existsSync(config), "setup writes nothing");
   } finally { rmSync(home, { recursive: true, force: true }); }

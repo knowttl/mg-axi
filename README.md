@@ -1,7 +1,7 @@
 # mg-axi
 
 Agent-facing Microsoft Graph CLI with one shared core and domain packs, read-only by default.
-The Entra pack comes first, with phased full coverage and later gated named writes.
+The Entra pack comes first, with phased full coverage and one gated named write.
 
 CLI-01 provides a local TypeScript/AXI shell, strict command catalogue, leaf help and fast version probes.
 AUTH-01 adds versioned dedicated-app delegated profiles and explicit login.
@@ -101,7 +101,16 @@ Denied reads name that role and read-scope requirement instead of only the gener
 
 `entra group list` defaults to compact properties (`id`, `displayName`, `mail`, `groupTypes`); `entra group show --id <group-id>` defaults to the richer reviewed group set including `isAssignableToRole`, which marks groups eligible for role assignment.
 Group `--select` accepts the [reviewed group property set](src/entra-groups.ts); `--fields` must be a subset of the fetched selection.
-Role-assignable membership changes need role-management permission and belong to a later write slice, never to these reads.
+Role-assignable membership changes need role-management permission and are refused by the membership write; that grant belongs to a later slice, never to this command.
+`entra group member add --group <group-id> --user <user-id>` previews adding one user to one non-role-assignable security or Microsoft 365 group through a directoryObjects reference.
+Both identifiers must be GUID object IDs; UPNs are not resolved, and only v1.0 is supported.
+Role-assignable, dynamic-membership and distribution groups are refused.
+The command verifies the user through `/users/<user-id>` before preview and again before sending; this read needs delegated User.ReadBasic.All or application User.Read.All, and the group and membership reads need D/A GroupMember.Read.All.
+The command needs a hand-enabled profile whose writes allow `mg.entra.group.member.add`; the mutation needs D/A GroupMember.ReadWrite.All, and delegated callers additionally need a groups role such as Groups Administrator.
+Delegated `--scopes` overrides only the mutation scope, which defaults to `https://graph.microsoft.com/GroupMember.ReadWrite.All`; application profiles reject `--scopes` and use their configured Graph `.default` audience.
+Without `--execute`, the command previews without journaling; `--execute --confirm <group-id>` sends once after a fresh read.
+An already-member user is a no-op without journaling when found by the initial read; a duplicate-reference 400 after sending is a journaled no-op.
+Execution reserves a journaled intent before the fresh read and records its outcome; uncertain outcomes require reading back the membership before any further action, with no automatic retry or replay.
 `entra group member list --group <group-id>` lists direct members and `entra group member-of list --group <group-id>` lists direct memberships; `--transitive` selects the flat nested closure instead.
 Relationship rows default to `id` and `displayName`; `--select` accepts only `id`, `displayName` and `mail`, and `--fields` must be a subset of that selection.
 Returned `@odata.type` stays visible alongside any `--fields` projection.
@@ -293,7 +302,7 @@ Preview is disabled and sensitive areas are empty in newly created profiles.
 Writes stay disabled unless a human hand-edits a `writes` object into the profile file: `{ "allowWrites": true, "operations": ["<operation-name>"] }`.
 The object accepts only `allowWrites` (boolean) and `operations` (1 to 64 nonempty operation names, each at most 256 characters), including when `allowWrites` is false.
 No command writes that object, and `MG_AXI_READ_ONLY=1` overrides any opt-in.
-WRITE-00 enables no mutation family or command; the coordinator is exercised only through fixtures under the [named-write execution contract](docs/execution.md#named-writes).
+For the supported membership write, see the group usage above and the [named-write execution contract](docs/execution.md#named-writes).
 The journal defaults to `~/.mg-axi/writes.log`; a nonblank `MG_AXI_WRITE_LOG` overrides that path.
 
 Browser login uses Microsoft's [MSAL interactive API](https://learn.microsoft.com/en-us/entra/msal/javascript/node/acquire-token-requests) and PKCE.
@@ -380,8 +389,8 @@ The pinned [Entra operation inventory](docs/inventory.md) defines the INV-01 dis
 
 ## Release
 
-This is the supported Entra read surface, not full Entra coverage.
-See the generated [capability report](docs/coverage.md) for implemented reads and discovery dispositions, and the [skill command table](skills/mg-axi/SKILL.md#orientation) for all executable leaves, including local commands.
+This is the supported Entra read and gated membership-write surface, not full Entra coverage.
+See the generated [capability report](docs/coverage.md) for implemented reads, writes and discovery dispositions, and the [skill command table](skills/mg-axi/SKILL.md#orientation) for all executable leaves, including local commands.
 The package is marked private and ships no publish workflow: preparing this release never publishes it.
 The packed files are `dist`, the discovery inventory, `skills/mg-axi`, `docs/coverage.md` and this README.
 Follow the [checkout instructions](#mg-axi) to install dependencies, build and run the version probe.

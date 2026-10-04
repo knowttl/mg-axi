@@ -457,10 +457,14 @@ test("recreated coordinator refuses an intent recorded without a terminal outcom
   assert.equal(f.requests.length, 0);
 });
 
-test("every catalogue leaf stays a read: no user-visible write command ships", () => {
+test("every catalogue leaf stays a read except the reviewed WRITE-01 membership write", () => {
   const operations = LEAVES.filter(leaf => leaf.operation).map(leaf => leaf.operation);
   assert.ok(operations.length > 0);
-  for (const operation of operations) assert.match(operation, /^GET:/, `write leaf in catalogue: ${operation}`);
+  assert.ok(operations.includes("POST:/groups/{group-id}/members/$ref"), "WRITE-01 leaf is catalogued");
+  for (const operation of operations) {
+    if (operation === "POST:/groups/{group-id}/members/$ref") continue;
+    assert.match(operation, /^GET:/, `write leaf in catalogue: ${operation}`);
+  }
 });
 
 test("reviewed raw surface never serves a mutation route", async () => {

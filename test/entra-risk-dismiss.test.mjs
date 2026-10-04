@@ -275,6 +275,33 @@ test("post-dismiss reread mismatch reports a conflict", async () => {
   } finally { teardown(state); }
 });
 
+for (const scenario of [
+  { name: "preview", extra: [], reads: [{ status: 403 }], code: "GRAPH_ERROR", sends: 0, outcome: null },
+  { name: "initial execution read", extra: ["--execute", "--confirm", userId], reads: [{ status: 403 }], code: "GRAPH_ERROR", sends: 0, outcome: null },
+  { name: "coordinator preview read", extra: ["--execute", "--confirm", userId], reads: ["atRisk", { status: 403 }], code: "GRAPH_ERROR", sends: 0, outcome: null },
+  { name: "fresh read", extra: ["--execute", "--confirm", userId], reads: ["atRisk", "atRisk", { status: 403 }], code: "GRAPH_ERROR", sends: 0, outcome: "NOT_SENT" },
+  { name: "verification read", extra: ["--execute", "--confirm", userId], reads: ["atRisk", "atRisk", "atRisk", { status: 403 }], code: "OUTCOME_UNKNOWN", sends: 1, outcome: "SUCCESS" },
+]) test(`${scenario.name} denial retains risky-user read guidance`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const f = fixture({ reads: scenario.reads });
+    const error = await executeArgv(dismissArgs(userId, scenario.extra), f.overrides)
+      .then(() => assert.fail("read denial must throw"), caught => caught);
+    assert.equal(error.code, scenario.code);
+    const guidance = error.suggestions.join("\n");
+    assert.match(guidance, /IdentityRiskyUser\.Read\.All/);
+    assert.match(guidance, /Global Reader, Security Operator, Security Reader or Security Administrator/);
+    assert.match(guidance, /admin-consented/);
+    assert.match(guidance, /P2/);
+    assert.match(guidance, /A 403 never proves which prerequisite is missing/);
+    assert.equal(f.mutRequests.length, scenario.sends);
+    if (scenario.outcome === null) assert.ok(!existsSync(f.journalPath));
+    else assert.equal(journal(f.journalPath)[1].outcome, scenario.outcome);
+    if (scenario.code === "OUTCOME_UNKNOWN") assert.match(guidance, /never replay this intent/);
+  } finally { teardown(state); }
+});
+
 test("denial surfaces P2, permission and role guidance", async () => {
   const state = setupProfiles();
   try {

@@ -1,4 +1,5 @@
 import { AxiError } from "axi-sdk-js";
+import { RISKY_USER_DENIAL_HINTS, withGuidance } from "./entra-risk.js";
 import type { GraphSession, SessionOperation } from "./graph-session.js";
 import type { MutationCoordinator } from "./mutations.js";
 import type { AnyProfile } from "./profiles.js";
@@ -87,13 +88,13 @@ async function readRiskState(
   readOperation: SessionOperation,
   user: string,
 ): Promise<RiskDismissState> {
-  const raw = await session.execute({
+  const raw = await withGuidance(RISKY_USER_DENIAL_HINTS, () => session.execute({
     profile,
     operation: readOperation,
     params: { "riskyUser-id": user },
     query: { $select: RISK_STATE_SELECT },
     ...(profile.mode === "application" ? {} : { scopes: [...RISKY_USER_DISMISS_READ_SCOPES] }),
-  });
+  }));
   if (raw !== null && typeof raw === "object" && !Array.isArray(raw) && "id" in raw && typeof raw.id === "string" && raw.id.length > 0) {
     const row = raw as Record<string, unknown>;
     const id: string = raw.id;
@@ -236,11 +237,14 @@ export async function dismissRiskyUser(args: {
   let verified: RiskDismissState | null = null;
   try {
     verified = await readRiskState(session, profile, readOperation, id);
-  } catch {
+  } catch (error) {
     throw new AxiError(
       `Dismissal of '${user}' was sent (audit ${result.auditId}) but the verification read failed; the outcome is unknown`,
       "OUTCOME_UNKNOWN",
-      [`Read back '${id}' before doing anything else; never replay this intent`],
+      [
+        ...(error instanceof AxiError ? error.suggestions : []),
+        `Read back '${id}' before doing anything else; never replay this intent`,
+      ],
     );
   }
   if (verified.riskState !== "dismissed") {

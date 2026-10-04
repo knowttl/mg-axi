@@ -226,7 +226,7 @@ function fullHint(noun: string, action: string, flags: RiskFlags, profileName: s
 // Denials carry the session's generic grant/role/licence cause; each
 // operation adds the roles and licensing that actually unlock it, because a
 // 403 alone never says which prerequisite is missing.
-function withGuidance<T>(hints: string[], run: () => Promise<T>): Promise<T> {
+export function withGuidance<T>(hints: string[], run: () => Promise<T>): Promise<T> {
   return run().catch(error => {
     if (error instanceof AxiError && error.code === "GRAPH_ERROR" && /\(403\)/.test(error.message)) {
       throw new AxiError(error.message, "GRAPH_ERROR", [...hints, ...error.suggestions]);
@@ -235,7 +235,7 @@ function withGuidance<T>(hints: string[], run: () => Promise<T>): Promise<T> {
   });
 }
 
-const RISKY_USER_DENIAL_HINTS = [
+export const RISKY_USER_DENIAL_HINTS = [
   "Risky-user reads need IdentityRiskyUser.Read.All plus a supported directory role: Global Reader, Security Operator, Security Reader or Security Administrator for delegated access, or admin-consented IdentityRiskyUser.Read.All for application access",
   "The riskyUsers API requires a Microsoft Entra ID P2 licence; data availability follows Entra retention policies",
 ];

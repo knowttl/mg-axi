@@ -18,7 +18,8 @@ export class MsalApplicationProvider implements ApplicationCredentialProvider {
     const result: AuthenticationResult | null = await new ConfidentialClientApplication(configuration)
       .acquireTokenByClientCredential({ scopes: scopes.length ? scopes : [graphAudience(profile)] });
     if (!result) throw new Error("Empty application token response");
-    return { token: result.accessToken, expiresAt: result.expiresOn?.getTime() ?? NaN, tenantId: result.tenantId, clientId: profile.clientId };
+    if (result.authority.toLowerCase() !== `${configuration.auth.authority.toLowerCase()}/`) throw new Error("Configured application authority mismatch");
+    return { token: result.accessToken, expiresAt: result.expiresOn?.getTime() ?? NaN, tenantId: profile.tenantId, clientId: profile.clientId };
   }
   private async privateKey(key: string) {
     const store = await import("keytar").then(module => module.default).catch(() => undefined);

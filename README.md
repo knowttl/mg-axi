@@ -378,6 +378,7 @@ This is the supported Entra read surface, not full Entra coverage.
 Only the commands in [docs/coverage.md](docs/coverage.md) have an implemented, tested leaf; every other operation remains scheduled, blocked, deprecated or excluded until its own slice ships.
 The package is marked private and ships no publish workflow: preparing this release never publishes it.
 The packed files are `dist`, the discovery inventory, `skills/mg-axi`, `docs/coverage.md` and this README.
+Verification: this read release was verified locally (build, lint and the full test suite) under the GitHub billing-outage posture with hosted CI disabled.
 
 Build from a checkout with the pinned toolchain, then verify the version probe stays fast without loading the command graph:
 

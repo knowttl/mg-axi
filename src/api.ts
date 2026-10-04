@@ -40,6 +40,7 @@ export interface ReviewedRawRoute {
   /** Supported read permission choices with delegated/application distinction. */
   readonly access: string;
   readonly note?: string;
+  readonly warning?: string;
   /** Primary-source operation documentation, rechecked on REVIEWED_ON. */
   readonly sources: readonly string[];
 }
@@ -88,6 +89,7 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
   { id: "v1.0:GET:/groups/{group-id}/members", kind: "collection", query: COLLECTION_QUERY, fields: MEMBER_FIELDS,
     access: "D/A GroupMember.ReadBasic.All minimum; richer access GroupMember.Read.All. Delegated callers pass one as --scopes.",
     note: "Hidden membership needs Member.Read.Hidden; the server omits what the caller cannot see rather than failing. Richer member fields need single-object reads.",
+    warning: "Microsoft Graph v1.0 may omit service principals from group members; completed pagination does not establish complete membership.",
     sources: ["https://learn.microsoft.com/graph/api/group-list-members?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/identity/conditionalAccess/policies", kind: "collection", query: COLLECTION_QUERY, fields: CA_POLICY_FIELDS,
     access: "D/A Policy.Read.All. Delegated callers pass it as --scopes; a supported administrator role (for example Security Reader) is also required.",
@@ -373,7 +375,7 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
     try { body = JSON.parse(response.body); } catch { return response; }
     if (route.kind === "single") body = reviewedFields(route, body);
     else if (isRecord(body) && Array.isArray(body.value)) body = { ...body, value: body.value.map(row => reviewedFields(route, row)) };
-    return { ...response, body: JSON.stringify(body) };
+    return { ...response, body: JSON.stringify(body), receivedBodyBytes: response.receivedBodyBytes ?? Buffer.byteLength(response.body, "utf8") };
   } });
   const full = !!args.full;
   if (route.kind === "single") {
@@ -385,14 +387,15 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
   const collected = await session.collect({ profile: args.profile, operation, params, query, scopes, limit: args.limit, cursor: args.cursor });
   const shaped = truncateForOutput(collected.value.map(row => reviewedFields(route, row)), full);
   const value = shaped.value as unknown[];
+  const warnings = route.warning ? { warnings: [route.warning] } : {};
   if (collected.complete) {
     return shaped.truncated
-      ? { returned: value.length, complete: true, value, help: ["Strings truncated at 4000 chars; re-run with --full"] }
-      : { returned: value.length, complete: true, value };
+      ? { returned: value.length, complete: true, value, ...warnings, help: ["Strings truncated at 4000 chars; re-run with --full"] }
+      : { returned: value.length, complete: true, value, ...warnings };
   }
   const hint = "Resume the same path, profile and scopes with --cursor - and supply the cursor token on stdin; use --limit <rows> or --all";
   const help = shaped.truncated ? [hint, "Strings truncated at 4000 chars; re-run with --full"] : [hint];
-  return { returned: value.length, complete: false, reason: collected.reason, value, cursor: collected.cursor, help };
+  return { returned: value.length, complete: false, reason: collected.reason, value, ...warnings, cursor: collected.cursor, help };
 }
 
 // Minimal HTTPS transport: sends only what the session authorized (GET on the

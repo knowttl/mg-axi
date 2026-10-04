@@ -21,6 +21,7 @@ const key = "33333333-3333-4333-8333-333333333333";
 const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key } };
 const appProfile = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "federated", key } };
 const scopes = "https://graph.microsoft.com/User.Read.All";
+const membershipWarning = "Microsoft Graph v1.0 may omit service principals from group members; completed pagination does not establish complete membership.";
 
 function json(status, body, headers = {}) {
   return { status, headers, body: JSON.stringify(body) };
@@ -222,7 +223,8 @@ for (const route of REVIEWED_ROUTES) test(`${route.id} defaults to reviewed fiel
   const f = read({ path }, json(200, body));
   const result = await f.run({});
   assert.equal(new URL(f.requests[0].url).searchParams.get("$select"), route.fields.join(","));
-  assert.deepEqual(result, route.kind === "single" ? { id: "a" } : { returned: 1, complete: true, value: [{ id: "a" }] });
+  const { warnings, ...data } = result;
+  assert.deepEqual(data, route.kind === "single" ? { id: "a" } : { returned: 1, complete: true, value: [{ id: "a" }] });
 });
 
 for (const path of ["/users/a", "/users"]) test(`explicit selection on ${path} still filters unexpected fields`, async () => {
@@ -254,7 +256,7 @@ test("group member fields stay reviewed across later pages", async () => {
   const f = read({ path: "/groups/g/members" }, (request, count) => count === 1
     ? json(200, { value: [{ id: "a", mail: "hidden" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/groups/g/members?$skiptoken=next" })
     : json(200, { value: [{ id: "b", userPrincipalName: "hidden" }] }));
-  assert.deepEqual(await f.run({}), { returned: 2, complete: true, value: [{ id: "a" }, { id: "b" }] });
+  assert.deepEqual(await f.run({}), { returned: 2, complete: true, value: [{ id: "a" }, { id: "b" }], warnings: [membershipWarning] });
   assert.equal(new URL(f.requests[1].url).searchParams.get("$select"), "id,displayName");
   assert.equal(new URL(f.requests[1].url).searchParams.get("$skiptoken"), "next");
 });
@@ -291,7 +293,7 @@ test("cursor resumes buffered rows and the next page with its original query", a
   assert.equal(first.complete, false);
   assert.deepEqual(first.value, [{ id: "a" }, { id: "b" }]);
   assert.deepEqual(JSON.parse(Buffer.from(first.cursor, "base64url").toString("utf8")).buffered, [{ id: "c" }]);
-  assert.deepEqual(await f.run({ cursor: first.cursor, limit: undefined }), { returned: 2, complete: true, value: [{ id: "c" }, { id: "d" }] });
+  assert.deepEqual(await f.run({ cursor: first.cursor, limit: undefined }), { returned: 2, complete: true, value: [{ id: "c" }, { id: "d" }], warnings: [membershipWarning] });
   assert.equal(f.requests.length, 2);
   assert.equal(new URL(f.requests[1].url).searchParams.get("$skiptoken"), "next");
 });
@@ -313,6 +315,46 @@ test("throttled partial output exposes a usable cursor", async () => {
   assert.equal(first.complete, false);
   assert.match(first.reason, /throttled/);
   assert.deepEqual(await f.run({ cursor: first.cursor }), { returned: 1, complete: true, value: [{ id: "a" }] });
+});
+
+for (const [name, options, response, complete] of [
+  ["empty", {}, json(200, { value: [] }), true],
+  ["complete", {}, json(200, { value: [{ id: "a" }] }), true],
+  ["truncated", {}, json(200, { value: [{ id: "a", displayName: "x".repeat(5000) }] }), true],
+  ["capped", { limit: 1 }, json(200, { value: [{ id: "a" }, { id: "b" }] }), false],
+  ["throttled", {}, { status: 429, headers: { "Retry-After": "3600" } }, false],
+]) test(`${name} group membership output warns about omitted service principals`, async () => {
+  const f = read({ path: "/groups/g/members", ...options }, response);
+  const result = await f.run({});
+  assert.equal(result.complete, complete);
+  assert.deepEqual(result.warnings, [membershipWarning]);
+});
+
+for (const [name, extra, padding] of [
+  ["whitespace", {}, " ".repeat(2_500_001)],
+  ["unreviewed properties", { unreviewed: "x".repeat(2_500_001) }, ""],
+  ["UTF-8 properties", { unreviewed: "é".repeat(1_250_001) }, ""],
+]) test(`raw ${name} bytes enforce the budget before projected rows are buffered`, async () => {
+  const firstBody = JSON.stringify({ value: [{ id: "a", ...extra }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$skiptoken=next" }) + padding;
+  const secondBody = JSON.stringify({ value: [{ id: "b", ...extra }] }) + padding;
+  const f = read({}, (request, count) => ({ status: 200, body: count === 1 ? firstBody : secondBody }));
+  const result = await f.run({});
+  assert.equal(result.complete, false);
+  assert.match(result.reason, /byte budget exceeded/);
+  assert.deepEqual(result.value, [{ id: "a" }]);
+  assert.equal(f.requests.length, 2);
+  assert.deepEqual(await f.run({ cursor: result.cursor }), { returned: 1, complete: true, value: [{ id: "b" }] });
+  assert.equal(f.requests.length, 2);
+});
+
+test("raw projection preserves an upstream transport's received byte count", async () => {
+  const f = read({}, { ...json(200, { value: [{ id: "a" }] }), receivedBodyBytes: 5_000_001 });
+  const result = await f.run({});
+  assert.equal(result.complete, false);
+  assert.match(result.reason, /byte budget exceeded after 5000001 bytes/);
+  assert.deepEqual(result.value, []);
+  assert.deepEqual(await f.run({ cursor: result.cursor }), { returned: 1, complete: true, value: [{ id: "a" }] });
+  assert.equal(f.requests.length, 1);
 });
 
 for (const overrides of [

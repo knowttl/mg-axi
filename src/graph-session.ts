@@ -63,6 +63,7 @@ export interface TransportResponse {
   status: number;
   headers: Record<string, string>;
   body: string;
+  receivedBodyBytes?: number;
 }
 
 // True external seam: tests substitute fixture transports, later slices wire
@@ -666,7 +667,7 @@ export class GraphSession {
             "Transport failures carry no Graph diagnosis; do not retry blindly",
           ]);
         }
-        bytes += bodyBytes(response.body ?? "");
+        bytes += response.receivedBodyBytes ?? bodyBytes(response.body ?? "");
         const status = response.status;
         if (status === 301 || status === 302 || status === 303 || status === 307 || status === 308) {
           const location = header(response.headers, "location");

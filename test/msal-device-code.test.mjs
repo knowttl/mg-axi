@@ -7,7 +7,7 @@ for (const scenario of [
   { name: "missing user challenge", status: 200, body: { device_code: "fixture-device-code", expires_in: 600 } },
   { name: "missing polling credential", status: 200, body: { user_code: "FIXTURE", expires_in: 600 } },
 ]) test(`${scenario.name} fails without displaying a challenge or requesting tokens`, () => {
-  const result = spawnSync(process.execPath, ["--experimental-test-module-mocks", "--input-type=module", "-e", `
+  const result = spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "--experimental-test-module-mocks", "--input-type=module", "-e", `
     import assert from "node:assert/strict";
     import { registerHooks } from "node:module";
     import { mock } from "node:test";

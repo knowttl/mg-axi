@@ -64,7 +64,7 @@ All rows below are v1.0; D/A distinctions and field/role constraints still belon
 | CA/named locations | P1 for CA, P2 for risk-based CA. | [Entra licensing](https://learn.microsoft.com/en-us/entra/fundamentals/licensing). |
 | Authentication methods/reporting | Targeted method availability differs by method; registration reporting premium requirements must be recorded per feature. | [Method API](https://learn.microsoft.com/en-us/graph/api/authentication-list-methods?view=graph-rest-1.0), [registration API](https://learn.microsoft.com/en-us/graph/api/authenticationmethodsroot-list-userregistrationdetails?view=graph-rest-1.0). |
 | Sign-in/audit Graph reporting | Conservative P1/P2 deployment prerequisite until the operation's documented access distinction is resolved; base logs and Graph access guidance differ. | [Activity log access](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-access-activity-logs). |
-| Risky users / full protection | P2/Suite for full investigation; API-specific restricted views remain distinct. | [Identity Protection](https://learn.microsoft.com/en-us/entra/id-protection/overview-identity-protection). |
+| Risky users / full protection | The riskyUsers API requires P2; full Identity Protection investigation requires P2/Suite. | [Risky-user API requirement](https://learn.microsoft.com/en-us/graph/api/riskyuser-get?view=graph-rest-1.0), [Identity Protection](https://learn.microsoft.com/en-us/entra/id-protection/overview-identity-protection). |
 | Risk detections | API permits P1 or P2; full details need P2. | [Risk detections](https://learn.microsoft.com/en-us/graph/api/riskdetection-list?view=graph-rest-1.0). |
 | Directory roles / PIM | Built-in roles base, custom role assignments P1, PIM P2 or ID Governance. | [Licensing](https://learn.microsoft.com/en-us/entra/fundamentals/licensing), [Governance licensing](https://learn.microsoft.com/en-us/entra/id-governance/licensing-fundamentals). |
 | Administrative units | P1 scoped administrators, Free members; dynamic membership P1. | [Administrative units](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/administrative-units). |
@@ -80,10 +80,8 @@ PIM requires P2 or ID Governance, not only P2.
 Administrative units use P1 for scoped administrators and Free for members; dynamic membership requires additional P1 licensing.
 These distinctions are supported by [Entra licensing](https://learn.microsoft.com/en-us/entra/fundamentals/licensing), [administrative-unit requirements](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/administrative-units), and [Governance licensing](https://learn.microsoft.com/en-us/entra/id-governance/licensing-fundamentals).
 
-Full Identity Protection investigation requires P2/Suite, but the risk-detections API explicitly permits P1 or P2.
-Use the API-specific statement and preserve limited/hidden risk detail rather than declaring P1 impossible or interpreting limited results as empty.
-See [Identity Protection](https://learn.microsoft.com/en-us/entra/id-protection/overview-identity-protection) and [risk-detections operation](https://learn.microsoft.com/en-us/graph/api/riskdetection-list?view=graph-rest-1.0).
-Risky sign-in investigation uses sign-in risk properties and detections; there is no invented `/riskySignIns` endpoint in this design.
+The licence matrix above distinguishes risky-user API access from risk-detection detail access.
+See [README.md](../README.md) for the implemented risk reads, limited/hidden-value handling and sign-in correlation workflow.
 
 The licensing overview makes base sign-in/audit logs available on Free, while [Graph access guidance](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-access-activity-logs) describes P1/P2 tenants.
 This contract exposes this distinction and adopts a conservative P1/P2 Graph deployment prerequisite rather than flattening the documentation into an unconditional licence claim.

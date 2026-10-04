@@ -25,6 +25,13 @@ const logRead = {
   cursor: { value: "opaque-cursor|-", description: "Resume a capped collection losslessly; - reads the token from stdin (16 MB ceiling for either input); repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to AuditLog.Read.All" },
 };
+const riskRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from the supported risk property set" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction, row caps or time bounds" },
+  cursor: { value: "opaque-cursor|-", description: "Resume a capped collection losslessly; - reads the token from stdin (16 MB ceiling for either input); repeat the original query flags or omit them" },
+};
 const userRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties; richer properties need User.Read.All, accountEnabled needs User.EnableDisableAccount.All" },
@@ -96,6 +103,14 @@ const auRead = {
   full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to AdministrativeUnit.Read.All, hidden members need Member.Read.Hidden" },
+};
+const caRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties; policy and location detail needs Policy.Read.All in both modes plus a supported Conditional Access role for delegated access" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor|-", description: "Resume a capped collection losslessly; - reads the token from stdin (16 MB ceiling for either input); repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Policy.Read.All" },
 };
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
@@ -396,6 +411,80 @@ export const LEAVES: Leaf[] = [
     cursor: appRoleGrantRead.cursor,
     scopes: appRoleGrantRead.scopes,
   }, examples: ["mg-axi entra service-principal app-role-assignment list --service-principal <service-principal-object-id> --profile soc"] },
+  { path: "entra risky-user list", description: "List at-risk users with compact risk state (IdentityRiskyUser.Read.All; delegated callers also need Global Reader, Security Operator, Security Reader or Security Administrator; the riskyUsers API requires P2)", operation: "GET:/identityProtection/riskyUsers", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: riskRead.filter,
+    select: riskRead.select,
+    fields: riskRead.fields,
+    full: riskRead.full,
+    cursor: riskRead.cursor,
+    scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to IdentityRiskyUser.Read.All" },
+  }, examples: ["mg-axi entra risky-user list --profile soc", "mg-axi entra risky-user list --profile soc --filter \"riskState eq 'atRisk'\" --limit 10", "mg-axi entra risky-user list --profile soc --all"] },
+  { path: "entra risky-user show", description: "Show one at-risk user with the full reviewed property set and detection/sign-in correlation guidance; this read never confirms, dismisses or remediates risk", operation: "GET:/identityProtection/riskyUsers/{riskyUser-id}", flags: {
+    ...common, id: { value: "risky-user-id", required: true, description: "Risky user object ID" },
+    select: riskRead.select,
+    fields: riskRead.fields,
+    full: riskRead.full,
+    scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to IdentityRiskyUser.Read.All" },
+  }, examples: ["mg-axi entra risky-user show --id <risky-user-id> --profile soc", "mg-axi entra risky-user show --id <risky-user-id> --profile soc --full"] },
+  { path: "entra risk-detection list", description: "List risk detections in a bounded time window (IdentityRiskEvent.Read.All; delegated callers also need Global Reader, Security Operator, Security Reader or Security Administrator; P1 or P2, with premium detail limited without P2)", operation: "GET:/identityProtection/riskDetections", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    since: { ...logRead.since, description: "Required for a new query (resume with --cursor instead): earliest detectedDateTime bounding the server time range" },
+    until: logRead.until,
+    filter: logRead.filter,
+    select: riskRead.select,
+    fields: riskRead.fields,
+    full: riskRead.full,
+    cursor: riskRead.cursor,
+    scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to IdentityRiskEvent.Read.All" },
+  }, examples: ["mg-axi entra risk-detection list --profile soc --since 2026-09-01T00:00:00Z", "mg-axi entra risk-detection list --profile soc --since 2026-09-01T00:00:00Z --filter \"riskState eq 'atRisk'\" --limit 10", "mg-axi entra risk-detection list --profile soc --since 2026-09-01T00:00:00Z --all"] },
+  { path: "entra risk-detection show", description: "Show one risk detection with the full reviewed property set and sign-in correlation guidance; a null correlationId means no sign-in is associated and there is no riskySignIns endpoint", operation: "GET:/identityProtection/riskDetections/{riskDetection-id}", flags: {
+    ...common, id: { value: "risk-detection-id", required: true, description: "Risk detection object ID" },
+    select: riskRead.select,
+    fields: riskRead.fields,
+    full: riskRead.full,
+    scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to IdentityRiskEvent.Read.All" },
+  }, examples: ["mg-axi entra risk-detection show --id <risk-detection-id> --profile soc", "mg-axi entra risk-detection show --id <risk-detection-id> --profile soc --full"] },
+  { path: "entra conditional-access policy list", description: "List Conditional Access policies with compact properties (id, displayName, state)", operation: "GET:/identity/conditionalAccess/policies", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: caRead.filter,
+    select: caRead.select,
+    fields: caRead.fields,
+    full: caRead.full,
+    cursor: caRead.cursor,
+    scopes: caRead.scopes,
+  }, examples: ["mg-axi entra conditional-access policy list --profile soc", "mg-axi entra conditional-access policy list --profile soc --limit 10", "mg-axi entra conditional-access policy list --profile soc --filter \"state eq 'enabled'\" --select id,displayName,state"] },
+  { path: "entra conditional-access policy show", description: "Show one Conditional Access policy with the full reviewed condition and control set", operation: "GET:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}", flags: {
+    ...common, id: { value: "policy-id", required: true, description: "Conditional Access policy object ID" },
+    select: caRead.select,
+    fields: caRead.fields,
+    full: caRead.full,
+    scopes: caRead.scopes,
+  }, examples: ["mg-axi entra conditional-access policy show --id <policy-id> --profile soc", "mg-axi entra conditional-access policy show --id <policy-id> --profile soc --full"] },
+  { path: "entra conditional-access named-location list", description: "List Conditional Access named locations with compact properties (id, displayName)", operation: "GET:/identity/conditionalAccess/namedLocations", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: caRead.filter,
+    select: caRead.select,
+    fields: caRead.fields,
+    full: caRead.full,
+    cursor: caRead.cursor,
+    scopes: caRead.scopes,
+  }, examples: ["mg-axi entra conditional-access named-location list --profile soc", "mg-axi entra conditional-access named-location list --profile soc --limit 10", "mg-axi entra conditional-access named-location list --profile soc --filter \"isTrusted eq true\""] },
+  { path: "entra conditional-access named-location show", description: "Show one Conditional Access named location with the full reviewed property set", operation: "GET:/identity/conditionalAccess/namedLocations/{namedLocation-id}", flags: {
+    ...common, id: { value: "named-location-id", required: true, description: "Named location object ID" },
+    select: caRead.select,
+    fields: caRead.fields,
+    full: caRead.full,
+    scopes: caRead.scopes,
+  }, examples: ["mg-axi entra conditional-access named-location show --id <named-location-id> --profile soc", "mg-axi entra conditional-access named-location show --id <named-location-id> --profile soc --full"] },
   { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices and administrative units; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
@@ -451,7 +540,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (flag!.value) {
       const value = match![2] ?? argv[++i];
       if (!value?.trim() || (value.startsWith("-") && !(name === "cursor" && value === "-"
-        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list")))) fail(`--${name} requires a non-empty value`);
+        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list")))) fail(`--${name} requires a non-empty value`);
       flags[name] = value!;
     } else {
       if (match![2] !== undefined) fail(`--${name} does not take a value`);
@@ -481,6 +570,6 @@ export function home() {
     profile: "unavailable: no profile configured",
     tenant: "unavailable: no tenant selected",
     domains: [{ name: "entra", status: "scheduled", summary: "Tenant summaries await Graph execution" }],
-    help: ["mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi entra application list --help", "mg-axi entra service-principal list --help", "mg-axi api get --help"],
+    help: ["mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi entra application list --help", "mg-axi entra service-principal list --help", "mg-axi entra conditional-access policy list --help", "mg-axi api get --help"],
   };
 }

@@ -18,9 +18,21 @@ Unknown actions, raw writes, secret-returning endpoints, and unsupported beta wr
 [Paging](https://learn.microsoft.com/en-us/graph/paging) follows exact `@odata.nextLink` values and preserves required headers.
 Validate HTTPS origin and version on initial requests, redirects and every continuation before adding credentials.
 An output cap cannot discard the remainder of a fetched page; continuation state preserves query/context and buffered rows if necessary.
+CORE-02 exposes these mechanics through `GraphSession.collect`, with `limit`, `budget` and an opaque `cursor`; this is a session interface, not an executable CLI command.
+Results contain `value`, `complete`, `requests` and `bytes`; a row limit that leaves buffered rows or another page, request/byte/deadline exhaustion, oversized throttle waits and continuation cycles return `complete: false` with a `reason` and cursor.
+Resume with the same operation, resource bindings, authentication mode, tenant/client/cloud, credential reference and scope set.
+The cursor restores the original query and consistency level when omitted; conflicting explicit arguments fail validation.
+Before returning buffered rows or fetching more pages, the session reacquires credentials and checks the original delegated account or application identity; a refreshed token for the same identity is accepted.
 [Advanced query](https://learn.microsoft.com/en-us/graph/aad-advanced-queries) support differs per endpoint; declare supported combinations and required eventual-consistency headers.
+The session requires `consistencyLevel: "eventual"` for `$search` or `$count=true`, preserving `ConsistencyLevel` across pages, redirects and cursor resumes.
+`$expand` accepts explicit relationship paths without nested query options, rejects sensitive relationships, and cannot accompany `$search` or `$count=true`.
+The shared query allowlist is defined in [the session implementation](../src/graph-session.ts); it does not establish endpoint-specific support.
 [Throttling guidance](https://learn.microsoft.com/en-us/graph/throttling) requires respecting Retry-After and bounded backoff where absent.
 Safe reads can retry within deadline; exhausted budget reports the cause and completeness.
+Both `execute` and `collect` retry 429/503 responses using Retry-After seconds or HTTP dates, or bounded exponential backoff when the header is absent or invalid.
+Their request, wait and deadline ceilings are defined in [the session implementation](../src/graph-session.ts); `collect` accepts positive integer request, response-body byte and deadline budgets per invocation.
+The deadline includes credential acquisition and in-flight requests, and `signal` cancellation rejects the call rather than returning a partial result.
+The injected `clock` controls deadlines and waits for offline verification in [the collection tests](../test/graph-collections.test.mjs).
 Use request IDs and structured errors, never raw dependency noise or secrets.
 [v1.0](https://learn.microsoft.com/en-us/graph/api/overview?view=graph-rest-1.0) is GA; [beta](https://learn.microsoft.com/en-us/graph/api/overview?view=graph-rest-beta) can break and is not recommended as a production dependency.
 

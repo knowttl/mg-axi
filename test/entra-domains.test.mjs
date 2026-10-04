@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -510,23 +510,36 @@ test("domain read flags validate before profiles or HTTP", async () => {
   await assert.rejects(executeArgv(["entra", "domain", "list", "--bogus"]), { code: "VALIDATION_ERROR" });
 });
 
-test("domain reads stay preview-gated on beta", async () => {
-  const state = setupProfiles();
-  try {
-    const { overrides } = overridesFor("delegated");
-    await assert.rejects(
-      executeArgv(["entra", "domain", "list", "--profile", "soc", "--api-version", "beta", "--limit", "1"], overrides),
-      error => {
-        assert.equal(error.code, "POLICY_DENIED");
-        return /preview-enabled/.test(error.message);
-      },
-    );
-    await assert.rejects(
-      executeArgv(["entra", "domain", "verification-dns-record", "list",
-        "--domain", dom1.id, "--profile", "soc", "--api-version", "beta"], overrides),
-      { code: "POLICY_DENIED" },
-    );
-  } finally {
-    teardownProfiles(state);
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+  for (const preview of [false, true]) {
+    for (const [command, args] of [
+      [["domain", "list"], []],
+      [["domain", "show"], ["--id", dom1.id]],
+      [["domain", "verification-dns-record", "list"], ["--domain", dom1.id]],
+      [["domain", "verification-dns-record", "show"], ["--domain", dom1.id, "--id", v1.id]],
+      [["domain", "service-configuration-record", "list"], ["--domain", dom1.id]],
+      [["domain", "service-configuration-record", "show"], ["--domain", dom1.id, "--id", s1.id]],
+      [["domain-dns-record", "list"], []],
+      [["domain-dns-record", "show"], ["--id", t1.id]],
+    ]) {
+      test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
+        const state = setupProfiles();
+        try {
+          const path = join(state.dir, "config.json");
+          const config = JSON.parse(readFileSync(path, "utf8"));
+          config.profiles[profile].preview = preview;
+          writeFileSync(path, JSON.stringify(config));
+          const { calls, requests, overrides } = overridesFor(mode);
+          await assert.rejects(
+            executeArgv(["entra", ...command, ...args, "--profile", profile, "--api-version", "beta"], overrides),
+            { code: "VALIDATION_ERROR", message: "Domain reads support v1.0 only; beta needs its own review" },
+          );
+          assert.equal(calls.length, 0);
+          assert.equal(requests.length, 0);
+        } finally {
+          teardownProfiles(state);
+        }
+      });
+    }
   }
-});
+}

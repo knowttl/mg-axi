@@ -515,8 +515,11 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     || leaf.path === "entra domain verification-dns-record list" || leaf.path === "entra domain verification-dns-record show"
     || leaf.path === "entra domain service-configuration-record list" || leaf.path === "entra domain service-configuration-record show"
     || leaf.path === "entra domain-dns-record list" || leaf.path === "entra domain-dns-record show") {
+    if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
+      throw new AxiError("Domain reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
     const selected = profiles.resolve(flags.profile as string | undefined);
-    const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
+    const operation = operationFor(leaf, "v1.0");
     if (!operation || operation.method !== "GET") {
       throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
     }

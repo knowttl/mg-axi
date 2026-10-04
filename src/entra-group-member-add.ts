@@ -53,26 +53,6 @@ const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type MemberAddFlags = Record<string, string | boolean>;
 
-// Production POST transport: sends only what the coordinator authorized (an
-// absolute HTTPS URL under /v1.0/ with coordinator-owned headers and body)
-// and returns status, headers and text. Timeouts and cancellation arrive
-// through the coordinator's AbortSignal; credential attachment happened
-// before this call. Tests substitute fixture transports.
-export const mutationFetchTransport: MutationTransport = async request => {
-  const response = await fetch(request.url, {
-    method: request.method,
-    headers: request.headers,
-    body: request.body,
-    signal: request.signal,
-    redirect: "manual",
-  });
-  const headers: Record<string, string> = {};
-  response.headers.forEach((value, key) => {
-    headers[key] = value;
-  });
-  return { status: response.status, headers, body: await response.text() };
-};
-
 function fail(message: string, code: string, suggestions: string[]): never {
   throw new AxiError(message, code, suggestions);
 }

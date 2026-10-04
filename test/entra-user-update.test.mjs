@@ -373,12 +373,13 @@ test("beta api-version is refused before credentials", async () => {
   } finally { teardown(state); }
 });
 
-test("non-boolean account-enabled is a usage error", async () => {
+for (const value of ["maybe", "TRUE", "FALSE", " true ", " false "]) test(`account-enabled ${JSON.stringify(value)} is a usage error`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
     const f = fixture();
-    await assert.rejects(executeArgv(updateArgs(userId, "maybe"), f.overrides), { code: "VALIDATION_ERROR" });
+    await assert.rejects(executeArgv(updateArgs(userId, value), f.overrides), { code: "VALIDATION_ERROR" });
+    assert.equal(f.credCalls.length, 0);
     assert.equal(f.mutRequests.length, 0);
     assert.equal(f.readRequests.length, 0);
   } finally { teardown(state); }

@@ -101,7 +101,7 @@ export type MutationCoordinator = {
 
 // Mutation-only transport seam: the read GraphTransport carries GET only, so
 // mutations travel on this separate type. Tests substitute fixture
-// transports; named write modules supply their production transports.
+// transports.
 export interface MutationTransportRequest {
   method: MutationMethod;
   url: string;
@@ -117,6 +117,21 @@ export interface MutationTransportResponse {
 }
 
 export type MutationTransport = (request: MutationTransportRequest) => Promise<MutationTransportResponse>;
+
+export const mutationFetchTransport: MutationTransport = async request => {
+  const response = await fetch(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: request.body,
+    signal: request.signal,
+    redirect: "manual",
+  });
+  const headers: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+  return { status: response.status, headers, body: await response.text() };
+};
 
 // Coordinator-minted authorization: an unforgeable capability the sender
 // consumes once. There is no self-service authorize on the sender; anything

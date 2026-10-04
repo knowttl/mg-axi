@@ -1,12 +1,7 @@
 import { AxiError } from "axi-sdk-js";
 import type { GraphSession, SessionOperation } from "./graph-session.js";
 import { encodeGraphPathSegment } from "./graph-session.js";
-import type {
-  MutationCoordinator,
-  MutationTransport,
-  MutationTransportRequest,
-  MutationTransportResponse,
-} from "./mutations.js";
+import type { MutationCoordinator } from "./mutations.js";
 import type { AnyProfile } from "./profiles.js";
 
 // WRITE-02: enable or disable one user's account through a desired-state
@@ -52,9 +47,8 @@ const ROLE_GUIDANCE =
 export type UserUpdateFlags = Record<string, string | boolean>;
 
 export function parseAccountEnabled(raw: unknown, help: string): boolean {
-  const text = String(raw ?? "").trim().toLowerCase();
-  if (text === "true") return true;
-  if (text === "false") return false;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
   throw new AxiError("--account-enabled must be true or false", "VALIDATION_ERROR", [help]);
 }
 
@@ -227,24 +221,3 @@ export async function updateUserAccount(args: {
   }
   return { user: { id, accountEnabled: desired }, auditId: result.auditId };
 }
-
-// Production mutation transport: plain HTTPS with redirects held for manual
-// refusal. The coordinator re-authorizes the destination before credentials
-// and before handoff; a redirect answer therefore fails closed downstream
-// instead of following anywhere.
-export const fetchMutationTransport: MutationTransport = async (
-  request: MutationTransportRequest,
-): Promise<MutationTransportResponse> => {
-  const response = await fetch(request.url, {
-    method: request.method,
-    headers: request.headers,
-    ...(request.body !== undefined ? { body: request.body } : {}),
-    ...(request.signal ? { signal: request.signal } : {}),
-    redirect: "manual",
-  });
-  const headers: Record<string, string> = {};
-  response.headers.forEach((value, key) => {
-    headers[key] = value;
-  });
-  return { status: response.status, headers, body: await response.text() };
-};

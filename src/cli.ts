@@ -5,8 +5,8 @@ import { VERSION } from "./version.js";
 import { Profiles } from "./profiles.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
-import { fetchMutationTransport, updateUserAccount } from "./entra-user-update.js";
-import { createMutationCoordinator, type MutationTransport } from "./mutations.js";
+import { updateUserAccount } from "./entra-user-update.js";
+import { createMutationCoordinator, mutationFetchTransport, type MutationTransport } from "./mutations.js";
 import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
 import { listDirectoryRoles, showDirectoryRole, listRoleAssignments, listPimEligible, listPimActive } from "./entra-roles.js";
 import { listAdministrativeUnitMembers, listAdministrativeUnits, listDevices, showAdministrativeUnit, showDevice } from "./entra-directory.js";
@@ -16,7 +16,7 @@ import { listAppRoleAssignments, listOAuth2Grants } from "./entra-grants.js";
 import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection } from "./entra-risk.js";
 import { listPolicies, showPolicy, listNamedLocations, showNamedLocation } from "./entra-conditional-access.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
-import { addGroupMember, mutationFetchTransport } from "./entra-group-member-add.js";
+import { addGroupMember } from "./entra-group-member-add.js";
 import { fetchTransport } from "./api.js";
 import { doctorTargets, runDoctor } from "./doctor.js";
 import { setupView } from "./setup.js";
@@ -208,7 +208,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       profile: selected.profile,
       delegated,
       application,
-      transport: overrides.mutationTransport ?? fetchMutationTransport,
+      transport: overrides.mutationTransport ?? mutationFetchTransport,
       ...(overrides.journalPath !== undefined ? { journalPath: overrides.journalPath } : {}),
     });
     return updateUserAccount({

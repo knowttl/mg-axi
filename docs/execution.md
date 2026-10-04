@@ -4,8 +4,8 @@
 
 Only named, approved pack commands can mutate; raw API remains read-only.
 WRITE-00 provides the shared [mutation coordinator](../src/mutations.ts).
-WRITE-01 ships the first named command (`entra group member add`); WRITE-02 adds the named `entra user update` account-state command.
-Both commands use the shared production [mutation transport](../src/mutations.ts); later families still ship independently with their own contracts.
+WRITE-01 ships the first named command (`entra group member add`); WRITE-02 adds the named `entra user update` account-state command; WRITE-03 adds the named `entra user revoke-sessions` session-revocation action.
+All three commands use the shared production [mutation transport](../src/mutations.ts); later families still ship independently with their own contracts.
 Profile enablement and environment configuration are documented in [README.md](../README.md); account-state usage, confirmation, identity pinning, permissions and concurrency limitations are documented there as well.
 The coordinator snapshots the validated profile's tenant, identity and approved-operation scope at creation; later profile edits cannot widen that scope.
 It checks forced read-only and profile enablement before preview, and the sender checks forced read-only again before credential acquisition and immediately before transport handoff.
@@ -59,7 +59,7 @@ Slice IDs and dependencies are defined in the [dispatch plan](build-plan.md).
 |---|---|---|
 | WRITE-01 Membership | [POST /groups/{id}/members/$ref](https://learn.microsoft.com/en-us/graph/api/group-post-members?view=graph-rest-1.0) | Shipped; supported targets and permission requirements are documented in [README.md](../README.md). |
 | WRITE-02 Account state | [PATCH /users/{id}](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0) | Shipped; account-state usage, permissions and sensitive-target role hierarchy are documented in [README.md](../README.md). |
-| WRITE-03 Revoke sessions | [POST /users/{id}/revokeSignInSessions](https://learn.microsoft.com/en-us/graph/api/user-revokesigninsessions?view=graph-rest-1.0), D/A User.RevokeSessions.All | Preview the action, do not invent a state diff or promise immediate universal session termination; no automatic replay of ambiguous requests. |
+| WRITE-03 Revoke sessions | [POST /users/{id}/revokeSignInSessions](https://learn.microsoft.com/en-us/graph/api/user-revokesigninsessions?view=graph-rest-1.0), D/A User.RevokeSessions.All | Shipped; action preview, delayed/external-user limitations, target confirmation and unknown-outcome handling are documented in [README.md](../README.md). |
 | WRITE-04 CA policy update | [PATCH /identity/conditionalAccess/policies/{id}](https://learn.microsoft.com/en-us/graph/api/conditionalaccesspolicy-update?view=graph-rest-1.0), D/A Policy.Read.All + Policy.ReadWrite.ConditionalAccess | P1, P2 for risk-based features; delegated administrator role; review lockout risk and concurrency limitations. |
 | WRITE-05 Risk dismissal | [POST /identityProtection/riskyUsers/dismiss](https://learn.microsoft.com/en-us/graph/api/riskyuser-dismiss?view=graph-rest-1.0), D/A IdentityRiskyUser.ReadWrite.All | P2; initially one explicit user; confirmation targets the user, not the collection action; dismissal is not remediation. |
 
@@ -69,6 +69,10 @@ The table describes permission choices, not automatic consent or authority.
 Raw writes remain denied even after named writes ship.
 
 The WRITE-01 implementation in [entra-group-member-add](../src/entra-group-member-add.ts) classifies membership adds as disruptive; command usage, enablement and permission requirements are owned by [README.md](../README.md).
+The WRITE-03 implementation in [entra-user-revoke-sessions](../src/entra-user-revoke-sessions.ts) classifies session revocation as disruptive; it sends `POST /users/{id}/revokeSignInSessions` with no request body and treats the accepted 2xx response as the proof, so there is no verification reread.
+The target is verified as a user through `GET:/users/{user-id}` with `$select=id` before preview and again before sending; failed or malformed user reads block the operation.
+The preview is an action description, never a state diff: it says Graph resets `signInSessionsValidFromDateTime`, states the action cannot be undone with no rollback, and carries the delayed-effect and external-user limits Microsoft states.
+A timeout or 5xx after send records `OUTCOME_UNKNOWN` with guidance to read back the target and never replay the intent.
 The $ref body carries exactly `{"@odata.id": "https://graph.microsoft.com/v1.0/directoryObjects/<user-id>"}`; both identifiers must be object IDs.
 The user is verified through `GET:/users/{user-id}` with `$select=id` before preview or no-op detection and again before sending; failed or malformed user reads block the operation.
 Group `isAssignableToRole` must be explicitly false or null; true, missing and malformed values are refused.

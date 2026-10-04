@@ -36,7 +36,7 @@ export function setupView(store: Profiles): Record<string, unknown> {
       reads,
       writes,
       local: implemented.length - reads - writes,
-      api: "Entra user, group, directory-role/PIM, device, administrative-unit, sign-in/directory-audit, application/service-principal, consent-grant, risk and Conditional Access reads plus reviewed raw api get, one gated group-membership write and one gated account enable/disable write; every other operation is scheduled, blocked, deprecated or excluded",
+      api: "Entra user, group, directory-role/PIM, device, administrative-unit, sign-in/directory-audit, application/service-principal, consent-grant, risk and Conditional Access reads plus reviewed raw api get, one gated group-membership write, one gated account enable/disable write and one gated session-revocation write; every other operation is scheduled, blocked, deprecated or excluded",
       report: "docs/coverage.md",
     },
     integration: "Install skills/mg-axi/SKILL.md explicitly through your agent's skill installation mechanism; setup only shows guidance and installs no skills or hooks",

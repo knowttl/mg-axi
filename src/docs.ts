@@ -89,7 +89,7 @@ export function capabilityDocument(): string {
     "|---|---|---|",
     ...writeRows,
     "",
-    "Extended families (EXT-01 through EXT-04), later writes (WRITE-03 and",
+    "Extended families (EXT-01 through EXT-04), later writes (WRITE-04 and",
     "beyond) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining",
     "scheduled rows; see docs/build-plan.md for their dispatch.",
     "",

@@ -28,7 +28,8 @@ import type { AnyProfile } from "./profiles.js";
 // $expand, and neither is used silently here - the limitation rides along as
 // an explicit warning instead. Role-assignable groups surface through
 // isAssignableToRole; changing their membership needs role-management
-// permission and is refused by WRITE-01; it belongs to a later write slice.
+// permission and is refused by the membership write
+// (`mg-axi entra group member add`); it belongs to a later write slice.
 
 // Every group property this slice may request or display, matching the
 // reviewed raw surface. Anything else fails before credentials.
@@ -334,7 +335,7 @@ export async function showGroup(
   const { row, truncated } = project(raw, fields, full);
   const helpHints: string[] = truncated ? [fullHint("entra group show", flags, profileName)] : [];
   if (row["isAssignableToRole"] === true) {
-    helpHints.push("Role-assignable group: membership changes need role-management permission and belong to WRITE-01, never to this read");
+    helpHints.push("Role-assignable group: `mg-axi entra group member add` supports non-role-assignable groups only; role-assignable membership needs role-management permission and belongs to a later slice, never to this read");
   }
   if (helpHints.length) return { group: row, help: helpHints };
   return { group: row };

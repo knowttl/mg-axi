@@ -329,8 +329,11 @@ Preview also requires the write-enabled profile and operation allowlist describe
 Dismissal is disruptive: every `--execute` run needs `--confirm '<risky-user-id>'` repeating the target exactly, including already-dismissed states.
 Dismissal answers 204 with an empty body, so after a send the command rereads the user and reports a `WRITE_CONFLICT` when the state is not dismissed; a failed verification read reports `OUTCOME_UNKNOWN`.
 A timeout or 5xx after send is `OUTCOME_UNKNOWN` with no replay: read back the user before doing anything else.
+Fresh reads do not make dismissal atomic: no ETag condition is sent, so another actor can change the risk state between the read, POST and verification.
 Dismissal is not remediation: it records the risk as dismissed without resetting credentials or revoking sessions.
-Delegated dismissal requests `IdentityRiskyUser.ReadWrite.All` while preview reads request `IdentityRiskyUser.Read.All`; application profiles use the configured Graph `.default` audience with the write permission admin-consented on the app registration.
+Delegated dismissal requests `IdentityRiskyUser.ReadWrite.All` while preview, pre-send and verification reads request `IdentityRiskyUser.Read.All`; credentials are acquired silently.
+Use explicit `mg-axi login --profile soc --scopes https://graph.microsoft.com/IdentityRiskyUser.ReadWrite.All,https://graph.microsoft.com/IdentityRiskyUser.Read.All` to sign in for the write and its prerequisite reads.
+Application profiles use the configured Graph `.default` audience with `IdentityRiskyUser.ReadWrite.All` admin-consented on the app registration; the prerequisite reads also require a [supported risky-user read permission](https://learn.microsoft.com/en-us/graph/api/riskyuser-get?view=graph-rest-1.0).
 The dismissal command rejects caller-supplied `--scopes`.
 Delegated callers additionally need `Security Administrator`, and the riskyUsers API requires a Microsoft Entra ID P2 licence; 403 denials surface the permission, role and licence rules because a 403 never says which prerequisite is missing.
 Risk reads never confirm, dismiss or remediate risk.

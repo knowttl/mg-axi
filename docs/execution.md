@@ -61,7 +61,7 @@ Slice IDs and dependencies are defined in the [dispatch plan](build-plan.md).
 | WRITE-02 Account state | [PATCH /users/{id}](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0) | Shipped; account-state usage, permissions and sensitive-target role hierarchy are documented in [README.md](../README.md). |
 | WRITE-03 Revoke sessions | [POST /users/{id}/revokeSignInSessions](https://learn.microsoft.com/en-us/graph/api/user-revokesigninsessions?view=graph-rest-1.0) | Shipped; usage, permissions, limitations and unknown-outcome handling are documented in [README.md](../README.md); implementation: [entra-user-revoke-sessions](../src/entra-user-revoke-sessions.ts). |
 | WRITE-04 CA policy update | [PATCH /identity/conditionalAccess/policies/{id}](https://learn.microsoft.com/en-us/graph/api/conditionalaccesspolicy-update?view=graph-rest-1.0), D/A Policy.Read.All + Policy.ReadWrite.ConditionalAccess | P1, P2 for risk-based features; delegated administrator role; review lockout risk and concurrency limitations. |
-| WRITE-05 Risk dismissal | [POST /identityProtection/riskyUsers/dismiss](https://learn.microsoft.com/en-us/graph/api/riskyuser-dismiss?view=graph-rest-1.0), D/A IdentityRiskyUser.ReadWrite.All | Shipped; single-user dismissal usage, permissions and P2/role guidance are documented in [README.md](../README.md). |
+| WRITE-05 Risk dismissal | [POST /identityProtection/riskyUsers/dismiss](https://learn.microsoft.com/en-us/graph/api/riskyuser-dismiss?view=graph-rest-1.0) | Shipped; single-user dismissal usage, permissions and P2/role guidance are documented in [README.md](../README.md). |
 
 
 Each write ships independently after the shared coordinator and its own contract pass offline checks.

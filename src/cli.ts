@@ -7,6 +7,7 @@ import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-ses
 import { listUsers, showUser } from "./entra-users.js";
 import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
 import { listDirectoryRoles, showDirectoryRole, listRoleAssignments, listPimEligible, listPimActive } from "./entra-roles.js";
+import { listAdministrativeUnitMembers, listAdministrativeUnits, listDevices, showAdministrativeUnit, showDevice } from "./entra-directory.js";
 import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from "./entra-audit-logs.js";
 import { listApplicationOwners, listApplications, listServicePrincipalOwners, listServicePrincipals, showApplication, showServicePrincipal } from "./entra-apps.js";
 import { fetchTransport } from "./api.js";
@@ -154,7 +155,10 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       ? listGroupMembers(session, flags, selected.profile, operation, leafHelp(leaf), selected.name)
       : listGroupMemberOf(session, flags, selected.profile, operation, leafHelp(leaf), selected.name);
   }
-  if (leaf.path === "entra directory-role list" || leaf.path === "entra directory-role show" || leaf.path === "entra role-assignment list" || leaf.path === "entra pim eligible list" || leaf.path === "entra pim active list") {
+  if (leaf.path === "entra directory-role list" || leaf.path === "entra directory-role show" || leaf.path === "entra role-assignment list" || leaf.path === "entra pim eligible list" || leaf.path === "entra pim active list"
+    || leaf.path === "entra device list" || leaf.path === "entra device show"
+    || leaf.path === "entra administrative-unit list" || leaf.path === "entra administrative-unit show"
+    || leaf.path === "entra administrative-unit member list") {
     const selected = profiles.resolve(flags.profile as string | undefined);
     const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
     if (!operation || operation.method !== "GET") {
@@ -179,7 +183,12 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra directory-role show": return showDirectoryRole(session, flags, selected.profile, operation, help, selected.name);
       case "entra role-assignment list": return listRoleAssignments(session, flags, selected.profile, operation, help, selected.name);
       case "entra pim eligible list": return listPimEligible(session, flags, selected.profile, operation, help, selected.name);
-      default: return listPimActive(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim active list": return listPimActive(session, flags, selected.profile, operation, help, selected.name);
+      case "entra device list": return listDevices(session, flags, selected.profile, operation, help, selected.name);
+      case "entra device show": return showDevice(session, flags, selected.profile, operation, help, selected.name);
+      case "entra administrative-unit list": return listAdministrativeUnits(session, flags, selected.profile, operation, help, selected.name);
+      case "entra administrative-unit show": return showAdministrativeUnit(session, flags, selected.profile, operation, help, selected.name);
+      default: return listAdministrativeUnitMembers(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "entra sign-in list" || leaf.path === "entra sign-in show" || leaf.path === "entra directory-audit list" || leaf.path === "entra directory-audit show" || leaf.path === "entra application list" || leaf.path === "entra application show" || leaf.path === "entra service-principal list" || leaf.path === "entra service-principal show" || leaf.path === "entra application owner list" || leaf.path === "entra service-principal owner list") {

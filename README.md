@@ -14,6 +14,7 @@ READ-02 adds group list/show and direct or transitive member and parent-membersh
 READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the user usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
+READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -112,6 +113,32 @@ Delegated callers additionally need a supported directory role per operation (fo
 Denied reads name that role requirement instead of only the generic grant/role/licence cause.
 Built-in roles are base inventory and custom role assignments need P1; PIM reads need P2 or ID Governance.
 Role assignment, activation and every other PIM mutation belongs to later write slices, never to these reads.
+
+Log in with `https://graph.microsoft.com/Device.Read.All` or `https://graph.microsoft.com/AdministrativeUnit.Read.All`, then inspect directory devices and administrative units:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Device.Read.All
+mg-axi entra device list --profile soc --limit 10
+mg-axi entra device show --profile soc --id <device-id>
+mg-axi login --profile soc --scopes https://graph.microsoft.com/AdministrativeUnit.Read.All
+mg-axi entra administrative-unit list --profile soc
+mg-axi entra administrative-unit show --profile soc --id <administrative-unit-id>
+mg-axi entra administrative-unit member list --profile soc --administrative-unit <administrative-unit-id>
+```
+
+`entra device list` defaults to compact properties (`id`, `displayName`, `operatingSystem`, `accountEnabled`); `entra device show --id <device-id>` takes the object `id`, not `deviceId`, and defaults to the full reviewed device set.
+Directory devices are Entra directory objects; Intune managed devices and device actions are a separately authorized surface, never these commands.
+`entra administrative-unit list` defaults to `id`, `displayName`, `visibility` and `membershipType`; `entra administrative-unit show --id <administrative-unit-id>` defaults to the full reviewed unit set including the membership rule.
+Device and unit `--select` accept their [reviewed property sets](src/entra-directory.ts); `--fields` must be a subset of the fetched selection.
+Unit show adds a licensing hint when the projected `membershipType` is `Dynamic`; custom `--select` or `--fields` that omit it also omit the hint.
+See the [licence matrix](docs/graph-coverage.md#licence-matrix-by-area) for device and administrative-unit licensing requirements.
+`entra administrative-unit member list --administrative-unit <administrative-unit-id>` lists member users, groups and devices with the same `id`/`displayName`/`mail` selection, `@odata.type` preservation, hidden-membership and limited-information behavior as group relationships.
+Device and unit lists return `devices` and `administrativeUnits`, member lists return `members`, and single-object reads return `device` and `administrativeUnit`.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to device and administrative-unit reads.
+Resume unit-member lists with the same `--administrative-unit`, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
+Delegated device reads default to `https://graph.microsoft.com/Device.Read.All` and unit reads to `https://graph.microsoft.com/AdministrativeUnit.Read.All`, while application profiles use the configured `.default` audience; hidden unit memberships need `Member.Read.Hidden`.
+Denied directory reads return operation-specific permission, delegated-role and licensing guidance rather than empty results; HTTP 403 alone does not identify which prerequisite is missing.
+`--filter` on these collections is sent with `$count=true` and `ConsistencyLevel: eventual`.
 
 Log in with `https://graph.microsoft.com/AuditLog.Read.All`, then query sign-ins and directory audits in bounded time windows:
 

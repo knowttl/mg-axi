@@ -8,7 +8,7 @@ AUTH-01 adds versioned dedicated-app delegated profiles and explicit login.
 AUTH-02 adds certificate and workload-federated application profiles and a client-credentials service.
 CORE-01 adds the shared policy-enforced Graph read session, exercised through an injected fixture HTTP transport.
 CORE-02 adds session collections, query validation, bounded retries and cancellation under the [read execution contract](docs/execution.md#read-mechanics-and-source-contracts).
-CLI Graph execution remains scheduled for later [build slices](docs/build-plan.md); the CLI does not yet acquire application tokens.
+API-01 adds one executable read, `mg-axi api get <path>`, serving the reviewed v1.0 raw surface through that session; other named leaves remain scheduled for later [build slices](docs/build-plan.md).
 No tenant, credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -56,6 +56,19 @@ Device code requires creating the profile with `--allow-device-code` and selecti
 Browser failure never falls back to device code.
 Only explicit login can open a browser or display the device challenge on stderr.
 Ordinary credential acquisition uses silent refresh and returns actionable errors when login, consent or policy intervention is required.
+
+Read reviewed raw Graph data without waiting for a named command:
+
+```sh
+mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All
+mg-axi api get /groups --query '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All
+mg-axi api get /identity/conditionalAccess/policies --scopes https://graph.microsoft.com/Policy.Read.All
+```
+
+`api get` accepts only GET routes in the reviewed inventory (`src/api.ts`, reviewed 2026-10-04) with reviewed query keys and `$select` fields.
+Unreviewed, secret-value, mail/file-content, beta and write routes fail before credentials, and pack, preview and sensitive-area policy still runs in the shared session.
+Delegated reads take explicit `--scopes` like login; application profiles use the configured `.default` audience and reject `--scopes`.
+Collections return truthful completion info, default to 100 rows, and follow pages within budget under `--all`.
 
 Delegated MSAL caches use the OS credential store through optional `keytar`, with login reporting `storage: os-protected`.
 If `keytar` cannot load, caches remain in process memory and login reports `storage: session-only`; authentication then lasts only for that process.

@@ -32,7 +32,7 @@ export async function main() {
     commands: {
       dispatch: async () => {
         if (process.argv.length === 3 && process.argv[2] === "--help") return TOP_LEVEL_HELP;
-        const { leaf, flags } = resolveCommand(process.argv.slice(2));
+        const { leaf, flags, positional } = resolveCommand(process.argv.slice(2));
         if (flags.help) return leafHelp(leaf);
         if (leaf.path === "home") return localHome(flags.profile as string | undefined);
         const profiles = new Profiles();
@@ -54,6 +54,27 @@ export async function main() {
           const { DelegatedAuth } = await import("./auth.js");
           const { MsalProvider } = await import("./msal-provider.js");
           return { profile: selected.name, ...await new DelegatedAuth(new MsalProvider()).login(selected.profile, String(flags.method ?? "browser"), String(flags.scopes).split(",")) };
+        }
+        if (leaf.path === "api get") {
+          const selected = profiles.resolve(flags.profile as string | undefined);
+          const { runApiGet, fetchTransport } = await import("./api.js");
+          const { DelegatedAuth } = await import("./auth.js");
+          const { ApplicationAuth } = await import("./app-auth.js");
+          const { MsalProvider } = await import("./msal-provider.js");
+          const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+          return runApiGet({
+            path: positional!,
+            apiVersion: String(flags["api-version"] ?? "v1.0"),
+            query: flags.query === undefined ? undefined : String(flags.query),
+            scopes: flags.scopes === undefined ? undefined : String(flags.scopes),
+            limit: flags.all ? undefined : flags.limit === undefined ? 100 : Number(flags.limit),
+            full: !!flags.full,
+            profile: selected.profile,
+          }, {
+            delegated: new DelegatedAuth(new MsalProvider()),
+            application: new ApplicationAuth(new MsalApplicationProvider()),
+            transport: fetchTransport,
+          });
         }
         const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
         throw new AxiError(`Command is not executable: ${operation?.disposition ?? "unavailable"} (${operation?.owningSlice ?? "no inventory mapping"})`, "NOT_IMPLEMENTED", [leafHelp(leaf)]);

@@ -9,7 +9,7 @@ export const API_VERSIONS: string[] = schema.$defs.version.enum;
 export const DESCRIPTION = "Inspect Microsoft Graph capabilities, read-only by default";
 
 type Flag = { description: string; value?: string; default?: string; required?: true };
-type Leaf = { path: string; description: string; flags: Record<string, Flag>; examples: string[]; operation?: string };
+type Leaf = { path: string; description: string; flags: Record<string, Flag>; examples: string[]; operation?: string; positional?: { name: string; description: string } };
 const common = {
   profile: { value: "name", description: "Select a configured profile" },
   "api-version": { value: API_VERSIONS.join("|"), default: "v1.0", description: "Explicit API version; no fallback" },
@@ -44,11 +44,20 @@ export const LEAVES: Leaf[] = [
   { path: "entra user show", description: "Show a user (scheduled for READ-01; not executable yet)", operation: "GET:/users/{user-id}", flags: {
     ...common, id: { value: "user-id-or-upn", required: true, description: "User object ID or UPN" },
   }, examples: ["mg-axi entra user show --help", "mg-axi entra user show --id <user-id-or-upn>"] },
+  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices and administrative units; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+    ...common,
+    query: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select/$expand on singles)" },
+    scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit full https://graph.microsoft.com/ scope names; application profiles use the .default audience" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; use --all to follow pages within budget" },
+    all: { description: "Follow @odata.nextLink pages within the request budget" },
+    full: { description: "Disable 4000-character string truncation; never disables redaction or row caps" },
+  }, examples: ["mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All", "mg-axi api get /groups --query '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All", "mg-axi api get /identity/conditionalAccess/policies --scopes https://graph.microsoft.com/Policy.Read.All"] },
 ];
 
 export function leafHelp(leaf: Leaf): string {
   return [
-    `mg-axi ${leaf.path}`, leaf.description,
+    `mg-axi ${leaf.path}${leaf.positional ? ` <${leaf.positional.name}>` : ""}`, leaf.description,
+    ...(leaf.positional ? [`<${leaf.positional.name}>: ${leaf.positional.description}`] : []),
     ...Object.entries(leaf.flags).map(([name, flag]) => `--${name}${flag.value ? ` <${flag.value}>` : ""}: ${flag.description}${flag.default ? ` (default: ${flag.default})` : ""}${flag.required ? " (required)" : ""}`),
     "--help: Show this reference",
     ...leaf.examples,
@@ -57,15 +66,28 @@ export function leafHelp(leaf: Leaf): string {
 
 export const TOP_LEVEL_HELP = [DESCRIPTION, ...LEAVES.map(leaf => leafHelp(leaf)), "-v, -V, --version: Print the bare version"].join("\n\n");
 
-export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<string, string | boolean> } {
+export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<string, string | boolean>; positional?: string } {
   const words = argv.slice(0, argv.findIndex(arg => arg.startsWith("-")) < 0 ? argv.length : argv.findIndex(arg => arg.startsWith("-")));
   const path = words.join(" ") || "home";
-  const leaf = LEAVES.find(item => item.path === path);
-  if (!leaf) throw new AxiError("unknown or incomplete command", "VALIDATION_ERROR", [TOP_LEVEL_HELP]);
+  let leaf = LEAVES.find(item => item.path === path);
+  let positional: string | undefined;
+  let flagStart = words.length;
+  if (!leaf) {
+    if (words[0] !== "api") throw new AxiError("unknown or incomplete command", "VALIDATION_ERROR", [TOP_LEVEL_HELP]);
+    leaf = LEAVES.find(item => item.path === "api get")!;
+    const help = leafHelp(leaf);
+    const verb = words[1];
+    if (verb === undefined) throw new AxiError("unknown or incomplete command", "VALIDATION_ERROR", [TOP_LEVEL_HELP]);
+    if (verb.toLowerCase() !== "get") throw new AxiError(`mg-axi api serves reviewed GET reads only; got api ${verb}`, "VALIDATION_ERROR", [help]);
+    if (words.length < 3 || words[2]!.startsWith("-")) throw new AxiError("missing path for `mg-axi api get`", "VALIDATION_ERROR", ["Example: mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All", help]);
+    if (words.length > 3) throw new AxiError(`unexpected argument \`${words[3]}\` for \`mg-axi api get\``, "VALIDATION_ERROR", ["Pass one path before flags: mg-axi api get <path> [--query 'k=v']", help]);
+    positional = words[2];
+    flagStart = 3;
+  }
   const help = leafHelp(leaf);
   const fail = (message: string): never => { throw new AxiError(message, "VALIDATION_ERROR", [help]); };
   const flags: Record<string, string | boolean> = Object.create(null);
-  for (let i = words.length; i < argv.length; i++) {
+  for (let i = flagStart; i < argv.length; i++) {
     const arg = argv[i]!;
     const match = /^--([a-z-]+)(?:=(.*))?$/.exec(arg);
     if (!match) fail("unexpected argument or short flag");
@@ -87,7 +109,8 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
   if (flags.limit && (!/^[1-9]\d*$/.test(String(flags.limit)) || !Number.isSafeInteger(Number(flags.limit)))) fail("--limit must be a positive safe integer");
   if (flags.limit && flags.all) fail("--limit and --all cannot be combined");
   if (!flags.help) for (const [name, flag] of Object.entries(leaf.flags)) if (flag.required && !flags[name]) fail(`--${name} is required`);
-  return { leaf, flags };
+  if (!flags.help && leaf.positional && positional === undefined) fail(`missing ${leaf.positional.name} for \`mg-axi ${leaf.path}\``);
+  return { leaf, flags, positional };
 }
 
 export function operationFor(leaf: Leaf, version: string) {
@@ -104,6 +127,6 @@ export function home() {
     profile: "unavailable: no profile configured",
     tenant: "unavailable: no tenant selected",
     domains: [{ name: "entra", status: "scheduled", summary: "Tenant summaries await Graph execution" }],
-    help: ["mg-axi entra user list --help", "mg-axi entra user show --help"],
+    help: ["mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi api get --help"],
   };
 }

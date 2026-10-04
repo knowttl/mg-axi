@@ -72,7 +72,7 @@ const TRUNCATE_AT = 500;
 // absent value reports the missing prerequisite rather than an empty result.
 const SIGNIN_UNAVAILABLE: Readonly<Record<string, string>> = {
   appliedConditionalAccessPolicies:
-    "unavailable: Graph omits CA policy detail without CA-data access - both modes need Policy.Read.All, Policy.Read.ConditionalAccess or Policy.ReadWrite.ConditionalAccess in addition to AuditLog.Read.All; delegated also needs Conditional Access Administrator, Global Reader, Security Administrator or Security Reader. For delegated access, log in and repeat this read with --scopes https://graph.microsoft.com/AuditLog.Read.All,https://graph.microsoft.com/Policy.Read.All",
+    "unavailable: Graph omits CA policy detail without CA-data access - both modes need Policy.Read.All or Policy.Read.ConditionalAccess in addition to AuditLog.Read.All; delegated also needs Conditional Access Administrator, Global Reader, Security Administrator or Security Reader. For delegated access, log in and repeat this read with --scopes https://graph.microsoft.com/AuditLog.Read.All,https://graph.microsoft.com/Policy.Read.All",
 };
 
 export type LogFlags = Record<string, string | boolean>;

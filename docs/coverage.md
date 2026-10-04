@@ -11,7 +11,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 ## Counts
 
 - implemented read leaves: 48 (46 named Entra reads plus reviewed raw api get and doctor health check)
-- implemented write leaves: 4 (named gated mutations below)
+- implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
 - inventory reviewed-raw-read: 0
@@ -128,8 +128,9 @@ Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, i
 | `mg-axi entra user revoke-sessions` | `POST:/users/{user-id}/revokeSignInSessions` | WRITE-03 |
 | `mg-axi entra group member add` | `POST:/groups/{group-id}/members/$ref` | WRITE-01 |
 | `mg-axi entra risky-user dismiss` | `POST:/identityProtection/riskyUsers/dismiss` | WRITE-05 |
+| `mg-axi entra conditional-access policy update` | `PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}` | WRITE-04 |
 
-Shipped initial writes: WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-05 (`mg-axi entra risky-user dismiss`).
-Pending initial writes: WRITE-04 (`PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}`).
+Shipped initial writes: WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
+Pending initial writes: none.
 Extended families (EXT-01 through EXT-04) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining
 scheduled rows; see docs/build-plan.md for their dispatch.

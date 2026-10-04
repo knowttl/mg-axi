@@ -17,6 +17,7 @@ import { listAppRoleAssignments, listOAuth2Grants } from "./entra-grants.js";
 import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection } from "./entra-risk.js";
 import { dismissRiskyUser } from "./entra-risk-dismiss.js";
 import { listPolicies, showPolicy, listNamedLocations, showNamedLocation } from "./entra-conditional-access.js";
+import { updateCaPolicy } from "./entra-ca-policy-update.js";
 import { listDomains, showDomain, listVerificationDnsRecords, showVerificationDnsRecord, listServiceConfigurationRecords, showServiceConfigurationRecord, listDomainDnsRecords, showDomainDnsRecord } from "./entra-domains.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
 import { addGroupMember } from "./entra-group-member-add.js";
@@ -256,6 +257,43 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       ...(overrides.journalPath !== undefined ? { journalPath: overrides.journalPath } : {}),
     });
     return revokeUserSessions({
+      session,
+      coordinator,
+      flags,
+      profile: selected.profile,
+      profileName: selected.name,
+      readOperation,
+      help: leafHelp(leaf),
+    });
+  }
+  if (leaf.path === "entra conditional-access policy update") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const readLeaf = LEAVES.find(item => item.path === "entra conditional-access policy show")!;
+    const readOperation = operationFor(readLeaf, "v1.0");
+    if (!readOperation || readOperation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${readLeaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const coordinator = createMutationCoordinator({
+      profile: selected.profile,
+      delegated,
+      application,
+      transport: overrides.mutationTransport ?? mutationFetchTransport,
+      ...(overrides.journalPath !== undefined ? { journalPath: overrides.journalPath } : {}),
+    });
+    return updateCaPolicy({
       session,
       coordinator,
       flags,

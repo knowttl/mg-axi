@@ -622,6 +622,18 @@ export const LEAVES: Leaf[] = [
     full: caRead.full,
     scopes: caRead.scopes,
   }, examples: ["mg-axi entra conditional-access policy show --id <policy-id> --profile soc", "mg-axi entra conditional-access policy show --id <policy-id> --profile soc --full"] },
+  { path: "entra conditional-access policy update", description: "Update one Conditional Access policy with reviewed fields only (WRITE-04): current-versus-proposed preview, lockout analysis, no concurrency promise; disruptive and needs typed confirmation", operation: "PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}", flags: {
+    ...common,
+    id: { value: "policy-id", required: true, description: "Conditional Access policy object ID to update" },
+    "display-name": { value: "name", description: "Reviewed field: new policy display name" },
+    state: { value: "enabled|enabledForReportingButNotEnforced|disabled", description: "Reviewed field: desired enforcement state" },
+    conditions: { value: "json-object", description: "Reviewed field: full conditions block as a JSON object" },
+    "grant-controls": { value: "json-object", description: "Reviewed field: full grantControls block as a JSON object" },
+    "session-controls": { value: "json-object", description: "Reviewed field: full sessionControls block as a JSON object" },
+    execute: { description: "Send the PATCH after preview; without it the command only previews the diff and lockout analysis and journals nothing" },
+    confirm: { value: "policy-id", description: "Required with --execute: repeat the --id value exactly" },
+    "acknowledge-lockout-risk": { description: "Required with --execute when the preview reports elevated lockout risk" },
+  }, examples: ["mg-axi entra conditional-access policy update --id <policy-id> --state disabled --profile soc", "mg-axi entra conditional-access policy update --id <policy-id> --state enabled --execute --confirm '<policy-id>' --profile soc"] },
   { path: "entra conditional-access named-location list", description: "List Conditional Access named locations with compact properties (id, displayName)", operation: "GET:/identity/conditionalAccess/namedLocations", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

@@ -4,8 +4,8 @@
 
 Only named, approved pack commands can mutate; raw API remains read-only.
 WRITE-00 provides the shared [mutation coordinator](../src/mutations.ts).
-WRITE-01 ships the first named command (`entra group member add`); WRITE-02 adds the named `entra user update` account-state command; WRITE-03 adds the named `entra user revoke-sessions` session-revocation action; WRITE-05 adds the named `entra risky-user dismiss` single-user action.
-All four commands use the shared production [mutation transport](../src/mutations.ts); later families still ship independently with their own contracts.
+WRITE-01 ships the first named command (`entra group member add`); WRITE-02 adds the named `entra user update` account-state command; WRITE-03 adds the named `entra user revoke-sessions` session-revocation action; WRITE-04 adds the named `entra conditional-access policy update` command; WRITE-05 adds the named `entra risky-user dismiss` single-user action.
+All five commands use the shared production [mutation transport](../src/mutations.ts); later families still ship independently with their own contracts.
 Profile enablement, environment configuration and named-write usage, confirmation, identity pinning, permissions and limitations are documented in [README.md](../README.md).
 The coordinator snapshots the validated profile's tenant, identity and approved-operation scope at creation; later profile edits cannot widen that scope.
 It checks forced read-only and profile enablement before preview, and the sender checks forced read-only again before credential acquisition and immediately before transport handoff.
@@ -60,7 +60,7 @@ Slice IDs and dependencies are defined in the [dispatch plan](build-plan.md).
 | WRITE-01 Membership | [POST /groups/{id}/members/$ref](https://learn.microsoft.com/en-us/graph/api/group-post-members?view=graph-rest-1.0) | Shipped; supported targets and permission requirements are documented in [README.md](../README.md). |
 | WRITE-02 Account state | [PATCH /users/{id}](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0) | Shipped; account-state usage, permissions and sensitive-target role hierarchy are documented in [README.md](../README.md). |
 | WRITE-03 Revoke sessions | [POST /users/{id}/revokeSignInSessions](https://learn.microsoft.com/en-us/graph/api/user-revokesigninsessions?view=graph-rest-1.0) | Shipped; usage, permissions, limitations and unknown-outcome handling are documented in [README.md](../README.md); implementation: [entra-user-revoke-sessions](../src/entra-user-revoke-sessions.ts). |
-| WRITE-04 CA policy update | [PATCH /identity/conditionalAccess/policies/{id}](https://learn.microsoft.com/en-us/graph/api/conditionalaccesspolicy-update?view=graph-rest-1.0), D/A Policy.Read.All + Policy.ReadWrite.ConditionalAccess | P1, P2 for risk-based features; delegated administrator role; review lockout risk and concurrency limitations. |
+| WRITE-04 CA policy update | [PATCH /identity/conditionalAccess/policies/{id}](https://learn.microsoft.com/en-us/graph/api/conditionalaccesspolicy-update?view=graph-rest-1.0) | Shipped; usage, permissions, lockout gates and concurrency limitations are documented in [README.md](../README.md). |
 | WRITE-05 Risk dismissal | [POST /identityProtection/riskyUsers/dismiss](https://learn.microsoft.com/en-us/graph/api/riskyuser-dismiss?view=graph-rest-1.0) | Shipped; single-user dismissal usage, permissions and P2/role guidance are documented in [README.md](../README.md). |
 
 
@@ -73,3 +73,6 @@ The $ref body carries exactly `{"@odata.id": "https://graph.microsoft.com/v1.0/d
 The user is verified through `GET:/users/{user-id}` with `$select=id` before preview or no-op detection and again before sending; failed or malformed user reads block the operation.
 Group `isAssignableToRole` must be explicitly false or null; true, missing and malformed values are refused.
 Desired state is read through `GET:/groups/{group-id}/members` in the preview and rechecked before the single send; an incomplete member window proceeds to the POST where a duplicate 400 lands as a no-op.
+
+The WRITE-04 implementation in [entra-ca-policy-update](../src/entra-ca-policy-update.ts) supplies a READ-03 policy-show reread callback to the coordinator, reapplying lockout gates on each fresh effective policy before the single send.
+Its reviewed fields, diff and no-op behavior, confirmation, lockout requirements, permissions and concurrency limitations are owned by [README.md](../README.md).

@@ -1,6 +1,6 @@
 ---
 name: mg-axi
-description: Use mg-axi for Microsoft Entra inspection and gated writes (account-state updates, user group membership adds, session revocation, risky-user dismissal) - users, groups, roles, devices, sign-ins, applications, consent grants, risk and Conditional Access through agent-ergonomic TOON output.
+description: Use mg-axi for Microsoft Entra inspection and gated named writes - users, groups, roles, devices, sign-ins, applications, consent grants, risk and Conditional Access through agent-ergonomic TOON output.
 user-invocable: false
 ---
 
@@ -8,7 +8,7 @@ user-invocable: false
 
 Agent-ergonomic CLI for Microsoft Graph, read-only by default.
 Entra SOC reads through token-efficient TOON output.
-Four gated write leaves exist (`entra user update` for account enable/disable, `entra group member add` for user membership, `entra user revoke-sessions` for session revocation, `entra risky-user dismiss` for single-user risk dismissal) through a separately gated mutation coordinator; raw API remains read-only and every other mutation is refused.
+The generated [command table](#orientation) lists supported named writes through the gated mutation coordinator; raw API remains read-only and every other mutation is refused.
 See [README.md](../../README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.
 
 From a built checkout, run commands from the repository root with `node dist/bin/mg-axi.js`.
@@ -84,6 +84,7 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra risk-detection show` | native | read |
 | `mg-axi entra conditional-access policy list` | native | read |
 | `mg-axi entra conditional-access policy show` | native | read |
+| `mg-axi entra conditional-access policy update` | native | write |
 | `mg-axi entra conditional-access named-location list` | native | read |
 | `mg-axi entra conditional-access named-location show` | native | read |
 | `mg-axi api get` | native | read |

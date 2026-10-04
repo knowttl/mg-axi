@@ -214,7 +214,6 @@ export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<Ca
   if (excludeRoles === null) {
     return { available: false, reason: "policy exclusions are unreadable, so lockout risk cannot be assessed" };
   }
-  const excluded = excludeUsers.length > 0 || excludeGroups.length > 0 || excludeRoles.length > 0;
   const grantControls = effective["grantControls"];
   if (grantControls === null || typeof grantControls !== "object" || Array.isArray(grantControls)) {
     return { available: false, reason: "policy grant controls are unreadable, so lockout risk cannot be assessed" };
@@ -237,8 +236,7 @@ export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<Ca
   const coversAdminClients = clients.includes("all")
     || (clients.includes("browser") && clients.includes("mobileAppsAndDesktopClients"));
   const coversAdminApps = (includedApps.includes("All") || includedApps.includes("MicrosoftAdminPortals"))
-    && !excludedApps.includes("All") && !excludedApps.includes("MicrosoftAdminPortals")
-    && (applications as PolicyRecord)["applicationFilter"] == null;
+    && !excludedApps.includes("All") && !excludedApps.includes("MicrosoftAdminPortals");
   let narrowedConditions = false;
   for (const field of ["signInRiskLevels", "userRiskLevels"] as const) {
     const levels = stringArray((conditions as PolicyRecord)[field]);
@@ -261,12 +259,12 @@ export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<Ca
     }
     if (!included.includes(all) || excluded.length > 0) narrowedConditions = true;
   }
-  if (includeUsers.includes("All") && !excluded && controls.includes("block")
+  if (includeUsers.includes("All") && controls.includes("block")
     && coversAdminClients && coversAdminApps && !narrowedConditions) {
     return {
       available: true,
       level: "refused",
-      findings: ["enabled policy would block all users without exclusions across browser and modern clients on all cloud apps or admin portals: every admin including break-glass access would be locked out"],
+      findings: ["enabled all-users block policy covers browser and modern clients on all cloud apps or admin portals; no verified exclusion protects admins and break-glass access, so full lockout is refused"],
     };
   }
   return {
@@ -314,7 +312,7 @@ function assertLockoutGates(
       `Refusing policy update: ${assessment.findings.join("; ")}`,
       "OPERATION_BLOCKED",
       [
-        "Narrow user, client or application conditions, exclude emergency access, or replace the block control before retrying",
+        "Narrow user, client or application conditions, or replace the block control before retrying",
         "This refusal cannot be overridden with an acknowledgement flag",
       ],
     );

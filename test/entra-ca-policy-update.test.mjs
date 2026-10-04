@@ -365,7 +365,6 @@ for (const [name, scope] of [
   ["modern clients only", { clientAppTypes: ["mobileAppsAndDesktopClients"] }],
   ["specific application", { applications: { includeApplications: ["33333333-3333-4333-8333-333333333333"], excludeApplications: [] } }],
   ["excluded admin portals", { applications: { includeApplications: ["All"], excludeApplications: ["MicrosoftAdminPortals"] } }],
-  ["application filter", { applications: { includeApplications: ["All"], excludeApplications: [], applicationFilter: { mode: "include", rule: 'app.displayName -eq "Scoped"' } } }],
   ["specific locations", { locations: { includeLocations: ["fixture-location"], excludeLocations: [] } }],
   ["excluded locations", { locations: { includeLocations: ["All"], excludeLocations: ["fixture-location"] } }],
   ["specific platforms", { platforms: { includePlatforms: ["windows"], excludePlatforms: [] } }],
@@ -400,6 +399,12 @@ for (const [name, scope] of [
   ["all clients and apps", { clientAppTypes: ["all"], applications: { includeApplications: ["All"], excludeApplications: [] } }],
   ["browser and modern clients", { clientAppTypes: ["browser", "mobileAppsAndDesktopClients"] }],
   ["admin portals", { applications: { includeApplications: ["MicrosoftAdminPortals"], excludeApplications: [] } }],
+  ["include-mode application filter", { applications: { includeApplications: ["All"], excludeApplications: [], applicationFilter: { mode: "include", rule: 'app.displayName -eq "Scoped"' } } }],
+  ["exclude-mode filter matching unrelated application", { applications: { includeApplications: ["All"], excludeApplications: [], applicationFilter: { mode: "exclude", rule: 'app.displayName -eq "Unrelated"' } } }],
+  ["unknown application filter", { applications: { includeApplications: ["All"], excludeApplications: [], applicationFilter: { futureRule: true } } }],
+  ["unverified user exclusion", { users: { includeUsers: ["All"], excludeUsers: ["non-admin"], excludeGroups: [] } }],
+  ["unverified group exclusion", { users: { includeUsers: ["All"], excludeUsers: [], excludeGroups: ["non-admin-group"] } }],
+  ["unverified role exclusion", { users: { includeUsers: ["All"], excludeUsers: [], excludeGroups: [], excludeRoles: ["non-admin-role"] } }],
   ["condition type annotation", { "@odata.type": "#microsoft.graph.conditionalAccessConditionSet" }],
   ["protocol annotations", { "@odata.context": "fixture-context", "@odata.etag": "fixture-etag" }],
   ["unknown property", { futureCondition: { enabled: true, values: ["legacy"] } }],
@@ -483,7 +488,7 @@ for (const readIndex of [1, 2]) test(`fresh read ${readIndex} refuses expansion 
         futureCondition: { enabled: true },
         platforms: { includePlatforms: ["all"], excludePlatforms: [] },
         locations: { includeLocations: ["All"], excludeLocations: [] },
-        applications: { includeApplications: ["All"], excludeApplications: ["33333333-3333-4333-8333-333333333333"] },
+        applications: { includeApplications: ["All"], excludeApplications: ["33333333-3333-4333-8333-333333333333"], applicationFilter: { mode: "exclude", rule: 'app.displayName -eq "Unrelated"' } },
       },
     });
     const scoped = { ...full, conditions: { ...full.conditions, clientAppTypes: ["exchangeActiveSync", "other"] } };
@@ -510,7 +515,7 @@ test("lockout refusal: enabling block for all users without exclusions is refuse
     assert.deepEqual(preview.preview.lockout, {
       available: true,
       level: "refused",
-      findings: ["enabled policy would block all users without exclusions across browser and modern clients on all cloud apps or admin portals: every admin including break-glass access would be locked out"],
+      findings: ["enabled all-users block policy covers browser and modern clients on all cloud apps or admin portals; no verified exclusion protects admins and break-glass access, so full lockout is refused"],
     });
     assert.equal(preview.preview.noop, false);
     const f = fixture({ reads: [blocking] });
@@ -520,7 +525,7 @@ test("lockout refusal: enabling block for all users without exclusions is refuse
     ]), f.overrides)
       .then(() => assert.fail("lockout must refuse"), caught => caught);
     assert.equal(error.code, "OPERATION_BLOCKED");
-    assert.match(error.message, /every admin including break-glass access would be locked out/i);
+    assert.match(error.message, /full lockout is refused/i);
     assert.match(error.suggestions.join("\n"), /cannot be overridden/i);
     assert.equal(f.mutRequests.length, 0);
     assert.ok(!existsSync(f.journalPath), "a refused execute reserves no intent");
@@ -555,9 +560,6 @@ test("lockout acknowledgement: all-users coverage without exclusions needs expli
 });
 
 for (const targeting of [
-  { includeUsers: ["All"], excludeUsers: ["non-admin"] },
-  { includeUsers: ["All"], excludeGroups: ["non-admin-group"] },
-  { includeUsers: ["All"], excludeRoles: ["non-admin-role"] },
   { includeUsers: ["admin"] },
   { includeUsers: [], includeGroups: ["admins"] },
   { includeUsers: [], includeRoles: ["admin-role"] },

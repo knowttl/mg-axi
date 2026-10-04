@@ -7,6 +7,7 @@ CLI-01 provides a local TypeScript/AXI shell, strict command catalogue, leaf hel
 AUTH-01 adds versioned dedicated-app delegated profiles and explicit login.
 AUTH-02 adds certificate and workload-federated application profiles and a client-credentials service.
 CORE-01 adds the shared policy-enforced Graph read session, exercised through an injected fixture HTTP transport.
+CORE-02 adds session collections, query validation, bounded retries and cancellation under the [read execution contract](docs/execution.md#read-mechanics-and-source-contracts).
 CLI Graph execution remains scheduled for later [build slices](docs/build-plan.md); the CLI does not yet acquire application tokens.
 No tenant, credentials or network access are required for help or an unconfigured home view.
 

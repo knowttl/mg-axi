@@ -285,10 +285,16 @@ Risk dismissal is a separately reviewed write, so risk reads never confirm, dism
 Configure the registration's Mobile and desktop applications redirect URI as `http://localhost` for browser login.
 The first created profile is the default; `--profile` selects another identity explicitly.
 Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate configuration file.
-Version 1 stores tenant/client/cloud, delegated or application mode, enabled packs, preview/sensitive policy, device-code opt-in and a unique credential reference only.
+Version 1 stores tenant/client/cloud, delegated or application mode, enabled packs, preview/sensitive policy, device-code opt-in, a unique credential reference and an optional write policy.
 Unknown fields, unsupported versions/clouds and inlined credential material are rejected with recovery guidance.
 Creation never overwrites an existing profile.
 Preview is disabled and sensitive areas are empty in newly created profiles.
+
+Writes stay disabled unless a human hand-edits a `writes` object into the profile file: `{ "allowWrites": true, "operations": ["<operation-name>"] }`.
+The object accepts only `allowWrites` (boolean) and `operations` (1 to 64 nonempty operation names, each at most 256 characters), including when `allowWrites` is false.
+No command writes that object, and `MG_AXI_READ_ONLY=1` overrides any opt-in.
+WRITE-00 enables no mutation family or command; the coordinator is exercised only through fixtures under the [named-write execution contract](docs/execution.md#named-writes).
+The journal defaults to `~/.mg-axi/writes.log`; a nonblank `MG_AXI_WRITE_LOG` overrides that path.
 
 Browser login uses Microsoft's [MSAL interactive API](https://learn.microsoft.com/en-us/entra/msal/javascript/node/acquire-token-requests) and PKCE.
 Request delegated Graph scope names explicitly with `--scopes`, separated by commas.

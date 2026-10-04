@@ -9,14 +9,15 @@ import type { AnyProfile } from "./profiles.js";
 // POST /users/{id}/revokeSignInSessions with no request body. Graph resets
 // the user's signInSessionsValidFromDateTime, invalidating issued refresh
 // tokens and browser session cookies so the user must sign in again, and
-// answers 2xx with {"value": true}; that accepted response is the proof, so
+// normally answers 2xx with {"value": true}; acceptance is based on status,
+// not response-body validation, so
 // unlike the 204 account update there is no verification reread.
 //
 // Reviewed against the v1.0 user-revokeSignInSessions operation
 // documentation on REVIEWED_ON. The least-privileged permission is
 // User.RevokeSessions.All in both delegated and application modes; the
 // documentation names no administrator-role prerequisite for this action, so
-// denial guidance names only the permission pair. This is an action, not a
+// denial guidance names only the action permission. This is an action, not a
 // desired-state write: the preview says what will happen and that it cannot
 // be undone (there is no rollback), never a state diff. Two Microsoft-stated
 // limits ride along in the preview: token revocation can lag a few minutes

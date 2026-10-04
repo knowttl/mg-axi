@@ -65,19 +65,21 @@ Use explicit `mg-axi login --profile soc --scopes https://graph.microsoft.com/Us
 Application profiles use the configured Graph `.default` audience with the pair admin-consented on the app registration; the command does not request a per-operation scope subset.
 The update command rejects caller-supplied `--scopes`.
 Delegated callers need `Privileged Authentication Administrator` for admin targets and must generally outrank the target; app-only callers need the pair plus a higher-privileged admin role assignment, and 403 denials surface both rules because a 403 never says which prerequisite is missing.
-WRITE-03 adds a named action write: `mg-axi entra user revoke-sessions --user <user-id>` revokes one user's sign-in sessions through `POST /users/{id}/revokeSignInSessions` with no request body; Graph answers 2xx with `{"value": true}` and that accepted response is the proof.
+WRITE-03 adds a named action write: `mg-axi entra user revoke-sessions --user <user-id>` revokes one user's sign-in sessions through `POST /users/{id}/revokeSignInSessions` with no request body.
+The command treats an accepted 2xx status as success without validating the response body or performing a verification reread; it returns `user.id`, `user.sessionsRevoked: true` and `auditId`.
 The command supports only `--api-version v1.0`; beta writes are rejected before credentials or HTTP.
 Without `--execute` the command previews the action and journals nothing: the preview states that Graph resets `signInSessionsValidFromDateTime`, invalidating issued refresh tokens and browser session cookies so the user must sign in again, and that the action cannot be undone - there is no rollback.
 The preview also carries the two Microsoft-stated limits: token revocation can lag a few minutes after the call returns, and external users are unaffected because they sign in through their home tenant.
 `--user` takes the user object ID only; UPNs are not resolved.
 The target is verified as a user through the user show route before preview and again before sending; a failed or malformed user read blocks the operation.
 Revocation is always disruptive: every `--execute` run needs `--confirm '<user-id>'` repeating the target exactly.
-The least-privileged permission is `User.RevokeSessions.All` in both modes.
+The revocation action's least-privileged permission is `User.RevokeSessions.All` in both modes.
 Delegated revocation credentials request that scope; reads request `User.ReadBasic.All`, and credentials are acquired silently.
 Use explicit `mg-axi login --profile soc --scopes https://graph.microsoft.com/User.RevokeSessions.All,https://graph.microsoft.com/User.ReadBasic.All` to sign in for the write.
-Application profiles use the configured Graph `.default` audience with the permission admin-consented on the app registration; the command does not request a per-operation scope subset.
+Application profiles use the configured Graph `.default` audience with `User.RevokeSessions.All` and the prerequisite [user-read permission](https://learn.microsoft.com/en-us/graph/api/user-get?view=graph-rest-1.0), `User.Read.All`, admin-consented on the app registration; the command does not request a per-operation scope subset.
 The revoke command rejects caller-supplied `--scopes`.
 A 403 denial surfaces the `User.RevokeSessions.All` requirement without inventing a role verdict; a timeout or 5xx after sending reports `OUTCOME_UNKNOWN`, and neither outcome is ever replayed.
+Unknown-outcome guidance includes a user read with `--select id`; that read checks target accessibility, not whether revocation took effect.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
 Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
 Data and structured errors use TOON on stdout; diagnostics belong on stderr.

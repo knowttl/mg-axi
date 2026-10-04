@@ -14,6 +14,7 @@ READ-02 adds group list/show and direct or transitive member and parent-membersh
 READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the user usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
+READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -119,6 +120,7 @@ Log in with `https://graph.microsoft.com/Device.Read.All` or `https://graph.micr
 mg-axi login --profile soc --scopes https://graph.microsoft.com/Device.Read.All
 mg-axi entra device list --profile soc --limit 10
 mg-axi entra device show --profile soc --id <device-id>
+mg-axi login --profile soc --scopes https://graph.microsoft.com/AdministrativeUnit.Read.All
 mg-axi entra administrative-unit list --profile soc
 mg-axi entra administrative-unit show --profile soc --id <administrative-unit-id>
 mg-axi entra administrative-unit member list --profile soc --administrative-unit <administrative-unit-id>
@@ -127,10 +129,12 @@ mg-axi entra administrative-unit member list --profile soc --administrative-unit
 `entra device list` defaults to compact properties (`id`, `displayName`, `operatingSystem`, `accountEnabled`); `entra device show --id <device-id>` defaults to the full reviewed device set with `deviceId` distinct from the object `id`.
 Directory devices are Entra directory objects; Intune managed devices and device actions are a separately authorized surface, never these commands.
 `entra administrative-unit list` defaults to `id`, `displayName`, `visibility` and `membershipType`; `entra administrative-unit show --id <administrative-unit-id>` defaults to the full reviewed unit set including the membership rule.
+Device and unit `--select` accept their [reviewed property sets](src/entra-directory.ts); `--fields` must be a subset of the fetched selection.
 Dynamic units carry a P1 licensing hint on show; scoped administration needs P1 while members are Free.
 `entra administrative-unit member list --administrative-unit <administrative-unit-id>` lists member users, groups and devices with the same `id`/`displayName`/`mail` selection, `@odata.type` preservation, hidden-membership and limited-information behavior as group relationships.
 Device and unit lists return `devices` and `administrativeUnits`, member lists return `members`, and single-object reads return `device` and `administrativeUnit`.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to device and administrative-unit reads.
+Resume unit-member lists with the same `--administrative-unit`, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
 Delegated device reads default to `https://graph.microsoft.com/Device.Read.All` and unit reads to `https://graph.microsoft.com/AdministrativeUnit.Read.All`, while application profiles use the configured `.default` audience; hidden unit memberships need `Member.Read.Hidden`.
 `--filter` on these collections is sent with `$count=true` and `ConsistencyLevel: eventual`.
 

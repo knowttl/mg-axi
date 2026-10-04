@@ -82,9 +82,9 @@ const DEFAULT_AU_LIST_SELECT = ["id", "displayName", "visibility", "membershipTy
 const DEFAULT_AU_SHOW_SELECT = [...KNOWN_AU_FIELDS];
 // Compact member rows: identifier and display name.
 const DEFAULT_AU_MEMBER_SELECT = ["id", "displayName"];
-// Device reads take Device.Read.All and AU reads take
-// AdministrativeUnit.Read.All in both modes; hidden AU members need
-// Member.Read.Hidden, both passed explicitly via --scopes.
+// Delegated defaults are operation-specific; hidden AU members need an
+// explicit --scopes set including Member.Read.Hidden. Application profiles
+// use their configured .default audience and reject --scopes.
 export const DEFAULT_DEVICE_SCOPES = ["https://graph.microsoft.com/Device.Read.All"];
 export const DEFAULT_AU_SCOPES = ["https://graph.microsoft.com/AdministrativeUnit.Read.All"];
 const TRUNCATE_AT = 500;

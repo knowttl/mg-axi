@@ -339,6 +339,89 @@ test("lockout acknowledgement: all-users coverage without exclusions needs expli
   } finally { teardown(state); }
 });
 
+for (const targeting of [
+  { includeUsers: ["All"], excludeUsers: ["non-admin"] },
+  { includeUsers: ["All"], excludeGroups: ["non-admin-group"] },
+  { includeUsers: ["All"], excludeRoles: ["non-admin-role"] },
+  { includeUsers: ["admin"] },
+  { includeUsers: [], includeGroups: ["admins"] },
+  { includeUsers: [], includeRoles: ["admin-role"] },
+]) test(`unverified targeting ${JSON.stringify(targeting)} requires acknowledgement`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const policy = basePolicy({
+      state: "disabled",
+      conditions: { users: { excludeUsers: [], excludeGroups: [], ...targeting } },
+      grantControls: { builtInControls: ["block"] },
+    });
+    const f = fixture({ reads: [policy] });
+    const preview = await executeArgv(updateArgs(["--state", "enabled"]), f.overrides);
+    assert.equal(preview.preview.lockout.level, "elevated");
+    await assert.rejects(
+      executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId]), f.overrides),
+      { code: "LOCKOUT_ACK_REQUIRED" },
+    );
+    assert.equal(f.mutRequests.length, 0);
+    const result = await executeArgv(updateArgs([
+      "--state", "enabled", "--execute", "--confirm", policyId, "--acknowledge-lockout-risk",
+    ]), f.overrides);
+    assert.deepEqual(result.policy, { id: policyId });
+    assert.equal(f.mutRequests.length, 1);
+  } finally { teardown(state); }
+});
+
+for (const missing of ["excludeUsers", "excludeGroups"]) test(`omitted ${missing} disables conditions updates`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const conditions = { users: { includeUsers: ["All"], excludeUsers: [], excludeGroups: [] } };
+    delete conditions.users[missing];
+    const f = fixture();
+    const fields = ["--conditions", JSON.stringify(conditions)];
+    const preview = await executeArgv(updateArgs(fields), f.overrides);
+    assert.equal(preview.preview.lockout.available, false);
+    await assert.rejects(
+      executeArgv(updateArgs([...fields, "--execute", "--confirm", policyId, "--acknowledge-lockout-risk"]), f.overrides),
+      { code: "OPERATION_BLOCKED", message: /stays disabled without lockout analysis/ },
+    );
+    assert.equal(f.mutRequests.length, 0);
+    assert.ok(!existsSync(f.journalPath));
+  } finally { teardown(state); }
+});
+
+for (const field of ["includeUsers", "includeGroups", "includeRoles", "excludeUsers", "excludeGroups", "excludeRoles"]) test(`unreadable ${field} disables enforcement`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const policy = basePolicy({
+      conditions: { users: { includeUsers: ["admin"], excludeUsers: [], excludeGroups: [], [field]: null } },
+    });
+    const f = fixture({ reads: [policy] });
+    await assert.rejects(
+      executeArgv(updateArgs(["--session-controls", "{}", "--execute", "--confirm", policyId, "--acknowledge-lockout-risk"]), f.overrides),
+      { code: "OPERATION_BLOCKED" },
+    );
+    assert.equal(f.mutRequests.length, 0);
+  } finally { teardown(state); }
+});
+
+for (const readIndex of [1, 2]) test(`fresh read ${readIndex} rechecks protected-account coverage`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const safe = basePolicy({ state: "disabled" });
+    const reads = [safe, safe, safe];
+    reads[readIndex] = basePolicy();
+    const f = fixture({ reads });
+    await assert.rejects(
+      executeArgv(updateArgs(["--session-controls", "{}", "--execute", "--confirm", policyId]), f.overrides),
+      { code: "LOCKOUT_ACK_REQUIRED" },
+    );
+    assert.equal(f.mutRequests.length, 0);
+  } finally { teardown(state); }
+});
+
 test("disabled operation: unreadable conditions keep enforcement changes disabled", async () => {
   const state = setupProfiles();
   try {

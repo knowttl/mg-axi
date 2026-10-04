@@ -201,19 +201,23 @@ export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<Ca
   if (includeUsers === null) {
     return { available: false, reason: "policy user scope is unreadable, so lockout risk cannot be assessed" };
   }
-  if (!includeUsers.includes("All")) {
-    return { available: true, level: "none", findings: [`policy covers ${includeUsers.length} included user entries, not all users`] };
+  const excludeUsers = stringArray((users as PolicyRecord)["excludeUsers"]);
+  const excludeGroups = stringArray((users as PolicyRecord)["excludeGroups"]);
+  if (excludeUsers === null || excludeGroups === null) {
+    return { available: false, reason: "policy exclusions are unreadable, so lockout risk cannot be assessed" };
   }
-  for (const exclusion of ["excludeUsers", "excludeGroups"] as const) {
-    const entries = (users as PolicyRecord)[exclusion];
+  for (const field of ["includeGroups", "includeRoles"] as const) {
+    const entries = (users as PolicyRecord)[field];
     if (entries !== undefined && stringArray(entries) === null) {
-      return { available: false, reason: "policy exclusions are unreadable, so lockout risk cannot be assessed" };
+      return { available: false, reason: "policy user scope is unreadable, so lockout risk cannot be assessed" };
     }
   }
-  const excluded = ["excludeUsers", "excludeGroups"].some(name => stringArray((users as PolicyRecord)[name])!.length > 0);
-  if (excluded) {
-    return { available: true, level: "none", findings: ["policy covers all users but carries account or group exclusions"] };
+  const roles = (users as PolicyRecord)["excludeRoles"];
+  const excludeRoles = roles === undefined ? [] : stringArray(roles);
+  if (excludeRoles === null) {
+    return { available: false, reason: "policy exclusions are unreadable, so lockout risk cannot be assessed" };
   }
+  const excluded = excludeUsers.length > 0 || excludeGroups.length > 0 || excludeRoles.length > 0;
   const grantControls = effective["grantControls"];
   if (grantControls === null || typeof grantControls !== "object" || Array.isArray(grantControls)) {
     return { available: false, reason: "policy grant controls are unreadable, so lockout risk cannot be assessed" };
@@ -223,7 +227,7 @@ export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<Ca
   if (controls === null) {
     return { available: false, reason: "policy grant controls are unreadable, so lockout risk cannot be assessed" };
   }
-  if (controls.includes("block")) {
+  if (includeUsers.includes("All") && !excluded && controls.includes("block")) {
     return {
       available: true,
       level: "refused",
@@ -233,7 +237,7 @@ export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<Ca
   return {
     available: true,
     level: "elevated",
-    findings: ["enabled policy would cover all users with no exclusions under non-block controls"],
+    findings: ["enabled policy may affect admins and break-glass access; protected-account coverage cannot be established from policy targeting alone"],
   };
 }
 
@@ -256,7 +260,6 @@ function showHint(policyId: string, profileName: string): string {
 }
 
 function assertLockoutGates(
-  current: PolicyRecord,
   payload: Partial<Record<CaPolicyWritableField, unknown>>,
   assessment: LockoutAssessment,
   acknowledged: boolean,
@@ -281,7 +284,7 @@ function assertLockoutGates(
   }
   if (assessment.level === "elevated" && !acknowledged) {
     throw new AxiError(
-      "Policy update needs --acknowledge-lockout-risk: the proposed policy would cover all users with no exclusions",
+      "Policy update needs --acknowledge-lockout-risk: protected-account coverage cannot be established from policy targeting alone",
       "LOCKOUT_ACK_REQUIRED",
       ["Re-run with --acknowledge-lockout-risk after confirming emergency-access coverage"],
     );
@@ -365,16 +368,16 @@ export async function updateCaPolicy(args: {
         ...(!noop
           ? ["Policy updates are disruptive: the --execute run needs the typed --confirm value shown above"]
           : []),
-        ...(elevated && !noop ? ["Covering all users with no exclusions needs --acknowledge-lockout-risk on the --execute run"] : []),
+        ...(elevated && !noop ? ["Unverified admin and break-glass coverage needs --acknowledge-lockout-risk on the --execute run"] : []),
         showHint(policyId, profileName),
       ],
     };
   }
   if (noop) return { noop: true, policy: { id: current["id"] } };
-  assertLockoutGates(current, payload, assessment, acknowledged);
+  assertLockoutGates(payload, assessment, acknowledged);
   const readState = async (): Promise<PolicyRecord> => {
     const fresh = await readPolicy(session, profile, readOperation, policyId);
-    assertLockoutGates(fresh, payload, analyzeLockout(fresh, payload), acknowledged);
+    assertLockoutGates(payload, analyzeLockout(fresh, payload), acknowledged);
     return fresh;
   };
   const result = await coordinator.execute(definition, {

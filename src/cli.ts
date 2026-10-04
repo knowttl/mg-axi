@@ -15,6 +15,8 @@ import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection } 
 import { listPolicies, showPolicy, listNamedLocations, showNamedLocation } from "./entra-conditional-access.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
 import { fetchTransport } from "./api.js";
+import { doctorTargets, runDoctor } from "./doctor.js";
+import { setupView } from "./setup.js";
 import type { DelegatedAuth } from "./auth.js";
 import type { ApplicationAuth } from "./app-auth.js";
 
@@ -74,6 +76,28 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     return items.length ? { profiles: items, help: ["mg-axi profile show --profile <name>", "mg-axi login --help"] } : { profiles: "0 profiles configured", help: ["mg-axi profile create --help"] };
   }
   if (leaf.path === "profile show") return profiles.resolve(flags.profile as string | undefined);
+  if (leaf.path === "setup") return setupView(profiles);
+  if (leaf.path === "doctor") {
+    const names = doctorTargets(profiles, flags.profile as string | undefined);
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    // A failing profile still reports its bounded read on stdout; the
+    // nonzero exit travels through process state, never the payload.
+    const result = await runDoctor({ store: profiles, names, session });
+    if (result.failed) process.exitCode = 1;
+    return result.output;
+  }
   if (leaf.path === "login") {
     const selected = profiles.resolve(flags.profile as string | undefined);
     if (selected.profile.mode !== "delegated") throw new AxiError("Application profiles authenticate with client credentials; interactive login is unavailable", "VALIDATION_ERROR", ["mg-axi profile show --profile <name>", "Application tokens are acquired silently with the configured Graph .default audience"]);

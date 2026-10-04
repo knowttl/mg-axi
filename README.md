@@ -32,6 +32,9 @@ node dist/bin/mg-axi.js entra user list --help
 node dist/bin/mg-axi.js entra user show --help
 ```
 
+Run checkout commands from the repository root with `node dist/bin/mg-axi.js`.
+Where examples or CLI output use `mg-axi`, substitute `node dist/bin/mg-axi.js` unless you have separately installed the executable on PATH.
+
 The home view reports unavailable tenant summaries explicitly.
 `entra user list` defaults to basic properties (`id`, `displayName`, `userPrincipalName`, `mail`); `entra user show --id <user-id-or-upn>` defaults to the richer server property set.
 `--select` requests properties from the [supported user property set](src/entra-users.ts); `--fields` projects locally and must be a subset of the fetched selection.
@@ -364,8 +367,29 @@ Ask an administrator to grant those permissions on the configured app registrati
 Acquisition failures return `AUTH_REQUIRED` with consent and certificate/federation guidance, without user or device-code fallback.
 
 Run `corepack pnpm build`, `corepack pnpm test` and `corepack pnpm lint` for shell validation.
-The [CI workflow](.github/workflows/ci.yml) defines the platform/runtime matrix for shell build, test and lint checks, and validates the Python inventory tooling separately.
+The [CI workflow](.github/workflows/ci.yml) defines the platform/runtime matrix for shell build, test and lint checks, validates the Python inventory tooling separately, and rejects stale generated docs.
 The [implementation plan](PLAN.md) remains the design authority.
-Generated skill, setup and capability reporting ship in PACK-01; no session hooks are installed by ordinary commands.
 
 The pinned [Entra operation inventory](docs/inventory.md) defines the INV-01 discovery boundary and schema for later build slices.
+
+## Release
+
+This is the supported Entra read surface, not full Entra coverage.
+See the generated [capability report](docs/coverage.md) for implemented reads and discovery dispositions, and the [skill command table](skills/mg-axi/SKILL.md#orientation) for all executable leaves, including local commands.
+The package is marked private and ships no publish workflow: preparing this release never publishes it.
+The packed files are `dist`, the discovery inventory, `skills/mg-axi`, `docs/coverage.md` and this README.
+Follow the [checkout instructions](#mg-axi) to install dependencies, build and run the version probe.
+
+From the repository root, `node dist/bin/mg-axi.js setup` shows the build steps, the selected configuration path, the configured profiles and the capability summary.
+It writes nothing, signs in nowhere and installs no hooks; ordinary commands never gain installation side effects.
+Create profiles with `node dist/bin/mg-axi.js profile create`, sign delegated profiles in with `node dist/bin/mg-axi.js login`, and check access with `node dist/bin/mg-axi.js doctor`.
+Doctor checks `--profile <name>` when supplied, otherwise the configured default, or all configured profiles when no default exists.
+Doctor performs one bounded `entra user list --limit 1` read per profile with silent credential acquisition only: it never opens a browser, never shows a device-code challenge, never auto-installs and never enables writes.
+Missing profiles, an unknown selected profile or invalid configuration fail before Graph reads.
+Read failures report per profile with rerun guidance and a nonzero exit.
+
+The installable skill lives at [skills/mg-axi/SKILL.md](skills/mg-axi/SKILL.md).
+Install it explicitly through your agent's skill installation mechanism; the setup command only shows guidance and does not install skills.
+Its command table is generated from the command catalogue; [docs/coverage.md](docs/coverage.md) also uses the discovery inventory.
+After building, regenerate both with `corepack pnpm run docs:generate` and verify freshness with `corepack pnpm run docs:check`; CI runs the freshness check.
+Critical journeys stay packaged offline: `test/pack.test.mjs` drives setup, doctor and the user, group, Conditional Access and sign-in reads through the packaged executable with fixture credentials and blocked networking.

@@ -333,6 +333,27 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
+  test(`${mode} resumes a capped named-location list through its opaque cursor`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const first = await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile, "--limit", "1"], overrides);
+      assert.deepEqual(first.namedLocations, [
+        { id: l1.id, displayName: l1.displayName, "@odata.type": l1["@odata.type"] },
+      ]);
+      assert.equal(first.count.returned, 1);
+      assert.equal(first.count.complete, false);
+      assert.equal(typeof first.cursor, "string");
+      const second = await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile, "--cursor", first.cursor], overrides);
+      assert.deepEqual(second.namedLocations, [
+        { id: l2.id, displayName: l2.displayName, "@odata.type": l2["@odata.type"] },
+      ]);
+      assert.deepEqual(second.count, { returned: 1, complete: true });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
   test(`${mode} denied policy reads surface role and P1/P2 guidance`, async () => {
     const state = setupProfiles();
     try {
@@ -378,6 +399,20 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.policies, []);
       assert.deepEqual(result.count, { returned: 0, complete: true });
       assert.ok(result.help.some(hint => hint.includes("0 conditional-access policies matched")));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} empty named-location results report absence instead of an error`, async () => {
+    const state = setupProfiles();
+    try {
+      const empty = transport(() => json(200, { value: [] }));
+      const { overrides } = overridesFor(mode, empty);
+      const result = await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile], overrides);
+      assert.deepEqual(result.namedLocations, []);
+      assert.deepEqual(result.count, { returned: 0, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("0 named locations matched")));
     } finally {
       teardownProfiles(state);
     }

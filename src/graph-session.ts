@@ -46,6 +46,7 @@ const READ_SCOPES = new Set([
   "LicenseAssignment.Read.All",
   "Member.Read.Hidden",
   "Organization.Read.All",
+  "OrganizationalBranding.Read.All",
   "Policy.Read.All",
   "Policy.Read.AuthenticationMethod",
   "Policy.Read.ConditionalAccess",
@@ -200,6 +201,7 @@ const SECRET_VALUE = [
 ];
 
 function secretKey(key: string): boolean {
+  if (key === "customAccountResetCredentialsUrl" || key === "customForgotMyPasswordText") return false;
   const name = key.toLowerCase().replace(/[-_]/g, "");
   return name === "sas" || name === "authorization" || SECRET_KEY.test(name) || KEY_SUFFIX.test(name);
 }
@@ -866,6 +868,10 @@ export class GraphSession {
       Accept: "application/json",
       "client-request-id": randomUUID(),
       ...(opts.consistencyLevel === "eventual" ? { ConsistencyLevel: "eventual" } : {}),
+      // The branding GET documents Accept-Language as required; 0 selects
+      // the default branding object. Locale variants come from the
+      // localizations collection instead of this header.
+      ...(operation.path === "/organization/{organization-id}/branding" ? { "Accept-Language": "0" } : {}),
     });
     for (;;) {
       signal?.throwIfAborted();

@@ -43,6 +43,9 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra pim active list/);
   assert.match(result.stdout, /entra device list/);
   assert.match(result.stdout, /entra administrative-unit list/);
+  assert.match(result.stdout, /entra organization list/);
+  assert.match(result.stdout, /entra organization branding show/);
+  assert.match(result.stdout, /entra organization branding-localization list/);
   assert.match(result.stdout, /entra domain list/);
   assert.match(result.stdout, /entra domain verification-dns-record list/);
   assert.match(result.stdout, /entra domain service-configuration-record list/);
@@ -78,6 +81,10 @@ for (const [name, args, error] of [
   ["unknown flag on member add", ["entra", "group", "member", "add", "--transitive"], /unknown flag/],
   ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
   ["missing required user", ["entra", "user", "authentication-method", "list"], /--user is required/],
+  ["missing required organization ID", ["entra", "organization", "show"], /--id is required/],
+  ["missing required organization for branding", ["entra", "organization", "branding", "show"], /--organization is required/],
+  ["missing required organization for localizations", ["entra", "organization", "branding-localization", "list"], /--organization is required/],
+  ["organization list rejects filters", ["entra", "organization", "list", "--filter", "displayName eq 'Contoso'"], /unknown flag --filter/],
   ["missing required domain ID", ["entra", "domain", "show"], /--id is required/],
   ["missing required domain for verification records", ["entra", "domain", "verification-dns-record", "list"], /--domain is required/],
   ["missing required domain for service records", ["entra", "domain", "service-configuration-record", "list"], /--domain is required/],
@@ -160,6 +167,24 @@ test("pim eligible list leaf help marks eligibility as not active", () => {
   assert.equal(result.stderr, "");
   assert.match(result.stdout, /not active/);
   assert.match(result.stdout, /RoleEligibilitySchedule\.Read\.Directory/);
+});
+
+test("access-review definition list leaf help marks schedules distinct from instances", () => {
+  const result = run(["entra", "access-review", "definition", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /review schedules.*never their occurrences/);
+  assert.match(result.stdout, /--cursor/);
+  assert.match(result.stdout, /AccessReview\.Read\.All/);
+});
+
+test("access-review decision list leaf help marks decisions read-only with parent flags", () => {
+  const result = run(["entra", "access-review", "decision", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /never approves, denies or applies anything/);
+  assert.match(result.stdout, /--definition.*required/);
+  assert.match(result.stdout, /--instance.*required/);
 });
 
 test("administrative-unit member list leaf help advertises the relationship flags", () => {

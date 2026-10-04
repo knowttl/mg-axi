@@ -21,6 +21,7 @@ READ-08 adds service-principal delegated-grant and app-role-assignment consent r
 EXT-01 (domains) adds tenant-domain list/show, per-domain verification and service-configuration DNS record reads, and top-level domain DNS record reads through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
+EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -185,6 +186,35 @@ Denied reads name that role requirement instead of only the generic grant/role/l
 Built-in roles are base inventory and custom role assignments need P1; PIM reads need P2 or ID Governance.
 Role assignment, activation and every other PIM mutation belongs to later write slices, never to these reads.
 
+Read access reviews through five views; delegated profiles first need explicit login with the read scope:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/AccessReview.Read.All
+mg-axi entra access-review definition list --profile soc --limit 10
+mg-axi entra access-review definition list --profile soc --filter "status eq 'InProgress'"
+mg-axi entra access-review definition show --profile soc --id <definition-id>
+mg-axi entra access-review instance list --profile soc --definition <definition-id>
+mg-axi entra access-review instance show --profile soc --definition <definition-id> --id <instance-id>
+mg-axi entra access-review decision list --profile soc --definition <definition-id> --instance <instance-id>
+```
+
+Definitions are review schedules (a series) and never carry their occurrences: each recurrence creates one instance per reviewed resource, and a one-time review creates one instance per resource.
+Instances are occurrences of one definition schedule, and each reviewed principal or resource in an instance carries one decision item.
+`entra access-review definition list` defaults to `id`, `displayName` and `status`; `entra access-review definition show --id <definition-id>` defaults to the full reviewed schedule set.
+`entra access-review instance list --definition <definition-id>` defaults to `id`, `status`, `startDateTime` and `endDateTime`; `entra access-review instance show` takes both `--definition` and `--id` and defaults to the full reviewed occurrence set.
+`entra access-review decision list --definition <definition-id> --instance <instance-id>` defaults to `id`, `accessReviewId`, `decision` and `recommendation`, where `accessReviewId` names the parent instance.
+Decision reads are read-only: listing never approves, denies or applies anything, and submitting or stopping a review belongs to a later slice, never to these reads.
+`--select` requests properties from the [reviewed access-review property sets](src/entra-access-reviews.ts); `--fields` must be a subset of the fetched selection.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; on definitions only `contains()` over the scope query and `eq` on status are documented.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to access-review reads.
+Resume any access-review list with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra access-review definition list --profile soc --cursor - < cursor.txt`; small cursors can also use `--cursor <token>`.
+Resume instance and decision lists with the same `--definition` (and `--instance`), profile, scopes and API version; a cursor from another definition or instance fails validation instead of returning foreign rows.
+To replay a resumed result with `--full`, supply the original input cursor on stdin; the returned cursor continues after that result.
+Delegated reads default to `https://graph.microsoft.com/AccessReview.Read.All`, while application profiles use the configured `.default` audience.
+Delegated callers additionally need a supported Entra role per review scope: group or app reviews need the review creator, Global Reader, Security Reader, User Administrator, Identity Governance Administrator or Security Administrator, while Entra-role reviews need Security Reader, Identity Governance Administrator, Privileged Role Administrator or Security Administrator.
+Denied reads name that role requirement instead of only the generic grant/role/licence cause.
+Access reviews need P2 or ID Governance depending on capability, not one uniform licence, and delegated personal Microsoft accounts are not supported.
+
 Log in with `https://graph.microsoft.com/Device.Read.All` or `https://graph.microsoft.com/AdministrativeUnit.Read.All`, then inspect directory devices and administrative units:
 
 ```sh
@@ -210,6 +240,35 @@ Resume unit-member lists with the same `--administrative-unit`, profile, scopes 
 Delegated device reads default to `https://graph.microsoft.com/Device.Read.All` and unit reads to `https://graph.microsoft.com/AdministrativeUnit.Read.All`, while application profiles use the configured `.default` audience; hidden unit memberships need `Member.Read.Hidden`.
 Denied directory reads return operation-specific permission, delegated-role and licensing guidance rather than empty results; HTTP 403 alone does not identify which prerequisite is missing.
 `--filter` on these collections is sent with `$count=true` and `ConsistencyLevel: eventual`.
+
+Log in with `https://graph.microsoft.com/Organization.Read.All` for organization reads and `https://graph.microsoft.com/User.Read` for branding reads, then inspect the tenant and its sign-in branding:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Organization.Read.All,https://graph.microsoft.com/User.Read
+mg-axi entra organization list --profile soc
+mg-axi entra organization show --profile soc --id <organization-id>
+mg-axi entra organization branding show --profile soc --organization <organization-id>
+mg-axi entra organization branding-localization list --profile soc --organization <organization-id>
+mg-axi entra organization branding-localization show --profile soc --organization <organization-id> --id fr-FR
+```
+
+`entra organization list` defaults to compact properties (`id`, `displayName`, `tenantType`, `verifiedDomains`); exactly one organization exists per tenant.
+`entra organization show --id <organization-id>` defaults to the full reviewed organization set including technical notification mails and the privacy profile.
+`--select` requests properties from the [reviewed organization and branding field sets](src/entra-organization.ts); `--fields` projects locally and must be a subset of the fetched selection.
+Delegated organization reads default to `https://graph.microsoft.com/Organization.Read.All` for full metadata; delegated `User.Read` returns only `id`, `displayName` and `verifiedDomains` with every other property null.
+`entra organization branding show --organization <organization-id>` reads the default branding metadata (non-Stream text and URLs); the session sends the documented `Accept-Language: 0` header and locale variants come from the localizations collection.
+Branding leaves default to delegated `https://graph.microsoft.com/User.Read`, the documented least-privileged scope; `OrganizationalBranding.Read.All` is the purpose-built alternative and `Organization.Read.All` also works when passed as `--scopes`.
+Application profiles need admin-consented `Organization.Read.All` for organization metadata or `OrganizationalBranding.Read.All` for branding, using the configured Graph `.default` audience.
+Stream image properties (`bannerLogo`, `backgroundImage` and friends) are refused before credentials: they need a later piece with its own binary-output contract.
+A branding 404 may indicate unconfigured branding, a missing locale, or a missing or inaccessible organization; configuring custom branding needs P1/P2, and contact fields on the organization are personal data.
+Delegated callers additionally need a supported Entra role (Directory Readers or Global Reader for organizations; Global Reader or Organizational Branding Administrator for branding); personal Microsoft accounts are not supported.
+Organization and localization lists return `organizations` and `brandingLocalizations`, single-object reads return `organization`, `branding` and `brandingLocalization`.
+Localization lists default to `id`, `signInPageText`, `usernameHintText` and `backgroundColor`; branding and localization show commands default to the full reviewed non-Stream field set.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to organization and branding reads.
+All five named reads default to `--api-version v1.0`; explicit `--api-version beta` requires a preview-enabled profile, with no automatic fallback.
+Organization and localization lists offer no `--filter`: Graph documents `$select` only on these routes, so the flag is refused before credentials.
+Denied organization and branding reads name the scope, role and licensing guidance instead of only the generic cause.
+No organization mutation lives here; certificate-based-auth configuration, extensions, beta-only settings and the POST lookup actions belong to later pieces; see the [organization scope decisions](docs/coverage.md#ext-01-organization-scope-decisions) for deferred reads and later subfamilies.
 
 Log in with `https://graph.microsoft.com/Domain.Read.All`, then inspect tenant domains and their DNS records:
 

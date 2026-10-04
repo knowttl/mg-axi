@@ -119,6 +119,20 @@ const auRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to AdministrativeUnit.Read.All, hidden members need Member.Read.Hidden" },
 };
+const orgRead = {
+  select: { value: "comma-separated-properties", description: "Request server properties; full metadata needs Organization.Read.All (delegated User.Read returns only id, displayName and verifiedDomains, everything else null)" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Organization.Read.All" },
+};
+const brandingRead = {
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed non-Stream branding set; Stream image properties need a later piece and fail before credentials" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to User.Read, the documented least-privileged scope; OrganizationalBranding.Read.All is the purpose-built alternative" },
+};
 const domainRead = {
   select: { value: "comma-separated-properties", description: "Request server properties; domain reads need Domain.Read.All" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
@@ -149,6 +163,14 @@ const providerRead = {
   full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to IdentityProvider.Read.All" },
+};
+const accessReviewRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; on definitions only contains() over the scope query and eq on status are documented; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed access-review set; reads need AccessReview.Read.All in both modes plus a supported Entra role for delegated access" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor|-", description: "Resume a capped collection losslessly; - reads the token from stdin (16 MB ceiling for either input); repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to AccessReview.Read.All" },
 };
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
@@ -375,6 +397,48 @@ export const LEAVES: Leaf[] = [
     cursor: auRead.cursor,
     scopes: auRead.scopes,
   }, examples: ["mg-axi entra administrative-unit member list --administrative-unit <administrative-unit-id> --profile soc", "mg-axi entra administrative-unit member list --administrative-unit <administrative-unit-id> --profile soc --limit 10"] },
+  { path: "entra organization list", description: "List tenant organizations with compact properties (id, displayName, tenantType, verifiedDomains); exactly one row exists per tenant; --filter is unsupported on /organizations (Graph documents $select only)", operation: "GET:/organization", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    select: orgRead.select,
+    fields: orgRead.fields,
+    full: orgRead.full,
+    cursor: orgRead.cursor,
+    scopes: orgRead.scopes,
+  }, examples: ["mg-axi entra organization list --profile soc", "mg-axi entra organization list --profile soc --select id,displayName,technicalNotificationMails"] },
+  { path: "entra organization show", description: "Show one tenant organization with the full reviewed property set including technical notification mails and privacy profile", operation: "GET:/organization/{organization-id}", flags: {
+    ...common, id: { value: "organization-id", required: true, description: "Tenant organization UUID" },
+    select: orgRead.select,
+    fields: orgRead.fields,
+    full: orgRead.full,
+    scopes: orgRead.scopes,
+  }, examples: ["mg-axi entra organization show --id <organization-id> --profile soc", "mg-axi entra organization show --id <organization-id> --profile soc --full"] },
+  { path: "entra organization branding show", description: "Show the default sign-in branding metadata (non-Stream text and URLs only); Stream image bytes need a later piece; a 404 may indicate unconfigured branding or a missing or inaccessible organization", operation: "GET:/organization/{organization-id}/branding", flags: {
+    ...common, organization: { value: "organization-id", required: true, description: "Tenant organization UUID whose default branding is shown" },
+    select: brandingRead.select,
+    fields: brandingRead.fields,
+    full: brandingRead.full,
+    scopes: brandingRead.scopes,
+  }, examples: ["mg-axi entra organization branding show --organization <organization-id> --profile soc", "mg-axi entra organization branding show --organization <organization-id> --profile soc --select id,signInPageText,usernameHintText"] },
+  { path: "entra organization branding-localization list", description: "List locale branding variants with compact properties (id, signInPageText, usernameHintText, backgroundColor); --filter is unsupported (Graph documents $select only)", operation: "GET:/organization/{organization-id}/branding/localizations", flags: {
+    ...common, organization: { value: "organization-id", required: true, description: "Tenant organization UUID whose locale branding is listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    select: brandingRead.select,
+    fields: brandingRead.fields,
+    full: brandingRead.full,
+    cursor: brandingRead.cursor,
+    scopes: brandingRead.scopes,
+  }, examples: ["mg-axi entra organization branding-localization list --organization <organization-id> --profile soc"] },
+  { path: "entra organization branding-localization show", description: "Show one locale branding variant with the full reviewed non-Stream property set; Stream image bytes need a later piece", operation: "GET:/organization/{organization-id}/branding/localizations/{organizationalBrandingLocalization-id}", flags: {
+    ...common, organization: { value: "organization-id", required: true, description: "Tenant organization UUID owning the locale branding" },
+    id: { value: "locale-id", required: true, description: "Branding locale id, for example fr-FR" },
+    select: brandingRead.select,
+    fields: brandingRead.fields,
+    full: brandingRead.full,
+    scopes: brandingRead.scopes,
+  }, examples: ["mg-axi entra organization branding-localization show --organization <organization-id> --id fr-FR --profile soc"] },
   { path: "entra domain list", description: "List tenant domains with compact properties (id, authenticationType, isVerified, isDefault). Domain ids are fully qualified names; --filter is unsupported on /domains (Graph known issue with $search, $top and $filter)", operation: "GET:/domains", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
@@ -687,7 +751,56 @@ export const LEAVES: Leaf[] = [
     ...common,
     scopes: providerRead.scopes,
   }, examples: ["mg-axi entra identity-provider available-types --profile soc"] },
-  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains and domain DNS records, and identity providers; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+  { path: "entra access-review definition list", description: "List access-review definitions with compact properties (id, displayName, status); definitions are review schedules (a series), never their occurrences", operation: "GET:/identityGovernance/accessReviews/definitions", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: accessReviewRead.filter,
+    select: accessReviewRead.select,
+    fields: accessReviewRead.fields,
+    full: accessReviewRead.full,
+    cursor: accessReviewRead.cursor,
+    scopes: accessReviewRead.scopes,
+  }, examples: ["mg-axi entra access-review definition list --profile soc", "mg-axi entra access-review definition list --profile soc --limit 10", "mg-axi entra access-review definition list --profile soc --filter \"status eq 'InProgress'\""] },
+  { path: "entra access-review definition show", description: "Show one access-review definition with the full reviewed schedule set; a definition never carries its instances", operation: "GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}", flags: {
+    ...common, id: { value: "definition-id", required: true, description: "Access-review definition ID" },
+    select: accessReviewRead.select,
+    fields: accessReviewRead.fields,
+    full: accessReviewRead.full,
+    scopes: accessReviewRead.scopes,
+  }, examples: ["mg-axi entra access-review definition show --id <definition-id> --profile soc", "mg-axi entra access-review definition show --id <definition-id> --profile soc --full"] },
+  { path: "entra access-review instance list", description: "List instances of one access-review definition (id, status, startDateTime, endDateTime); instances are occurrences of the schedule, never schedules themselves", operation: "GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances", flags: {
+    ...common, definition: { value: "definition-id", required: true, description: "Parent access-review definition ID whose instances are listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: accessReviewRead.filter,
+    select: accessReviewRead.select,
+    fields: accessReviewRead.fields,
+    full: accessReviewRead.full,
+    cursor: accessReviewRead.cursor,
+    scopes: accessReviewRead.scopes,
+  }, examples: ["mg-axi entra access-review instance list --definition <definition-id> --profile soc", "mg-axi entra access-review instance list --definition <definition-id> --profile soc --filter \"status eq 'InProgress'\""] },
+  { path: "entra access-review instance show", description: "Show one access-review instance with the full reviewed occurrence set", operation: "GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}", flags: {
+    ...common, definition: { value: "definition-id", required: true, description: "Parent access-review definition ID" },
+    id: { value: "instance-id", required: true, description: "Access-review instance ID" },
+    select: accessReviewRead.select,
+    fields: accessReviewRead.fields,
+    full: accessReviewRead.full,
+    scopes: accessReviewRead.scopes,
+  }, examples: ["mg-axi entra access-review instance show --definition <definition-id> --id <instance-id> --profile soc", "mg-axi entra access-review instance show --definition <definition-id> --id <instance-id> --profile soc --full"] },
+  { path: "entra access-review decision list", description: "List decision items of one access-review instance (id, accessReviewId, decision, recommendation); decisions are read-only here and listing never approves, denies or applies anything", operation: "GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/decisions", flags: {
+    ...common, definition: { value: "definition-id", required: true, description: "Parent access-review definition ID" },
+    instance: { value: "instance-id", required: true, description: "Parent access-review instance ID whose decisions are listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: accessReviewRead.filter,
+    select: accessReviewRead.select,
+    fields: accessReviewRead.fields,
+    full: accessReviewRead.full,
+    cursor: accessReviewRead.cursor,
+    scopes: accessReviewRead.scopes,
+  }, examples: ["mg-axi entra access-review decision list --definition <definition-id> --instance <instance-id> --profile soc", "mg-axi entra access-review decision list --definition <definition-id> --instance <instance-id> --profile soc --filter \"decision eq 'NotReviewed'\""] },
+  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations and branding; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
     cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --odata to reuse its query" },
@@ -742,7 +855,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (flag!.value) {
       const value = match![2] ?? argv[++i];
       if (!value?.trim() || (value.startsWith("-") && !(name === "cursor" && value === "-"
-        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list")))) fail(`--${name} requires a non-empty value`);
+        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra access-review definition list" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review decision list")))) fail(`--${name} requires a non-empty value`);
       flags[name] = value!;
     } else {
       if (match![2] !== undefined) fail(`--${name} does not take a value`);

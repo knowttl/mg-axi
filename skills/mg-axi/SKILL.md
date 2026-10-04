@@ -1,6 +1,6 @@
 ---
 name: mg-axi
-description: Use mg-axi for Microsoft Entra inspection and gated named writes - users, groups, roles, devices, sign-ins, applications, consent grants, risk and Conditional Access through agent-ergonomic TOON output.
+description: Use mg-axi for Microsoft Entra inspection and gated writes (account-state updates, user group membership adds, session revocation, risky-user dismissal, Conditional Access policy updates) - users, groups, roles, devices, organization and branding, domains and DNS records, sign-ins, applications, consent grants, risk and Conditional Access through agent-ergonomic TOON output.
 user-invocable: false
 ---
 
@@ -57,6 +57,11 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra administrative-unit list` | native | read |
 | `mg-axi entra administrative-unit show` | native | read |
 | `mg-axi entra administrative-unit member list` | native | read |
+| `mg-axi entra organization list` | native | read |
+| `mg-axi entra organization show` | native | read |
+| `mg-axi entra organization branding show` | native | read |
+| `mg-axi entra organization branding-localization list` | native | read |
+| `mg-axi entra organization branding-localization show` | native | read |
 | `mg-axi entra domain list` | native | read |
 | `mg-axi entra domain show` | native | read |
 | `mg-axi entra domain verification-dns-record list` | native | read |
@@ -91,6 +96,11 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra identity-provider show` | native | read |
 | `mg-axi entra identity-provider count` | native | read |
 | `mg-axi entra identity-provider available-types` | native | read |
+| `mg-axi entra access-review definition list` | native | read |
+| `mg-axi entra access-review definition show` | native | read |
+| `mg-axi entra access-review instance list` | native | read |
+| `mg-axi entra access-review instance show` | native | read |
+| `mg-axi entra access-review decision list` | native | read |
 | `mg-axi api get` | native | read |
 <!-- command-registry:end -->
 

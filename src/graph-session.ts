@@ -115,6 +115,7 @@ export interface CollectArgs extends ExecuteArgs {
 
 export interface CollectionResult {
   value: unknown[];
+  query: Record<string, string>;
   complete: boolean;
   reason?: string;
   cursor?: string;
@@ -513,6 +514,10 @@ export class GraphSession {
     },
   ) {}
 
+  cursorQuery(operation: SessionOperation, cursor: string): Readonly<Record<string, string>> {
+    return decodeCursor(operation, cursor).query;
+  }
+
   async execute(args: ExecuteArgs): Promise<unknown> {
     checkOperation(args.operation);
     // The inventory is authoritative: only the id is trusted from the caller,
@@ -568,10 +573,10 @@ export class GraphSession {
       throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
     }
     const resumed = args.cursor === undefined ? undefined : decodeCursor(operation, args.cursor);
-    const query = args.query ?? resumed?.query ?? {};
+    const query = { ...resumed?.query, ...args.query };
     const consistencyLevel = args.consistencyLevel ?? resumed?.consistencyLevel;
     checkQueryContext(query, consistencyLevel);
-    if (resumed && ((args.query !== undefined && buildQuery(args.query) !== buildQuery(resumed.query)) || (args.consistencyLevel !== undefined && args.consistencyLevel !== resumed.consistencyLevel))) {
+    if (resumed && ((args.query !== undefined && buildQuery(query) !== buildQuery(resumed.query)) || (args.consistencyLevel !== undefined && args.consistencyLevel !== resumed.consistencyLevel))) {
       throw new AxiError("Resume arguments conflict with collection cursor context", "VALIDATION_ERROR", ["Resume with the cursor's original query and consistency level, or omit those arguments"]);
     }
     const params = args.params ?? {};
@@ -605,6 +610,7 @@ export class GraphSession {
     let identity = resumed?.identity ?? null;
     const partial = (reason: string, next: string | undefined, buffered: unknown[]): CollectionResult => ({
       value: results,
+      query,
       complete: false,
       reason,
       cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel, context, identity }),
@@ -640,10 +646,10 @@ export class GraphSession {
       while (pending.length > 0 && (args.limit === undefined || results.length < args.limit)) results.push(pending.shift()!);
       if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
       if (args.limit !== undefined && results.length >= args.limit) {
-        if (pending.length === 0 && !current) return { value: results, complete: true, requests, bytes };
+        if (pending.length === 0 && !current) return { value: results, query, complete: true, requests, bytes };
         return partial("row limit reached; buffered remainder is preserved in the cursor", current, pending);
       }
-      if (!current) return { value: results, complete: true, requests, bytes };
+      if (!current) return { value: results, query, complete: true, requests, bytes };
       if (requests >= budget.maxRequests) return partial(`request budget exhausted after ${requests} requests`, current, pending);
       const cycleKey = digestUrl(current);
       if (seen.has(cycleKey)) return partial("continuation cycle detected; result is partial, never complete", current, pending);

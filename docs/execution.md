@@ -19,10 +19,10 @@ Unknown actions, raw writes, secret-returning endpoints, and unsupported beta wr
 Validate HTTPS origin and version on initial requests, redirects and every continuation before adding credentials.
 An output cap cannot discard the remainder of a fetched page; continuation state preserves query/context and buffered rows if necessary.
 CORE-02 exposes these mechanics through `GraphSession.collect`, with `limit`, `budget` and an opaque `cursor`.
-API-01 uses that interface for raw collection reads; [README.md](../README.md) owns CLI options, output and resume usage.
-Results contain `value`, `complete`, `requests` and `bytes`; a row limit that leaves buffered rows or another page, request/byte/deadline exhaustion, oversized throttle waits and continuation cycles return `complete: false` with a `reason` and cursor.
+API-01 uses that interface for raw collection reads, and READ-01 maps user-list CLI flags onto it; [README.md](../README.md) owns CLI options, output and resume usage.
+Results contain `value`, the effective `query`, `complete`, `requests` and `bytes`; a row limit that leaves buffered rows or another page, request/byte/deadline exhaustion, oversized throttle waits and continuation cycles return `complete: false` with a `reason` and cursor.
 Resume with the same operation, resource bindings, authentication mode, tenant/client/cloud, credential reference and scope set.
-The cursor restores the original query and consistency level when omitted; conflicting explicit arguments fail validation.
+The cursor restores omitted query entries and the consistency level; conflicting explicit arguments fail validation.
 Before returning buffered rows or fetching more pages, the session reacquires credentials and checks the original delegated account or application identity; a refreshed token for the same identity is accepted.
 [Advanced query](https://learn.microsoft.com/en-us/graph/aad-advanced-queries) support differs per endpoint; declare supported combinations and required eventual-consistency headers.
 The session requires `consistencyLevel: "eventual"` for `$search` or `$count=true`, preserving `ConsistencyLevel` across pages, redirects and cursor resumes.

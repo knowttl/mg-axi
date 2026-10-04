@@ -290,7 +290,7 @@ function matchTemplate(template: string, pathname: string): Record<string, strin
     const segment = actual[i]!;
     const name = /^\{([^{}]+)\}$/.exec(slot)?.[1];
     if (name) {
-      if (!segment.length) return null;
+      if (!segment.length || /[()]/.test(segment)) return null;
       encodeGraphPathSegment(segment);
       params[name] = segment;
     } else if (slot.toLowerCase() !== segment.toLowerCase()) return null;

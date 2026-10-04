@@ -152,6 +152,21 @@ for (const profile of [delegatedProfile, appProfile]) {
   });
 }
 
+for (const profile of [delegatedProfile, appProfile]) {
+  for (const path of ["/contracts/delta()", "/CONTRACTS/DELTA()/"]) {
+    test(`${profile.mode} raw ${path} rejects deferred delta before credentials or HTTP`, async () => {
+      const f = fixture(json(200, {}));
+      await assert.rejects(
+        runApiGet({ path, apiVersion: "v1.0", profile,
+          ...(profile.mode === "delegated" ? { scopes: "https://graph.microsoft.com/Directory.Read.All" } : {}) }, f.deps),
+        error => error.code === "VALIDATION_ERROR" && /not in the reviewed raw inventory/.test(error.message),
+      );
+      assert.equal(f.credentialCalls.length, 0);
+      assert.equal(f.requests.length, 0);
+    });
+  }
+}
+
 test("application profiles refuse delegated scopes before credentials", async () => {
   const f = fixture(json(200, { value: [] }));
   await assert.rejects(

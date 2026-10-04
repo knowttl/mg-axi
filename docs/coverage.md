@@ -10,8 +10,8 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 39 (38 named Entra reads plus reviewed raw api get)
-- local leaves: 7 (home, profile, login, setup and doctor views)
+- implemented read leaves: 40 (38 named Entra reads plus reviewed raw api get and doctor health check)
+- local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
 - inventory reviewed-raw-read: 0
 - inventory scheduled: 8466
@@ -63,6 +63,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra conditional-access named-location list` | `GET:/identity/conditionalAccess/namedLocations` | scheduled | READ-03 |
 | `mg-axi entra conditional-access named-location show` | `GET:/identity/conditionalAccess/namedLocations/{namedLocation-id}` | scheduled | READ-03 |
 | `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |
+| `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |
 
 Extended families (EXT-01 through EXT-04), later writes (WRITE-00 and
 beyond) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining

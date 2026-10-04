@@ -16,10 +16,6 @@ export const DOCTOR_OPERATION = "GET:/users";
 export const DOCTOR_VERSION = "v1.0";
 export const DOCTOR_CHECK = `entra user list --limit 1 (${DOCTOR_VERSION}:${DOCTOR_OPERATION})`;
 
-// Explicit --profile wins; otherwise the configured default, then the sole
-// profile. With no selection among several profiles, doctor checks every
-// profile instead of failing ambiguous; with none, the caller reports the
-// missing configuration before any credential or HTTP work.
 export function doctorTargets(store: Profiles, flag?: string): string[] {
   if (flag !== undefined) return [store.resolve(flag).name];
   const items = store.list();
@@ -56,7 +52,11 @@ export async function runDoctor(args: {
       // no cursor and accepts none; recovery reruns doctor, not the read.
       const result = (await listUsers(args.session, { limit: "1" }, selected.profile, operation, `mg-axi ${DOCTOR_CHECK} --help`, name)) as {
         users: unknown[];
+        count: { complete: boolean; reason?: string };
       };
+      if (!result.count.complete && result.count.reason !== "row limit reached; buffered remainder is preserved in the cursor") {
+        throw new AxiError(`Doctor read incomplete: ${result.count.reason}`, "GRAPH_ERROR", [rerun]);
+      }
       profiles.push({ name, mode: selected.profile.mode, check: DOCTOR_CHECK, status: "ok",
         detail: result.users.length ? "1 user row returned" : "0 users matched; the absence of results is the answer" });
     } catch (error) {

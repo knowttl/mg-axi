@@ -11,7 +11,7 @@ import { Profiles } from "./profiles.js";
 export function setupView(store: Profiles): Record<string, unknown> {
   const items = store.list();
   const implemented = LEAVES.map(leaf => leaf.path);
-  const reads = LEAVES.filter(leaf => leaf.operation !== undefined || leaf.path === "api get").length;
+  const reads = LEAVES.filter(leaf => leaf.operation !== undefined || leaf.path === "api get" || leaf.path === "doctor").length;
   return {
     command: "mg-axi setup",
     config: store.path,

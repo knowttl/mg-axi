@@ -9,7 +9,7 @@ import { decode } from "@toon-format/toon";
 import { executeArgv } from "../dist/cli.js";
 import { doctorTargets, runDoctor } from "../dist/doctor.js";
 import { capabilityDocument, skillCommandTable } from "../dist/docs.js";
-import { GraphSession } from "../dist/graph-session.js";
+import { GraphSession, systemClock } from "../dist/graph-session.js";
 import { Profiles } from "../dist/profiles.js";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
@@ -32,7 +32,7 @@ function runPlain(args, home) {
   });
 }
 
-function runPack(args, home, mode, denied = false) {
+function runPack(args, home, mode, denied = false, throttled = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-pack-cli.mjs")).href, bin, ...args,
@@ -41,7 +41,7 @@ function runPack(args, home, mode, denied = false) {
     env: {
       PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       HOME: home, USERPROFILE: home, MG_AXI_CONFIG: join(home, "config.json"),
-      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, denied }),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, denied, throttled }),
     },
   });
 }
@@ -91,6 +91,8 @@ test("setup reports unconfigured state without writing configuration", () => {
     assert.equal(output.profiles, "0 profiles configured");
     assert.ok(output.capabilities.implemented.includes("mg-axi setup") || output.capabilities.implemented.includes("setup"));
     assert.ok(output.capabilities.implemented.includes("entra user list"));
+    assert.equal(output.capabilities.reads, 40);
+    assert.equal(output.capabilities.local, 6);
     assert.ok(!existsSync(config), "setup writes nothing");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
@@ -174,6 +176,23 @@ test("packaged doctor reports a denied profile as an operational failure", () =>
     assert.ok(!result.stdout.includes("opaque-fixture-delegated-token"));
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
+
+for (const mode of ["delegated", "application"]) {
+  test(`packaged doctor reports throttling as failure for ${mode} profiles`, () => {
+    const home = dir();
+    try {
+      createProfiles(home);
+      const result = runPack(["doctor", "--profile", mode === "delegated" ? "soc" : "batch"], home, mode, false, true);
+      assert.equal(result.status, 1, result.stdout);
+      const output = decode(result.stdout);
+      assert.equal(output.count, "0 of 1 profiles ok");
+      assert.equal(output.complete, false);
+      assert.equal(output.profiles[0].status, "failed");
+      assert.equal(output.profiles[0].code, "GRAPH_ERROR");
+      assert.match(output.profiles[0].error, /deadline exceeded; throttled \(429\)/);
+    } finally { rmSync(home, { recursive: true, force: true }); }
+  });
+}
 
 for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
   test(`packaged ${mode} critical journey reads users, groups, policies and sign-ins offline`, () => {
@@ -294,6 +313,70 @@ function fixtureTransport(requests, deniedModes) {
   return { requests, send };
 }
 
+for (const boundary of ["credential", "transport"]) {
+  test(`doctor reports a ${boundary} deadline as failure`, async t => {
+    const home = dir();
+    const configured = writeConfig(home);
+    let now = 0;
+    const credential = fixtureCredential("delegated");
+    const transport = fixtureTransport([], []).send;
+    t.mock.method(systemClock, "now", () => now);
+    try {
+      const result = await runDoctor({ store: configured.store, names: ["soc"], session: new GraphSession({
+        delegated: { credential: async profile => {
+          if (boundary === "credential") now = 60_000;
+          return credential.credential(profile);
+        } },
+        application: fixtureCredential("application"),
+        transport: async request => {
+          if (boundary === "transport") now = 60_000;
+          return transport(request);
+        },
+      }) });
+      assert.equal(result.failed, true);
+      assert.equal(result.output.complete, false);
+      assert.equal(result.output.count, "0 of 1 profiles ok");
+      assert.equal(result.output.profiles[0].status, "failed");
+      assert.match(result.output.profiles[0].error, /deadline exceeded/);
+    } finally {
+      configured.restore();
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const [name, value, detail] of [
+  ["empty result", [], "0 users matched; the absence of results is the answer"],
+  ["buffered row limit", [{ id: userId }, { id: tenant }], "1 user row returned"],
+  ["continuation row limit", [{ id: userId }], "1 user row returned"],
+]) {
+  test(`doctor accepts a successful ${name}`, async () => {
+    const home = dir();
+    const configured = writeConfig(home);
+    const requests = [];
+    try {
+      const result = await runDoctor({ store: configured.store, names: ["soc"], session: new GraphSession({
+        delegated: fixtureCredential("delegated"),
+        application: fixtureCredential("application"),
+        transport: async request => {
+          requests.push(request);
+          return { status: 200, headers: {}, body: JSON.stringify({ value,
+            ...(name === "continuation row limit" ? { "@odata.nextLink": `${request.url}&$skiptoken=next` } : {}),
+          }) };
+        },
+      }) });
+      assert.equal(result.failed, false);
+      assert.equal(result.output.complete, true);
+      assert.equal(result.output.profiles[0].status, "ok");
+      assert.equal(result.output.profiles[0].detail, detail);
+      assert.equal(requests.length, 1);
+    } finally {
+      configured.restore();
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+}
+
 async function doctorArgv(home, requests, deniedModes) {
   const previousConfig = process.env.MG_AXI_CONFIG;
   const previousExit = process.exitCode;
@@ -387,7 +470,7 @@ test("lists every executable leaf in the skill table exactly once", () => {
   const rows = skillCommandTable().split("\n").slice(2);
   assert.ok(rows.length > 40);
   assert.ok(rows.some(row => row.includes("`mg-axi setup` | native | local |")));
-  assert.ok(rows.some(row => row.includes("`mg-axi doctor` | native | local |")));
+  assert.ok(rows.some(row => row.includes("`mg-axi doctor` | native | read |")));
   assert.ok(rows.some(row => row.includes("`mg-axi entra user list` | native | read |")));
   assert.ok(rows.some(row => row.includes("`mg-axi api get` | native | read |")));
 });

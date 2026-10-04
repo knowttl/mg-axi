@@ -7,7 +7,7 @@ import { mock } from "node:test";
 // doctor bounded read, through the packaged executable with real profiles.
 // MSAL providers resolve synthetic credentials and every HTTP exchange is a
 // fixture response; unreachable code throws instead of touching a network.
-const { mode, denied } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const { mode, denied, throttled } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
 const [major, minor] = process.versions.node.split(".").map(Number);
 const exportOption = major >= 26 || (major === 25 && minor >= 9) || (major === 24 && minor >= 15)
   ? "exports" : "namedExports";
@@ -66,6 +66,7 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
     assert.equal(request.headers.Authorization, `Bearer opaque-fixture-${mode}-token`);
     const url = new URL(request.url);
     assert.equal(url.origin, "https://graph.microsoft.com");
+    if (throttled) return { status: 429, headers: { "Retry-After": "60" }, body: JSON.stringify({ error: { code: "TooManyRequests" } }) };
     const body = () => {
       if (denied) return { status: 403, body: { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } } };
       if (url.pathname === "/v1.0/users") return { status: 200, body: { value: [user] } };

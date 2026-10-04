@@ -17,6 +17,7 @@ READ-03 adds Conditional Access policy and named-location list/show as separate 
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the Conditional Access usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
+READ-08 adds service-principal delegated-grant and app-role-assignment consent reads for a named client through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
@@ -41,6 +42,8 @@ Partial lists report `count.complete: false`, a reason and an opaque `cursor` pr
 Resume with `--cursor <cursor-from-output>` using the same profile, authentication scopes and API version; original `--select` and `--filter` values may be repeated or omitted, and conflicting values fail validation.
 Repeat `--fields` and `--full` when the same local view is wanted; these are not saved in the cursor.
 Delegated user reads default to `https://graph.microsoft.com/User.Read.All` with `--scopes` available for least-privilege basics; application profiles use the configured Graph `.default` audience and reject delegated scopes.
+All delegated reads, including raw reads and cursor resumes, reject scopes outside `READ_SCOPES` in the [shared session](src/graph-session.ts) before credential acquisition; [Graph coverage](docs/graph-coverage.md) explains the operation-specific read permission choices.
+Write scopes are refused with `VALIDATION_ERROR` and a list of supported read scopes.
 User reads acquire credentials silently; a resume containing only buffered rows can finish without another Graph request.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
 Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
@@ -74,6 +77,24 @@ mg-axi entra service-principal list --profile soc --limit 10
 mg-axi entra service-principal show --profile soc --id <service-principal-object-id>
 mg-axi entra service-principal owner list --profile soc --service-principal <service-principal-object-id>
 ```
+
+Read granted consent for one client service principal; delegated profiles first need explicit login with the read scopes:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Directory.Read.All,https://graph.microsoft.com/Application.Read.All
+mg-axi entra service-principal oauth2-grant list --profile soc --service-principal <service-principal-object-id>
+mg-axi entra service-principal app-role-assignment list --profile soc --service-principal <service-principal-object-id> --filter "resourceId eq '<resource-id>'"
+```
+
+`entra service-principal oauth2-grant list` defaults to `id`, `consentType`, `principalId`, `resourceId` and `scope`: the delegated scopes granted to the client, with `consentType` AllPrincipals covering every user (and an explicit null `principalId`) versus Principal covering the one user named by `principalId`.
+`entra service-principal app-role-assignment list` defaults to `id`, `appRoleId`, `resourceDisplayName` and `resourceId`: the app-only roles granted to the client on each resource API.
+Both lists show actual granted consent records; the application's requested permissions (`requiredResourceAccess`) are declared on the application object and are never shown here, and grant creation, revocation and consent belong to later write slices, never to these reads.
+`--select` requests properties from the [reviewed grant property sets](src/entra-grants.ts); `--fields` must be a subset of the fetched selection.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; the named-list caps, `count`, cursor resume rules and 500-character text truncation described above also apply.
+Resume either list with the same `--service-principal` object ID.
+Delegated oauth2-grant reads default to `https://graph.microsoft.com/Directory.Read.All` and app-role reads to `https://graph.microsoft.com/Application.Read.All`, while application profiles use the configured `.default` audience; reads never request a write-consent scope such as `DelegatedPermissionGrant.ReadWrite.All`, `Application.ReadWrite.All` or `Directory.ReadWrite.All`.
+Delegated callers additionally need a supported directory role per operation (for example Directory Readers, Global Reader or Application Administrator).
+Denied reads name that role and read-scope requirement instead of only the generic grant/role/licence cause.
 
 `entra group list` defaults to compact properties (`id`, `displayName`, `mail`, `groupTypes`); `entra group show --id <group-id>` defaults to the richer reviewed group set including `isAssignableToRole`, which marks groups eligible for role assignment.
 Group `--select` accepts the [reviewed group property set](src/entra-groups.ts); `--fields` must be a subset of the fetched selection.
@@ -216,7 +237,7 @@ Both log show commands default to the full reviewed property set.
 Log reads truncate text longer than 500 characters, including nested values; `--full` restores complete text without lifting redaction, row caps or time bounds.
 To replay a resumed result with `--full`, supply the original input cursor on stdin; the returned cursor continues after that result.
 Graph omits CA policy detail without CA-data access, so an absent `appliedConditionalAccessPolicies` value reports its required policy permission and delegated role as unavailable rather than empty.
-Both modes need Policy.Read.All, Policy.Read.ConditionalAccess or Policy.ReadWrite.ConditionalAccess in addition to AuditLog.Read.All; delegated callers also need Conditional Access Administrator, Global Reader, Security Administrator or Security Reader.
+For CA detail, use Policy.Read.All or Policy.Read.ConditionalAccess in addition to AuditLog.Read.All; delegated callers also need Conditional Access Administrator, Global Reader, Security Administrator or Security Reader.
 For delegated CA detail, log in and repeat the read with `--scopes https://graph.microsoft.com/AuditLog.Read.All,https://graph.microsoft.com/Policy.Read.All`.
 Denied log reads name the operation's supported directory roles and the conservative P1/P2 deployment prerequisite instead of only the generic grant/role/licence cause.
 
@@ -226,7 +247,8 @@ Denied log reads name the operation's supported directory roles and the conserva
 Credential collections expose only expiry metadata (`keyId`, `displayName`, `startDateTime`, `endDateTime`); the shared session drops every other credential subfield before output or cursor buffering and applies the same filtering to buffered rows on resume, including older cursors.
 Non-array credential collections become empty arrays, and non-object entries are dropped; other properties retain the null/missing behavior described above.
 Secret-minting routes are never constructed.
-`entra application owner list --application <application-object-id>` and `entra service-principal owner list --service-principal <service-principal-object-id>` list owners; rows carry `@odata.type` naming the owner kind, and consent grants stay out - they belong to READ-08.
+`entra application owner list --application <application-object-id>` and `entra service-principal owner list --service-principal <service-principal-object-id>` list owners; rows carry `@odata.type` naming the owner kind.
+For consent grants, use the service-principal grant commands described above.
 Application lists return `applications`, service-principal lists return `servicePrincipals`, owner lists return `owners`, and single-object reads return `application` or `servicePrincipal`.
 App and service-principal `--select` accepts the [reviewed property sets](src/entra-apps.ts); `--fields` must be a subset of the fetched selection.
 Owner rows default to `id`, `displayName` and `mail`, the only selectable owner properties; rows without non-null descriptive properties are preserved with a hint about limited consent or unset properties.
@@ -291,7 +313,7 @@ Method requests omit `$select` on initial requests, continuations, redirects and
 Other routes send `$select` to Graph.
 Relationship expansion (`$expand`) is unavailable.
 Unreviewed, secret-value, mail/file-content, beta and write routes fail before credentials, and pack, preview and sensitive-area policy still runs in the shared session.
-Delegated reads take explicit `--scopes` like login; application profiles use the configured `.default` audience and reject `--scopes`.
+Delegated raw reads require explicit `--scopes` from the supported read choices described above; application profiles use the configured `.default` audience and reject `--scopes`.
 Collections return `returned`, `complete` and `value`, default to 100 rows, and follow pages within budget under `--all`.
 `--limit` and `--all` cannot be combined.
 Completion describes pagination, not visibility of every directory object; group-member results include a warning for the [v1.0 service-principal limitation](docs/graph-coverage.md#licensing-and-completeness-findings), even when `complete` is true.

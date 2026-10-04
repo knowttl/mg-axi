@@ -10,7 +10,18 @@ export type DelegatedProfile = Readonly<{
   credentialRef: Readonly<{ provider: "os-or-session"; key: string }>;
   allowDeviceCode: boolean;
 }>;
-type Config = { version: 1; defaultProfile?: string; profiles: Record<string, DelegatedProfile> };
+export type ApplicationProfile = Readonly<{
+  mode: "application"; tenantId: string; clientId: string; cloud: "commercial";
+  enabledPacks: readonly "entra"[]; preview: boolean; sensitiveAreas: readonly string[];
+  credentialRef: Readonly<
+    | { provider: "certificate"; key: string; thumbprint: string }
+    | { provider: "federated"; key: string }
+  >;
+  allowDeviceCode: false;
+}>;
+export type AnyProfile = DelegatedProfile | ApplicationProfile;
+export type AppCredential = { token: string; expiresAt: number; tenantId: string; clientId: string };
+type Config = { version: 1; defaultProfile?: string; profiles: Record<string, AnyProfile> };
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const namePattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -19,17 +30,46 @@ function invalid(message: string): never {
   throw new AxiError(message, "VALIDATION_ERROR", ["mg-axi profile create --help", "Correct the version-1 profile configuration; no automatic migration is performed"]);
 }
 
-export function validateProfile(value: unknown): DelegatedProfile {
-  if (!object(value) || !exact(value, ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "credentialRef", "allowDeviceCode"]) ||
-    value.mode !== "delegated" || value.cloud !== "commercial" || typeof value.tenantId !== "string" || !guid.test(value.tenantId) ||
-    typeof value.clientId !== "string" || !guid.test(value.clientId) || typeof value.preview !== "boolean" || typeof value.allowDeviceCode !== "boolean" ||
-    !Array.isArray(value.enabledPacks) || value.enabledPacks.some(pack => pack !== "entra") || new Set(value.enabledPacks).size !== value.enabledPacks.length ||
-    !Array.isArray(value.sensitiveAreas) || value.sensitiveAreas.length !== 0 ||
+const thumbprint = /^[0-9a-f]{40}$/i;
+const sharedKeys = ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "credentialRef", "allowDeviceCode"];
+const sharedIdentity = (value: Record<string, unknown>) =>
+  value.cloud === "commercial" && typeof value.tenantId === "string" && guid.test(value.tenantId) &&
+  typeof value.clientId === "string" && guid.test(value.clientId) && typeof value.preview === "boolean" &&
+  Array.isArray(value.enabledPacks) && value.enabledPacks.every(pack => pack === "entra") && new Set(value.enabledPacks).size === value.enabledPacks.length &&
+  Array.isArray(value.sensitiveAreas) && value.sensitiveAreas.length === 0;
+
+export function validateDelegatedProfile(value: unknown): DelegatedProfile {
+  if (!object(value) || !exact(value, sharedKeys) || value.mode !== "delegated" || !sharedIdentity(value) || typeof value.allowDeviceCode !== "boolean" ||
     !object(value.credentialRef) || !exact(value.credentialRef, ["provider", "key"]) || value.credentialRef.provider !== "os-or-session" ||
     typeof value.credentialRef.key !== "string" || !guid.test(value.credentialRef.key)) invalid("Invalid delegated profile; explicit tenant/client IDs and commercial cloud are required, with credentials only by reference");
-  return Object.freeze({ mode: "delegated", tenantId: value.tenantId, clientId: value.clientId, cloud: "commercial", preview: value.preview,
-    allowDeviceCode: value.allowDeviceCode, enabledPacks: Object.freeze([...value.enabledPacks] as "entra"[]), sensitiveAreas: Object.freeze([]),
-    credentialRef: Object.freeze({ provider: "os-or-session", key: value.credentialRef.key }) });
+  const profile = value as unknown as DelegatedProfile;
+  return Object.freeze({ mode: "delegated" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const, preview: profile.preview,
+    allowDeviceCode: profile.allowDeviceCode, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
+    credentialRef: Object.freeze({ provider: "os-or-session" as const, key: profile.credentialRef.key }) });
+}
+
+export function validateApplicationProfile(value: unknown): ApplicationProfile {
+  if (!object(value) || !exact(value, sharedKeys) || value.mode !== "application" || !sharedIdentity(value) || value.allowDeviceCode !== false ||
+    !object(value.credentialRef)) invalid("Invalid application profile; explicit tenant/client IDs and commercial cloud are required, with credentials only by reference");
+  const profile = value as unknown as Omit<ApplicationProfile, "credentialRef"> & { credentialRef: Record<string, unknown> };
+  const ref = profile.credentialRef;
+  if (ref.provider === "certificate" && exact(ref, ["provider", "key", "thumbprint"]) && typeof ref.key === "string" && guid.test(ref.key) &&
+    typeof ref.thumbprint === "string" && thumbprint.test(ref.thumbprint)) {
+    return Object.freeze({ mode: "application" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const,
+      preview: profile.preview, allowDeviceCode: false as const, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
+      credentialRef: Object.freeze({ provider: "certificate" as const, key: ref.key, thumbprint: ref.thumbprint.toLowerCase() }) });
+  }
+  if (ref.provider === "federated" && exact(ref, ["provider", "key"]) && typeof ref.key === "string" && guid.test(ref.key)) {
+    return Object.freeze({ mode: "application" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const,
+      preview: profile.preview, allowDeviceCode: false as const, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
+      credentialRef: Object.freeze({ provider: "federated" as const, key: ref.key }) });
+  }
+  invalid("Invalid application profile; credentialRef must be a certificate or federated reference, never inlined key material");
+}
+
+export function validateProfile(value: unknown): AnyProfile {
+  if (!!value && typeof value === "object" && !Array.isArray(value) && (value as Record<string, unknown>).mode === "application") return validateApplicationProfile(value);
+  return validateDelegatedProfile(value);
 }
 
 export class Profiles {
@@ -42,7 +82,7 @@ export class Profiles {
       invalid("Unable to read profile configuration; check the file permissions and version-1 JSON schema");
     }
     if (!object(value) || value.version !== 1 || !exact(value, ["version", "defaultProfile", "profiles"]) || !object(value.profiles)) invalid("Unsupported profile configuration; explicitly migrate to version 1");
-    const profiles: Record<string, DelegatedProfile> = Object.create(null);
+    const profiles: Record<string, AnyProfile> = Object.create(null);
     for (const [name, profile] of Object.entries(value.profiles)) {
       if (!namePattern.test(name)) invalid("Invalid profile name");
       profiles[name] = validateProfile(profile);
@@ -58,9 +98,17 @@ export class Profiles {
     if (!selected || !Object.hasOwn(config.profiles, selected)) throw new AxiError("No configured profile selected", "AUTH_REQUIRED", ["mg-axi profile list", "mg-axi profile create --help"]);
     return { name: selected, profile: config.profiles[selected]! };
   }
-  create(name: string, tenantId: string, clientId: string, cloud: string, allowDeviceCode: boolean) {
+  create(name: string, tenantId: string, clientId: string, cloud: string, allowDeviceCode: boolean, application?: { certificateThumbprint?: string; federated?: boolean }) {
     if (!namePattern.test(name)) invalid("Profile name must contain only letters, digits, underscores or hyphens");
-    const profile = validateProfile({ mode: "delegated", tenantId, clientId, cloud, enabledPacks: ["entra"], preview: false, sensitiveAreas: [], credentialRef: { provider: "os-or-session", key: randomUUID() }, allowDeviceCode });
+    const certificate = application?.certificateThumbprint;
+    const federated = application?.federated ?? false;
+    if (application && (certificate !== undefined && (typeof certificate !== "string" || !/^[0-9a-f]{40}$/i.test(certificate)))) invalid("Application certificate profiles name a 40-hex-digit thumbprint; the private key stays in protected storage");
+    if (application && ((certificate === undefined) === !federated)) invalid("Application profiles use exactly one credential: --certificate-thumbprint or --federated");
+    if (application && allowDeviceCode) invalid("Application profiles never use device code; it is a delegated login method");
+    const profile = application
+      ? validateApplicationProfile({ mode: "application", tenantId, clientId, cloud, enabledPacks: ["entra"], preview: false, sensitiveAreas: [],
+        credentialRef: certificate === undefined ? { provider: "federated", key: randomUUID() } : { provider: "certificate", key: randomUUID(), thumbprint: certificate }, allowDeviceCode: false })
+      : validateDelegatedProfile({ mode: "delegated", tenantId, clientId, cloud, enabledPacks: ["entra"], preview: false, sensitiveAreas: [], credentialRef: { provider: "os-or-session", key: randomUUID() }, allowDeviceCode });
     const config = this.load();
     if (Object.hasOwn(config.profiles, name)) invalid("Profile already exists; creation never replaces identity");
     config.profiles[name] = profile;

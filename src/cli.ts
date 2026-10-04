@@ -36,7 +36,13 @@ export async function main() {
         if (flags.help) return leafHelp(leaf);
         if (leaf.path === "home") return localHome(flags.profile as string | undefined);
         const profiles = new Profiles();
-        if (leaf.path === "profile create") return profiles.create(String(flags.name), String(flags.tenant), String(flags.client), String(flags.cloud), !!flags["allow-device-code"]);
+        if (leaf.path === "profile create") {
+          if (String(flags.mode ?? "delegated") !== "application" && (flags["certificate-thumbprint"] !== undefined || flags.federated)) throw new AxiError("Certificate and federated credentials belong to application profiles; pass --mode application", "VALIDATION_ERROR", [leafHelp(leaf)]);
+          return profiles.create(String(flags.name), String(flags.tenant), String(flags.client), String(flags.cloud), !!flags["allow-device-code"],
+          String(flags.mode ?? "delegated") === "application"
+            ? { certificateThumbprint: flags["certificate-thumbprint"] === undefined ? undefined : String(flags["certificate-thumbprint"]), federated: !!flags.federated }
+            : undefined);
+        }
         if (leaf.path === "profile list") {
           const items = profiles.list();
           return items.length ? { profiles: items, help: ["mg-axi profile show --profile <name>", "mg-axi login --help"] } : { profiles: "0 profiles configured", help: ["mg-axi profile create --help"] };
@@ -44,6 +50,7 @@ export async function main() {
         if (leaf.path === "profile show") return profiles.resolve(flags.profile as string | undefined);
         if (leaf.path === "login") {
           const selected = profiles.resolve(flags.profile as string | undefined);
+          if (selected.profile.mode !== "delegated") throw new AxiError("Application profiles authenticate with client credentials; interactive login is unavailable", "VALIDATION_ERROR", ["mg-axi profile show --profile <name>", "Application tokens are acquired silently with the configured Graph .default audience"]);
           const { DelegatedAuth } = await import("./auth.js");
           const { MsalProvider } = await import("./msal-provider.js");
           return { profile: selected.name, ...await new DelegatedAuth(new MsalProvider()).login(selected.profile, String(flags.method ?? "browser"), String(flags.scopes).split(",")) };

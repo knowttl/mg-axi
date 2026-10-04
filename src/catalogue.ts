@@ -88,6 +88,14 @@ const auRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to AdministrativeUnit.Read.All, hidden members need Member.Read.Hidden" },
 };
+const caRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties; policy and location detail needs Policy.Read.All in both modes plus a supported Conditional Access role for delegated access" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Policy.Read.All" },
+};
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
   { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
@@ -403,6 +411,42 @@ export const LEAVES: Leaf[] = [
     full: riskRead.full,
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to IdentityRiskEvent.Read.All" },
   }, examples: ["mg-axi entra risk-detection show --id <risk-detection-id> --profile soc", "mg-axi entra risk-detection show --id <risk-detection-id> --profile soc --full"] },
+  { path: "entra conditional-access policy list", description: "List Conditional Access policies with compact properties (id, displayName, state)", operation: "GET:/identity/conditionalAccess/policies", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: caRead.filter,
+    select: caRead.select,
+    fields: caRead.fields,
+    full: caRead.full,
+    cursor: caRead.cursor,
+    scopes: caRead.scopes,
+  }, examples: ["mg-axi entra conditional-access policy list --profile soc", "mg-axi entra conditional-access policy list --profile soc --limit 10", "mg-axi entra conditional-access policy list --profile soc --filter \"state eq 'enabled'\" --select id,displayName,state"] },
+  { path: "entra conditional-access policy show", description: "Show one Conditional Access policy with the full reviewed condition and control set", operation: "GET:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}", flags: {
+    ...common, id: { value: "policy-id", required: true, description: "Conditional Access policy object ID" },
+    select: caRead.select,
+    fields: caRead.fields,
+    full: caRead.full,
+    scopes: caRead.scopes,
+  }, examples: ["mg-axi entra conditional-access policy show --id <policy-id> --profile soc", "mg-axi entra conditional-access policy show --id <policy-id> --profile soc --full"] },
+  { path: "entra conditional-access named-location list", description: "List Conditional Access named locations with compact properties (id, displayName)", operation: "GET:/identity/conditionalAccess/namedLocations", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: caRead.filter,
+    select: caRead.select,
+    fields: caRead.fields,
+    full: caRead.full,
+    cursor: caRead.cursor,
+    scopes: caRead.scopes,
+  }, examples: ["mg-axi entra conditional-access named-location list --profile soc", "mg-axi entra conditional-access named-location list --profile soc --limit 10", "mg-axi entra conditional-access named-location list --profile soc --filter \"isTrusted eq true\""] },
+  { path: "entra conditional-access named-location show", description: "Show one Conditional Access named location with the full reviewed property set", operation: "GET:/identity/conditionalAccess/namedLocations/{namedLocation-id}", flags: {
+    ...common, id: { value: "named-location-id", required: true, description: "Named location object ID" },
+    select: caRead.select,
+    fields: caRead.fields,
+    full: caRead.full,
+    scopes: caRead.scopes,
+  }, examples: ["mg-axi entra conditional-access named-location show --id <named-location-id> --profile soc", "mg-axi entra conditional-access named-location show --id <named-location-id> --profile soc --full"] },
   { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices and administrative units; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
@@ -488,6 +532,6 @@ export function home() {
     profile: "unavailable: no profile configured",
     tenant: "unavailable: no tenant selected",
     domains: [{ name: "entra", status: "scheduled", summary: "Tenant summaries await Graph execution" }],
-    help: ["mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi entra application list --help", "mg-axi entra service-principal list --help", "mg-axi api get --help"],
+    help: ["mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi entra application list --help", "mg-axi entra service-principal list --help", "mg-axi entra conditional-access policy list --help", "mg-axi api get --help"],
   };
 }

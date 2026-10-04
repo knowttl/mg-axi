@@ -13,11 +13,16 @@
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@azure/msal-node": "^7.0.1",
     "@toon-format/toon": "^2.3.0",
-    "axi-sdk-js": "^0.1.13"
+    "axi-sdk-js": "^0.1.13",
+    "open": "^11.0.4"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "typescript": "^7.0.2"
+  },
+  "optionalDependencies": {
+    "keytar": "^7.9.0"
   }
 }

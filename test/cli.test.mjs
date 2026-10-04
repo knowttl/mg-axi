@@ -9,10 +9,13 @@ import { decode } from "@toon-format/toon";
 
 const bin = resolve("dist/bin/mg-axi.js");
 function run(args, executable = bin) {
-  return spawnSync(process.execPath, [executable, ...args], {
-    encoding: "utf8", input: "", timeout: 10000,
-    env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
-  });
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-cli-"));
+  try {
+    return spawnSync(process.execPath, [executable, ...args], {
+      encoding: "utf8", input: "", timeout: 10000,
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, MG_AXI_CONFIG: join(dir, "config.json") },
+    });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
 test("home reports unavailable tenant state on stdout without credentials", () => {
@@ -29,7 +32,8 @@ test("top help lists only the shell catalogue", () => {
   const result = run(["--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /entra user list/);
-  assert.doesNotMatch(result.stdout, /Upgrade|login/);
+  assert.match(result.stdout, /login/);
+  assert.doesNotMatch(result.stdout, /Upgrade/);
 });
 
 test("leaf help includes flags, defaults and examples without requiring an ID", () => {

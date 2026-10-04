@@ -237,12 +237,29 @@ export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<Ca
   const coversAdminClients = clients.includes("all")
     || (clients.includes("browser") && clients.includes("mobileAppsAndDesktopClients"));
   const coversAdminApps = (includedApps.includes("All") || includedApps.includes("MicrosoftAdminPortals"))
-    && excludedApps.length === 0 && (applications as PolicyRecord)["applicationFilter"] == null;
-  const otherConditions = Object.entries(conditions as PolicyRecord).some(([field, value]) =>
-    !["users", "applications", "clientAppTypes"].includes(field)
+    && !excludedApps.includes("All") && !excludedApps.includes("MicrosoftAdminPortals")
+    && (applications as PolicyRecord)["applicationFilter"] == null;
+  let narrowedConditions = Object.entries(conditions as PolicyRecord).some(([field, value]) =>
+    !["users", "applications", "clientAppTypes", "platforms", "locations"].includes(field)
     && value != null && !(Array.isArray(value) && value.length === 0));
+  for (const [field, includeField, excludeField, all] of [
+    ["platforms", "includePlatforms", "excludePlatforms", "all"],
+    ["locations", "includeLocations", "excludeLocations", "All"],
+  ] as const) {
+    const scope = (conditions as PolicyRecord)[field];
+    if (scope == null) continue;
+    if (typeof scope !== "object" || Array.isArray(scope)) {
+      return { available: false, reason: `policy ${field} scope is unreadable, so lockout risk cannot be assessed` };
+    }
+    const included = stringArray((scope as PolicyRecord)[includeField]);
+    const excluded = stringArray((scope as PolicyRecord)[excludeField]);
+    if (included === null || excluded === null) {
+      return { available: false, reason: `policy ${field} inclusions or exclusions are unreadable, so lockout risk cannot be assessed` };
+    }
+    if (!included.includes(all) || excluded.length > 0) narrowedConditions = true;
+  }
   if (includeUsers.includes("All") && !excluded && controls.includes("block")
-    && coversAdminClients && coversAdminApps && !otherConditions) {
+    && coversAdminClients && coversAdminApps && !narrowedConditions) {
     return {
       available: true,
       level: "refused",
@@ -252,7 +269,7 @@ export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<Ca
   return {
     available: true,
     level: "elevated",
-    findings: [!coversAdminClients || !coversAdminApps || otherConditions
+    findings: [!coversAdminClients || !coversAdminApps || narrowedConditions
       ? "scoped warning: client, application or other conditions limit coverage; this policy may still affect admins and break-glass access and requires acknowledgement"
       : "enabled policy may affect admins and break-glass access; protected-account coverage cannot be established from policy targeting alone"],
   };

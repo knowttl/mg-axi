@@ -367,6 +367,9 @@ for (const [name, scope] of [
   ["excluded admin portals", { applications: { includeApplications: ["All"], excludeApplications: ["MicrosoftAdminPortals"] } }],
   ["application filter", { applications: { includeApplications: ["All"], excludeApplications: [], applicationFilter: { mode: "include", rule: 'app.displayName -eq "Scoped"' } } }],
   ["specific locations", { locations: { includeLocations: ["fixture-location"], excludeLocations: [] } }],
+  ["excluded locations", { locations: { includeLocations: ["All"], excludeLocations: ["fixture-location"] } }],
+  ["specific platforms", { platforms: { includePlatforms: ["windows"], excludePlatforms: [] } }],
+  ["excluded platforms", { platforms: { includePlatforms: ["all"], excludePlatforms: ["windows"] } }],
   ["risk condition", { signInRiskLevels: ["high"] }],
 ]) test(`scoped lockout warning for ${name} permits acknowledged execution`, async () => {
   const state = setupProfiles();
@@ -396,6 +399,15 @@ for (const [name, scope] of [
   ["all clients and apps", { clientAppTypes: ["all"], applications: { includeApplications: ["All"], excludeApplications: [] } }],
   ["browser and modern clients", { clientAppTypes: ["browser", "mobileAppsAndDesktopClients"] }],
   ["admin portals", { applications: { includeApplications: ["MicrosoftAdminPortals"], excludeApplications: [] } }],
+  ["all apps with unrelated exclusion", { applications: { includeApplications: ["All"], excludeApplications: ["33333333-3333-4333-8333-333333333333"] } }],
+  ["admin portals with unrelated exclusion", { applications: { includeApplications: ["MicrosoftAdminPortals"], excludeApplications: ["33333333-3333-4333-8333-333333333333"] } }],
+  ["all platforms", { platforms: { includePlatforms: ["all"], excludePlatforms: [] } }],
+  ["all locations", { locations: { includeLocations: ["All"], excludeLocations: [] } }],
+  ["all platforms and locations with unrelated app exclusion", {
+    platforms: { includePlatforms: ["all"], excludePlatforms: [] },
+    locations: { includeLocations: ["All"], excludeLocations: [] },
+    applications: { includeApplications: ["All"], excludeApplications: ["33333333-3333-4333-8333-333333333333"] },
+  }],
 ]) test(`full lockout refusal for ${name} cannot be acknowledged`, async () => {
   const state = setupProfiles();
   try {
@@ -424,6 +436,12 @@ for (const [name, scope] of [
   ["malformed applications", { applications: [] }],
   ["missing application inclusions", { applications: { excludeApplications: [] } }],
   ["missing application exclusions", { applications: { includeApplications: ["All"] } }],
+  ["malformed platforms", { platforms: [] }],
+  ["missing platform inclusions", { platforms: { excludePlatforms: [] } }],
+  ["missing platform exclusions", { platforms: { includePlatforms: ["all"] } }],
+  ["malformed locations", { locations: "All" }],
+  ["missing location inclusions", { locations: { excludeLocations: [] } }],
+  ["missing location exclusions", { locations: { includeLocations: ["All"] } }],
 ]) test(`unavailable lockout analysis for ${name} disables enforcement`, async () => {
   const state = setupProfiles();
   try {
@@ -448,7 +466,16 @@ for (const readIndex of [1, 2]) test(`fresh read ${readIndex} refuses expansion 
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
-    const full = allUsersPolicy({ state: "disabled", grantControls: { builtInControls: ["block"] } });
+    const full = allUsersPolicy({
+      state: "disabled",
+      grantControls: { builtInControls: ["block"] },
+      conditions: {
+        ...allUsersPolicy().conditions,
+        platforms: { includePlatforms: ["all"], excludePlatforms: [] },
+        locations: { includeLocations: ["All"], excludeLocations: [] },
+        applications: { includeApplications: ["All"], excludeApplications: ["33333333-3333-4333-8333-333333333333"] },
+      },
+    });
     const scoped = { ...full, conditions: { ...full.conditions, clientAppTypes: ["exchangeActiveSync", "other"] } };
     const reads = [scoped, scoped, scoped];
     reads[readIndex] = full;

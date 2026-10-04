@@ -165,6 +165,42 @@ test("preview shows the current-versus-proposed diff and sends nothing", async (
   } finally { teardown(state); }
 });
 
+test("policy diff redacts secrets while PATCH retains reviewed values", async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const payload = {
+      displayName: "AccountKey=private-name",
+      state: "disabled",
+      conditions: { applications: { includeApplications: ["AccountKey=private-app", "ordinary-app"] } },
+      grantControls: { builtInControls: ["mfa"], customAuthenticationFactors: ["SharedAccessKey=private-factor"] },
+      sessionControls: { applicationEnforcedRestrictions: { isEnabled: true, token: "private-token" } },
+    };
+    const fields = [
+      "--display-name", payload.displayName,
+      "--state", payload.state,
+      "--conditions", JSON.stringify(payload.conditions),
+      "--grant-controls", JSON.stringify(payload.grantControls),
+      "--session-controls", JSON.stringify(payload.sessionControls),
+    ];
+    const f = fixture({ reads: [basePolicy({ displayName: "AccountKey=old-private-name" })] });
+    const result = await executeArgv(updateArgs(fields), f.overrides);
+    assert.deepEqual(result.preview.changes.map(change => change.proposed), [
+      "***redacted***",
+      "disabled",
+      { applications: { includeApplications: ["***redacted***", "ordinary-app"] } },
+      { builtInControls: ["mfa"], customAuthenticationFactors: ["***redacted***"] },
+      { applicationEnforcedRestrictions: { isEnabled: true, token: "***redacted***" } },
+    ]);
+    assert.equal(result.preview.changes[0].current, "***redacted***");
+    assert.equal(result.preview.noop, false);
+    assert.equal(f.mutRequests.length, 0);
+    await executeArgv(updateArgs([...fields, "--execute", "--confirm", policyId]), f.overrides);
+    assert.equal(f.mutRequests.length, 1);
+    assert.deepEqual(JSON.parse(f.mutRequests[0].body), payload);
+  } finally { teardown(state); }
+});
+
 test("disable sends the exact PATCH target and body with the documented scopes", async () => {
   const state = setupProfiles();
   try {

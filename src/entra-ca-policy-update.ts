@@ -1,6 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { GraphSession, SessionOperation } from "./graph-session.js";
-import { encodeGraphPathSegment } from "./graph-session.js";
+import { encodeGraphPathSegment, redactGraphValue } from "./graph-session.js";
 import type { MutationCoordinator } from "./mutations.js";
 import type { AnyProfile } from "./profiles.js";
 
@@ -337,8 +337,8 @@ export async function updateCaPolicy(args: {
   const current = await readPolicy(session, profile, readOperation, policyId);
   const changes = (Object.keys(payload) as CaPolicyWritableField[]).map(field => ({
     field,
-    current: Object.hasOwn(current, field) ? current[field] as unknown : null,
-    proposed: payload[field] as unknown,
+    current: redactGraphValue(Object.hasOwn(current, field) ? current[field] : null),
+    proposed: redactGraphValue(payload[field]),
   }));
   // A missing property reads as absent, never as null: only an explicitly
   // stored equal value counts as already-desired.

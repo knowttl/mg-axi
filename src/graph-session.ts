@@ -21,6 +21,10 @@ import {
 // key-name and secret-value rules are adapted here.
 export const REDACTED = "***redacted***";
 export const SAFE_CREDENTIAL_FIELDS: readonly string[] = ["keyId", "displayName", "startDateTime", "endDateTime"];
+// READ-04 protected values: authentication-method phone numbers are PII the
+// server itself masks for the Authentication Administrator role, so the
+// session replaces them with the marker for every role before collection
+// buffering, execute output and cursor decode.
 export const GRAPH_HOST = "graph.microsoft.com";
 // Conservative read-query allowlist. Per-operation review (READ slices) can
 // extend it; unknown keys fail closed here. $search/$count=true need eventual
@@ -177,7 +181,7 @@ function redact(value: unknown): unknown {
             .filter(field => Object.hasOwn(entry, field))
             .map(field => [field, entry[field]]))))];
       }
-      return [key, typeof child === "string" && secretKey(key) ? REDACTED : redact(child)];
+      return [key, typeof child === "string" && (secretKey(key) || key === "phoneNumber") ? REDACTED : redact(child)];
     }),
   );
 }

@@ -11,6 +11,7 @@ CORE-02 adds session collections, query validation, bounded retries and cancella
 API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface through that session.
 READ-01 executes Entra user list/show through that session in both delegated and application modes; current usage follows below.
 READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
+READ-04 adds targeted per-user authentication-method reads and the tenant registration report through the same session, with phone numbers redacted.
 READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
 READ-03 adds Conditional Access policy and named-location list/show as separate grammar through the same session; Conditional Access usage follows the device and administrative-unit usage below.
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the Conditional Access usage below.
@@ -167,6 +168,28 @@ To replay a resumed result with `--full`, reuse the original input cursor; the r
 Delegated policy and location reads default to `https://graph.microsoft.com/Policy.Read.All`; application profiles require admin-consented `Policy.Read.All`, use the configured Graph `.default` audience and reject `--scopes`.
 HTTP 403 policy and location errors name the operation's supported directory roles (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access) and include guidance from the [licensing contract](docs/graph-coverage.md#licence-matrix-by-area); the response alone does not identify the missing prerequisite.
 No policy mutation lives here; policy updates belong to a later write slice.
+
+Inspect one user's authentication methods and the tenant registration report; delegated profiles first need explicit login with the read scopes:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/UserAuthenticationMethod.Read.All,https://graph.microsoft.com/AuditLog.Read.All
+mg-axi entra user authentication-method list --profile soc --user <user-id>
+mg-axi entra user authentication-method list --profile soc --user <user-id> --select id,displayName,phoneType
+mg-axi entra registration list --profile soc
+mg-axi entra registration list --profile soc --filter "isMfaRegistered eq false"
+```
+
+`entra user authentication-method list` targets one named user (`--user` takes the user object ID or UPN) and defaults to `id`, `displayName` and `createdDateTime`; rows carry `@odata.type` naming the method kind.
+There is no tenant scan through per-user methods: aggregate MFA coverage belongs to `entra registration list`, and the method output points there.
+`entra registration list` defaults to `id`, `userPrincipalName`, `userDisplayName` and `isMfaRegistered` and returns the tenant MFA/SSPR posture.
+The report does not cover disabled users, so absence from it is never proof of no MFA; that gap rides in the leaf help and every report output.
+Phone numbers are protected values: the shared session replaces them with the redaction marker before output or cursor buffering (including resume cursors), so neither output nor cursors ever carry one; `--full` never lifts that redaction.
+Method registration and deletion belong to no read slice and are never constructed.
+`--select` requests properties from the [reviewed authentication property sets](src/entra-auth-methods.ts); `--fields` must be a subset of the fetched selection.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; the named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply.
+Delegated method reads default to `https://graph.microsoft.com/UserAuthenticationMethod.Read.All` (delegated self-reads may use `UserAuthenticationMethod.Read`) and registration reads default to `https://graph.microsoft.com/AuditLog.Read.All`, while application profiles use the configured `.default` audience.
+Delegated callers acting on another user additionally need Global Reader, Authentication Administrator or Privileged Authentication Administrator for methods, and Reports Reader, Security Reader, Security Administrator or Global Reader for the report.
+Denied reads name that role requirement instead of only the generic grant/role/licence cause.
 
 Log in with `https://graph.microsoft.com/AuditLog.Read.All`, then query sign-ins and directory audits in bounded time windows:
 

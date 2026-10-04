@@ -36,6 +36,8 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra application list/);
   assert.match(result.stdout, /entra service-principal list/);
   assert.match(result.stdout, /entra directory-role list/);
+  assert.match(result.stdout, /entra user authentication-method list/);
+  assert.match(result.stdout, /entra registration list/);
   assert.match(result.stdout, /entra pim active list/);
   assert.match(result.stdout, /entra device list/);
   assert.match(result.stdout, /entra administrative-unit list/);
@@ -65,6 +67,7 @@ for (const [name, args, error] of [
   ["missing required location ID", ["entra", "conditional-access", "named-location", "show"], /--id is required/],
   ["missing required group", ["entra", "group", "member", "list"], /--group is required/],
   ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
+  ["missing required user", ["entra", "user", "authentication-method", "list"], /--user is required/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
   ["transitive on application list", ["entra", "application", "list", "--transitive"], /unknown flag/],
   ["missing required administrative unit", ["entra", "administrative-unit", "member", "list"], /--administrative-unit is required/],

@@ -97,6 +97,11 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra access-review instance list` | native | read |
 | `mg-axi entra access-review instance show` | native | read |
 | `mg-axi entra access-review decision list` | native | read |
+| `mg-axi entra access-review decision show` | native | read |
+| `mg-axi entra access-review contacted-reviewer list` | native | read |
+| `mg-axi entra access-review contacted-reviewer show` | native | read |
+| `mg-axi entra access-review stage list` | native | read |
+| `mg-axi entra access-review stage show` | native | read |
 | `mg-axi api get` | native | read |
 <!-- command-registry:end -->
 

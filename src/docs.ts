@@ -81,6 +81,7 @@ export function capabilityDocument(): string {
   });
   const deferredDomainRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate R1 "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
+  const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
   return [
@@ -130,6 +131,17 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredOrganizationRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-02 access-review scope decisions",
+    "",
+    "Firstmate decision (mg-ext-02b inbox 001 and 002): approve narrowing this change to the ten access-review reads above (definition, instance, decision, contacted-reviewer and stage list/show reads).",
+    "The legacy accessReviews and unified alias reads below stay scheduled for the mg-ext-02c follow-up; beta-only operations stay deferred (\"beta needs its own review\").",
+    "The history reads below are blocked pending review for mg-ext-02c: their documented least privilege is AccessReview.ReadWrite.All (no read scope), and history instances return a bearer SAS downloadUri.",
+    "No new commands or raw access are approved for any row below.",
+    "",
+    "| Inventory operation | Disposition | Deferral reason |",
+    "|---|---|---|",
+    ...deferredAccessReviewRows.map(row => `| \`${row.id}\` | ${row.disposition}: ${row.owningSlice} | ${row.reason} |`),
     "",
     "## Named writes",
     "",

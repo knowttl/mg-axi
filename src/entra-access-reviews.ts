@@ -13,20 +13,29 @@ import type { AnyProfile } from "./profiles.js";
 //
 // Reviewed against the v1.0 accessreviewset-list-definitions,
 // accessreviewscheduledefinition-get,
-// accessreviewscheduledefinition-list-instances, accessreviewinstance-get
-// and accessreviewinstance-list-decisions operation documentation on
-// 2026-10-04. All five reads take D/A AccessReview.Read.All as the least
-// privileged choice; delegated personal Microsoft accounts are not
-// supported. Delegated callers additionally need a supported administrator
-// role: group or app reviews need the review creator, Global Reader,
-// Security Reader, User Administrator, Identity Governance Administrator or
-// Security Administrator, while Entra-role reviews need Security Reader,
-// Identity Governance Administrator, Privileged Role Administrator or
-// Security Administrator. Collection queries document $select with plain
-// $filter ($orderby/$skip/$top stay server-side paging concerns); singles
-// document $select only. None of these collections documents an
-// advanced-query contract, so --filter passes through as plain $filter with
-// no $count or ConsistencyLevel attached.
+// accessreviewscheduledefinition-list-instances, accessreviewinstance-get,
+// accessreviewinstance-list-decisions,
+// accessreviewinstancedecisionitem-get,
+// accessreviewinstance-list-contactedreviewers,
+// accessreviewinstance-list-stages and accessreviewstage-get operation
+// documentation, plus the accessReviewReviewer and accessReviewStage
+// resource references, on 2026-10-04. All ten reads take D/A
+// AccessReview.Read.All as the least privileged choice; delegated personal
+// Microsoft accounts are not supported. Delegated callers additionally need
+// a supported administrator role: group or app reviews need the review
+// creator, Global Reader, Security Reader, User Administrator, Identity
+// Governance Administrator or Security Administrator, while Entra-role
+// reviews need Security Reader, Identity Governance Administrator,
+// Privileged Role Administrator or Security Administrator. Definition,
+// instance and decision collections document $select with plain $filter
+// ($orderby/$skip/$top stay server-side paging concerns); contacted-reviewer
+// lists add $orderby to the documented set and stage lists document $filter
+// (eq only), both still passed through as plain $filter with no $count or
+// ConsistencyLevel attached. Singles document $select only; the
+// contacted-reviewer single reuses its list's resource contract because the
+// resource carries no relationships and the list returns all nested
+// properties. None of these collections documents an advanced-query
+// contract.
 //
 // Definitions are review schedules (a series: one recurrence creates one
 // instance per reviewed resource, and a one-time review creates one
@@ -82,9 +91,33 @@ export const KNOWN_DECISION_FIELDS: readonly string[] = [
   "resourceLink",
   "target",
 ];
+// Contacted reviewers are the reviewer identities recorded on one instance,
+// whether or not they were notified; the resource carries no relationships
+// and the list returns all nested properties, so list and show share one
+// reviewed set.
+export const KNOWN_CONTACTED_REVIEWER_FIELDS: readonly string[] = [
+  "id",
+  "displayName",
+  "userPrincipalName",
+  "createdDateTime",
+];
+// Stages are the sequential phases of one instance (up to three when the
+// definition sets stageSettings); each stage carries its own reviewer
+// scopes, and durationInDays is not a stage property (it folds into
+// endDateTime). Decisions hang off each stage but belong to a later slice.
+export const KNOWN_STAGE_FIELDS: readonly string[] = [
+  "id",
+  "startDateTime",
+  "endDateTime",
+  "status",
+  "reviewers",
+  "fallbackReviewers",
+];
 const DEFINITION_KNOWN = new Set(KNOWN_DEFINITION_FIELDS);
 const INSTANCE_KNOWN = new Set(KNOWN_INSTANCE_FIELDS);
 const DECISION_KNOWN = new Set(KNOWN_DECISION_FIELDS);
+const CONTACTED_REVIEWER_KNOWN = new Set(KNOWN_CONTACTED_REVIEWER_FIELDS);
+const STAGE_KNOWN = new Set(KNOWN_STAGE_FIELDS);
 
 // Compact rows: identifiers plus schedule state, occurrence window or the
 // review outcome. The definition id is the schedule; accessReviewId on a
@@ -94,6 +127,11 @@ const DEFAULT_DEFINITION_SHOW_SELECT = [...KNOWN_DEFINITION_FIELDS];
 const DEFAULT_INSTANCE_LIST_SELECT = ["id", "status", "startDateTime", "endDateTime"];
 const DEFAULT_INSTANCE_SHOW_SELECT = [...KNOWN_INSTANCE_FIELDS];
 const DEFAULT_DECISION_SELECT = ["id", "accessReviewId", "decision", "recommendation"];
+const DEFAULT_DECISION_SHOW_SELECT = [...KNOWN_DECISION_FIELDS];
+const DEFAULT_CONTACTED_REVIEWER_LIST_SELECT = ["id", "displayName", "userPrincipalName"];
+const DEFAULT_CONTACTED_REVIEWER_SHOW_SELECT = [...KNOWN_CONTACTED_REVIEWER_FIELDS];
+const DEFAULT_STAGE_LIST_SELECT = ["id", "status", "startDateTime", "endDateTime"];
+const DEFAULT_STAGE_SHOW_SELECT = [...KNOWN_STAGE_FIELDS];
 export const DEFAULT_ACCESS_REVIEW_SCOPES = ["https://graph.microsoft.com/AccessReview.Read.All"];
 const TRUNCATE_AT = 500;
 
@@ -275,6 +313,34 @@ const DECISION_LIST: CollectionShape = {
   ],
 };
 
+const CONTACTED_REVIEWER_LIST: CollectionShape = {
+  command: "entra access-review contacted-reviewer list",
+  key: "contactedReviewers",
+  known: CONTACTED_REVIEWER_KNOWN,
+  knownList: KNOWN_CONTACTED_REVIEWER_FIELDS,
+  defaultSelect: DEFAULT_CONTACTED_REVIEWER_LIST_SELECT,
+  denialScopeNote: "Contacted reviewers are the reviewer identities recorded on one instance, whether or not they were notified; they never carry review outcomes",
+  emptyNote: "0 contacted reviewers matched; the absence of results is the answer, not an error",
+  standing: profileName => [
+    "Contacted reviewers are identities recorded on one instance, never review outcomes or notification receipts",
+    `Show one contacted reviewer: mg-axi entra access-review contacted-reviewer show --definition <definition-id> --instance <instance-id> --id <reviewer-id> ${profileHint(profileName)}`,
+  ],
+};
+
+const STAGE_LIST: CollectionShape = {
+  command: "entra access-review stage list",
+  key: "stages",
+  known: STAGE_KNOWN,
+  knownList: KNOWN_STAGE_FIELDS,
+  defaultSelect: DEFAULT_STAGE_LIST_SELECT,
+  denialScopeNote: "Stages are sequential phases of one instance (up to three when stageSettings is defined), never definitions or decisions",
+  emptyNote: "0 access-review stages matched; an instance without stageSettings has no stages, which is the answer, not an error",
+  standing: profileName => [
+    "Stages are sequential phases of one instance: each stage carries its own reviewer scopes, and per-stage decisions belong to a later slice",
+    `Show one stage: mg-axi entra access-review stage show --definition <definition-id> --instance <instance-id> --id <stage-id> ${profileHint(profileName)}`,
+  ],
+};
+
 function parentId(flags: AccessReviewFlags, flag: string, noun: string, help: string): string {
   const value = String(flags[flag] ?? "");
   if (!value.trim()) throw new AxiError(`--${flag} needs the parent ${noun} ID`, "VALIDATION_ERROR", [help]);
@@ -448,4 +514,85 @@ export async function listDecisions(
   return listCollection(DECISION_LIST, session, flags, profile, operation, help, profileName,
     { "accessReviewScheduleDefinition-id": definition, "accessReviewInstance-id": instance },
     `Resume losslessly with the same --definition, --instance and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
+}
+
+export async function showDecision(
+  session: GraphSession,
+  flags: AccessReviewFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const definition = parentId(flags, "definition", "access-review definition", help);
+  const instance = parentId(flags, "instance", "access-review instance", help);
+  return showOne("decision", "entra access-review decision show",
+    DECISION_KNOWN, KNOWN_DECISION_FIELDS, DEFAULT_DECISION_SHOW_SELECT,
+    session, flags, profile, operation, help, profileName,
+    { "accessReviewScheduleDefinition-id": definition, "accessReviewInstance-id": instance, "accessReviewInstanceDecisionItem-id": String(flags.id) },
+    "Graph returned a malformed access-review decision body");
+}
+
+export async function listContactedReviewers(
+  session: GraphSession,
+  flags: AccessReviewFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const definition = parentId(flags, "definition", "access-review definition", help);
+  const instance = parentId(flags, "instance", "access-review instance", help);
+  return listCollection(CONTACTED_REVIEWER_LIST, session, flags, profile, operation, help, profileName,
+    { "accessReviewScheduleDefinition-id": definition, "accessReviewInstance-id": instance },
+    `Resume losslessly with the same --definition, --instance and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
+}
+
+export async function showContactedReviewer(
+  session: GraphSession,
+  flags: AccessReviewFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const definition = parentId(flags, "definition", "access-review definition", help);
+  const instance = parentId(flags, "instance", "access-review instance", help);
+  return showOne("contactedReviewer", "entra access-review contacted-reviewer show",
+    CONTACTED_REVIEWER_KNOWN, KNOWN_CONTACTED_REVIEWER_FIELDS, DEFAULT_CONTACTED_REVIEWER_SHOW_SELECT,
+    session, flags, profile, operation, help, profileName,
+    { "accessReviewScheduleDefinition-id": definition, "accessReviewInstance-id": instance, "accessReviewReviewer-id": String(flags.id) },
+    "Graph returned a malformed contacted-reviewer body");
+}
+
+export async function listStages(
+  session: GraphSession,
+  flags: AccessReviewFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const definition = parentId(flags, "definition", "access-review definition", help);
+  const instance = parentId(flags, "instance", "access-review instance", help);
+  return listCollection(STAGE_LIST, session, flags, profile, operation, help, profileName,
+    { "accessReviewScheduleDefinition-id": definition, "accessReviewInstance-id": instance },
+    `Resume losslessly with the same --definition, --instance and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
+}
+
+export async function showStage(
+  session: GraphSession,
+  flags: AccessReviewFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const definition = parentId(flags, "definition", "access-review definition", help);
+  const instance = parentId(flags, "instance", "access-review instance", help);
+  return showOne("stage", "entra access-review stage show",
+    STAGE_KNOWN, KNOWN_STAGE_FIELDS, DEFAULT_STAGE_SHOW_SELECT,
+    session, flags, profile, operation, help, profileName,
+    { "accessReviewScheduleDefinition-id": definition, "accessReviewInstance-id": instance, "accessReviewStage-id": String(flags.id) },
+    "Graph returned a malformed access-review stage body");
 }

@@ -32,6 +32,8 @@ function basePolicy(overrides = {}) {
     displayName: "Baseline CA policy",
     state: "enabled",
     conditions: {
+      clientAppTypes: ["all"],
+      applications: { includeApplications: ["All"], excludeApplications: [] },
       users: { includeUsers: ["11111111-2222-4333-8444-555555555555"], excludeUsers: [], excludeGroups: [] },
     },
     grantControls: { operator: "OR", builtInControls: ["mfa"] },
@@ -42,7 +44,7 @@ function basePolicy(overrides = {}) {
 
 function allUsersPolicy(overrides = {}) {
   return basePolicy({
-    conditions: { users: { includeUsers: ["All"], excludeUsers: [], excludeGroups: [] } },
+    conditions: { ...basePolicy().conditions, users: { includeUsers: ["All"], excludeUsers: [], excludeGroups: [] } },
     ...overrides,
   });
 }
@@ -357,6 +359,108 @@ for (const value of ["not-json", "[1,2]", "null", "42"]) test(`conditions ${JSON
   } finally { teardown(state); }
 });
 
+for (const [name, scope] of [
+  ["legacy clients", { clientAppTypes: ["exchangeActiveSync", "other"] }],
+  ["browser only", { clientAppTypes: ["browser"] }],
+  ["modern clients only", { clientAppTypes: ["mobileAppsAndDesktopClients"] }],
+  ["specific application", { applications: { includeApplications: ["33333333-3333-4333-8333-333333333333"], excludeApplications: [] } }],
+  ["excluded admin portals", { applications: { includeApplications: ["All"], excludeApplications: ["MicrosoftAdminPortals"] } }],
+  ["application filter", { applications: { includeApplications: ["All"], excludeApplications: [], applicationFilter: { mode: "include", rule: 'app.displayName -eq "Scoped"' } } }],
+  ["specific locations", { locations: { includeLocations: ["fixture-location"], excludeLocations: [] } }],
+  ["risk condition", { signInRiskLevels: ["high"] }],
+]) test(`scoped lockout warning for ${name} permits acknowledged execution`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const policy = allUsersPolicy({
+      state: "disabled",
+      conditions: { ...allUsersPolicy().conditions, ...scope },
+      grantControls: { builtInControls: ["block"] },
+    });
+    const f = fixture({ reads: [policy] });
+    const preview = await executeArgv(updateArgs(["--state", "enabled"]), f.overrides);
+    assert.equal(preview.preview.lockout.level, "elevated");
+    assert.match(preview.preview.lockout.findings.join("\n"), /scoped warning/);
+    await assert.rejects(
+      executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId]), f.overrides),
+      { code: "LOCKOUT_ACK_REQUIRED" },
+    );
+    assert.equal(f.mutRequests.length, 0);
+    await executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId, "--acknowledge-lockout-risk"]), f.overrides);
+    assert.equal(f.mutRequests.length, 1);
+    assert.deepEqual(JSON.parse(f.mutRequests[0].body), { state: "enabled" });
+  } finally { teardown(state); }
+});
+
+for (const [name, scope] of [
+  ["all clients and apps", { clientAppTypes: ["all"], applications: { includeApplications: ["All"], excludeApplications: [] } }],
+  ["browser and modern clients", { clientAppTypes: ["browser", "mobileAppsAndDesktopClients"] }],
+  ["admin portals", { applications: { includeApplications: ["MicrosoftAdminPortals"], excludeApplications: [] } }],
+]) test(`full lockout refusal for ${name} cannot be acknowledged`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const policy = allUsersPolicy({
+      state: "disabled",
+      conditions: { ...allUsersPolicy().conditions, ...scope },
+      grantControls: { builtInControls: ["block"] },
+    });
+    const f = fixture({ reads: [policy] });
+    const preview = await executeArgv(updateArgs(["--state", "enabled"]), f.overrides);
+    assert.equal(preview.preview.lockout.level, "refused");
+    await assert.rejects(
+      executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId, "--acknowledge-lockout-risk"]), f.overrides),
+      { code: "OPERATION_BLOCKED" },
+    );
+    assert.equal(f.mutRequests.length, 0);
+    assert.ok(!existsSync(f.journalPath));
+  } finally { teardown(state); }
+});
+
+for (const [name, scope] of [
+  ["missing clients", { clientAppTypes: undefined }],
+  ["malformed clients", { clientAppTypes: "all" }],
+  ["missing applications", { applications: undefined }],
+  ["malformed applications", { applications: [] }],
+  ["missing application inclusions", { applications: { excludeApplications: [] } }],
+  ["missing application exclusions", { applications: { includeApplications: ["All"] } }],
+]) test(`unavailable lockout analysis for ${name} disables enforcement`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const policy = allUsersPolicy({
+      state: "disabled",
+      conditions: { ...allUsersPolicy().conditions, ...scope },
+      grantControls: { builtInControls: ["block"] },
+    });
+    const f = fixture({ reads: [policy] });
+    const preview = await executeArgv(updateArgs(["--state", "enabled"]), f.overrides);
+    assert.equal(preview.preview.lockout.available, false);
+    await assert.rejects(
+      executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId, "--acknowledge-lockout-risk"]), f.overrides),
+      { code: "OPERATION_BLOCKED", message: /stays disabled without lockout analysis/ },
+    );
+    assert.equal(f.mutRequests.length, 0);
+  } finally { teardown(state); }
+});
+
+for (const readIndex of [1, 2]) test(`fresh read ${readIndex} refuses expansion to full lockout`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const full = allUsersPolicy({ state: "disabled", grantControls: { builtInControls: ["block"] } });
+    const scoped = { ...full, conditions: { ...full.conditions, clientAppTypes: ["exchangeActiveSync", "other"] } };
+    const reads = [scoped, scoped, scoped];
+    reads[readIndex] = full;
+    const f = fixture({ reads });
+    await assert.rejects(
+      executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId, "--acknowledge-lockout-risk"]), f.overrides),
+      { code: "OPERATION_BLOCKED" },
+    );
+    assert.equal(f.mutRequests.length, 0);
+  } finally { teardown(state); }
+});
+
 test("lockout refusal: enabling block for all users without exclusions is refused", async () => {
   const state = setupProfiles();
   try {
@@ -369,7 +473,7 @@ test("lockout refusal: enabling block for all users without exclusions is refuse
     assert.deepEqual(preview.preview.lockout, {
       available: true,
       level: "refused",
-      findings: ["enabled policy would block all users with no exclusions: every admin including break-glass access would be locked out"],
+      findings: ["enabled policy would block all users without exclusions across browser and modern clients on all cloud apps or admin portals: every admin including break-glass access would be locked out"],
     });
     assert.equal(preview.preview.noop, false);
     const f = fixture({ reads: [blocking] });
@@ -379,7 +483,7 @@ test("lockout refusal: enabling block for all users without exclusions is refuse
     ]), f.overrides)
       .then(() => assert.fail("lockout must refuse"), caught => caught);
     assert.equal(error.code, "OPERATION_BLOCKED");
-    assert.match(error.message, /locking out every admin including break-glass/i);
+    assert.match(error.message, /every admin including break-glass access would be locked out/i);
     assert.match(error.suggestions.join("\n"), /cannot be overridden/i);
     assert.equal(f.mutRequests.length, 0);
     assert.ok(!existsSync(f.journalPath), "a refused execute reserves no intent");
@@ -426,7 +530,7 @@ for (const targeting of [
     enableWrites(state.dir);
     const policy = basePolicy({
       state: "disabled",
-      conditions: { users: { excludeUsers: [], excludeGroups: [], ...targeting } },
+      conditions: { ...basePolicy().conditions, users: { excludeUsers: [], excludeGroups: [], ...targeting } },
       grantControls: { builtInControls: ["block"] },
     });
     const f = fixture({ reads: [policy] });

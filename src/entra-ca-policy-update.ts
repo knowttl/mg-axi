@@ -177,14 +177,6 @@ function stringArray(value: unknown): string[] | null {
   return Array.isArray(value) && value.every(entry => typeof entry === "string") ? [...value] : null;
 }
 
-// Lockout analysis over the proposed effective policy (current merged with
-// the PATCH payload). An enabled policy that covers all users with no
-// user, group or role exclusions and block controls would lock out every
-// admin including break-glass accounts, so enforcement-touching changes toward that state
-// are refused. Other enabled policies need acknowledgement because targeting
-// alone cannot establish protected-account coverage. Unreadable effective
-// inputs (including missing user/group exclusion arrays) disable enforcement
-// changes. User-facing lockout requirements are owned by README.md.
 export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<CaPolicyWritableField, unknown>>): LockoutAssessment {
   const effective: PolicyRecord = { ...current, ...payload };
   const state = effective["state"];
@@ -232,17 +224,37 @@ export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<Ca
   if (controls === null) {
     return { available: false, reason: "policy grant controls are unreadable, so lockout risk cannot be assessed" };
   }
-  if (includeUsers.includes("All") && !excluded && controls.includes("block")) {
+  const clients = stringArray((conditions as PolicyRecord)["clientAppTypes"]);
+  const applications = (conditions as PolicyRecord)["applications"];
+  if (clients === null || applications === null || typeof applications !== "object" || Array.isArray(applications)) {
+    return { available: false, reason: "policy client or application scope is unreadable, so lockout risk cannot be assessed" };
+  }
+  const includedApps = stringArray((applications as PolicyRecord)["includeApplications"]);
+  const excludedApps = stringArray((applications as PolicyRecord)["excludeApplications"]);
+  if (includedApps === null || excludedApps === null) {
+    return { available: false, reason: "policy application inclusions or exclusions are unreadable, so lockout risk cannot be assessed" };
+  }
+  const coversAdminClients = clients.includes("all")
+    || (clients.includes("browser") && clients.includes("mobileAppsAndDesktopClients"));
+  const coversAdminApps = (includedApps.includes("All") || includedApps.includes("MicrosoftAdminPortals"))
+    && excludedApps.length === 0 && (applications as PolicyRecord)["applicationFilter"] == null;
+  const otherConditions = Object.entries(conditions as PolicyRecord).some(([field, value]) =>
+    !["users", "applications", "clientAppTypes"].includes(field)
+    && value != null && !(Array.isArray(value) && value.length === 0));
+  if (includeUsers.includes("All") && !excluded && controls.includes("block")
+    && coversAdminClients && coversAdminApps && !otherConditions) {
     return {
       available: true,
       level: "refused",
-      findings: ["enabled policy would block all users with no exclusions: every admin including break-glass access would be locked out"],
+      findings: ["enabled policy would block all users without exclusions across browser and modern clients on all cloud apps or admin portals: every admin including break-glass access would be locked out"],
     };
   }
   return {
     available: true,
     level: "elevated",
-    findings: ["enabled policy may affect admins and break-glass access; protected-account coverage cannot be established from policy targeting alone"],
+    findings: [!coversAdminClients || !coversAdminApps || otherConditions
+      ? "scoped warning: client, application or other conditions limit coverage; this policy may still affect admins and break-glass access and requires acknowledgement"
+      : "enabled policy may affect admins and break-glass access; protected-account coverage cannot be established from policy targeting alone"],
   };
 }
 
@@ -279,10 +291,10 @@ function assertLockoutGates(
   }
   if (assessment.level === "refused") {
     throw new AxiError(
-      "Refusing policy update: the proposed policy would block all users with no exclusions, locking out every admin including break-glass access",
+      `Refusing policy update: ${assessment.findings.join("; ")}`,
       "OPERATION_BLOCKED",
       [
-        "Narrow conditions.users.includeUsers, add excludeUsers/excludeGroups for emergency access, or replace the block control before retrying",
+        "Narrow user, client or application conditions, exclude emergency access, or replace the block control before retrying",
         "This refusal cannot be overridden with an acknowledgement flag",
       ],
     );

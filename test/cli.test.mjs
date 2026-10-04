@@ -36,6 +36,8 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra application list/);
   assert.match(result.stdout, /entra service-principal list/);
   assert.match(result.stdout, /entra directory-role list/);
+  assert.match(result.stdout, /entra service-principal oauth2-grant list/);
+  assert.match(result.stdout, /entra service-principal app-role-assignment list/);
   assert.match(result.stdout, /entra pim active list/);
   assert.match(result.stdout, /entra device list/);
   assert.match(result.stdout, /entra administrative-unit list/);
@@ -62,6 +64,8 @@ for (const [name, args, error] of [
   ["missing required group", ["entra", "group", "member", "list"], /--group is required/],
   ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
+  ["missing required grant client", ["entra", "service-principal", "oauth2-grant", "list"], /--service-principal is required/],
+  ["missing required app-role client", ["entra", "service-principal", "app-role-assignment", "list"], /--service-principal is required/],
   ["transitive on application list", ["entra", "application", "list", "--transitive"], /unknown flag/],
   ["missing required administrative unit", ["entra", "administrative-unit", "member", "list"], /--administrative-unit is required/],
   ["transitive on group list", ["entra", "group", "list", "--transitive"], /unknown flag/],
@@ -145,6 +149,25 @@ test("administrative-unit member list leaf help advertises the relationship flag
   assert.match(result.stdout, /--administrative-unit.*required/);
   assert.match(result.stdout, /--cursor/);
   assert.match(result.stdout, /Member\.Read\.Hidden/);
+});
+
+test("oauth2-grant list leaf help marks rows as granted consent with read-only scopes", () => {
+  const result = run(["entra", "service-principal", "oauth2-grant", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /granted consent, distinct from the application's requested permissions/);
+  assert.match(result.stdout, /Directory\.Read\.All/);
+  assert.match(result.stdout, /never request write-consent scopes/);
+  assert.match(result.stdout, /--service-principal.*required/);
+});
+
+test("app-role-assignment list leaf help marks rows as granted consent with read-only scopes", () => {
+  const result = run(["entra", "service-principal", "app-role-assignment", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /granted consent, distinct from the application's requested permissions/);
+  assert.match(result.stdout, /Application\.Read\.All/);
+  assert.match(result.stdout, /--service-principal.*required/);
 });
 
 test("group member list without a profile fails operationally on stdout", () => {

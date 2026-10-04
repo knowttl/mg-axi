@@ -57,6 +57,22 @@ const ownerRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Application.Read.All" },
 };
+const grantRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from id, clientId, consentType, principalId, resourceId, scope" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Directory.Read.All; reads never request write-consent scopes" },
+};
+const appRoleGrantRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from id, appRoleId, createdDateTime, principalDisplayName, principalId, principalType, resourceDisplayName, resourceId" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Application.Read.All; reads never request write-consent scopes" },
+};
 const roleRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties from the reviewed role property set" },
@@ -358,6 +374,28 @@ export const LEAVES: Leaf[] = [
     cursor: ownerRead.cursor,
     scopes: ownerRead.scopes,
   }, examples: ["mg-axi entra service-principal owner list --service-principal <service-principal-object-id> --profile soc"] },
+  { path: "entra service-principal oauth2-grant list", description: "List delegated permission grants for one client service principal; rows are granted consent, distinct from the application's requested permissions", operation: "GET:/servicePrincipals/{servicePrincipal-id}/oauth2PermissionGrants", flags: {
+    ...common, "service-principal": { value: "service-principal-object-id", required: true, description: "Client service-principal object ID whose delegated grants are listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: grantRead.filter,
+    select: grantRead.select,
+    fields: grantRead.fields,
+    full: grantRead.full,
+    cursor: grantRead.cursor,
+    scopes: grantRead.scopes,
+  }, examples: ["mg-axi entra service-principal oauth2-grant list --service-principal <service-principal-object-id> --profile soc", "mg-axi entra service-principal oauth2-grant list --service-principal <service-principal-object-id> --profile soc --filter \"consentType eq 'AllPrincipals'\""] },
+  { path: "entra service-principal app-role-assignment list", description: "List app-only role assignments granted to one client service principal; rows are granted consent, distinct from the application's requested permissions", operation: "GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignments", flags: {
+    ...common, "service-principal": { value: "service-principal-object-id", required: true, description: "Client service-principal object ID whose app-only grants are listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: appRoleGrantRead.filter,
+    select: appRoleGrantRead.select,
+    fields: appRoleGrantRead.fields,
+    full: appRoleGrantRead.full,
+    cursor: appRoleGrantRead.cursor,
+    scopes: appRoleGrantRead.scopes,
+  }, examples: ["mg-axi entra service-principal app-role-assignment list --service-principal <service-principal-object-id> --profile soc"] },
   { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices and administrative units; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },

@@ -15,6 +15,7 @@ READ-09 adds directory-role list/show, current role-assignment inventory and act
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the user usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
+READ-08 adds service-principal delegated-grant and app-role-assignment consent reads for a named client through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -71,6 +72,24 @@ mg-axi entra service-principal list --profile soc --limit 10
 mg-axi entra service-principal show --profile soc --id <service-principal-object-id>
 mg-axi entra service-principal owner list --profile soc --service-principal <service-principal-object-id>
 ```
+
+Read granted consent for one client service principal; delegated profiles first need explicit login with the read scopes:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Directory.Read.All,https://graph.microsoft.com/Application.Read.All
+mg-axi entra service-principal oauth2-grant list --profile soc --service-principal <service-principal-object-id>
+mg-axi entra service-principal app-role-assignment list --profile soc --service-principal <service-principal-object-id> --filter "resourceId eq '<resource-id>'"
+```
+
+`entra service-principal oauth2-grant list` defaults to `id`, `consentType`, `principalId`, `resourceId` and `scope`: the delegated scopes granted to the client, with `consentType` AllPrincipals covering every user (and an explicit null `principalId`) versus Principal covering the one user named by `principalId`.
+`entra service-principal app-role-assignment list` defaults to `id`, `appRoleId`, `resourceDisplayName` and `resourceId`: the app-only roles granted to the client on each resource API.
+Both lists show actual granted consent records; the application's requested permissions (`requiredResourceAccess`) are declared on the application object and are never shown here, and grant creation, revocation and consent belong to later write slices, never to these reads.
+`--select` requests properties from the [reviewed grant property sets](src/entra-grants.ts); `--fields` must be a subset of the fetched selection.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; the named-list caps, `count`, cursor resume rules and 500-character text truncation described above also apply.
+Resume either list with the same `--service-principal` object ID.
+Delegated oauth2-grant reads default to `https://graph.microsoft.com/Directory.Read.All` and app-role reads to `https://graph.microsoft.com/Application.Read.All`, while application profiles use the configured `.default` audience; reads never request a write-consent scope such as `DelegatedPermissionGrant.ReadWrite.All`, `Application.ReadWrite.All` or `Directory.ReadWrite.All`.
+Delegated callers additionally need a supported directory role per operation (for example Directory Readers, Global Reader or Application Administrator).
+Denied reads name that role and read-scope requirement instead of only the generic grant/role/licence cause.
 
 `entra group list` defaults to compact properties (`id`, `displayName`, `mail`, `groupTypes`); `entra group show --id <group-id>` defaults to the richer reviewed group set including `isAssignableToRole`, which marks groups eligible for role assignment.
 Group `--select` accepts the [reviewed group property set](src/entra-groups.ts); `--fields` must be a subset of the fetched selection.

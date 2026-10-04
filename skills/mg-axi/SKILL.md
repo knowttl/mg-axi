@@ -70,6 +70,7 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra service-principal app-role-assignment list` | native | read |
 | `mg-axi entra risky-user list` | native | read |
 | `mg-axi entra risky-user show` | native | read |
+| `mg-axi entra risky-user dismiss` | native | write |
 | `mg-axi entra risk-detection list` | native | read |
 | `mg-axi entra risk-detection show` | native | read |
 | `mg-axi entra conditional-access policy list` | native | read |

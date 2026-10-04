@@ -14,6 +14,7 @@ import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from
 import { listApplicationOwners, listApplications, listServicePrincipalOwners, listServicePrincipals, showApplication, showServicePrincipal } from "./entra-apps.js";
 import { listAppRoleAssignments, listOAuth2Grants } from "./entra-grants.js";
 import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection } from "./entra-risk.js";
+import { dismissRiskyUser } from "./entra-risk-dismiss.js";
 import { listPolicies, showPolicy, listNamedLocations, showNamedLocation } from "./entra-conditional-access.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
 import { addGroupMember } from "./entra-group-member-add.js";
@@ -401,6 +402,43 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     return leaf.path === "entra service-principal oauth2-grant list"
       ? listOAuth2Grants(session, flags, selected.profile, operation, help, selected.name)
       : listAppRoleAssignments(session, flags, selected.profile, operation, help, selected.name);
+  }
+  if (leaf.path === "entra risky-user dismiss") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const readLeaf = LEAVES.find(item => item.path === "entra risky-user show")!;
+    const readOperation = operationFor(readLeaf, "v1.0");
+    if (!readOperation || readOperation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${readLeaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const coordinator = createMutationCoordinator({
+      profile: selected.profile,
+      delegated,
+      application,
+      transport: overrides.mutationTransport ?? mutationFetchTransport,
+      ...(overrides.journalPath !== undefined ? { journalPath: overrides.journalPath } : {}),
+    });
+    return dismissRiskyUser({
+      session,
+      coordinator,
+      flags,
+      profile: selected.profile,
+      profileName: selected.name,
+      readOperation,
+      help: leafHelp(leaf),
+    });
   }
   if (leaf.path === "entra risky-user list" || leaf.path === "entra risky-user show" || leaf.path === "entra risk-detection list" || leaf.path === "entra risk-detection show") {
     const selected = profiles.resolve(flags.profile as string | undefined);

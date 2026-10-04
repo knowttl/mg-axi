@@ -115,6 +115,27 @@ test("setup reports configured profiles without credential material", () => {
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
+test("setup suggests runnable checkout commands", () => {
+  const home = dir();
+  try {
+    const output = decode(runPlain(["setup"], home).stdout);
+    for (const command of [
+      ...output.guidance.slice(1).map(command => `${command} --help`),
+      `${output.help[0]} --help`, ...output.help.slice(1),
+    ]) {
+      const [executable, ...args] = command.split(" ");
+      const result = spawnSync(executable, args, {
+        encoding: "utf8", timeout: 30000,
+        env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
+          HOME: home, USERPROFILE: home, MG_AXI_CONFIG: join(home, "config.json") },
+      });
+      assert.equal(result.status, 0, `${command}: ${result.error ?? result.stdout}`);
+      assert.match(result.stdout, /mg-axi/);
+    }
+    assert.ok(!existsSync(join(home, "config.json")));
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
 test("doctor rejects unknown flags before credentials", () => {
   const home = dir();
   try {

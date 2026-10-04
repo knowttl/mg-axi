@@ -26,9 +26,9 @@ export function setupView(store: Profiles): Record<string, unknown> {
     ],
     guidance: [
       `Hand-edit ${store.path} or set MG_AXI_CONFIG to a separate configuration file; secrets stay in protected storage references, never in argv or config`,
-      "mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial",
-      "mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
-      "mg-axi doctor",
+      "node dist/bin/mg-axi.js profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial",
+      "node dist/bin/mg-axi.js login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
+      "node dist/bin/mg-axi.js doctor",
     ],
     capabilities: {
       implemented,
@@ -37,7 +37,7 @@ export function setupView(store: Profiles): Record<string, unknown> {
       api: "Entra user, group, directory-role/PIM, device, administrative-unit, sign-in/directory-audit, application/service-principal, consent-grant, risk and Conditional Access reads plus reviewed raw api get; every other operation is scheduled, blocked, deprecated or excluded",
       report: "docs/coverage.md",
     },
-    integration: "The static skill at skills/mg-axi/SKILL.md is installed only by explicit setup; no ordinary command installs hooks or writes configuration",
-    help: ["mg-axi doctor", "mg-axi entra user list --help", "mg-axi api get --help"],
+    integration: "Install skills/mg-axi/SKILL.md explicitly through your agent's skill installation mechanism; setup only shows guidance and installs no skills or hooks",
+    help: ["node dist/bin/mg-axi.js doctor", "node dist/bin/mg-axi.js entra user list --help", "node dist/bin/mg-axi.js api get --help"],
   };
 }

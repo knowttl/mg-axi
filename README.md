@@ -32,6 +32,9 @@ node dist/bin/mg-axi.js entra user list --help
 node dist/bin/mg-axi.js entra user show --help
 ```
 
+Run checkout commands from the repository root with `node dist/bin/mg-axi.js`.
+Where examples or CLI output use `mg-axi`, substitute `node dist/bin/mg-axi.js` unless you have separately installed the executable on PATH.
+
 The home view reports unavailable tenant summaries explicitly.
 `entra user list` defaults to basic properties (`id`, `displayName`, `userPrincipalName`, `mail`); `entra user show --id <user-id-or-upn>` defaults to the richer server property set.
 `--select` requests properties from the [supported user property set](src/entra-users.ts); `--fields` projects locally and must be a subset of the fetched selection.
@@ -376,7 +379,7 @@ Only the commands in [docs/coverage.md](docs/coverage.md) have an implemented, t
 The package is marked private and ships no publish workflow: preparing this release never publishes it.
 The packed files are `dist`, the discovery inventory, `skills/mg-axi`, `docs/coverage.md` and this README.
 
-Install from a checkout with the pinned toolchain, then verify the version probe stays fast without loading the command graph:
+Build from a checkout with the pinned toolchain, then verify the version probe stays fast without loading the command graph:
 
 ```sh
 corepack pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false
@@ -384,13 +387,14 @@ corepack pnpm build
 node dist/bin/mg-axi.js --version
 ```
 
-Explicit setup only: `mg-axi setup` shows the installation steps, the selected configuration path, the configured profiles and the capability summary.
+From the repository root, `node dist/bin/mg-axi.js setup` shows the build steps, the selected configuration path, the configured profiles and the capability summary.
 It writes nothing, signs in nowhere and installs no hooks; ordinary commands never gain installation side effects.
-Create profiles with `mg-axi profile create`, sign delegated profiles in with `mg-axi login`, and check every selected profile with `mg-axi doctor`.
+Create profiles with `node dist/bin/mg-axi.js profile create`, sign delegated profiles in with `node dist/bin/mg-axi.js login`, and check every selected profile with `node dist/bin/mg-axi.js doctor`.
 Doctor performs one bounded `entra user list --limit 1` read per profile with silent credential acquisition only: it never opens a browser, never shows a device-code challenge, never auto-installs and never enables writes.
 Configuration or access failures report per profile with rerun guidance and a nonzero exit.
 
 The installable skill lives at [skills/mg-axi/SKILL.md](skills/mg-axi/SKILL.md).
+Install it explicitly through your agent's skill installation mechanism; the setup command only shows guidance and does not install skills.
 Its command table and [docs/coverage.md](docs/coverage.md) are generated from the command catalogue and the discovery inventory.
 Regenerate both with `corepack pnpm run docs:generate` and verify freshness with `corepack pnpm run docs:check`; CI runs the check after every build.
 Critical journeys stay packaged offline: `test/pack.test.mjs` drives setup, doctor and the user, group, Conditional Access and sign-in reads through the packaged executable with fixture credentials and blocked networking.

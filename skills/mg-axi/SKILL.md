@@ -10,7 +10,9 @@ Agent-ergonomic CLI for Microsoft Graph, read-only by default.
 Entra SOC reads through token-efficient TOON output.
 No write leaf exists: every mutation is refused by the read-only session.
 
-Run `mg-axi doctor` first.
+From a built checkout, run commands from the repository root with `node dist/bin/mg-axi.js`.
+Throughout this skill and CLI output, substitute that invocation for `mg-axi` unless you have separately installed the executable on PATH.
+Run `node dist/bin/mg-axi.js doctor` first.
 It checks the explicitly selected profile, otherwise the configured default, or all configured profiles when no default exists, with one bounded user-list read per selected profile.
 It reports configuration, connectivity, authentication and access failures.
 It never signs in interactively, installs nothing or enables writes.
@@ -81,18 +83,20 @@ Unknown flags fail before any credential or HTTP work.
 ## Setup (explicit only)
 
 No ordinary command installs or changes configuration.
+Build a checkout with `corepack pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false` and `corepack pnpm build`.
+Install this skill explicitly through your agent's skill installation mechanism; setup only shows guidance and installs no skills or hooks.
 Create profiles explicitly and keep secrets out of argv and config files:
 
 ```sh
-mg-axi setup                                    # installation, config path and capabilities; writes nothing
-mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
-mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All
-mg-axi doctor                                   # one bounded read per selected profile
-mg-axi entra user list --profile soc --limit 10
+node dist/bin/mg-axi.js setup                    # build steps, config path and capabilities; writes nothing
+node dist/bin/mg-axi.js profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
+node dist/bin/mg-axi.js login --profile soc --scopes https://graph.microsoft.com/User.Read.All
+node dist/bin/mg-axi.js doctor                   # one bounded read per selected profile
+node dist/bin/mg-axi.js entra user list --profile soc --limit 10
 ```
 
 Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate file.
-`mg-axi setup` shows the selected path and writes nothing.
+`node dist/bin/mg-axi.js setup` shows the selected path and writes nothing.
 
 ## Selecting a profile
 

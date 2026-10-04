@@ -46,6 +46,7 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra conditional-access policy list/);
   assert.match(result.stdout, /entra conditional-access named-location list/);
   assert.match(result.stdout, /entra group member add/);
+  assert.match(result.stdout, /entra user revoke-sessions/);
   assert.match(result.stdout, /login/);
   assert.doesNotMatch(result.stdout, /Upgrade/);
 });

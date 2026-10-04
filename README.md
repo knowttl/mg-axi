@@ -65,6 +65,21 @@ Use explicit `mg-axi login --profile soc --scopes https://graph.microsoft.com/Us
 Application profiles use the configured Graph `.default` audience with the pair admin-consented on the app registration; the command does not request a per-operation scope subset.
 The update command rejects caller-supplied `--scopes`.
 Delegated callers need `Privileged Authentication Administrator` for admin targets and must generally outrank the target; app-only callers need the pair plus a higher-privileged admin role assignment, and 403 denials surface both rules because a 403 never says which prerequisite is missing.
+WRITE-03 adds a named action write: `mg-axi entra user revoke-sessions --user <user-id>` revokes one user's sign-in sessions through `POST /users/{id}/revokeSignInSessions` with no request body.
+The command treats an accepted 2xx status as success without validating the response body or performing a verification reread; it returns `user.id`, `user.sessionsRevoked: true` and `auditId`.
+The command supports only `--api-version v1.0`; beta writes are rejected before credentials or HTTP.
+Without `--execute` the command previews the action and journals nothing: the preview states that Graph resets `signInSessionsValidFromDateTime`, invalidating issued refresh tokens and browser session cookies so the user must sign in again, and that the action cannot be undone - there is no rollback.
+The preview also carries the two Microsoft-stated limits: token revocation can lag a few minutes after the call returns, and external users are unaffected because they sign in through their home tenant.
+`--user` takes the user object ID only; UPNs are not resolved.
+The target is verified as a user through the user show route before preview and again before sending; a failed or malformed user read blocks the operation.
+Revocation is always disruptive: every `--execute` run needs `--confirm '<user-id>'` repeating the target exactly.
+The revocation action's least-privileged permission is `User.RevokeSessions.All` in both modes.
+Delegated revocation credentials request that scope; reads request `User.ReadBasic.All`, and credentials are acquired silently.
+Use explicit `mg-axi login --profile soc --scopes https://graph.microsoft.com/User.RevokeSessions.All,https://graph.microsoft.com/User.ReadBasic.All` to sign in for the write.
+Application profiles use the configured Graph `.default` audience with `User.RevokeSessions.All` and the prerequisite [user-read permission](https://learn.microsoft.com/en-us/graph/api/user-get?view=graph-rest-1.0), `User.Read.All`, admin-consented on the app registration; the command does not request a per-operation scope subset.
+The revoke command rejects caller-supplied `--scopes`.
+A 403 denial surfaces the `User.RevokeSessions.All` requirement without inventing a role verdict; a timeout or 5xx after sending reports `OUTCOME_UNKNOWN`, and neither outcome is ever replayed.
+Unknown-outcome guidance includes a user read with `--select id`; that read checks target accessibility, not whether revocation took effect.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
 Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
 Data and structured errors use TOON on stdout; diagnostics belong on stderr.
@@ -334,6 +349,7 @@ No command writes that object, and `MG_AXI_READ_ONLY=1` overrides any opt-in.
 For the supported membership write, see the group usage above.
 Named writes run through the shared coordinator under the [named-write execution contract](docs/execution.md#named-writes).
 WRITE-02 binds the `entra.user.update` operation name: hand-enable account writes with `{ "allowWrites": true, "operations": ["entra.user.update"] }`.
+WRITE-03 binds the `entra.user.revokeSessions` operation name: hand-enable session revocation with `{ "allowWrites": true, "operations": ["entra.user.revokeSessions"] }`.
 WRITE-05 binds the `entra.risky-user.dismiss` operation name: hand-enable risk dismissals with `{ "allowWrites": true, "operations": ["entra.risky-user.dismiss"] }`.
 The journal defaults to `~/.mg-axi/writes.log`; a nonblank `MG_AXI_WRITE_LOG` overrides that path.
 
@@ -421,7 +437,7 @@ The pinned [Entra operation inventory](docs/inventory.md) defines the INV-01 dis
 
 ## Release
 
-This is the supported Entra read and gated membership-write surface, not full Entra coverage.
+This is the supported Entra read and gated write surface, not full Entra coverage.
 See the generated [capability report](docs/coverage.md) for implemented reads, writes and discovery dispositions, and the [skill command table](skills/mg-axi/SKILL.md#orientation) for all executable leaves, including local commands.
 The package is marked private and ships no publish workflow: preparing this release never publishes it.
 The packed files are `dist`, the discovery inventory, `skills/mg-axi`, `docs/coverage.md` and this README.

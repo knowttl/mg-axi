@@ -84,7 +84,7 @@ function assertGroupWritable(group: unknown, groupId: string): { id: string; dis
   }
   const row = group as Record<string, unknown>;
   if (row["isAssignableToRole"] === true) {
-    fail(`Refusing role-assignable group ${groupId}: WRITE-01 adds users to non-role-assignable groups only`, "OPERATION_BLOCKED", [
+    fail(`Refusing role-assignable group ${groupId}: this command adds users to non-role-assignable groups only`, "OPERATION_BLOCKED", [
       "Role-assignable membership needs RoleManagement.ReadWrite.Directory and Privileged Role Administrator; that grant belongs to a later slice, never to this command",
       "Verify the group with mg-axi entra group show --id <group-id>",
     ]);
@@ -165,7 +165,7 @@ export async function addGroupMember(args: {
   // Strict flag validation runs before any credential or HTTP.
   const apiVersion = String(flags["api-version"] ?? "v1.0");
   if (apiVersion !== "v1.0") {
-    fail(`No reviewed ${apiVersion} membership write: WRITE-01 binds to v1.0 only`, "VALIDATION_ERROR", [help]);
+    fail(`No reviewed ${apiVersion} membership write: this command binds to v1.0 only`, "VALIDATION_ERROR", [help]);
   }
   const groupId = String(flags.group ?? "").trim();
   if (!groupId) fail("--group needs the group object ID", "VALIDATION_ERROR", [help]);

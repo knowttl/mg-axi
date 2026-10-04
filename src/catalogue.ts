@@ -177,6 +177,12 @@ export const LEAVES: Leaf[] = [
     execute: { description: "Send the PATCH after preview; without it the command only previews the desired-state diff and journals nothing" },
     confirm: { value: "user-id-or-upn", description: "Required with --execute: repeat the --user value exactly" },
   }, examples: ["mg-axi entra user update --user <user-id-or-upn> --account-enabled false --profile soc", "mg-axi entra user update --user <user-id-or-upn> --account-enabled false --execute --confirm '<user-id-or-upn>' --profile soc", "mg-axi entra user update --user <user-id-or-upn> --account-enabled true --execute --confirm '<user-id-or-upn>' --profile soc"] },
+  { path: "entra user revoke-sessions", description: "Revoke one user's sign-in sessions (WRITE-03): action preview states what happens and that it cannot be undone; revocation can lag minutes and never touches external users' home-tenant sessions; D/A User.RevokeSessions.All; disruptive, needs typed confirmation", operation: "POST:/users/{user-id}/revokeSignInSessions", flags: {
+    ...common,
+    user: { value: "user-object-id", required: true, description: "User object ID whose sessions are revoked; verified as a user before preview and sending; UPNs are not resolved" },
+    execute: { description: "Send after preview; without it the command only previews the action and journals nothing" },
+    confirm: { value: "user-object-id", description: "Required with --execute: repeat the --user ID exactly" },
+  }, examples: ["mg-axi entra user revoke-sessions --user <user-id> --profile soc", "mg-axi entra user revoke-sessions --user <user-id> --profile soc --execute --confirm <user-id>"] },
   { path: "entra user authentication-method list", description: "List authentication methods for one named user (id, displayName, createdDateTime); targeted inspection only, never a tenant scan; phone numbers redacted", operation: "GET:/users/{user-id}/authentication/methods", flags: {
     ...common, user: { value: "user-id-or-upn", required: true, description: "User object ID or UPN whose methods are listed" },
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

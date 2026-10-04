@@ -6,6 +6,7 @@ import { Profiles } from "./profiles.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
 import { updateUserAccount } from "./entra-user-update.js";
+import { revokeUserSessions } from "./entra-user-revoke-sessions.js";
 import { createMutationCoordinator, mutationFetchTransport, type MutationTransport } from "./mutations.js";
 import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
 import { listDirectoryRoles, showDirectoryRole, listRoleAssignments, listPimEligible, listPimActive } from "./entra-roles.js";
@@ -213,6 +214,47 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       ...(overrides.journalPath !== undefined ? { journalPath: overrides.journalPath } : {}),
     });
     return updateUserAccount({
+      session,
+      coordinator,
+      flags,
+      profile: selected.profile,
+      profileName: selected.name,
+      readOperation,
+      help: leafHelp(leaf),
+    });
+  }
+  if (leaf.path === "entra user revoke-sessions") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
+    if (!operation || operation.method !== "POST") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    const readLeaf = LEAVES.find(item => item.path === "entra user show")!;
+    const readOperation = operationFor(readLeaf, "v1.0");
+    if (!readOperation || readOperation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${readLeaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const coordinator = createMutationCoordinator({
+      profile: selected.profile,
+      delegated,
+      application,
+      transport: overrides.mutationTransport ?? mutationFetchTransport,
+      ...(overrides.journalPath !== undefined ? { journalPath: overrides.journalPath } : {}),
+    });
+    return revokeUserSessions({
       session,
       coordinator,
       flags,

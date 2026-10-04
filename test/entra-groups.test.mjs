@@ -203,7 +203,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = await executeArgv(["entra", "group", "show", "--id", g2.id, "--profile", profile], overrides);
       assert.equal(result.group.isAssignableToRole, true);
       assert.ok(result.help.some(hint => hint.includes("Role-assignable group")));
-      assert.ok(result.help.some(hint => hint.includes("WRITE-01")));
+      assert.ok(result.help.some(hint => hint.includes("mg-axi entra group member add")));
     } finally {
       teardownProfiles(state);
     }

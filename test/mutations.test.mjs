@@ -462,8 +462,9 @@ test("every catalogue leaf stays a read except the reviewed named writes", () =>
   assert.ok(operations.length > 0);
   assert.ok(operations.includes("POST:/groups/{group-id}/members/$ref"), "WRITE-01 leaf is catalogued");
   assert.ok(operations.includes("PATCH:/users/{user-id}"), "WRITE-02 leaf is catalogued");
+  assert.ok(operations.includes("POST:/users/{user-id}/revokeSignInSessions"), "WRITE-03 leaf is catalogued");
   assert.ok(operations.includes("POST:/identityProtection/riskyUsers/dismiss"), "WRITE-05 leaf is catalogued");
-  const reviewed = new Set(["POST:/groups/{group-id}/members/$ref", "PATCH:/users/{user-id}", "POST:/identityProtection/riskyUsers/dismiss"]);
+  const reviewed = new Set(["POST:/groups/{group-id}/members/$ref", "PATCH:/users/{user-id}", "POST:/users/{user-id}/revokeSignInSessions", "POST:/identityProtection/riskyUsers/dismiss"]);
   for (const operation of operations) {
     if (reviewed.has(operation)) continue;
     assert.match(operation, /^GET:/, `write leaf in catalogue: ${operation}`);

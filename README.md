@@ -1,7 +1,7 @@
 # mg-axi
 
 Agent-facing Microsoft Graph CLI with one shared core and domain packs, read-only by default.
-The Entra pack comes first, with phased full coverage and one gated named write.
+The Entra pack comes first, with phased full coverage and gated named writes.
 
 CLI-01 provides a local TypeScript/AXI shell, strict command catalogue, leaf help and fast version probes.
 AUTH-01 adds versioned dedicated-app delegated profiles and explicit login.
@@ -48,6 +48,23 @@ Delegated user reads default to `https://graph.microsoft.com/User.Read.All` with
 All delegated reads, including raw reads and cursor resumes, reject scopes outside `READ_SCOPES` in the [shared session](src/graph-session.ts) before credential acquisition; [Graph coverage](docs/graph-coverage.md) explains the operation-specific read permission choices.
 Write scopes are refused with `VALIDATION_ERROR` and a list of supported read scopes.
 User reads acquire credentials silently; a resume containing only buffered rows can finish without another Graph request.
+WRITE-02 adds a named write: `mg-axi entra user update --user <user-id-or-upn> --account-enabled true|false` sets one user's `accountEnabled` through `PATCH /users/{id}` with only that property sent.
+`--account-enabled` accepts exactly `true` or `false`; uppercase and whitespace-padded values are rejected.
+The command supports only `--api-version v1.0`; beta writes are rejected before credentials or HTTP.
+Without `--execute` the command previews the desired-state diff read through the user show route and journals nothing; an already-desired value is a no-op with exit 0.
+Preview also requires the write-enabled profile and operation allowlist described below.
+User IDs and UPNs are accepted, including guest UPNs containing `#EXT#`; pass the literal identifier, quoted for the shell, rather than percent-encoding it.
+The first lookup pins the Graph object ID for the PATCH and subsequent reads; successful execution and no-op results return that object ID in `user.id`.
+Enabling and disabling are disruptive: every `--execute` run needs `--confirm '<user-id-or-upn>'` repeating the target exactly, including already-desired states.
+After a successful PATCH the command rereads the user and reports a `WRITE_CONFLICT` when the value is not what was sent; user-update answers 204 with an empty body, so the reread is the only proof.
+A failed verification read reports `OUTCOME_UNKNOWN`; read back the pinned object ID before proceeding and never replay the intent.
+Fresh reads do not make this write atomic: no ETag condition is sent, so another actor can change the account between the read, PATCH and verification.
+The least-privileged permission pair is `User.EnableDisableAccount.All` plus `User.Read.All` in both modes.
+Delegated PATCH credentials request both scopes together; reads request `User.Read.All`, and credentials are acquired silently.
+Use explicit `mg-axi login --profile soc --scopes https://graph.microsoft.com/User.EnableDisableAccount.All,https://graph.microsoft.com/User.Read.All` to sign in for the write.
+Application profiles use the configured Graph `.default` audience with the pair admin-consented on the app registration; the command does not request a per-operation scope subset.
+The update command rejects caller-supplied `--scopes`.
+Delegated callers need `Privileged Authentication Administrator` for admin targets and must generally outrank the target; app-only callers need the pair plus a higher-privileged admin role assignment, and 403 denials surface both rules because a 403 never says which prerequisite is missing.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
 Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
 Data and structured errors use TOON on stdout; diagnostics belong on stderr.
@@ -302,7 +319,9 @@ Preview is disabled and sensitive areas are empty in newly created profiles.
 Writes stay disabled unless a human hand-edits a `writes` object into the profile file: `{ "allowWrites": true, "operations": ["<operation-name>"] }`.
 The object accepts only `allowWrites` (boolean) and `operations` (1 to 64 nonempty operation names, each at most 256 characters), including when `allowWrites` is false.
 No command writes that object, and `MG_AXI_READ_ONLY=1` overrides any opt-in.
-For the supported membership write, see the group usage above and the [named-write execution contract](docs/execution.md#named-writes).
+For the supported membership write, see the group usage above.
+Named writes run through the shared coordinator under the [named-write execution contract](docs/execution.md#named-writes).
+WRITE-02 binds the `entra.user.update` operation name: hand-enable account writes with `{ "allowWrites": true, "operations": ["entra.user.update"] }`.
 The journal defaults to `~/.mg-axi/writes.log`; a nonblank `MG_AXI_WRITE_LOG` overrides that path.
 
 Browser login uses Microsoft's [MSAL interactive API](https://learn.microsoft.com/en-us/entra/msal/javascript/node/acquire-token-requests) and PKCE.

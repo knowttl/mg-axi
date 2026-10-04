@@ -169,7 +169,7 @@ test("read-time scopes never widen the write scope", async () => {
   assert.equal(f.requests.length, 0);
 });
 
-for (const path of ["", "v1.0/fixture", "/beta/fixture/notes", "/v1.0/../tenants", "/v1.0/a b", "/v1.0/a?b=c", "/v1.0/a#b", "/v1.0/a\\b", "/v1.0/", "/v1.0//notes", "/v1.0/a/{b}", "/v1.0/%2e%2e/x"]) {
+for (const path of ["", "v1.0/fixture", "/beta/fixture/notes", "/v1.0/../tenants", "/v1.0/a b", "/v1.0/a?b=c", "/v1.0/a#b", "/v1.0/a\\b", "/v1.0/", "/v1.0//notes", "/v1.0/a/{b}", "/v1.0/%2e%2e/x", "/v1.0/a%2fb", "/v1.0/a%5cb", "/v1.0/a%252fb", "/v1.0/%20", "/v1.0/%00", "/v1.0/%7bb%7d", "/v1.0/%zz"]) {
   test(`hostile mutation path ${JSON.stringify(path)} is refused with zero sends`, async () => {
     const f = fixture();
     await assert.rejects(
@@ -457,12 +457,14 @@ test("recreated coordinator refuses an intent recorded without a terminal outcom
   assert.equal(f.requests.length, 0);
 });
 
-test("every catalogue leaf stays a read except the reviewed WRITE-01 membership write", () => {
+test("every catalogue leaf stays a read except the reviewed named writes", () => {
   const operations = LEAVES.filter(leaf => leaf.operation).map(leaf => leaf.operation);
   assert.ok(operations.length > 0);
   assert.ok(operations.includes("POST:/groups/{group-id}/members/$ref"), "WRITE-01 leaf is catalogued");
+  assert.ok(operations.includes("PATCH:/users/{user-id}"), "WRITE-02 leaf is catalogued");
+  const reviewed = new Set(["POST:/groups/{group-id}/members/$ref", "PATCH:/users/{user-id}"]);
   for (const operation of operations) {
-    if (operation === "POST:/groups/{group-id}/members/$ref") continue;
+    if (reviewed.has(operation)) continue;
     assert.match(operation, /^GET:/, `write leaf in catalogue: ${operation}`);
   }
 });

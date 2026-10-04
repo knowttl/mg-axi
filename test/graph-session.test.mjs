@@ -84,6 +84,18 @@ test("path parameters bind one encoded resource per placeholder", async () => {
   assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/users/analyst%40example.invalid");
 });
 
+test("guest UPN remains bound across a same-resource redirect", async () => {
+  const user = "alice_example.com#EXT#@tenant.onmicrosoft.com";
+  const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(user)}`;
+  const redirectedUrl = `${url}?$select=id`;
+  const f = fixture((request, count) => count === 1
+    ? { status: 302, headers: { location: redirectedUrl }, body: "" }
+    : json(200, { id: user }));
+  const result = await f.session.execute({ profile: delegatedProfile, operation: userById, params: { "user-id": user }, scopes });
+  assert.deepEqual(result, { id: user });
+  assert.deepEqual(f.requests.map(request => request.url), [url, redirectedUrl]);
+});
+
 for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) {
   for (const params of [{}, { appId: client }]) test(`${profile.mode} embedded path templates with ${Object.keys(params).length} bindings fail before credentials`, async () => {
     const operation = resolveSessionOperation("v1.0", "GET", "/applications(appId='{appId}')");

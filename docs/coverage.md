@@ -11,7 +11,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 ## Counts
 
 - implemented read leaves: 40 (38 named Entra reads plus reviewed raw api get and doctor health check)
-- implemented write leaves: 1 (gated named Entra writes)
+- implemented write leaves: 2 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
 - inventory reviewed-raw-read: 0
@@ -63,10 +63,18 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra conditional-access policy show` | `GET:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}` | scheduled | READ-03 |
 | `mg-axi entra conditional-access named-location list` | `GET:/identity/conditionalAccess/namedLocations` | scheduled | READ-03 |
 | `mg-axi entra conditional-access named-location show` | `GET:/identity/conditionalAccess/namedLocations/{namedLocation-id}` | scheduled | READ-03 |
-| `mg-axi entra group member add` | `POST:/groups/{group-id}/members/$ref` | scheduled | WRITE-01 |
 | `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |
 | `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |
 
-Extended families (EXT-01 through EXT-04), later writes (WRITE-02 and
+## Named writes
+
+Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, immutable scope, preview, explicit `--execute`, typed target confirmation for disruptive effects, durable journal intent/outcome and no replay. Inventory dispositions stay discovery-time records until a metadata refresh reviews them; the implemented review lives beside each command.
+
+| Command | Operation | Owning slice |
+|---|---|---|
+| `mg-axi entra user update` | `PATCH:/users/{user-id}` | WRITE-02 |
+| `mg-axi entra group member add` | `POST:/groups/{group-id}/members/$ref` | WRITE-01 |
+
+Extended families (EXT-01 through EXT-04), later writes (WRITE-03 and
 beyond) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining
 scheduled rows; see docs/build-plan.md for their dispatch.

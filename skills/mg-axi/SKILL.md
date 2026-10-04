@@ -1,6 +1,6 @@
 ---
 name: mg-axi
-description: Use mg-axi for Microsoft Entra inspection and gated user group membership adds through agent-ergonomic TOON output.
+description: Use mg-axi for Microsoft Entra inspection and gated writes (account-state updates, user group membership adds) - users, groups, roles, devices, sign-ins, applications, consent grants, risk and Conditional Access through agent-ergonomic TOON output.
 user-invocable: false
 ---
 
@@ -8,7 +8,8 @@ user-invocable: false
 
 Agent-ergonomic CLI for Microsoft Graph, read-only by default.
 Entra SOC reads through token-efficient TOON output.
-One gated write leaf exists (`entra group member add`); every other mutation is refused.
+Two gated write leaves exist (`entra user update` for account enable/disable, `entra group member add` for user membership) through a separately gated mutation coordinator; raw API remains read-only and every other mutation is refused.
+See [README.md](../../README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.
 
 From a built checkout, run commands from the repository root with `node dist/bin/mg-axi.js`.
 Throughout this skill and CLI output, substitute that invocation for `mg-axi` unless you have separately installed the executable on PATH.
@@ -18,7 +19,8 @@ See [README.md](../../README.md#release) for doctor profile selection, checks an
 ## Orientation
 
 The exact current leaf registry is `src/catalogue.ts`.
-The generated table below records each leaf's capability and effect.
+Its capability label is `native` (implemented by an mg-axi handler).
+Its effect is `read` for Graph read leaves and the doctor health check, `write` for the gated named writes, or `local` for home, profile, login and setup views.
 Doctor acquires credentials silently and contacts Graph; only its help view stays offline.
 The list below records current executable leaves; it makes no coverage claim for other Graph operations.
 See `docs/coverage.md` for the per-operation disposition records.
@@ -36,6 +38,7 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi doctor` | native | read |
 | `mg-axi entra user list` | native | read |
 | `mg-axi entra user show` | native | read |
+| `mg-axi entra user update` | native | write |
 | `mg-axi entra user authentication-method list` | native | read |
 | `mg-axi entra registration list` | native | read |
 | `mg-axi entra group list` | native | read |

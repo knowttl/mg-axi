@@ -9,12 +9,11 @@ import { LEAVES } from "./catalogue.js";
 
 // One row per executable leaf in catalogue order.
 // Every leaf is implemented by an mg-axi handler (native). Graph
-// leaves carry the read effect; the WRITE-01 membership write carries write.
-function leafEffect(leaf: { operation?: string; path: string }): string {
-  if (leaf.operation === undefined) return leaf.path === "api get" || leaf.path === "doctor" ? "read" : "local";
-  return leaf.operation.startsWith("GET:") ? "read" : "write";
+// leaves carry the read effect, except reviewed named writes.
+function leafEffect(leaf: { path: string; operation?: string }): string {
+  if (leaf.operation !== undefined) return leaf.operation.startsWith("GET:") ? "read" : "write";
+  return leaf.path === "api get" || leaf.path === "doctor" ? "read" : "local";
 }
-
 export function skillCommandTable(): string {
   return [
     "| Command | Capability | Effect |",
@@ -46,9 +45,13 @@ export function capabilityDocument(): string {
   const count = (disposition: string): number => rows.filter(row => row.disposition === disposition).length;
   const readLeaves = LEAVES.filter(leaf => leaf.operation !== undefined && leaf.operation.startsWith("GET:"));
   const writeLeaves = LEAVES.filter(leaf => leaf.operation !== undefined && !leaf.operation.startsWith("GET:"));
-  const commandRows = [...readLeaves, ...writeLeaves].map(leaf => {
+  const commandRows = readLeaves.map(leaf => {
     const row = rows.find(candidate => candidate.id === `v1.0:${leaf.operation}`);
     return `| \`mg-axi ${leaf.path}\` | \`${leaf.operation}\` | ${row ? row.disposition : "no v1.0 inventory row"} | ${row?.owningSlice ?? "-"} |`;
+  });
+  const writeRows = writeLeaves.map(leaf => {
+    const row = rows.find(candidate => candidate.id === `v1.0:${leaf.operation}`);
+    return `| \`mg-axi ${leaf.path}\` | \`${leaf.operation}\` | ${row?.owningSlice ?? "-"} |`;
   });
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
@@ -66,7 +69,7 @@ export function capabilityDocument(): string {
     "## Counts",
     "",
     `- implemented read leaves: ${readCount} (${readLeaves.length} named Entra reads plus reviewed raw api get and doctor health check)`,
-    `- implemented write leaves: ${writeLeaves.length} (gated named Entra writes)`,
+    `- implemented write leaves: ${writeLeaves.length} (named gated mutations below)`,
     `- local leaves: ${localCount} (home, profile, login and setup views)`,
     ...DISPOSITIONS.map(disposition => `- inventory ${disposition}: ${count(disposition)}`),
     "",
@@ -78,7 +81,15 @@ export function capabilityDocument(): string {
     "| `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |",
     "| `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |",
     "",
-    "Extended families (EXT-01 through EXT-04), later writes (WRITE-02 and",
+    "## Named writes",
+    "",
+    "Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, immutable scope, preview, explicit `--execute`, typed target confirmation for disruptive effects, durable journal intent/outcome and no replay. Inventory dispositions stay discovery-time records until a metadata refresh reviews them; the implemented review lives beside each command.",
+    "",
+    "| Command | Operation | Owning slice |",
+    "|---|---|---|",
+    ...writeRows,
+    "",
+    "Extended families (EXT-01 through EXT-04), later writes (WRITE-03 and",
     "beyond) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining",
     "scheduled rows; see docs/build-plan.md for their dispatch.",
     "",

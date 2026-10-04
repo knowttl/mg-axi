@@ -4,8 +4,9 @@
 
 Only named, approved pack commands can mutate; raw API remains read-only.
 WRITE-00 provides the shared [mutation coordinator](../src/mutations.ts).
-WRITE-01 ships the first named command (`entra group member add`) with a production POST transport; later families still ship independently with their own contracts.
-Profile enablement and environment configuration are documented in [README.md](../README.md).
+WRITE-01 ships the first named command (`entra group member add`); WRITE-02 adds the named `entra user update` account-state command.
+Both commands use the shared production [mutation transport](../src/mutations.ts); later families still ship independently with their own contracts.
+Profile enablement and environment configuration are documented in [README.md](../README.md); account-state usage, confirmation, identity pinning, permissions and concurrency limitations are documented there as well.
 The coordinator snapshots the validated profile's tenant, identity and approved-operation scope at creation; later profile edits cannot widen that scope.
 It checks forced read-only and profile enablement before preview, and the sender checks forced read-only again before credential acquisition and immediately before transport handoff.
 Preview redacts current state and proposed payload using the shared Graph redaction boundary.
@@ -57,7 +58,7 @@ Slice IDs and dependencies are defined in the [dispatch plan](build-plan.md).
 | Slice | Operation and permission | Material constraints |
 |---|---|---|
 | WRITE-01 Membership | [POST /groups/{id}/members/$ref](https://learn.microsoft.com/en-us/graph/api/group-post-members?view=graph-rest-1.0) | Shipped; supported targets and permission requirements are documented in [README.md](../README.md). |
-| WRITE-02 Account state | [PATCH /users/{id}](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0), D/A User.EnableDisableAccount.All + User.Read.All for accountEnabled | Sensitive-target role hierarchy also applies, including documented app-role requirements for app-only sensitive updates. |
+| WRITE-02 Account state | [PATCH /users/{id}](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0) | Shipped; account-state usage, permissions and sensitive-target role hierarchy are documented in [README.md](../README.md). |
 | WRITE-03 Revoke sessions | [POST /users/{id}/revokeSignInSessions](https://learn.microsoft.com/en-us/graph/api/user-revokesigninsessions?view=graph-rest-1.0), D/A User.RevokeSessions.All | Preview the action, do not invent a state diff or promise immediate universal session termination; no automatic replay of ambiguous requests. |
 | WRITE-04 CA policy update | [PATCH /identity/conditionalAccess/policies/{id}](https://learn.microsoft.com/en-us/graph/api/conditionalaccesspolicy-update?view=graph-rest-1.0), D/A Policy.Read.All + Policy.ReadWrite.ConditionalAccess | P1, P2 for risk-based features; delegated administrator role; review lockout risk and concurrency limitations. |
 | WRITE-05 Risk dismissal | [POST /identityProtection/riskyUsers/dismiss](https://learn.microsoft.com/en-us/graph/api/riskyuser-dismiss?view=graph-rest-1.0), D/A IdentityRiskyUser.ReadWrite.All | P2; initially one explicit user; confirmation targets the user, not the collection action; dismissal is not remediation. |

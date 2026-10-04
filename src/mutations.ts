@@ -5,11 +5,11 @@ import { dirname, join } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
-import { GRAPH_HOST, redactGraphValue } from "./graph-session.js";
+import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-session.js";
 import { validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
 
-// Shared mutation coordinator for named writes. The gate order
-// follows az-axi's write gates as the reference: read-only default,
+// Shared mutation coordinator for reviewed named mutation families.
+// The gate order follows az-axi's write gates as the reference: read-only default,
 // allowWrites plus a scope allowlist, preview, --execute, --confirm,
 // --if-match and a durable journal. The shared read-only
 // scope guard in graph-session.ts stays in force for reads; write scopes are
@@ -34,7 +34,8 @@ export function resolveWriteLogPath(env: NodeJS.ProcessEnv = process.env): strin
 export type MutationMethod = "POST" | "PUT" | "PATCH" | "DELETE";
 export type MutationEffect = "write" | "disruptive";
 
-// A named mutation must fall inside the profile's configured operation scope.
+// Named handlers bind reviewed mutations to this shape; the operation must
+// fall inside the profile's configured scope.
 export type MutationDefinition = {
   operation: string;
   method: MutationMethod;
@@ -100,7 +101,7 @@ export type MutationCoordinator = {
 
 // Mutation-only transport seam: the read GraphTransport carries GET only, so
 // mutations travel on this separate type. Tests substitute fixture
-// transports; named write modules supply their production transports.
+// transports.
 export interface MutationTransportRequest {
   method: MutationMethod;
   url: string;
@@ -116,6 +117,21 @@ export interface MutationTransportResponse {
 }
 
 export type MutationTransport = (request: MutationTransportRequest) => Promise<MutationTransportResponse>;
+
+export const mutationFetchTransport: MutationTransport = async request => {
+  const response = await fetch(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: request.body,
+    signal: request.signal,
+    redirect: "manual",
+  });
+  const headers: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+  return { status: response.status, headers, body: await response.text() };
+};
 
 // Coordinator-minted authorization: an unforgeable capability the sender
 // consumes once. There is no self-service authorize on the sender; anything
@@ -414,7 +430,7 @@ export function createMutationCoordinator(args: {
         "WRITES_DISABLED",
         [
           "Writes are disabled for this profile",
-          "WRITE-00 supports fixture-driven coordinator tests only; no mutation command is available",
+          "Enable named writes explicitly in the profile configuration; see README.md for the write gates",
         ],
       );
     }
@@ -422,7 +438,7 @@ export function createMutationCoordinator(args: {
     // definition fails as VALIDATION_ERROR before membership is considered.
     if (!definition.operation.trim()) {
       throw new AxiError("Mutation operation must be a non-empty name", "VALIDATION_ERROR", [
-        "Name the fixture operation the coordinator should authorize",
+        "Name the approved operation the coordinator should authorize",
       ]);
     }
     if (!definition.target.trim()) {
@@ -432,7 +448,7 @@ export function createMutationCoordinator(args: {
     }
     if (definition.version !== "v1.0") {
       throw new AxiError(`Unsupported mutation version ${definition.version}`, "VALIDATION_ERROR", [
-        "WRITE-00 binds fixture mutations to v1.0; beta writes stay blocked",
+        "Mutations are bound to v1.0; beta writes stay blocked",
       ]);
     }
     // Gate 3: the operation must fall inside the profile's own configured scope.
@@ -442,7 +458,7 @@ export function createMutationCoordinator(args: {
         "OPERATION_NOT_WRITABLE",
         [
           "Writes are limited to this profile's configured operations",
-          "WRITE-00 supports fixture-driven coordinator tests only; no mutation command is available",
+          "The named write must be in the profile's writes.operations allowlist; see README.md for configuration",
         ],
       );
     }
@@ -453,10 +469,21 @@ export function createMutationCoordinator(args: {
     const segments = definition.path.split("/");
     if (!definition.path.startsWith(prefix) || segments[0] !== ""
       || segments.slice(1).some(segment => !segment || segment === "." || segment === "..")
-      || /[%\s\x00-\x1f\x7f\\?#{}]/.test(definition.path)) {
+      || /[\s\x00-\x1f\x7f\\?#{}]/.test(definition.path)) {
       throw new AxiError("Refusing mutation path outside the bound operation scope", "VALIDATION_ERROR", [
         `Mutation paths must stay under ${prefix} without traversal, query strings or fragments`,
       ]);
+    }
+    for (const segment of segments.slice(1)) {
+      let decoded: string;
+      try {
+        decoded = decodeURIComponent(segment);
+      } catch {
+        throw new AxiError("Invalid mutation path encoding", "VALIDATION_ERROR", [
+          "Bind one encoded resource identifier per path segment",
+        ]);
+      }
+      encodeGraphPathSegment(decoded);
     }
     return `https://${GRAPH_HOST}${definition.path}`;
   }

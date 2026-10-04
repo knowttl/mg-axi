@@ -321,7 +321,22 @@ Risk reads truncate text longer than 500 characters, including nested values suc
 See the [access and licence contract](docs/graph-coverage.md#licence-matrix-by-area) for the riskyUsers P2 requirement and risk-detection P1/P2 detail boundaries.
 Limited views stay limited: a premium detection without P2 detail reports `riskEventType` generic, hidden risk levels report the licence boundary instead of the level, and a null detection `correlationId` means no sign-in is associated.
 To correlate a detection to sign-ins, use `risk-detection show` or select `activityDateTime`, then filter the sign-in list above on the detection's `userPrincipalName` in that activity window; sign-in reads require the separate `AuditLog.Read.All` login above, and there is no riskySignIns endpoint.
-Risk dismissal is a separately reviewed write, so risk reads never confirm, dismiss or remediate risk.
+WRITE-05 adds a named write: `mg-axi entra risky-user dismiss --user <risky-user-id>` dismisses one user's risk through `POST /identityProtection/riskyUsers/dismiss` with a single-element `{ "userIds": [...] }` body.
+There is no bulk form: `--user` takes exactly one ID and a comma-separated list is a usage error.
+The command supports only `--api-version v1.0`; beta writes are rejected before credentials or HTTP.
+Without `--execute` the command previews the user's current risk state read through the risky-user show route and journals nothing; an already-dismissed user is a no-op with exit 0.
+Preview also requires the write-enabled profile and operation allowlist described below.
+Dismissal is disruptive: every `--execute` run needs `--confirm '<risky-user-id>'` repeating the target exactly, including already-dismissed states.
+Dismissal answers 204 with an empty body, so after a send the command rereads the user and reports a `WRITE_CONFLICT` when the state is not dismissed; a failed verification read reports `OUTCOME_UNKNOWN`.
+A timeout or 5xx after send is `OUTCOME_UNKNOWN` with no replay: read back the user before doing anything else.
+Fresh reads do not make dismissal atomic: no ETag condition is sent, so another actor can change the risk state between the read, POST and verification.
+Dismissal is not remediation: it records the risk as dismissed without resetting credentials or revoking sessions.
+Delegated dismissal requests `IdentityRiskyUser.ReadWrite.All` while preview, pre-send and verification reads request `IdentityRiskyUser.Read.All`; credentials are acquired silently.
+Use explicit `mg-axi login --profile soc --scopes https://graph.microsoft.com/IdentityRiskyUser.ReadWrite.All,https://graph.microsoft.com/IdentityRiskyUser.Read.All` to sign in for the write and its prerequisite reads.
+Application profiles use the configured Graph `.default` audience with `IdentityRiskyUser.ReadWrite.All` admin-consented on the app registration; the prerequisite reads also require a [supported risky-user read permission](https://learn.microsoft.com/en-us/graph/api/riskyuser-get?view=graph-rest-1.0).
+The dismissal command rejects caller-supplied `--scopes`.
+Delegated callers additionally need `Security Administrator`, and the riskyUsers API requires a Microsoft Entra ID P2 licence; 403 denials surface the permission, role and licence rules because a 403 never says which prerequisite is missing.
+Risk reads never confirm, dismiss or remediate risk.
 
 Configure the registration's Mobile and desktop applications redirect URI as `http://localhost` for browser login.
 The first created profile is the default; `--profile` selects another identity explicitly.
@@ -338,6 +353,7 @@ For the supported membership write, see the group usage above.
 Named writes run through the shared coordinator under the [named-write execution contract](docs/execution.md#named-writes).
 WRITE-02 binds the `entra.user.update` operation name: hand-enable account writes with `{ "allowWrites": true, "operations": ["entra.user.update"] }`.
 WRITE-03 binds the `entra.user.revokeSessions` operation name: hand-enable session revocation with `{ "allowWrites": true, "operations": ["entra.user.revokeSessions"] }`.
+WRITE-05 binds the `entra.risky-user.dismiss` operation name: hand-enable risk dismissals with `{ "allowWrites": true, "operations": ["entra.risky-user.dismiss"] }`.
 The journal defaults to `~/.mg-axi/writes.log`; a nonblank `MG_AXI_WRITE_LOG` overrides that path.
 
 Browser login uses Microsoft's [MSAL interactive API](https://learn.microsoft.com/en-us/entra/msal/javascript/node/acquire-token-requests) and PKCE.

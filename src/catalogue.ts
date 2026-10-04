@@ -490,6 +490,12 @@ export const LEAVES: Leaf[] = [
     full: riskRead.full,
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to IdentityRiskyUser.Read.All" },
   }, examples: ["mg-axi entra risky-user show --id <risky-user-id> --profile soc", "mg-axi entra risky-user show --id <risky-user-id> --profile soc --full"] },
+  { path: "entra risky-user dismiss", description: "Dismiss one user's risk (WRITE-05): single-user POST with the current risk state previewed through the risky-user show route; dismissal is not remediation (it resets no credential and revokes no session); D/A IdentityRiskyUser.ReadWrite.All plus Security Administrator for delegated callers; the riskyUsers API requires P2", operation: "POST:/identityProtection/riskyUsers/dismiss", flags: {
+    ...common,
+    user: { value: "risky-user-id", required: true, description: "Exactly one risky-user ID to dismiss; there is no bulk form" },
+    execute: { description: "Send the dismissal after preview; without it the command only previews the current risk state and journals nothing" },
+    confirm: { value: "risky-user-id", description: "Required with --execute: repeat the --user value exactly" },
+  }, examples: ["mg-axi entra risky-user dismiss --user <risky-user-id> --profile soc", "mg-axi entra risky-user dismiss --user <risky-user-id> --execute --confirm '<risky-user-id>' --profile soc"] },
   { path: "entra risk-detection list", description: "List risk detections in a bounded time window (IdentityRiskEvent.Read.All; delegated callers also need Global Reader, Security Operator, Security Reader or Security Administrator; P1 or P2, with premium detail limited without P2)", operation: "GET:/identityProtection/riskDetections", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

@@ -298,6 +298,58 @@ test("cursor resumes buffered rows and the next page with its original query", a
   assert.equal(new URL(f.requests[1].url).searchParams.get("$skiptoken"), "next");
 });
 
+for (const profile of [delegatedProfile, appProfile]) {
+  const methodPath = "/users/a/authentication/methods";
+  const methodUrl = `https://graph.microsoft.com/v1.0${methodPath}`;
+  const rows = [{ id: "a", displayName: "Phone", phoneNumber: "+1 5550100" }];
+  for (const [name, responses] of [
+    ["initial", [json(200, { value: rows })]],
+    ["redirected", [{ status: 302, headers: { location: `${methodUrl}?$select=id` } }, json(200, { value: rows })]],
+  ]) {
+    test(`${profile.mode} raw ${name} method read preserves local selection`, async () => {
+      const f = read({ path: methodPath, profile, odata: "$select=id" }, (_request, count) => responses[count - 1]);
+      assert.deepEqual(await f.run({}), { returned: 1, complete: true, value: [{ id: "a" }] });
+      assert.equal(f.requests.length, responses.length);
+      assert.ok(f.requests.every(request => !new URL(request.url).searchParams.has("$select")));
+    });
+  }
+
+  test(`${profile.mode} raw method selection survives buffered and continued resume`, async () => {
+    const responses = [
+      json(200, { value: [...rows, { id: "b", displayName: "Email" }], "@odata.nextLink": `${methodUrl}?$skiptoken=next&$select=id` }),
+      json(200, { value: [{ id: "c", displayName: "Key" }] }),
+    ];
+    const f = read({ path: methodPath, profile, limit: 1 }, (_request, count) => responses[count - 1]);
+    const first = await f.run({ odata: "$select=id" });
+    assert.deepEqual(first.value, [{ id: "a" }]);
+    assert.equal(first.complete, false);
+    assert.deepEqual(await f.run({ cursor: first.cursor, limit: undefined }), {
+      returned: 2, complete: true, value: [{ id: "b" }, { id: "c" }],
+    });
+    assert.equal(f.requests.length, 2);
+    assert.ok(f.requests.every(request => !new URL(request.url).searchParams.has("$select")));
+  });
+
+  test(`${profile.mode} raw method selection survives a throttled retry`, async () => {
+    const responses = [{ status: 429, headers: { "Retry-After": "3600" } }, json(200, { value: rows })];
+    const f = read({ path: methodPath, profile }, (_request, count) => responses[count - 1]);
+    const first = await f.run({ odata: "$select=id" });
+    assert.equal(first.complete, false);
+    assert.deepEqual(await f.run({ cursor: first.cursor }), { returned: 1, complete: true, value: [{ id: "a" }] });
+    assert.equal(f.requests.length, 2);
+    assert.ok(f.requests.every(request => !new URL(request.url).searchParams.has("$select")));
+  });
+
+  for (const odata of ["$filter=phoneType eq 'mobile'", "$top=1", "$orderby=id"]) {
+    test(`${profile.mode} raw methods reject unsupported ${odata} before credentials`, async () => {
+      const f = read({ path: methodPath, profile, odata });
+      await assert.rejects(f.run({}), { code: "VALIDATION_ERROR" });
+      assert.equal(f.credentialCalls.length, 0);
+      assert.equal(f.requests.length, 0);
+    });
+  }
+}
+
 test("cursor preserves untruncated buffered strings", async () => {
   const long = "x".repeat(5000);
   const f = read({ limit: 1 }, json(200, { value: [{ id: "a" }, { id: "b", displayName: long }] }));

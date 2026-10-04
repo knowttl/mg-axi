@@ -44,8 +44,6 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
     assert.equal(request.headers.Authorization, `Bearer opaque-fixture-${mode}-token`);
     const url = new URL(request.url);
     assert.equal(url.origin, "https://graph.microsoft.com");
-    // Neither collection documents a method-specific query contract, so a
-    // filter must arrive as plain $filter with no advanced-query contract.
     if (url.searchParams.has("$filter")) {
       assert.equal(request.headers.ConsistencyLevel, undefined);
       assert.equal(url.searchParams.has("$count"), false);
@@ -56,6 +54,8 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
       status = 403;
       body = { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } };
     } else if (/^\/v1\.0\/users\/[^/]+\/authentication\/methods$/.test(url.pathname)) {
+      assert.equal(url.searchParams.has("$select"), false);
+      assert.equal(url.searchParams.has("$filter"), false);
       body = { value: methods };
     } else if (url.pathname === "/v1.0/reports/authenticationMethods/userRegistrationDetails") {
       body = { value: report };

@@ -65,7 +65,6 @@ const ownerRead = {
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Application.Read.All" },
 };
 const authMethodRead = {
-  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Select output properties locally from the reviewed method set; phoneNumber is always redacted; no $select is sent to Graph" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must belong to the default or --select set" },
   full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
@@ -73,7 +72,7 @@ const authMethodRead = {
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to UserAuthenticationMethod.Read.All" },
 };
 const registrationRead = {
-  filter: authMethodRead.filter,
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties from the reviewed report set" },
   fields: authMethodRead.fields,
   full: authMethodRead.full,
@@ -155,7 +154,6 @@ export const LEAVES: Leaf[] = [
     ...common, user: { value: "user-id-or-upn", required: true, description: "User object ID or UPN whose methods are listed" },
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
     all: { description: "Follow pages within request, byte and deadline budgets" },
-    filter: authMethodRead.filter,
     select: authMethodRead.select,
     fields: authMethodRead.fields,
     full: authMethodRead.full,

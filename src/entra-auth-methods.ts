@@ -300,11 +300,9 @@ async function listCollection(
     shape.known, shape.knownList, help);
   const savedFilter = saved?.$filter;
   const filter = flags.filter === undefined ? savedFilter : String(flags.filter);
+  if (shape.preserveType && filter !== undefined) throw new AxiError("Authentication-method reads do not support --filter", "VALIDATION_ERROR", [help]);
   const scopes = scopesFor(flags, profile, shape.defaultScopes, help);
   const full = flags.full === true;
-  // Neither collection documents a method-specific query contract, so
-  // --filter passes through as plain $filter with no $count or
-  // ConsistencyLevel attached, exactly like the role reads.
   const query: Record<string, string> = { $select: select.join(",") };
   if (filter !== undefined) query.$filter = filter;
   const args: CollectArgs = { profile, operation, query, scopes };
@@ -317,7 +315,7 @@ async function listCollection(
   }
   const result = await withGuidance(shape.denialHints, () => session.collect(args));
   const effectiveFlags: AuthMethodFlags = { ...flags, select: result.query.$select ?? shape.defaultSelect.join(",") };
-  if (result.query.$filter !== undefined) effectiveFlags.filter = result.query.$filter;
+  if (!shape.preserveType && result.query.$filter !== undefined) effectiveFlags.filter = result.query.$filter;
   const rows: Record<string, unknown>[] = [];
   let truncated = false;
   for (const row of result.value) {

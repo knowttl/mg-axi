@@ -216,6 +216,20 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
+  test(`${mode} method reads reject --filter before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(executeArgv(["entra", "user", "authentication-method", "list",
+        "--user", userId, "--profile", profile, "--filter", "phoneType eq 'mobile'"], overrides),
+      error => error.code === "VALIDATION_ERROR");
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
   test(`${mode} lists the registration report with the disabled-user gap explicit`, async () => {
     const state = setupProfiles();
     try {

@@ -105,7 +105,7 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
   { id: "v1.0:GET:/identity/conditionalAccess/namedLocations/{namedLocation-id}", kind: "single", query: SINGLE_QUERY, fields: NAMED_LOCATION_FIELDS,
     access: "D/A Policy.Read.All. Delegated callers pass it as --scopes; a supported administrator role (for example Security Reader) is also required.",
     sources: ["https://learn.microsoft.com/graph/api/countrynamedlocation-get?view=graph-rest-1.0"] },
-  { id: "v1.0:GET:/users/{user-id}/authentication/methods", kind: "collection", query: COLLECTION_QUERY, fields: AUTH_METHOD_FIELDS,
+  { id: "v1.0:GET:/users/{user-id}/authentication/methods", kind: "collection", query: ["$select"], fields: AUTH_METHOD_FIELDS,
     access: "D/A UserAuthenticationMethod.Read.All for other users; delegated self UserAuthenticationMethod.Read. Dedicated administrator roles also apply.",
     note: "Targeted per-user inspection only; aggregate coverage belongs to the registration report, never to a scan across users.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/authentication-list-methods?view=graph-rest-1.0"] },
@@ -357,26 +357,30 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
     ]);
   }
   const query = args.cursor !== undefined && args.odata === undefined ? undefined : parseQuery(args.odata);
-  if (query !== undefined) checkQuery(route, query);
   // The inventory row is authoritative for destination, method and policy; the
   // review above only selects which row may run. Binding, query-shape and
   // policy failures below still throw before the session acquires credentials.
   const operation = resolveSessionOperation(version, "GET", route.id.slice(`${version}:GET:`.length));
+  const localSelection = operation.path === "/users/{user-id}/authentication/methods";
   const scopes = args.scopes === undefined ? undefined : args.scopes.split(",").map(scope => scope.trim()).filter(scope => scope.length > 0);
   const session = new GraphSession({ ...deps, transport: async request => {
     const url = new URL(request.url);
     const query = Object.fromEntries(url.searchParams);
     delete query["$skiptoken"];
     checkQuery(route, query);
-    url.searchParams.set("$select", query["$select"]!);
+    if (localSelection) url.searchParams.delete("$select");
+    else url.searchParams.set("$select", query["$select"]!);
     const response = await deps.transport({ ...request, url: url.toString() });
     if (response.status < 200 || response.status >= 300 || !response.body) return response;
     let body: unknown;
     try { body = JSON.parse(response.body); } catch { return response; }
     if (route.kind === "single") body = reviewedFields(route, body);
-    else if (isRecord(body) && Array.isArray(body.value)) body = { ...body, value: body.value.map(row => reviewedFields(route, row)) };
+    else if (isRecord(body) && Array.isArray(body.value)) body = { ...body, value: body.value.map(row => reviewedFields(outputRoute, row)) };
     return { ...response, body: JSON.stringify(body), receivedBodyBytes: response.receivedBodyBytes ?? Buffer.byteLength(response.body, "utf8") };
   } });
+  const selection = query ?? { ...session.cursorQuery(operation, args.cursor!) };
+  checkQuery(route, selection);
+  const outputRoute = localSelection ? { ...route, fields: selection["$select"]!.split(",").map(field => field.trim()).filter(Boolean) } : route;
   const full = !!args.full;
   if (route.kind === "single") {
     const body = await session.execute({ profile: args.profile, operation, params, query, scopes });
@@ -385,7 +389,7 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
     return shaped.truncated ? { ...record, help: ["Strings truncated at 4000 chars; re-run with --full"] } : record;
   }
   const collected = await session.collect({ profile: args.profile, operation, params, query, scopes, limit: args.limit, cursor: args.cursor });
-  const shaped = truncateForOutput(collected.value.map(row => reviewedFields(route, row)), full);
+  const shaped = truncateForOutput(collected.value.map(row => reviewedFields(outputRoute, row)), full);
   const value = shaped.value as unknown[];
   const warnings = route.warning ? { warnings: [route.warning] } : {};
   if (collected.complete) {

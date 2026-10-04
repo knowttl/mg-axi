@@ -221,11 +221,11 @@ def make_row(version, path, method, operation):
         elif version == "beta":
             reason = "Deferred by firstmate organization scope to a later EXT-01 beta organization subfamily: the approved reads cover the shared routes on both versions; beta-only settings, partner and theme contracts need separate review."
     if owner == "EXT-02" and method == "GET" and disposition == "scheduled" and "/accessReviews/historyDefinitions" in path:
-        disposition, reason = "intentionally-blocked", "Blocked by firstmate pending review for EXT-02c: documented least privilege is AccessReview.ReadWrite.All (no read scope), and history instances return a bearer SAS downloadUri; recording or emitting that URL needs its own redaction and output review."
+        disposition, reason = "intentionally-blocked", "Blocked: documented least privilege is the write scope AccessReview.ReadWrite.All (no read scope), and history instances return SAS download URLs in downloadUri; recording or emitting that URL needs its own redaction and output review."
         owner = "EXT-02c"
     if owner == "EXT-02" and method == "GET" and disposition == "scheduled" and (path.split("/")[1] in {"accessReviews", "accessReviewDecisions"} or "/accessReviews/unified" in path):
         owner = "EXT-02c"
-        reason = "Deferred by firstmate to EXT-02c (mg-ext-02c): legacy accessReviews and unified alias reads need their own query, access and projection review; beta contracts need separate review."
+        reason = "Split into EXT-02c to limit this piece's size: legacy accessReviews and unified alias reads need their own query, access and projection review; beta contracts need separate review."
     if owner == "EXT-01" and method == "GET" and disposition == "scheduled" and path.split("/")[1] in {"domains", "domainDnsRecords"}:
         if "/federationConfiguration" in path:
             reason = "Deferred by firstmate R1 to a later EXT-01 domain federation subfamily: federation configuration can carry signing-certificate material and needs a separate output review."

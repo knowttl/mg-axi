@@ -78,6 +78,6 @@ Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, i
 | `mg-axi entra risky-user dismiss` | `POST:/identityProtection/riskyUsers/dismiss` | WRITE-05 |
 | `mg-axi entra conditional-access policy update` | `PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}` | WRITE-04 |
 
-Extended families (EXT-01 through EXT-04), later writes (WRITE-05 and
+Extended families (EXT-01 through EXT-04), later writes (WRITE-06 and
 beyond) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining
 scheduled rows; see docs/build-plan.md for their dispatch.

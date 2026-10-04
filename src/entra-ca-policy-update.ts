@@ -179,13 +179,12 @@ function stringArray(value: unknown): string[] | null {
 
 // Lockout analysis over the proposed effective policy (current merged with
 // the PATCH payload). An enabled policy that covers all users with no
-// exclusions and block controls would lock out every admin including
-// break-glass accounts, so enforcement-touching changes toward that state
-// are refused. An enabled all-users policy without exclusions under milder
-// controls is elevated risk and needs explicit acknowledgement. When the
-// current conditions, user scope or grant controls are unreadable the
-// analysis cannot run, and enforcement-touching changes stay disabled
-// instead of sending a blind PATCH.
+// user, group or role exclusions and block controls would lock out every
+// admin including break-glass accounts, so enforcement-touching changes toward that state
+// are refused. Other enabled policies need acknowledgement because targeting
+// alone cannot establish protected-account coverage. Unreadable effective
+// inputs (including missing user/group exclusion arrays) disable enforcement
+// changes. User-facing lockout requirements are owned by README.md.
 export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<CaPolicyWritableField, unknown>>): LockoutAssessment {
   const effective: PolicyRecord = { ...current, ...payload };
   const state = effective["state"];

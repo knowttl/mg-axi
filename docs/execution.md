@@ -60,7 +60,7 @@ Slice IDs and dependencies are defined in the [dispatch plan](build-plan.md).
 | WRITE-01 Membership | [POST /groups/{id}/members/$ref](https://learn.microsoft.com/en-us/graph/api/group-post-members?view=graph-rest-1.0) | Shipped; supported targets and permission requirements are documented in [README.md](../README.md). |
 | WRITE-02 Account state | [PATCH /users/{id}](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0) | Shipped; account-state usage, permissions and sensitive-target role hierarchy are documented in [README.md](../README.md). |
 | WRITE-03 Revoke sessions | [POST /users/{id}/revokeSignInSessions](https://learn.microsoft.com/en-us/graph/api/user-revokesigninsessions?view=graph-rest-1.0) | Shipped; usage, permissions, limitations and unknown-outcome handling are documented in [README.md](../README.md); implementation: [entra-user-revoke-sessions](../src/entra-user-revoke-sessions.ts). |
-| WRITE-04 CA policy update | [PATCH /identity/conditionalAccess/policies/{id}](https://learn.microsoft.com/en-us/graph/api/conditionalaccesspolicy-update?view=graph-rest-1.0), D/A Policy.Read.All + Policy.ReadWrite.ConditionalAccess | P1, P2 for risk-based features; delegated administrator role; review lockout risk and concurrency limitations. |
+| WRITE-04 CA policy update | [PATCH /identity/conditionalAccess/policies/{id}](https://learn.microsoft.com/en-us/graph/api/conditionalaccesspolicy-update?view=graph-rest-1.0) | Shipped; usage, permissions, lockout gates and concurrency limitations are documented in [README.md](../README.md). |
 | WRITE-05 Risk dismissal | [POST /identityProtection/riskyUsers/dismiss](https://learn.microsoft.com/en-us/graph/api/riskyuser-dismiss?view=graph-rest-1.0) | Shipped; single-user dismissal usage, permissions and P2/role guidance are documented in [README.md](../README.md). |
 
 
@@ -74,8 +74,5 @@ The user is verified through `GET:/users/{user-id}` with `$select=id` before pre
 Group `isAssignableToRole` must be explicitly false or null; true, missing and malformed values are refused.
 Desired state is read through `GET:/groups/{group-id}/members` in the preview and rechecked before the single send; an incomplete member window proceeds to the POST where a duplicate 400 lands as a no-op.
 
-The WRITE-04 implementation in [entra-ca-policy-update](../src/entra-ca-policy-update.ts) PATCHes one policy with only the reviewed fields `displayName`, `state`, `conditions`, `grantControls` and `sessionControls`; any other property has no flag and is refused before credentials, and only v1.0 mutates.
-Current state is read through the READ-03 policy show route for a current-versus-proposed diff preview and rechecked before the single send; an already-desired value set is a no-op.
-Every execute is disruptive and needs the typed policy-ID confirmation.
-The preview carries a lockout analysis over the proposed effective policy: all-users block coverage without exclusions is refused, lesser all-users coverage without exclusions needs `--acknowledge-lockout-risk`, and enforcement-touching changes stay disabled while the analysis inputs are unreadable.
-The endpoint documents no ETag or If-Match precondition, so the command sends none and the race is stated in the preview and usage guidance; the coordinator outcome on the 204 response is the only proof, verified afterwards with policy show.
+The WRITE-04 implementation in [entra-ca-policy-update](../src/entra-ca-policy-update.ts) supplies a READ-03 policy-show reread callback to the coordinator, reapplying lockout gates on each fresh effective policy before the single send.
+Its reviewed fields, diff and no-op behavior, confirmation, lockout requirements, permissions and concurrency limitations are owned by [README.md](../README.md).

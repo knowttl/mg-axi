@@ -56,12 +56,13 @@ function json(status, body, headers = {}) {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function fixture({ group = plainGroup, members = [{ id: other }], post } = {}) {
+function fixture({ group = plainGroup, user = json(200, { id: uid }), members = [{ id: other }], post } = {}) {
   const dir = scratch();
   const journalPath = join(dir, "writes.log");
   const getRequests = [];
   const postRequests = [];
   const credentialCalls = [];
+  let userReads = 0;
   const credential = account => ({
     token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account,
   });
@@ -77,6 +78,10 @@ function fixture({ group = plainGroup, members = [{ id: other }], post } = {}) {
   const get = async request => {
     getRequests.push(request);
     const url = new URL(request.url);
+    if (url.pathname === `/v1.0/users/${uid}`) {
+      userReads += 1;
+      return typeof user === "function" ? user(request, userReads) : user;
+    }
     if (url.pathname === `/v1.0/groups/${gid}`) {
       if (group === null) return json(404, { error: { code: "Request_ResourceNotFound", message: "no such group" } });
       return json(200, group);
@@ -155,6 +160,9 @@ test("confirmed execution posts the directoryObjects $ref once and journals inte
   assert.equal(sent.body, JSON.stringify({ "@odata.id": `https://graph.microsoft.com/v1.0/directoryObjects/${uid}` }));
   assert.equal(sent.headers["Content-Type"], "application/json");
   assert.equal(sent.headers.Authorization, "Bearer opaque-fixture-secret");
+  const userReads = f.getRequests.map(request => new URL(request.url)).filter(url => url.pathname === `/v1.0/users/${uid}`);
+  assert.equal(userReads.length, 2);
+  assert.deepEqual(userReads.map(url => url.searchParams.get("$select")), ["id", "id"]);
   const records = journal(f.journalPath);
   assert.equal(records.length, 2);
   assert.equal(records[0].kind, "intent");
@@ -174,8 +182,41 @@ test("delegated execution requests only the documented write scope for the mutat
   const scopeSets = silent.map(call => call[2]);
   assert.ok(scopeSets.some(scopes => scopes.length === 1 && scopes[0] === WRITE_SCOPE), "mutation credential uses GroupMember.ReadWrite.All only");
   assert.ok(scopeSets.some(scopes => scopes.includes(READ_SCOPE)), "preview reads use the READ-02 read scope");
+  assert.ok(scopeSets.some(scopes => scopes.length === 1 && scopes[0] === "https://graph.microsoft.com/User.ReadBasic.All"));
   assert.deepEqual(GROUP_MEMBER_ADD_SCOPES, [WRITE_SCOPE]);
 });
+
+for (const profile of [enabledDelegated, enabledApp]) {
+  for (const [name, response] of [
+    ["non-user or missing object", json(404, { error: { code: "Request_ResourceNotFound", message: "not a user" } })],
+    ["inaccessible user", json(403, { error: { code: "Authorization_RequestDenied", message: "denied" } })],
+    ["null body", json(200, null)],
+    ["array body", json(200, [{ id: uid }])],
+    ["missing identity", json(200, {})],
+    ["malformed identity", json(200, { id: 123 })],
+    ["wrong identity", json(200, { id: other })],
+    ["non-user type", json(200, { id: uid, "@odata.type": "#microsoft.graph.group" })],
+  ]) {
+    for (const [path, flags, members] of [
+      ["preview", {}, []],
+      ["execution", { execute: true, confirm: gid }, []],
+      ["no-op", { execute: true, confirm: gid }, [{ id: uid }]],
+    ]) {
+      test(`${profile.mode} ${path} refuses ${name} before accepting membership`, async () => {
+        const f = fixture({ user: response, members });
+        await assert.rejects(f.run(flags, profile), { code: "GRAPH_ERROR" });
+        assert.equal(f.postRequests.length, 0);
+        assert.throws(() => readFileSync(f.journalPath, "utf8"), /ENOENT/);
+      });
+    }
+    test(`${profile.mode} fresh read refuses ${name} before sending`, async () => {
+      const f = fixture({ user: (_request, count) => count === 1 ? json(200, { id: uid.toUpperCase() }) : response });
+      await assert.rejects(f.run({ execute: true, confirm: gid }, profile), { code: "GRAPH_ERROR" });
+      assert.equal(f.postRequests.length, 0);
+      assert.equal(journal(f.journalPath)[1].outcome, "NOT_SENT");
+    });
+  }
+}
 
 test("already-member preview is a no-op with zero sends and no journal", async () => {
   const f = fixture({ members: [{ id: other }, { id: uid.toUpperCase() }] });
@@ -314,6 +355,7 @@ test("incomplete member window proceeds to the POST instead of claiming absence"
   const get = async request => {
     const url = new URL(request.url);
     if (url.pathname === `/v1.0/groups/${gid}`) return json(200, plainGroup);
+    if (url.pathname === `/v1.0/users/${uid}`) return json(200, { id: uid });
     pages += 1;
     return json(200, { value: [{ id: other }], "@odata.nextLink": `https://graph.microsoft.com/v1.0/groups/${gid}/members?$skiptoken=${pages}` });
   };

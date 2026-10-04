@@ -69,5 +69,6 @@ Raw writes remain denied even after named writes ship.
 
 WRITE-01 (`entra group member add --group <group-id> --user <user-id>`, implemented in [entra-group-member-add](../src/entra-group-member-add.ts), operation `mg.entra.group.member.add`) is classified disruptive, so `--execute` needs `--confirm <group-id>`.
 The $ref body carries exactly `{"@odata.id": "https://graph.microsoft.com/v1.0/directoryObjects/<user-id>"}`; both identifiers must be object IDs.
+The user is verified through `GET:/users/{user-id}` with `$select=id` before preview or no-op detection and again before sending; this read needs delegated User.ReadBasic.All or application User.Read.All, and failed or malformed user reads block the operation.
 Desired state is read through `GET:/groups/{group-id}/members` in the preview and rechecked before the single send; role-assignable, dynamic-membership and distribution groups are refused before sending, and an incomplete member window proceeds to the POST where a duplicate 400 lands as a no-op.
 The mutation requests only D/A GroupMember.ReadWrite.All for user members; delegated callers additionally need a groups role with `microsoft.directory/groups/members/update`.

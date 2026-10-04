@@ -103,6 +103,7 @@ Denied reads name that role and read-scope requirement instead of only the gener
 Group `--select` accepts the [reviewed group property set](src/entra-groups.ts); `--fields` must be a subset of the fetched selection.
 Role-assignable membership changes need role-management permission and are refused by the membership write; that grant belongs to a later slice, never to this command.
 `entra group member add --group <group-id> --user <user-id>` previews adding one user to one non-role-assignable security or Microsoft 365 group through a directoryObjects reference.
+The command verifies the user through `/users/<user-id>` before preview and again before sending; this read needs delegated User.ReadBasic.All or application User.Read.All, in addition to the group-read permissions.
 The command needs a hand-enabled profile whose writes allow `mg.entra.group.member.add`, user members need D/A GroupMember.ReadWrite.All, and delegated callers additionally need a groups role such as Groups Administrator; `--execute --confirm <group-id>` sends once, an already-member user is a no-op, and every intent and outcome is journaled.
 `entra group member list --group <group-id>` lists direct members and `entra group member-of list --group <group-id>` lists direct memberships; `--transitive` selects the flat nested closure instead.
 Relationship rows default to `id` and `displayName`; `--select` accepts only `id`, `displayName` and `mail`, and `--fields` must be a subset of that selection.

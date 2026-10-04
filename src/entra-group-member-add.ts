@@ -212,7 +212,9 @@ export async function addGroupMember(args: {
     }
   }
   const readScopes = profile.mode === "delegated" ? [...PREVIEW_SCOPES] : undefined;
+  const userReadScopes = profile.mode === "delegated" ? ["https://graph.microsoft.com/User.ReadBasic.All"] : undefined;
   const groupOperation = resolveSessionOperation("v1.0", "GET", "/groups/{group-id}");
+  const userOperation = resolveSessionOperation("v1.0", "GET", "/users/{user-id}");
   const membersOperation = resolveSessionOperation("v1.0", "GET", "/groups/{group-id}/members");
 
   // Desired-state read through the READ-02 route. An incomplete page window
@@ -227,6 +229,21 @@ export async function addGroupMember(args: {
       scopes: readScopes,
     });
     const writable = assertGroupWritable(group, groupId);
+    const user = await session.execute({
+      profile,
+      operation: userOperation,
+      params: { "user-id": userId },
+      query: { $select: "id" },
+      scopes: userReadScopes,
+    });
+    const userRow = user as Record<string, unknown> | null;
+    if (userRow === null || typeof userRow !== "object" || Array.isArray(userRow)
+      || typeof userRow["id"] !== "string" || userRow["id"].toLowerCase() !== userId.toLowerCase()
+      || (userRow["@odata.type"] !== undefined && userRow["@odata.type"] !== "#microsoft.graph.user")) {
+      fail(`Graph did not establish user identity for ${userId}`, "GRAPH_ERROR", [
+        "Verify --user is an accessible user object ID; non-user objects cannot be added by this command",
+      ]);
+    }
     const collected = await session.collect({
       profile,
       operation: membersOperation,

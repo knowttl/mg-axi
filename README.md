@@ -282,8 +282,11 @@ mg-axi api get /identity/conditionalAccess/policies --scopes https://graph.micro
 ```
 
 `api get` accepts only GET routes in the [reviewed route catalogue](src/api.ts), which owns route-specific query keys, `$select` fields and access constraints.
-Server OData parameters use `--odata`; `--query` is reserved for output queries and is not implemented here.
-Omitting `$select` requests the route's reviewed fields, and every response is filtered to reviewed fields before output.
+OData parameters use `--odata`; `--query` is reserved for output queries and is not implemented here.
+Omitting `$select` selects the route's reviewed fields, and every response is filtered to reviewed fields before output.
+For `/users/<user-id>/authentication/methods`, `$select` is the only supported OData parameter and selects output properties locally; an explicit selection restricts output to that subset.
+Method requests omit `$select` on initial requests, continuations, redirects and retries, while cursors preserve the local selection.
+Other routes send `$select` to Graph.
 Relationship expansion (`$expand`) is unavailable.
 Unreviewed, secret-value, mail/file-content, beta and write routes fail before credentials, and pack, preview and sensitive-area policy still runs in the shared session.
 Delegated reads take explicit `--scopes` like login; application profiles use the configured `.default` audience and reject `--scopes`.

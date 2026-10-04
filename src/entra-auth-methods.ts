@@ -33,9 +33,9 @@ import type { AnyProfile } from "./profiles.js";
 // preserve @odata.type (naming the method kind) without making it selectable.
 // No method registration or deletion is constructed here.
 
-// Every authentication-method property this slice may request or display,
+// Every authentication-method property this slice may select locally,
 // matching the reviewed API-01 field set. Anything else fails before
-// credentials so typos never become misleading server queries.
+// credentials so typos never become misleading output projections.
 export const KNOWN_METHOD_FIELDS: readonly string[] = [
   "id",
   "createdDateTime",

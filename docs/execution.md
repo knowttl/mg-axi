@@ -15,7 +15,7 @@ Unknown actions, raw writes, secret-returning endpoints, and unsupported beta wr
 
 ## Read mechanics and source contracts
 
-[Paging](https://learn.microsoft.com/en-us/graph/paging) follows exact `@odata.nextLink` values and preserves required headers.
+[Paging](https://learn.microsoft.com/en-us/graph/paging) follows exact `@odata.nextLink` values and preserves required headers, except for the authentication-method query handling documented in [README.md](../README.md).
 Validate HTTPS origin and version on initial requests, redirects and every continuation before adding credentials.
 An output cap cannot discard the remainder of a fetched page; continuation state preserves query/context and buffered rows if necessary.
 CORE-02 exposes these mechanics through `GraphSession.collect`, with `limit`, `budget` and an opaque `cursor`.

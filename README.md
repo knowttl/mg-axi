@@ -19,7 +19,7 @@ READ-07 adds application and service-principal list/show with credential expiry 
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
 READ-08 adds service-principal delegated-grant and app-role-assignment consent reads for a named client through the same session.
 EXT-01 (domains) adds tenant-domain list/show, per-domain verification and service-configuration DNS record reads, and top-level domain DNS record reads through the same session.
-EXT-03 (identity providers) adds workforce identity-provider list/show/count reads with secret scrubbing through the same session.
+EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
@@ -247,12 +247,15 @@ mg-axi login --profile soc --scopes https://graph.microsoft.com/IdentityProvider
 mg-axi entra identity-provider list --profile soc
 mg-axi entra identity-provider show --profile soc --id <provider-id>
 mg-axi entra identity-provider count --profile soc
+mg-axi entra identity-provider available-types --profile soc
 ```
 
 `entra identity-provider list` defaults to compact properties (`id`, `displayName`); `show --id <provider-id>` defaults to the full reviewed provider set.
-All three identity-provider commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+All four identity-provider commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
 `--select` accepts the [reviewed provider property set](src/entra-identity-providers.ts); `--fields` must be a subset of the fetched selection.
 Provider lists return `identityProviders`, single-provider reads return `identityProvider`, and counts return `count` with the scalar total.
+`available-types` returns `availableProviderTypes`, an array of type names available for the tenant, with a `count` aggregate.
+Available types depend on tenant configuration and licensing; availability does not mean a provider is configured.
 Provider lists accept `--filter` as plain `$filter`; counts accept `--filter` to narrow the total server-side.
 Rows carry `@odata.type` naming the provider kind (social, SAML/WS-Fed, Apple-managed, built-in); kind-specific detail needs an explicit `--select` naming the property.
 `clientSecret` and `certificateData` are never selectable and any row carrying them is scrubbed before output, so key material can never reach stdout, errors or logs.

@@ -212,9 +212,7 @@ def make_row(version, path, method, operation):
             reason = "Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review."
     if owner == "EXT-03" and method == "GET" and disposition == "scheduled" and (path == "/identity/identityProviders" or path.startswith("/identity/identityProviders/")):
         if version == "beta":
-            reason = "Deferred to a later EXT-03 beta identity-providers subfamily: the approved reads cover v1.0 only; beta contracts need separate review."
-        elif path.endswith("/availableProviderTypes()"):
-            reason = "Deferred to a later EXT-03 provider-types subfamily: availableProviderTypes() needs a function-call and licence-dependent output review separate from the approved list/show/count reads."
+            reason = "Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review."
     if mutates and owner is not None:
         owner = "WRITE-N"
         if method == "PATCH" and path == "/users/{user-id}":

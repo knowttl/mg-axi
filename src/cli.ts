@@ -19,7 +19,7 @@ import { dismissRiskyUser } from "./entra-risk-dismiss.js";
 import { listPolicies, showPolicy, listNamedLocations, showNamedLocation } from "./entra-conditional-access.js";
 import { updateCaPolicy } from "./entra-ca-policy-update.js";
 import { listDomains, showDomain, listVerificationDnsRecords, showVerificationDnsRecord, listServiceConfigurationRecords, showServiceConfigurationRecord, listDomainDnsRecords, showDomainDnsRecord } from "./entra-domains.js";
-import { listIdentityProviders, showIdentityProvider, countIdentityProviders } from "./entra-identity-providers.js";
+import { listIdentityProviders, showIdentityProvider, countIdentityProviders, availableIdentityProviderTypes } from "./entra-identity-providers.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
 import { addGroupMember } from "./entra-group-member-add.js";
 import { fetchTransport } from "./api.js";
@@ -587,7 +587,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       default: return showDomainDnsRecord(session, flags, selected.profile, operation, help, selected.name);
     }
   }
-  if (leaf.path === "entra identity-provider list" || leaf.path === "entra identity-provider show" || leaf.path === "entra identity-provider count") {
+  if (leaf.path === "entra identity-provider list" || leaf.path === "entra identity-provider show" || leaf.path === "entra identity-provider count" || leaf.path === "entra identity-provider available-types") {
     if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
       throw new AxiError("Identity-provider reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
     }
@@ -613,6 +613,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     switch (leaf.path) {
       case "entra identity-provider list": return listIdentityProviders(session, flags, selected.profile, operation, help, selected.name);
       case "entra identity-provider show": return showIdentityProvider(session, flags, selected.profile, operation, help, selected.name);
+      case "entra identity-provider available-types": return availableIdentityProviderTypes(session, flags, selected.profile, operation, help);
       default: return countIdentityProviders(session, flags, selected.profile, operation, help, selected.name);
     }
   }

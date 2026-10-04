@@ -683,6 +683,10 @@ export const LEAVES: Leaf[] = [
     filter: providerRead.filter,
     scopes: providerRead.scopes,
   }, examples: ["mg-axi entra identity-provider count --profile soc", "mg-axi entra identity-provider count --profile soc --filter \"identityProviderType eq 'Google'\""] },
+  { path: "entra identity-provider available-types", description: "List available workforce identity-provider types for the tenant; availability does not mean a provider is configured", operation: "GET:/identity/identityProviders/availableProviderTypes()", flags: {
+    ...common,
+    scopes: providerRead.scopes,
+  }, examples: ["mg-axi entra identity-provider available-types --profile soc"] },
   { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains and domain DNS records, and identity providers; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },

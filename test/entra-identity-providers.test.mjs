@@ -90,11 +90,12 @@ function json(status, body, headers = {}) {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function providerTransport({ denied = false, countBody = "4", countStatus = 200 } = {}) {
+function providerTransport({ denied = false, countBody = "4", countStatus = 200, typesBody = { value: ["Google", "Apple", "SAML"] } } = {}) {
   return transport(request => {
     const url = new URL(request.url);
     const path = url.pathname;
     if (denied) return json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } });
+    if (path === "/v1.0/identity/identityProviders/availableProviderTypes()") return json(200, typesBody);
     if (path === "/v1.0/identity/identityProviders/$count") {
       return { status: countStatus, headers: {}, body: countBody };
     }
@@ -147,6 +148,36 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identity/identityProviders?"));
       if (mode === "delegated") assert.deepEqual(calls[0][1], providerScopes);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} reads available provider types through the v1.0 function`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode, providerTransport());
+      const result = await executeArgv(["entra", "identity-provider", "available-types", "--profile", profile], overrides);
+      assert.deepEqual(result.availableProviderTypes, ["Google", "Apple", "SAML"]);
+      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/identity/identityProviders/availableProviderTypes()");
+      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
+      assert.ok(result.help.some(hint => hint.includes("licensing")));
+      assert.equal(calls.length, 1);
+      if (mode === "delegated") assert.deepEqual(calls[0][1], providerScopes);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} accepts an empty available provider types result`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode, providerTransport({ typesBody: { value: [] } }));
+      const result = await executeArgv(["entra", "identity-provider", "available-types", "--profile", profile], overrides);
+      assert.deepEqual(result.availableProviderTypes, []);
+      assert.deepEqual(result.count, { returned: 0, complete: true });
     } finally {
       teardownProfiles(state);
     }
@@ -215,6 +246,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         ["entra", "identity-provider", "list", "--profile", profile],
         ["entra", "identity-provider", "show", "--id", saml.id, "--profile", profile],
         ["entra", "identity-provider", "count", "--profile", profile],
+        ["entra", "identity-provider", "available-types", "--profile", profile],
       ]) {
         await assert.rejects(executeArgv(args, overrides), error => {
           assert.equal(error.code, "GRAPH_ERROR");
@@ -314,6 +346,21 @@ test("provider read flags validate before profiles or HTTP", async () => {
   await assert.rejects(executeArgv(["entra", "identity-provider", "list", "--limit", "10", "--all"]), { code: "VALIDATION_ERROR" });
 });
 
+for (const body of [null, [], {}, { value: null }, { value: ["Google", 1] }, { value: [{ displayName: "Google" }] }]) {
+  test(`available provider types rejects malformed body ${JSON.stringify(body)}`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor("delegated", providerTransport({ typesBody: body }));
+      await assert.rejects(
+        executeArgv(["entra", "identity-provider", "available-types", "--profile", "soc"], overrides),
+        { code: "GRAPH_ERROR", message: "Graph returned a malformed available identity-provider types body" },
+      );
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+}
+
 for (const id of ["$count", "$value", "$ref"]) {
   test(`identity-provider show rejects reserved resource binding ${id} before credentials`, async () => {
     const state = setupProfiles();
@@ -336,6 +383,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     ["entra", "identity-provider", "list", "--profile", profile],
     ["entra", "identity-provider", "show", "--id", saml.id, "--profile", profile],
     ["entra", "identity-provider", "count", "--profile", profile],
+    ["entra", "identity-provider", "available-types", "--profile", profile],
   ]) {
     test(`${mode} ${args[1]} ${args[2]} refuses beta before credentials`, async () => {
       const state = setupProfiles();
@@ -360,6 +408,21 @@ test("application mode rejects delegated scopes before HTTP", async () => {
     const { calls, requests, overrides } = overridesFor("application", providerTransport());
     await assert.rejects(
       executeArgv(["entra", "identity-provider", "list", "--profile", "batch", "--scopes", providerScopes[0]], overrides),
+      { code: "VALIDATION_ERROR", message: "Application profiles use the configured Graph .default audience; delegated scopes are unavailable" },
+    );
+    assert.equal(calls.length, 0);
+    assert.equal(requests.length, 0);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
+test("available provider types application mode rejects delegated scopes before HTTP", async () => {
+  const state = setupProfiles();
+  try {
+    const { calls, requests, overrides } = overridesFor("application", providerTransport());
+    await assert.rejects(
+      executeArgv(["entra", "identity-provider", "available-types", "--profile", "batch", "--scopes", providerScopes[0]], overrides),
       { code: "VALIDATION_ERROR", message: "Application profiles use the configured Graph .default audience; delegated scopes are unavailable" },
     );
     assert.equal(calls.length, 0);

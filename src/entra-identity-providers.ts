@@ -329,3 +329,26 @@ export async function countIdentityProviders(
   }
   return { count: { returned: raw, complete: true }, help: [WORKFORCE_NOTE] };
 }
+
+export async function availableIdentityProviderTypes(
+  session: GraphSession,
+  flags: IdentityProviderFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+): Promise<Record<string, unknown>> {
+  const scopes = scopesFor(flags, profile, help);
+  const raw = await withGuidance(PROVIDER_DENIAL_HINTS, () => session.execute({ profile, operation, scopes }));
+  const value = raw !== null && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>).value : undefined;
+  if (!Array.isArray(value) || value.some(type => typeof type !== "string")) {
+    throw new AxiError("Graph returned a malformed available identity-provider types body", "GRAPH_ERROR", [
+      "Available-provider-type reads carry a value array of strings; treat anything else as unknown, not empty",
+    ]);
+  }
+  return {
+    availableProviderTypes: value,
+    count: { returned: value.length, complete: true },
+    help: ["Available provider types depend on tenant configuration and licensing; availability does not mean a provider is configured", WORKFORCE_NOTE],
+  };
+}

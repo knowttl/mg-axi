@@ -241,7 +241,7 @@ export const LEAVES: Leaf[] = [
     full: auRead.full,
     cursor: auRead.cursor,
     scopes: auRead.scopes,
-  }, examples: ["mg-axi entra administrative-unit list --profile soc", "mg-axi entra administrative-unit list --profile soc --limit 10", "mg-axi entra administrative-unit list --profile soc --filter \"visibility eq 'HiddenMembership'\""] },
+  }, examples: ["mg-axi entra administrative-unit list --profile soc", "mg-axi entra administrative-unit list --profile soc --limit 10", "mg-axi entra administrative-unit list --profile soc --filter \"displayName eq 'Seattle Schools'\""] },
   { path: "entra administrative-unit show", description: "Show one administrative unit with the full reviewed property set including visibility and membership rule", operation: "GET:/directory/administrativeUnits/{administrativeUnit-id}", flags: {
     ...common, id: { value: "administrative-unit-id", required: true, description: "Administrative unit object ID" },
     select: auRead.select,

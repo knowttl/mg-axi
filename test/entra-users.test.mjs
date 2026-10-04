@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 import { decode } from "@toon-format/toon";
 import { executeArgv } from "../dist/cli.js";
 import { Profiles } from "../dist/profiles.js";
@@ -133,15 +134,37 @@ function overridesFor(mode, handler, calls = []) {
   };
 }
 
+// Parse a recovery hint back into argv without a shell: hints render values
+// with POSIX single-quote escaping, and Windows has no /bin/sh to delegate
+// to. The child receives the words as an array, so no quoting remains.
 function hintArgv(hint) {
-  const command = `"${process.execPath}" -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' ${hint.slice("mg-axi ".length)}`;
-  return JSON.parse(execFileSync("/bin/sh", ["-c", command], { encoding: "utf8" }));
+  const argv = [];
+  let word = "";
+  let quote = null;
+  let escaped = false;
+  let started = false;
+  const push = () => { if (started) { argv.push(word); word = ""; started = false; } };
+  for (const char of hint.slice("mg-axi ".length)) {
+    if (escaped) { word += char; escaped = false; }
+    else if (quote === "'") { if (char === "'") quote = null; else word += char; }
+    else if (quote === '"') {
+      if (char === '"') quote = null;
+      else if (char === "\\") escaped = true;
+      else word += char;
+    }
+    else if (char === "\\") escaped = true;
+    else if (char === "'" || char === '"') { quote = char; started = true; }
+    else if (/\s/.test(char)) push();
+    else { word += char; started = true; }
+  }
+  push();
+  return argv;
 }
 
 function runReadCli(args, state, mode, rows = directory, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
-    "--import", resolve("test/fixtures/read-cli.mjs"), resolve("dist/bin/mg-axi.js"), ...args,
+    "--import", pathToFileURL(resolve("test/fixtures/read-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
   ], {
     encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000,
     env: {

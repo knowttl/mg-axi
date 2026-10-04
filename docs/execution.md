@@ -3,7 +3,9 @@
 ## Named writes
 
 Only named, approved pack commands can mutate; raw API remains read-only.
-WRITE-00 implements the [mutation coordinator](../src/mutations.ts) for fixture-driven execution; named mutation commands and production mutation transport remain unavailable.
+WRITE-00 implements the [mutation coordinator](../src/mutations.ts); WRITE-02 adds the named `entra user update` account-state command and its production mutation transport.
+Both enabling and disabling require explicit `--execute` and exact target confirmation, including already-desired states.
+The initial user lookup resolves an object ID that pins the PATCH and all subsequent reads, while confirmation repeats the entered user ID or UPN.
 Profile enablement and environment configuration are documented in [README.md](../README.md).
 The coordinator snapshots the validated profile's tenant, identity and approved-operation scope at creation; later profile edits cannot widen that scope.
 It checks forced read-only and profile enablement before preview, and the sender checks forced read-only again before credential acquisition and immediately before transport handoff.

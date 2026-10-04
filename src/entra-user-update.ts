@@ -129,28 +129,31 @@ export async function updateUserAccount(args: {
       [help],
     );
   }
-  const definition = userAccountDefinition(user, desired);
+  const requestedDefinition = userAccountDefinition(user, desired);
   const execute = flags.execute === true;
   // Gates first: preview refuses read-only, unscoped and beta-bound profiles
   // before any read, credential or transport.
-  const preview = coordinator.preview(definition);
+  coordinator.preview(requestedDefinition);
   if (execute) {
     if (flags.confirm === undefined) {
       throw new AxiError(
-        `blocked: disruptive PATCH needs --confirm '${definition.target}'`,
+        `blocked: disruptive PATCH needs --confirm '${requestedDefinition.target}'`,
         "CONFIRM_REQUIRED",
-        [`Re-run with --confirm '${definition.target}'`],
+        [`Re-run with --confirm '${requestedDefinition.target}'`],
       );
     }
-    if (String(flags.confirm) !== definition.target) {
+    if (String(flags.confirm) !== requestedDefinition.target) {
       throw new AxiError(
-        `blocked: --confirm '${flags.confirm}' does not match target '${definition.target}'`,
+        `blocked: --confirm '${flags.confirm}' does not match target '${requestedDefinition.target}'`,
         "CONFIRM_MISMATCH",
-        [`Re-run with --confirm '${definition.target}'`],
+        [`Re-run with --confirm '${requestedDefinition.target}'`],
       );
     }
   }
-  let account = await readUserAccount(session, profile, readOperation, user);
+  const account = await readUserAccount(session, profile, readOperation, user);
+  const id = account.id;
+  const definition = { ...requestedDefinition, path: `/v1.0/users/${encodeGraphPathSegment(id)}` };
+  const preview = coordinator.preview(definition);
   const current = account.accountEnabled;
   const state = {
     operation: definition.operation,
@@ -179,10 +182,7 @@ export async function updateUserAccount(args: {
     execute: true,
     confirm: String(flags.confirm),
     ...(profile.mode === "application" ? {} : { scopes: [...USER_ACCOUNT_WRITE_SCOPES] }),
-    readState: async () => {
-      account = await readUserAccount(session, profile, readOperation, user);
-      return account.accountEnabled;
-    },
+    readState: async () => (await readUserAccount(session, profile, readOperation, id)).accountEnabled,
     isNoop: currentState => currentState === desired,
   });
   if (result.kind === "failed") {
@@ -191,41 +191,41 @@ export async function updateUserAccount(args: {
       "GRAPH_ERROR",
       [
         ...(result.status === 403 ? [PERMISSION_GUIDANCE, ROLE_GUIDANCE] : []),
-        `Audit ${result.auditId} recorded the refusal; read back the target and never replay this intent`,
+        `Audit ${result.auditId} recorded the refusal; read back '${id}' and never replay this intent`,
       ],
     );
   }
   if (result.kind === "unknown") {
-    throw new AxiError(result.guidance, "OUTCOME_UNKNOWN", [
-      `Audit ${result.auditId} recorded the uncertain outcome; read back the target before doing anything else`,
+    throw new AxiError(`Update of '${id}' may or may not have been applied (audit ${result.auditId}); never replay this intent`, "OUTCOME_UNKNOWN", [
+      `Audit ${result.auditId} recorded the uncertain outcome; read back '${id}' with ${showHint(id, profileName)} before doing anything else`,
       "Never replay this intent",
     ]);
   }
   // Anything but success, failure or uncertainty is the verified no-op:
   // dry-run needs execute !== true, always set above.
   if (result.kind !== "success") {
-    return { noop: true, user: { id: account.id, accountEnabled: desired } };
+    return { noop: true, user: { id, accountEnabled: desired } };
   }
   // Success carries no proof: user-update answers 204 with an empty body, so
   // only the reread decides between updated and conflict.
-  let verified: { id: string; accountEnabled: boolean | null };
+  let verified: boolean | null;
   try {
-    verified = await readUserAccount(session, profile, readOperation, user);
+    verified = (await readUserAccount(session, profile, readOperation, id)).accountEnabled;
   } catch {
     throw new AxiError(
       `Update of '${user}' was sent (audit ${result.auditId}) but the verification read failed; the outcome is unknown`,
       "OUTCOME_UNKNOWN",
-      [`Read back '${user}' before doing anything else; never replay this intent`],
+      [`Read back '${id}' before doing anything else; never replay this intent`],
     );
   }
-  if (verified.accountEnabled !== desired) {
+  if (verified !== desired) {
     throw new AxiError(
-      `Update of '${user}' conflicts: the reread shows accountEnabled ${verified.accountEnabled === null ? "unreadable" : String(verified.accountEnabled)} instead of the sent ${String(desired)} (audit ${result.auditId})`,
+      `Update of '${user}' conflicts: the reread shows accountEnabled ${verified === null ? "unreadable" : String(verified)} instead of the sent ${String(desired)} (audit ${result.auditId})`,
       "WRITE_CONFLICT",
-      [`Read back '${user}' with ${showHint(user, profileName)} before doing anything else`, "Never replay this intent"],
+      [`Read back '${id}' with ${showHint(id, profileName)} before doing anything else`, "Never replay this intent"],
     );
   }
-  return { user: { id: verified.id, accountEnabled: desired }, auditId: result.auditId };
+  return { user: { id, accountEnabled: desired }, auditId: result.auditId };
 }
 
 // Production mutation transport: plain HTTPS with redirects held for manual

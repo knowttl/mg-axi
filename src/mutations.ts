@@ -384,7 +384,7 @@ export function createMutationCoordinator(args: {
         "WRITES_DISABLED",
         [
           "Writes are disabled for this profile",
-          "WRITE-00 supports fixture-driven coordinator tests only; no mutation command is available",
+          "Enable named writes explicitly in the profile configuration; see README.md for the write gates",
         ],
       );
     }
@@ -392,7 +392,7 @@ export function createMutationCoordinator(args: {
     // definition fails as VALIDATION_ERROR before membership is considered.
     if (!definition.operation.trim()) {
       throw new AxiError("Mutation operation must be a non-empty name", "VALIDATION_ERROR", [
-        "Name the fixture operation the coordinator should authorize",
+        "Name the approved operation the coordinator should authorize",
       ]);
     }
     if (!definition.target.trim()) {
@@ -402,7 +402,7 @@ export function createMutationCoordinator(args: {
     }
     if (definition.version !== "v1.0") {
       throw new AxiError(`Unsupported mutation version ${definition.version}`, "VALIDATION_ERROR", [
-        "WRITE-00 binds fixture mutations to v1.0; beta writes stay blocked",
+        "Mutations are bound to v1.0; beta writes stay blocked",
       ]);
     }
     // Gate 3: the operation must fall inside the profile's own configured scope.
@@ -412,7 +412,7 @@ export function createMutationCoordinator(args: {
         "OPERATION_NOT_WRITABLE",
         [
           "Writes are limited to this profile's configured operations",
-          "WRITE-00 supports fixture-driven coordinator tests only; no mutation command is available",
+          "The named write must be in the profile's writes.operations allowlist; see README.md for configuration",
         ],
       );
     }

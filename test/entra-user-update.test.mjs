@@ -203,6 +203,10 @@ for (const [target, desired] of [
     const result = await executeArgv(updateArgs(target, String(desired), ["--execute", "--confirm", target]), f.overrides);
     assert.deepEqual(result, { noop: true, user: { id: userId, accountEnabled: desired } });
     assert.equal(f.mutRequests.length, 0);
+    assert.deepEqual(f.readRequests.map(request => new URL(request.url).pathname), [
+      `/v1.0/users/${encodeURIComponent(target)}`,
+      `/v1.0/users/${userId}`,
+    ]);
   } finally { teardown(state); }
 });
 
@@ -272,7 +276,7 @@ for (const status of [400, 404, 429]) test(`PATCH refusal ${status} preserves st
     assert.equal(error.code, "GRAPH_ERROR");
     assert.equal(error.message, `Graph refused the account update (status ${status})`);
     assert.equal(error.suggestions.length, 1);
-    assert.match(error.suggestions[0], /read back the target and never replay/);
+    assert.ok(error.suggestions[0].includes(`read back '${userId}' and never replay`));
     assert.equal(f.mutRequests.length, 1);
     assert.equal(journal(f.journalPath)[1].httpStatus, status);
   } finally { teardown(state); }
@@ -411,22 +415,63 @@ test("application mode uses the .default audience and succeeds", async () => {
   } finally { teardown(state); }
 });
 
-for (const upn of ["AdeleV@contoso.com", "alice_example.com#EXT#@tenant.onmicrosoft.com"]) test(`UPN ${upn} targets the same user in preview, PATCH and rereads`, async () => {
+for (const upn of ["AdeleV@contoso.com", "alice_example.com#EXT#@tenant.onmicrosoft.com"]) test(`UPN ${upn} resolves once and pins preview, PATCH and rereads to the object ID`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
     const f = fixture({ reads: [true, true, true, false] });
     const preview = await executeArgv(updateArgs(upn, "false"), fixture().overrides);
-    assert.equal(preview.preview.url, `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(upn)}`);
+    assert.equal(preview.preview.url, MUTATION_URL);
     assert.equal(preview.preview.target, upn);
     const result = await executeArgv(updateArgs(upn, "false", ["--execute", "--confirm", upn]), f.overrides);
     assert.deepEqual(result.user, { id: userId, accountEnabled: false });
-    assert.equal(f.mutRequests[0].url, `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(upn)}`);
+    assert.equal(f.mutRequests[0].url, MUTATION_URL);
     assert.equal(f.mutRequests[0].body, JSON.stringify({ accountEnabled: false }));
     assert.equal(f.readRequests.length, 4);
-    for (const request of f.readRequests) {
-      assert.equal(new URL(request.url).pathname, `/v1.0/users/${encodeURIComponent(upn)}`);
-    }
+    assert.deepEqual(f.readRequests.map(request => new URL(request.url).pathname), [
+      `/v1.0/users/${encodeURIComponent(upn)}`,
+      `/v1.0/users/${userId}`,
+      `/v1.0/users/${userId}`,
+      `/v1.0/users/${userId}`,
+    ]);
+    assert.equal(journal(f.journalPath)[0].target, upn);
+    assert.equal(journal(f.journalPath)[0].url, MUTATION_URL);
+  } finally { teardown(state); }
+});
+
+for (const [profileName, desired, current] of [
+  ["soc", true, false],
+  ["soc", false, true],
+  ["batch", true, false],
+  ["batch", false, true],
+]) test(`${profileName} update to ${desired} keeps the original identity after UPN reassignment`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir, profileName);
+    const upn = "alice_example.com#EXT#@tenant.onmicrosoft.com";
+    const replacementId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const f = fixture({ reads: [current, current, current, desired] });
+    const originalTransport = f.overrides.transport;
+    f.overrides.transport = async request => {
+      const response = await originalTransport(request);
+      if (f.readRequests.length > 1 && new URL(request.url).pathname === `/v1.0/users/${encodeURIComponent(upn)}`) {
+        return json(200, { id: replacementId, accountEnabled: f.mutRequests.length > 0 ? desired : current });
+      }
+      return response;
+    };
+    const result = await executeArgv([
+      "entra", "user", "update", "--user", upn, "--account-enabled", String(desired),
+      "--profile", profileName, "--execute", "--confirm", upn,
+    ], f.overrides);
+    assert.deepEqual(result.user, { id: userId, accountEnabled: desired });
+    assert.equal(f.mutRequests.length, 1);
+    assert.equal(f.mutRequests[0].url, MUTATION_URL);
+    assert.deepEqual(f.readRequests.map(request => new URL(request.url).pathname), [
+      `/v1.0/users/${encodeURIComponent(upn)}`,
+      `/v1.0/users/${userId}`,
+      `/v1.0/users/${userId}`,
+      `/v1.0/users/${userId}`,
+    ]);
   } finally { teardown(state); }
 });
 

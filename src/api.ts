@@ -75,6 +75,7 @@ const DEVICE_FIELDS = ["id", "deviceId", "displayName", "operatingSystem", "oper
 const AU_FIELDS = ["id", "displayName", "description", "visibility", "membershipType", "membershipRule"];
 const DOMAIN_FIELDS = ["id", "authenticationType", "availabilityStatus", "isAdminManaged", "isDefault", "isInitial", "isRoot", "isVerified", "supportedServices", "passwordValidityPeriodInDays", "passwordNotificationWindowInDays", "state"];
 const DNS_RECORD_FIELDS = ["id", "isOptional", "label", "recordType", "supportedService", "ttl", "mailExchange", "preference", "canonicalName", "nameTarget", "port", "priority", "protocol", "service", "weight", "text"];
+const PROVIDER_FIELDS = ["id", "displayName", "identityProviderType", "clientId"];
 
 // The reviewed surface, exported for capability reporting (PACK-01) and tests.
 export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
@@ -251,6 +252,14 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
     note: "No P1/P2 prerequisite is stated for contract reads.",
     sources: ["https://learn.microsoft.com/graph/api/contract-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/contract?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/identityProviders", kind: "collection", query: COLLECTION_QUERY, fields: PROVIDER_FIELDS,
+    access: "D/A IdentityProvider.Read.All. Delegated callers pass it as --scopes; delegated reads additionally need a directory role that can read federation configuration (Global Reader is the least-privileged read-only directory role). Personal Microsoft accounts are not supported; no per-operation licence prerequisite is stated.",
+    note: "Workforce context only; external-customer user-flow provider bindings are separate scheduled operations. clientSecret and certificateData are never projected: the former is write-only and the latter is key material.",
+    sources: ["https://learn.microsoft.com/graph/api/identitycontainer-list-identityproviders?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/identityProviders/{identityProviderBase-id}", kind: "single", query: SINGLE_QUERY, fields: PROVIDER_FIELDS,
+    access: "D/A IdentityProvider.Read.All. Delegated callers pass it as --scopes; delegated reads additionally need a directory role that can read federation configuration (Global Reader is the least-privileged read-only directory role). Personal Microsoft accounts are not supported; no per-operation licence prerequisite is stated.",
+    note: "Workforce context only. clientSecret and certificateData are never projected: the former is write-only and the latter is key material.",
+    sources: ["https://learn.microsoft.com/graph/api/identityproviderbase-get?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/identityGovernance/accessReviews/definitions", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_DEFINITION_FIELDS,
     access: "D/A AccessReview.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (group/app reviews: review creator, Global Reader, Security Reader, User Administrator, Identity Governance Administrator or Security Administrator; Entra-role reviews: Security Reader, Identity Governance Administrator, Privileged Role Administrator or Security Administrator); personal Microsoft accounts are not supported.",
     note: "Definitions are review schedules (a series), never their occurrences; access reviews need P2 or ID Governance depending on capability.",

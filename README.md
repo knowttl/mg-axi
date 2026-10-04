@@ -1,7 +1,7 @@
 # mg-axi
 
 Agent-facing Microsoft Graph CLI with one shared core and domain packs, read-only by default.
-The Entra pack comes first, with phased full coverage and one gated named write.
+The Entra pack comes first, with phased full coverage and gated named writes.
 
 CLI-01 provides a local TypeScript/AXI shell, strict command catalogue, leaf help and fast version probes.
 AUTH-01 adds versioned dedicated-app delegated profiles and explicit login.
@@ -49,6 +49,8 @@ All delegated reads, including raw reads and cursor resumes, reject scopes outsi
 Write scopes are refused with `VALIDATION_ERROR` and a list of supported read scopes.
 User reads acquire credentials silently; a resume containing only buffered rows can finish without another Graph request.
 WRITE-02 adds a named write: `mg-axi entra user update --user <user-id-or-upn> --account-enabled true|false` sets one user's `accountEnabled` through `PATCH /users/{id}` with only that property sent.
+`--account-enabled` accepts exactly `true` or `false`; uppercase and whitespace-padded values are rejected.
+The command supports only `--api-version v1.0`; beta writes are rejected before credentials or HTTP.
 Without `--execute` the command previews the desired-state diff read through the user show route and journals nothing; an already-desired value is a no-op with exit 0.
 Preview also requires the write-enabled profile and operation allowlist described below.
 User IDs and UPNs are accepted, including guest UPNs containing `#EXT#`; pass the literal identifier, quoted for the shell, rather than percent-encoding it.
@@ -62,7 +64,7 @@ Delegated PATCH credentials request both scopes together; reads request `User.Re
 Use explicit `mg-axi login --profile soc --scopes https://graph.microsoft.com/User.EnableDisableAccount.All,https://graph.microsoft.com/User.Read.All` to sign in for the write.
 Application profiles use the configured Graph `.default` audience with the pair admin-consented on the app registration; the command does not request a per-operation scope subset.
 The update command rejects caller-supplied `--scopes`.
-Delegated callers need `Privileged Authentication Administrator` for admin targets and must generally outrank the target; app-only callers need the pair plus a higher-privileged admin role assignment, and denials surface both rules because a 403 never says which prerequisite is missing.
+Delegated callers need `Privileged Authentication Administrator` for admin targets and must generally outrank the target; app-only callers need the pair plus a higher-privileged admin role assignment, and 403 denials surface both rules because a 403 never says which prerequisite is missing.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
 Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
 Data and structured errors use TOON on stdout; diagnostics belong on stderr.

@@ -8,10 +8,8 @@ import { DelegatedAuth } from "./auth.js";
 import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-session.js";
 import { validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
 
-// WRITE-00 mutation coordinator: fixture-only enablement for later named
-// mutation families. No user-visible mutation command ships in this piece;
-// tests drive the coordinator through a fixture mutation only. The gate order
-// follows az-axi's write gates as the reference: read-only default,
+// Shared mutation coordinator for reviewed named mutation families.
+// The gate order follows az-axi's write gates as the reference: read-only default,
 // allowWrites plus a scope allowlist, preview, --execute, --confirm,
 // --if-match and a durable journal. The shared read-only
 // scope guard in graph-session.ts stays in force for reads; write scopes are
@@ -36,9 +34,8 @@ export function resolveWriteLogPath(env: NodeJS.ProcessEnv = process.env): strin
 export type MutationMethod = "POST" | "PUT" | "PATCH" | "DELETE";
 export type MutationEffect = "write" | "disruptive";
 
-// A fixture-supplied mutation. WRITE-00 enables no real family: the only
-// operable definitions come from tests, and the operation must fall inside
-// the profile's configured scope. WRITE-01 binds real families to this shape.
+// Named handlers bind reviewed mutations to this shape; the operation must
+// fall inside the profile's configured scope.
 export type MutationDefinition = {
   operation: string;
   method: MutationMethod;

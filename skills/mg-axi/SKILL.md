@@ -9,11 +9,7 @@ user-invocable: false
 Agent-ergonomic CLI for Microsoft Graph, read-only by default.
 Entra SOC reads through token-efficient TOON output.
 The named `entra user update` write enables or disables one account through a separately gated mutation coordinator; raw API remains read-only.
-Without `--execute`, the command previews the desired state and sends nothing.
-Every `--execute` run requires `--confirm` repeating the entered user ID or UPN exactly, including already-desired states.
-The first lookup pins the Graph object ID for the PATCH and rereads.
-Writes require hand-enabled profile configuration and an approved-operation allowlist; forced read-only overrides both.
-See [README.md](../../README.md) for permissions, target-role hierarchy and write configuration.
+See [README.md](../../README.md) for account-state usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.
 
 From a built checkout, run commands from the repository root with `node dist/bin/mg-axi.js`.
 Throughout this skill and CLI output, substitute that invocation for `mg-axi` unless you have separately installed the executable on PATH.

@@ -505,6 +505,54 @@ test("unknown properties and unfetched fields fail before HTTP", async () => {
   }
 });
 
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+  for (const [name, body] of [
+    ["buffered-only", { value: [{ id: "a" }, { id: "b" }] }],
+    ["nextLink", { value: [{ id: "a" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$skiptoken=next" }],
+  ]) {
+    test(`${mode} ${name} resume rejects unfetched fields before credentials or HTTP`, async () => {
+      const state = setupProfiles();
+      try {
+        const fixture = transport(() => json(200, body));
+        const { calls, requests, overrides } = overridesFor(mode, fixture);
+        const first = await executeArgv(["entra", "user", "list", "--profile", profile,
+          "--select", "id", "--limit", "1"], overrides);
+        assert.equal(first.count.complete, false);
+        overrides[mode] = { credential: async (...args) => {
+          calls.push(args);
+          throw new Error("Authentication is unavailable");
+        } };
+        await assert.rejects(executeArgv(["entra", "user", "list", "--profile", profile,
+          "--cursor", first.cursor, "--fields", "department"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /department was not fetched/.test(error.message));
+        assert.equal(calls.length, 1);
+        assert.equal(requests.length, 1);
+      } finally { teardownProfiles(state); }
+    });
+  }
+  for (const [name, body, expectedRequests] of [
+    ["buffered-only", { value: [{ id: "a", department: "Sales" }, { id: "b", department: "R&D" }] }, 1],
+    ["nextLink", { value: [{ id: "a", department: "Sales" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$skiptoken=next" }, 2],
+  ]) {
+    test(`${mode} ${name} resume projects fields from the saved selection`, async () => {
+      const state = setupProfiles();
+      try {
+        const fixture = transport(request => json(200, new URL(request.url).searchParams.has("$skiptoken")
+          ? { value: [{ id: "b", department: "R&D" }] } : body));
+        const { calls, requests, overrides } = overridesFor(mode, fixture);
+        const first = await executeArgv(["entra", "user", "list", "--profile", profile,
+          "--select", "id,department", "--limit", "1"], overrides);
+        const resumed = await executeArgv(["entra", "user", "list", "--profile", profile,
+          "--cursor", first.cursor, "--fields", "department"], overrides);
+        assert.deepEqual(resumed.users, [{ department: "R&D" }]);
+        assert.deepEqual(resumed.count, { returned: 1, complete: true });
+        assert.equal(calls.length, 2);
+        assert.equal(requests.length, expectedRequests);
+      } finally { teardownProfiles(state); }
+    });
+  }
+}
+
 test("richer selects dispatch the same mapping while beta stays preview-gated", async () => {
   const state = setupProfiles();
   try {

@@ -514,6 +514,10 @@ export class GraphSession {
     },
   ) {}
 
+  cursorQuery(operation: SessionOperation, cursor: string): Readonly<Record<string, string>> {
+    return decodeCursor(operation, cursor).query;
+  }
+
   async execute(args: ExecuteArgs): Promise<unknown> {
     checkOperation(args.operation);
     // The inventory is authoritative: only the id is trusted from the caller,

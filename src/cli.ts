@@ -9,9 +9,9 @@ import { fetchTransport } from "./graph-transport.js";
 import type { DelegatedAuth } from "./auth.js";
 import type { ApplicationAuth } from "./app-auth.js";
 
-function localHome(name?: string, profiles?: Profiles) {
+function localHome(name?: string) {
   const output = home();
-  const store = profiles ?? new Profiles();
+  const store = new Profiles();
   if (name || store.list().length) {
     try {
       const selected = store.resolve(name);
@@ -33,14 +33,13 @@ export interface DispatchOverrides {
   transport?: GraphTransport;
   delegated?: DelegatedAuth;
   application?: ApplicationAuth;
-  profiles?: Profiles;
 }
 
 export async function executeArgv(argv: string[], overrides: DispatchOverrides = {}): Promise<string | Record<string, unknown>> {
   const { leaf, flags, positional } = resolveCommand(argv);
   if (flags.help) return leafHelp(leaf);
-  if (leaf.path === "home") return localHome(flags.profile as string | undefined, overrides.profiles);
-  const profiles = overrides.profiles ?? new Profiles();
+  if (leaf.path === "home") return localHome(flags.profile as string | undefined);
+  const profiles = new Profiles();
   if (leaf.path === "profile create") {
     if (String(flags.mode ?? "delegated") !== "application" && (flags["certificate-thumbprint"] !== undefined || flags.federated)) throw new AxiError("Certificate and federated credentials belong to application profiles; pass --mode application", "VALIDATION_ERROR", [leafHelp(leaf)]);
     return profiles.create(String(flags.name), String(flags.tenant), String(flags.client), String(flags.cloud), !!flags["allow-device-code"],

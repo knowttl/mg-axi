@@ -159,20 +159,17 @@ export async function listUsers(
   help: string,
   profileName: string,
 ): Promise<Record<string, unknown>> {
-  const selection = flags.cursor === undefined || flags.select !== undefined
-    ? selectedFields(flags, DEFAULT_LIST_SELECT, help)
-    : undefined;
-  if (!selection && flags.fields !== undefined) fieldList(flags.fields, "fields", help);
+  const cursor = flags.cursor === undefined ? undefined : String(flags.cursor);
+  if (cursor !== undefined && !cursor.trim()) throw new AxiError("--cursor needs the opaque cursor from a partial result", "VALIDATION_ERROR", [help]);
+  const savedSelect = cursor === undefined ? undefined : session.cursorQuery(operation, cursor).$select;
+  const { select, fields } = selectedFields(flags,
+    savedSelect === undefined ? DEFAULT_LIST_SELECT : fieldList(savedSelect, "select", help), help);
   const scopes = scopesFor(flags, profile, help);
   const full = flags.full === true;
-  const query: Record<string, string> = {};
-  if (selection) query.$select = selection.select.join(",");
+  const query: Record<string, string> = { $select: select.join(",") };
   if (flags.filter !== undefined) query.$filter = String(flags.filter);
   const args: CollectArgs = { profile, operation, query, scopes };
-  if (flags.cursor !== undefined) {
-    if (!String(flags.cursor).trim()) throw new AxiError("--cursor needs the opaque cursor from a partial result", "VALIDATION_ERROR", [help]);
-    args.cursor = String(flags.cursor);
-  }
+  if (cursor !== undefined) args.cursor = cursor;
   if (flags.all === true) {
     if (flags.limit !== undefined) throw new AxiError("--limit and --all cannot be combined", "VALIDATION_ERROR", [help]);
   } else {
@@ -181,7 +178,6 @@ export async function listUsers(
   const result = await session.collect(args);
   const effectiveFlags: UserFlags = { ...flags, select: result.query.$select ?? DEFAULT_LIST_SELECT.join(",") };
   if (result.query.$filter !== undefined) effectiveFlags.filter = result.query.$filter;
-  const { fields } = selectedFields(effectiveFlags, DEFAULT_LIST_SELECT, help);
   const users: Record<string, unknown>[] = [];
   let truncated = false;
   for (const row of result.value) {

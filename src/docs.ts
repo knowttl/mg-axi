@@ -26,6 +26,7 @@ type InventoryRow = {
   id: string;
   disposition: string;
   owningSlice: string | null;
+  reason: string;
 };
 
 // Initial write families resolve to shipped when the catalogue carries a
@@ -78,6 +79,7 @@ export function capabilityDocument(): string {
     const row = rows.find(candidate => candidate.id === `v1.0:${leaf.operation}`);
     return `| \`mg-axi ${leaf.path}\` | \`${leaf.operation}\` | ${row?.owningSlice ?? "-"} |`;
   });
+  const deferredDomainRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate R1 "));
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
   return [
@@ -105,6 +107,18 @@ export function capabilityDocument(): string {
     ...commandRows,
     "| `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |",
     "| `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |",
+    "",
+    "## EXT-01 domain scope decisions",
+    "",
+    "Firstmate decision R1: approve narrowing this change to the eight v1.0 domain reads above.",
+    "The operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.",
+    "Federation stays out because it can carry signing-certificate material.",
+    "Firstmate decision R2: keep the write-family status section as the coverage fix added to scope (resolved-kept).",
+    "Both firstmate decisions must also be stated in the PR body by the delivery phase.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredDomainRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## Named writes",
     "",

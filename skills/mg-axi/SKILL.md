@@ -62,6 +62,14 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra organization branding show` | native | read |
 | `mg-axi entra organization branding-localization list` | native | read |
 | `mg-axi entra organization branding-localization show` | native | read |
+| `mg-axi entra domain list` | native | read |
+| `mg-axi entra domain show` | native | read |
+| `mg-axi entra domain verification-dns-record list` | native | read |
+| `mg-axi entra domain verification-dns-record show` | native | read |
+| `mg-axi entra domain service-configuration-record list` | native | read |
+| `mg-axi entra domain service-configuration-record show` | native | read |
+| `mg-axi entra domain-dns-record list` | native | read |
+| `mg-axi entra domain-dns-record show` | native | read |
 | `mg-axi entra sign-in list` | native | read |
 | `mg-axi entra sign-in show` | native | read |
 | `mg-axi entra directory-audit list` | native | read |

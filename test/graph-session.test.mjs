@@ -88,6 +88,24 @@ test("path parameters bind one encoded resource per placeholder", async () => {
   assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/users/analyst%40example.invalid");
 });
 
+for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) {
+  for (const id of ["$count", "$value", "$ref", "$custom", "%24count"]) {
+    for (const [method, operation, params] of [
+      ["execute", userById, { "user-id": id }],
+      ["collect", resolveSessionOperation("v1.0", "GET", "/groups/{group-id}/members"), { "group-id": id }],
+    ]) test(`${profile.mode} ${method} rejects reserved resource binding ${id} before credentials`, async () => {
+      const f = fixture(json(200, {}));
+      await assert.rejects(f.session[method]({ profile, operation, params, ...scopeArgs }), { code: "VALIDATION_ERROR" });
+      assert.equal(f.credentialCalls.length, 0);
+      assert.equal(f.requests.length, 0);
+    });
+  }
+}
+
+test("continuation authorization rejects a reserved resource binding", () => {
+  assert.throws(() => authorizeUrl(userById, { "user-id": "$count" }, "/v1.0/users/%24count"), { code: "VALIDATION_ERROR" });
+});
+
 test("guest UPN remains bound across a same-resource redirect", async () => {
   const user = "alice_example.com#EXT#@tenant.onmicrosoft.com";
   const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(user)}`;

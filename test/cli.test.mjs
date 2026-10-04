@@ -46,6 +46,10 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra organization list/);
   assert.match(result.stdout, /entra organization branding show/);
   assert.match(result.stdout, /entra organization branding-localization list/);
+  assert.match(result.stdout, /entra domain list/);
+  assert.match(result.stdout, /entra domain verification-dns-record list/);
+  assert.match(result.stdout, /entra domain service-configuration-record list/);
+  assert.match(result.stdout, /entra domain-dns-record list/);
   assert.match(result.stdout, /entra conditional-access policy list/);
   assert.match(result.stdout, /entra conditional-access named-location list/);
   assert.match(result.stdout, /entra group member add/);
@@ -81,6 +85,10 @@ for (const [name, args, error] of [
   ["missing required organization for branding", ["entra", "organization", "branding", "show"], /--organization is required/],
   ["missing required organization for localizations", ["entra", "organization", "branding-localization", "list"], /--organization is required/],
   ["organization list rejects filters", ["entra", "organization", "list", "--filter", "displayName eq 'Contoso'"], /unknown flag --filter/],
+  ["missing required domain ID", ["entra", "domain", "show"], /--id is required/],
+  ["missing required domain for verification records", ["entra", "domain", "verification-dns-record", "list"], /--domain is required/],
+  ["missing required domain for service records", ["entra", "domain", "service-configuration-record", "list"], /--domain is required/],
+  ["domain list rejects filters", ["entra", "domain", "list", "--filter", "isVerified eq true"], /unknown flag --filter/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
   ["missing required grant client", ["entra", "service-principal", "oauth2-grant", "list"], /--service-principal is required/],
   ["missing required app-role client", ["entra", "service-principal", "app-role-assignment", "list"], /--service-principal is required/],

@@ -2,7 +2,7 @@ import { AxiError } from "axi-sdk-js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
-import { GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
+import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
 // API-01: the reviewed read-only raw Graph surface.
@@ -71,6 +71,8 @@ const ROLE_ASSIGNMENT_FIELDS = ["id", "principalId", "roleDefinitionId", "direct
 const PIM_INSTANCE_FIELDS = ["id", "roleDefinitionId", "principalId", "assignmentType", "memberType", "startDateTime", "endDateTime", "activatedUsing"];
 const DEVICE_FIELDS = ["id", "deviceId", "displayName", "operatingSystem", "operatingSystemVersion", "trustType", "isCompliant", "isManaged", "accountEnabled", "createdDateTime", "approximateLastSignInDateTime", "manufacturer", "model"];
 const AU_FIELDS = ["id", "displayName", "description", "visibility", "membershipType", "membershipRule"];
+const DOMAIN_FIELDS = ["id", "authenticationType", "availabilityStatus", "isAdminManaged", "isDefault", "isInitial", "isRoot", "isVerified", "supportedServices", "passwordValidityPeriodInDays", "passwordNotificationWindowInDays", "state"];
+const DNS_RECORD_FIELDS = ["id", "isOptional", "label", "recordType", "supportedService", "ttl", "mailExchange", "preference", "canonicalName", "nameTarget", "port", "priority", "protocol", "service", "weight", "text"];
 
 // The reviewed surface, exported for capability reporting (PACK-01) and tests.
 export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
@@ -210,6 +212,35 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D User.Read least-privileged or the purpose-built OrganizationalBranding.Read.All (Organization.Read.All also works). Delegated callers pass it as --scopes and additionally need Global Reader or Organizational Branding Administrator; A OrganizationalBranding.Read.All. No P1/P2 prerequisite is stated for this read.",
     note: "Only non-Stream properties are reviewed here; Stream image bytes are refused.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/organizationalbrandinglocalization-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/domains", kind: "collection", query: ["$select"], fields: DOMAIN_FIELDS,
+    access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; a supported Entra role is also required (Domain Name Administrator or Global Reader are least-privileged). No P1/P2 prerequisite is stated for domain reads.",
+    note: "Graph documents a known issue with $search, $top and $filter on domain lists; only $select is reviewed here.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/domains/{domain-id}", kind: "single", query: SINGLE_QUERY, fields: DOMAIN_FIELDS,
+    access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; a supported Entra role is also required (Domain Name Administrator or Global Reader are least-privileged). No P1/P2 prerequisite is stated for domain reads.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/domain-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/domains/{domain-id}/verificationDnsRecords", kind: "collection", query: COLLECTION_QUERY, fields: DNS_RECORD_FIELDS,
+    access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list-verificationdnsrecords?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/domains/{domain-id}/verificationDnsRecords/{domainDnsRecord-id}", kind: "single", query: SINGLE_QUERY, fields: DNS_RECORD_FIELDS,
+    access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
+    note: "No operation-level documentation page; access follows the parent verification-records contract and the domainDnsRecord resource reference.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list-verificationdnsrecords?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/domaindnsrecord?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/domains/{domain-id}/serviceConfigurationRecords", kind: "collection", query: COLLECTION_QUERY, fields: DNS_RECORD_FIELDS,
+    access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list-serviceconfigurationrecords?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/domains/{domain-id}/serviceConfigurationRecords/{domainDnsRecord-id}", kind: "single", query: SINGLE_QUERY, fields: DNS_RECORD_FIELDS,
+    access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
+    note: "No operation-level documentation page; access follows the parent service-configuration contract and the domainDnsRecord resource reference.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list-serviceconfigurationrecords?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/domaindnsrecord?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/domainDnsRecords", kind: "collection", query: COLLECTION_QUERY, fields: DNS_RECORD_FIELDS,
+    access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
+    note: "No operation-level documentation page; access follows the documented domain/DNS-read contract and the domainDnsRecord resource reference.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/domaindnsrecord?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/domainDnsRecords/{domainDnsRecord-id}", kind: "single", query: SINGLE_QUERY, fields: DNS_RECORD_FIELDS,
+    access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
+    note: "No operation-level documentation page; access follows the documented domain/DNS-read contract and the domainDnsRecord resource reference.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/domaindnsrecord?view=graph-rest-1.0"] },
 ];
 
 function splitPath(path: string): string[] {
@@ -231,6 +262,7 @@ function matchTemplate(template: string, pathname: string): Record<string, strin
     const name = /^\{([^{}]+)\}$/.exec(slot)?.[1];
     if (name) {
       if (!segment.length) return null;
+      encodeGraphPathSegment(segment);
       params[name] = segment;
     } else if (slot.toLowerCase() !== segment.toLowerCase()) return null;
   }

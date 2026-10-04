@@ -91,7 +91,7 @@ test("setup reports unconfigured state without writing configuration", () => {
     assert.equal(output.profiles, "0 profiles configured");
     assert.ok(output.capabilities.implemented.includes("mg-axi setup") || output.capabilities.implemented.includes("setup"));
     assert.ok(output.capabilities.implemented.includes("entra user list"));
-    assert.equal(output.capabilities.reads, 45);
+    assert.equal(output.capabilities.reads, 53);
     assert.equal(output.capabilities.writes, 4);
     assert.equal(output.capabilities.local, 6);
     assert.ok(!existsSync(config), "setup writes nothing");
@@ -500,6 +500,15 @@ test("lists every executable leaf in the skill table exactly once", () => {
 test("keeps the committed coverage record generated from the inventory", () => {
   const coverage = readFileSync(new URL("../docs/coverage.md", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.equal(coverage, capabilityDocument());
+});
+
+test("write status follows the catalogue, not hard-coded prose", () => {
+  const coverage = capabilityDocument();
+  const shipped = coverage.split("Shipped initial writes: ")[1]?.split(".\n")[0] ?? "";
+  const pending = coverage.split("Pending initial writes: ")[1]?.split(".\n")[0] ?? "";
+  for (const slice of ["WRITE-01", "WRITE-02", "WRITE-03", "WRITE-05"]) assert.ok(shipped.includes(slice), `${slice} reads shipped`);
+  for (const slice of ["WRITE-04"]) assert.ok(pending.includes(slice), `${slice} reads pending`);
+  assert.doesNotMatch(coverage, /later writes \(WRITE-04 and beyond\)/);
 });
 
 test("calls the release the supported Entra read surface, not full coverage", () => {

@@ -475,6 +475,8 @@ export function createMutationCoordinator(args: {
       ]);
     }
     for (const segment of segments.slice(1)) {
+      if (segment === "$ref" && definition.operation === "mg.entra.group.member.add" && definition.method === "POST"
+        && /^\/v1\.0\/groups\/[^/]+\/members\/\$ref$/.test(definition.path)) continue;
       let decoded: string;
       try {
         decoded = decodeURIComponent(segment);

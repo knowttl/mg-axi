@@ -75,6 +75,14 @@ READ_ACTION_SOURCES = {
     "previewTaskFailures": "identitygovernance-workflow-previewtaskfailures",
     "tenantSearch": "managedtenants-tenantgroup-tenantsearch",
 }
+# The five approved EXT-01b organization/branding reads, shared by both API versions.
+APPROVED_ORGANIZATION_READS = {
+    "/organization",
+    "/organization/{organization-id}",
+    "/organization/{organization-id}/branding",
+    "/organization/{organization-id}/branding/localizations",
+    "/organization/{organization-id}/branding/localizations/{organizationalBrandingLocalization-id}",
+}
 MANAGED_TENANT_NAV = set("auditEvents conditionalAccessPolicyCoverages credentialUserRegistrationsSummaries myRoles tenantGroups tenantTags tenants tenantsCustomizedInformation tenantsDetailedInformation".split())
 EXCLUDED_NAV = {
     "Mail": set("mailboxSettings messages mailFolders calendars calendar contactFolders outlook".split()),
@@ -199,6 +207,30 @@ def make_row(version, path, method, operation):
         disposition, reason = "intentionally-blocked", "Beta writes are denied by the approved plan."
     elif any(word in lower for word in ("b2c", "authenticationeventsflows", "trustframework/policies")):
         disposition, reason = "intentionally-blocked", "External-customer launch support requires separate authorization."
+    if owner == "EXT-01" and not mutates and disposition == "scheduled" and path.split("/")[1] == "organization" and path not in APPROVED_ORGANIZATION_READS:
+        if "/certificateBasedAuthConfiguration" in path:
+            reason = "Deferred by firstmate organization scope to a later EXT-01 organization certificate-auth subfamily: trusted-CA certificate material needs a separate redaction and output review."
+        elif "/extensions" in path:
+            reason = "Deferred by firstmate organization scope to a later EXT-01 organization extensions subfamily: open-extension payloads need their own query and projection review."
+        elif path.rsplit("/", 1)[-1] in {"backgroundImage", "bannerLogo", "customCSS", "favicon", "headerLogo", "squareLogo", "squareLogoDark"}:
+            reason = "Deferred by firstmate organization scope to a later EXT-01 organization branding-stream subfamily: binary image and CSS bytes need a separate output contract from the approved metadata reads."
+        elif path.endswith(("/$count", "/delta()")):
+            reason = "Deferred by firstmate organization scope to a later EXT-01 organization counts subfamily: scalar counts and deltas need a separate query and response contract from the approved list/show reads."
+        elif method == "POST":
+            reason = "Deferred by firstmate organization scope to a later EXT-01 organization lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review."
+        elif version == "beta":
+            reason = "Deferred by firstmate organization scope to a later EXT-01 beta organization subfamily: the approved reads cover the shared routes on both versions; beta-only settings, partner and theme contracts need separate review."
+    if owner == "EXT-01" and method == "GET" and disposition == "scheduled" and path.split("/")[1] in {"domains", "domainDnsRecords"}:
+        if "/federationConfiguration" in path:
+            reason = "Deferred by firstmate R1 to a later EXT-01 domain federation subfamily: federation configuration can carry signing-certificate material and needs a separate output review."
+        elif "/domainNameReferences" in path or path.endswith("/rootDomain"):
+            reason = "Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review."
+        elif "/sharedEmailDomainInvitations" in path:
+            reason = "Deferred by firstmate R1 to a later EXT-01 shared-email domains subfamily: beta invitation relationships need a separate access and output review."
+        elif path.endswith("/$count"):
+            reason = "Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads."
+        elif version == "beta":
+            reason = "Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review."
     if mutates and owner is not None:
         owner = "WRITE-N"
         if method == "PATCH" and path == "/users/{user-id}":

@@ -13,7 +13,7 @@ READ-01 executes Entra user list/show through that session in both delegated and
 READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
 READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
 READ-03 adds Conditional Access policy and named-location list/show as separate grammar through the same session; Conditional Access usage follows the group usage below.
-READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the user usage below.
+READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the Conditional Access usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
@@ -158,7 +158,10 @@ mg-axi entra conditional-access named-location show --profile soc --id <named-lo
 Policy `--select` accepts the [reviewed policy property set](src/entra-conditional-access.ts) and location `--select` accepts the [reviewed location property set](src/entra-conditional-access.ts); `--fields` must be a subset of the fetched selection in each family.
 Returned `@odata.type` stays visible on named-location rows so IP and country locations stay distinguishable alongside any `--fields` projection.
 Policy lists return `policies`, location lists return `namedLocations`, single-policy reads return `policy` and single-location reads return `namedLocation`.
+Successful empty collections return an empty list with `count.returned: 0`, `count.complete: true` and absence guidance.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to Conditional Access reads, including nested condition values; every truncated value carries a `--full` hint.
+Resume either Conditional Access list with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra conditional-access policy list --profile soc --cursor - < cursor.txt`.
+Small cursors can also use `--cursor <token>`; both forms enforce a 16 MB size ceiling.
 Use `--full` when reasoning from complete condition or control text; `--select` and `--fields` still determine which properties are visible, and missing properties remain unknown.
 To replay a resumed result with `--full`, reuse the original input cursor; the returned cursor continues after that result.
 Delegated policy and location reads default to `https://graph.microsoft.com/Policy.Read.All`; application profiles require admin-consented `Policy.Read.All`, use the configured Graph `.default` audience and reject `--scopes`.

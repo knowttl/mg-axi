@@ -11,6 +11,7 @@ CORE-02 adds session collections, query validation, bounded retries and cancella
 API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface through that session.
 READ-01 executes Entra user list/show through that session in both delegated and application modes; current usage follows below.
 READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
+READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the user usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
@@ -86,9 +87,10 @@ Direct member results always carry the [v1.0 service-principal limitation](docs/
 Delegated group reads default to `https://graph.microsoft.com/GroupMember.Read.All`; hidden members need `Member.Read.Hidden` and richer group properties may need `Group.Read.All`, while application profiles use the configured `.default` audience.
 When richer group access is needed, pass `--scopes https://graph.microsoft.com/Group.Read.All`; for hidden-member access, explicitly log in and read with `--scopes https://graph.microsoft.com/GroupMember.Read.All,https://graph.microsoft.com/Member.Read.Hidden` and satisfy the operation's delegated role requirements.
 
-Read directory roles, current assignments and PIM activity through four views:
+Read directory roles, current assignments and PIM activity through four views; delegated profiles first need explicit login with the read scopes:
 
 ```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/RoleManagement.Read.Directory,https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory,https://graph.microsoft.com/RoleAssignmentSchedule.Read.Directory
 mg-axi entra directory-role list --profile soc --limit 10
 mg-axi entra directory-role show --profile soc --id <role-id>
 mg-axi entra role-assignment list --profile soc --filter "principalId eq '<principal-id>'"
@@ -99,9 +101,9 @@ mg-axi entra pim active list --profile soc --filter "assignmentType eq 'Activate
 `entra directory-role list` defaults to `id`, `displayName`, `description` and `roleTemplateId`; `entra directory-role show --id <role-id>` defaults to the full reviewed role set.
 Directory roles are activated instances only: a role appears after activation, never before, so an empty result never proves the role does not exist.
 `entra role-assignment list` defaults to `id`, `principalId`, `roleDefinitionId` and `directoryScopeId` and returns the current assignment inventory, including direct and PIM-activated assignments.
-Use `entra pim active list` to distinguish `assignmentType` Assigned from Activated.
-`entra pim eligible list` covers PIM-eligible assignments, which are not active, and eligible instances carry no `assignmentType`.
-`entra pim active list` covers both directly assigned (`assignmentType` Assigned) and activated eligible (`assignmentType` Activated) assignments; `memberType` names how the instance reaches the principal.
+Use `entra pim active list` to classify those assignments as described below.
+`entra pim eligible list` defaults to `id`, `principalId`, `roleDefinitionId` and `memberType`; it covers PIM-eligible assignments, which are not active, and eligible instances carry no `assignmentType`.
+`entra pim active list` defaults to those properties plus `assignmentType` and covers both directly assigned (`assignmentType` Assigned) and activated eligible (`assignmentType` Activated) assignments; `memberType` names how the instance reaches the principal.
 For built-in roles the unified `roleDefinitionId` matches the directory-role `roleTemplateId`.
 `--select` requests properties from the [reviewed role property sets](src/entra-roles.ts); `--fields` must be a subset of the fetched selection.
 `--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; the named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply.

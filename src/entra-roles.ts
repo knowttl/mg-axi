@@ -33,8 +33,8 @@ import type { AnyProfile } from "./profiles.js";
 // reads. Built-in roles are base inventory; custom role assignments need P1;
 // PIM reads need P2 or ID Governance.
 
-// Every property this slice may request or display, matching the reviewed
-// raw surface. Anything else fails before credentials.
+// Eligible and active instances need separate reviewed property sets:
+// only active instances expose assignmentType.
 export const KNOWN_ROLE_FIELDS: readonly string[] = [
   "id",
   "displayName",

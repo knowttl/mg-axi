@@ -92,6 +92,10 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra conditional-access policy update` | native | write |
 | `mg-axi entra conditional-access named-location list` | native | read |
 | `mg-axi entra conditional-access named-location show` | native | read |
+| `mg-axi entra identity-provider list` | native | read |
+| `mg-axi entra identity-provider show` | native | read |
+| `mg-axi entra identity-provider count` | native | read |
+| `mg-axi entra identity-provider available-types` | native | read |
 | `mg-axi entra access-review definition list` | native | read |
 | `mg-axi entra access-review definition show` | native | read |
 | `mg-axi entra access-review instance list` | native | read |

@@ -148,6 +148,10 @@ export const LEAVES: Leaf[] = [
     method: { value: "browser|device-code", default: "browser", description: "Device code additionally requires profile opt-in" },
     scopes: { value: "comma-separated-Graph-scopes", required: true, description: "Explicit delegated permissions using full https://graph.microsoft.com/ scope names" },
   }, examples: ["mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read", "mg-axi login --profile soc --method device-code --scopes https://graph.microsoft.com/User.Read"] },
+  { path: "setup", description: "Show installation, configuration and capability guidance without signing in or writing anything", flags: {}, examples: ["mg-axi setup", "mg-axi setup --help"] },
+  { path: "doctor", description: "Check each selected profile with one bounded user-list read; never signs in interactively, installs nothing, enables no writes", flags: {
+    profile: common.profile,
+  }, examples: ["mg-axi doctor", "mg-axi doctor --profile soc", "mg-axi doctor --help"] },
   { path: "entra user list", description: "List users with basic properties (id, displayName, userPrincipalName, mail)", operation: "GET:/users", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
@@ -606,6 +610,6 @@ export function home() {
     profile: "unavailable: no profile configured",
     tenant: "unavailable: no tenant selected",
     domains: [{ name: "entra", status: "scheduled", summary: "Tenant summaries await Graph execution" }],
-    help: ["mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi entra application list --help", "mg-axi entra service-principal list --help", "mg-axi entra conditional-access policy list --help", "mg-axi api get --help"],
+    help: ["mg-axi setup", "mg-axi doctor", "mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi entra application list --help", "mg-axi entra service-principal list --help", "mg-axi entra conditional-access policy list --help", "mg-axi api get --help"],
   };
 }

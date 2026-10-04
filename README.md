@@ -364,8 +364,33 @@ Ask an administrator to grant those permissions on the configured app registrati
 Acquisition failures return `AUTH_REQUIRED` with consent and certificate/federation guidance, without user or device-code fallback.
 
 Run `corepack pnpm build`, `corepack pnpm test` and `corepack pnpm lint` for shell validation.
-The [CI workflow](.github/workflows/ci.yml) defines the platform/runtime matrix for shell build, test and lint checks, and validates the Python inventory tooling separately.
+The [CI workflow](.github/workflows/ci.yml) defines the platform/runtime matrix for shell build, test and lint checks, validates the Python inventory tooling separately, and rejects stale generated docs.
 The [implementation plan](PLAN.md) remains the design authority.
-Generated skill, setup and capability reporting ship in PACK-01; no session hooks are installed by ordinary commands.
 
 The pinned [Entra operation inventory](docs/inventory.md) defines the INV-01 discovery boundary and schema for later build slices.
+
+## Release
+
+This is the supported Entra read surface, not full Entra coverage.
+Only the commands in [docs/coverage.md](docs/coverage.md) have an implemented, tested leaf; every other operation remains scheduled, blocked, deprecated or excluded until its own slice ships.
+The package is marked private and ships no publish workflow: preparing this release never publishes it.
+The packed files are `dist`, the discovery inventory, `skills/mg-axi`, `docs/coverage.md` and this README.
+
+Install from a checkout with the pinned toolchain, then verify the version probe stays fast without loading the command graph:
+
+```sh
+corepack pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false
+corepack pnpm build
+node dist/bin/mg-axi.js --version
+```
+
+Explicit setup only: `mg-axi setup` shows the installation steps, the selected configuration path, the configured profiles and the capability summary.
+It writes nothing, signs in nowhere and installs no hooks; ordinary commands never gain installation side effects.
+Create profiles with `mg-axi profile create`, sign delegated profiles in with `mg-axi login`, and check every selected profile with `mg-axi doctor`.
+Doctor performs one bounded `entra user list --limit 1` read per profile with silent credential acquisition only: it never opens a browser, never shows a device-code challenge, never auto-installs and never enables writes.
+Configuration or access failures report per profile with rerun guidance and a nonzero exit.
+
+The installable skill lives at [skills/mg-axi/SKILL.md](skills/mg-axi/SKILL.md).
+Its command table and [docs/coverage.md](docs/coverage.md) are generated from the command catalogue and the discovery inventory.
+Regenerate both with `corepack pnpm run docs:generate` and verify freshness with `corepack pnpm run docs:check`; CI runs the check after every build.
+Critical journeys stay packaged offline: `test/pack.test.mjs` drives setup, doctor and the user, group, Conditional Access and sign-in reads through the packaged executable with fixture credentials and blocked networking.

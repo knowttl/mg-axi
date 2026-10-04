@@ -4,28 +4,12 @@ import { encodeGraphPathSegment, redactGraphValue, REDACTED } from "./graph-sess
 import type { MutationCoordinator } from "./mutations.js";
 import type { AnyProfile } from "./profiles.js";
 
-// WRITE-04: update one Conditional Access policy through a reviewed-field
-// write leaf (`mg-axi entra conditional-access policy update --id
-// <policy-id> --state enabled|...`), via PATCH
-// /identity/conditionalAccess/policies/{id} with only explicitly reviewed
-// fields sent. Preview reads the current policy through the READ-03 policy
-// show route and shows the current-versus-proposed diff; an already-desired
-// value set is a no-op; every execute is disruptive and needs the typed
-// policy-ID confirmation.
-//
-// Reviewed against the v1.0 conditionalaccesspolicy-update operation
-// documentation on REVIEWED_ON: PATCH carries only the properties to update
-// and answers 204 No Content, so the coordinator outcome is the only proof.
-// The least-privileged pair is Policy.Read.All plus
-// Policy.ReadWrite.ConditionalAccess in both delegated and application
-// modes. Delegated callers additionally need Conditional Access
-// Administrator or Security Administrator. CA needs P1; risk-based CA needs
-// P2. Graph documents no ETag or If-Match precondition for this endpoint,
-// so the command sends none and promises no concurrency protection: fresh
-// reads do not make the update atomic. Every gate in src/mutations.ts stays
-// in force through the coordinator: hand-enabled profile, immutable scope,
-// preview, --execute, durable journal intent/outcome, no replay,
-// coordinator-only authorization and read-only enforced at send time.
+// WRITE-04 usage, reviewed fields, permissions and lockout requirements are
+// owned by README.md; shared execution gates are owned by docs/execution.md.
+// Reviewed against v1.0 conditionalaccesspolicy-update on REVIEWED_ON:
+// Graph documents no ETag or If-Match precondition, so fresh reads cannot
+// make the PATCH atomic. Its 204 response contains no policy body; the
+// coordinator records the outcome, and callers must verify with policy show.
 
 export const REVIEWED_ON = "2026-10-04";
 

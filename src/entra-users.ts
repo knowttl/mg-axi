@@ -162,7 +162,17 @@ function selectedFields(flags: UserFlags, defaults: string[], help: string): { s
 }
 
 function profileHint(profileName: string): string {
-  return `--profile ${profileName}`;
+  return `--profile ${shellValue(profileName)}`;
+}
+
+function shellValue(value: string): string {
+  return /^[A-Za-z0-9_.,:/@=-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function fullHint(action: string, flags: UserFlags, profileName: string): string {
+  const args = Object.entries({ ...flags, profile: profileName, full: true })
+    .map(([name, value]) => value === true ? `--${name}` : `--${name} ${shellValue(String(value))}`);
+  return `mg-axi entra user ${action} ${args.join(" ")}`;
 }
 
 export async function listUsers(
@@ -173,10 +183,14 @@ export async function listUsers(
   help: string,
   profileName: string,
 ): Promise<Record<string, unknown>> {
-  const { select, fields } = selectedFields(flags, DEFAULT_LIST_SELECT, help);
+  const selection = flags.cursor === undefined || flags.select !== undefined
+    ? selectedFields(flags, DEFAULT_LIST_SELECT, help)
+    : undefined;
+  if (!selection && flags.fields !== undefined) fieldList(flags.fields, "fields", help);
   const scopes = scopesFor(flags, profile, help);
   const full = flags.full === true;
-  const query: Record<string, string> = { $select: select.join(",") };
+  const query: Record<string, string> = {};
+  if (selection) query.$select = selection.select.join(",");
   if (flags.filter !== undefined) query.$filter = String(flags.filter);
   const args: CollectArgs = { profile, operation, query, scopes };
   if (flags.cursor !== undefined) {
@@ -189,6 +203,9 @@ export async function listUsers(
     args.limit = flags.limit === undefined ? 100 : Number(flags.limit);
   }
   const result = await session.collect(args);
+  const effectiveFlags: UserFlags = { ...flags, select: result.query.$select ?? DEFAULT_LIST_SELECT.join(",") };
+  if (result.query.$filter !== undefined) effectiveFlags.filter = result.query.$filter;
+  const { fields } = selectedFields(effectiveFlags, DEFAULT_LIST_SELECT, help);
   const users: Record<string, unknown>[] = [];
   let truncated = false;
   for (const row of result.value) {
@@ -197,12 +214,13 @@ export async function listUsers(
     truncated = truncated || projected.truncated;
   }
   const showHint = `mg-axi entra user show --id <user-id-or-upn> ${profileHint(profileName)}`;
+  const truncationHints = truncated ? [fullHint("list", effectiveFlags, profileName)] : [];
   if (!result.complete) {
     return {
       users,
       count: { returned: users.length, complete: false, reason: result.reason },
       cursor: result.cursor,
-      help: [`Resume losslessly with the same flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`, showHint],
+      help: [...truncationHints, `Resume losslessly with the same flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`, showHint],
     };
   }
   const count = { returned: users.length, complete: true };
@@ -216,8 +234,7 @@ export async function listUsers(
       ],
     };
   }
-  const helpHints = [showHint];
-  if (truncated) helpHints.unshift(`mg-axi entra user list --full ${profileHint(profileName)}`);
+  const helpHints = [...truncationHints, showHint];
   return { users, count, help: helpHints };
 }
 
@@ -227,6 +244,7 @@ export async function showUser(
   profile: AnyProfile,
   operation: SessionOperation,
   help: string,
+  profileName: string,
 ): Promise<Record<string, unknown>> {
   const { select, fields } = selectedFields(flags, DEFAULT_SHOW_SELECT, help);
   const scopes = scopesFor(flags, profile, help);
@@ -244,6 +262,6 @@ export async function showUser(
     ]);
   }
   const { row, truncated } = project(raw, fields, full);
-  if (truncated) return { user: row, help: ["mg-axi entra user show --id <user-id-or-upn> --full"] };
+  if (truncated) return { user: row, help: [fullHint("show", flags, profileName)] };
   return { user: row };
 }

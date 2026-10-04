@@ -116,7 +116,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
     return leaf.path === "entra user list"
       ? listUsers(session, flags, selected.profile, operation, leafHelp(leaf), selected.name)
-      : showUser(session, flags, selected.profile, operation, leafHelp(leaf));
+      : showUser(session, flags, selected.profile, operation, leafHelp(leaf), selected.name);
   }
   const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
   throw new AxiError(`Command is not executable: ${operation?.disposition ?? "unavailable"} (${operation?.owningSlice ?? "no inventory mapping"})`, "NOT_IMPLEMENTED", [leafHelp(leaf)]);

@@ -9,6 +9,7 @@ export const fetchTransport: GraphTransport = async request => {
     method: request.method,
     headers: request.headers,
     signal: request.signal,
+    redirect: "manual",
   });
   const headers: Record<string, string> = Object.create(null);
   response.headers.forEach((value, name) => {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -133,6 +134,11 @@ function overridesFor(mode, handler, calls = []) {
 
 const exitCode = error => (error?.code === "VALIDATION_ERROR" ? 2 : 1);
 
+function hintArgv(hint) {
+  const command = `"${process.execPath}" -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' ${hint.slice("mg-axi ".length)}`;
+  return JSON.parse(execFileSync("/bin/sh", ["-c", command], { encoding: "utf8" }));
+}
+
 test("delegated list returns compact basic rows with a complete count and show hint", async () => {
   const state = setupProfiles();
   try {
@@ -182,16 +188,75 @@ test("show truncates long text unless --full is passed", async () => {
     const fixture = transport(() => json(200, { ...u1, department: long }));
     const credential = credentialService("delegated", []);
     const overrides = { transport: fixture.send, delegated: credential, application: credentialService("application", []) };
-    const compact = await executeArgv(["entra", "user", "show", "--id", u1.id, "--profile", "soc", "--select", "id,department"], overrides);
+    const argv = ["entra", "user", "show", "--id", u1.id, "--profile", "soc", "--select", "id,department",
+      "--fields", "department", "--api-version", "v1.0", "--scopes", delegatedScopes[0]];
+    const compact = await executeArgv(argv, overrides);
     assert.match(compact.user.department, /\.\.\. \(truncated, 600 chars total\)$/);
     assert.ok(compact.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "user", "show", "--id", u1.id, "--profile", "soc", "--select", "id,department", "--full"], overrides);
+    const recovery = hintArgv(compact.help[0]);
+    assert.deepEqual(recovery, [...argv, "--full"]);
+    const full = await executeArgv(recovery, overrides);
     assert.equal(full.user.department, long);
     assert.equal(full.help, undefined);
   } finally {
     teardownProfiles(state);
   }
 });
+
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+  for (const repeated of [[], ["--select", "id,department"], ["--filter", "department eq 'R&D'"]]) {
+    test(`${mode} resume restores omitted query flags with ${JSON.stringify(repeated)}`, async () => {
+      const state = setupProfiles();
+      try {
+        const fixture = transport(request => new URL(request.url).searchParams.has("$skiptoken")
+          ? json(200, { value: [{ id: "c", department: "R&D" }] })
+          : json(200, {
+            value: [{ id: "a", department: "R&D" }, { id: "b", department: null }],
+            "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$skiptoken=next",
+          }));
+        const { overrides } = overridesFor(mode, fixture);
+        const first = await executeArgv(["entra", "user", "list", "--profile", profile,
+          "--select", "id,department", "--filter", "department eq 'R&D'", "--limit", "1"], overrides);
+        const second = await executeArgv(["entra", "user", "list", "--profile", profile,
+          "--cursor", first.cursor, ...repeated], overrides);
+        assert.deepEqual(second.users, [{ id: "b", department: null }, { id: "c", department: "R&D" }]);
+        assert.equal(second.count.complete, true);
+        assert.equal(fixture.requests[1].url, "https://graph.microsoft.com/v1.0/users?$skiptoken=next");
+        await assert.rejects(executeArgv(["entra", "user", "list", "--profile", profile,
+          "--cursor", first.cursor, "--select", "id"], overrides), { code: "VALIDATION_ERROR" });
+      } finally {
+        teardownProfiles(state);
+      }
+    });
+  }
+}
+
+for (const cap of [["--all"], ["--limit", "1"]]) {
+  test(`list truncation recovery preserves query and projection with ${cap.join(" ")}`, async () => {
+    const state = setupProfiles();
+    try {
+      const long = "x".repeat(600);
+      const fixture = transport(() => json(200, { value: [{ id: "a", department: long }, { id: "b", department: long }] }));
+      const { overrides } = overridesFor("delegated", fixture);
+      const argv = ["entra", "user", "list", "--profile", "soc", "--select", "id,department",
+        "--fields", "department", "--filter", "department eq 'R&D'", "--scopes", delegatedScopes[0], "--api-version", "v1.0", ...cap];
+      const compact = await executeArgv(argv, overrides);
+      assert.match(compact.users[0].department, /truncated/);
+      const recovery = hintArgv(compact.help[0]);
+      assert.deepEqual(recovery, [...argv, "--full"]);
+      const full = await executeArgv(recovery, overrides);
+      assert.deepEqual(full.users, cap[0] === "--all" ? [{ department: long }, { department: long }] : [{ department: long }]);
+      assert.equal(full.count.complete, compact.count.complete);
+      if (compact.cursor) {
+        const resumed = await executeArgv(["entra", "user", "list", "--profile", "soc", "--cursor", compact.cursor], overrides);
+        const recovered = await executeArgv(hintArgv(resumed.help[0]), overrides);
+        assert.deepEqual(recovered.users, [{ id: "b", department: long }]);
+      }
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+}
 
 test("a capped delegated list resumes losslessly through its opaque cursor", async () => {
   const state = setupProfiles();

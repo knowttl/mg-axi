@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Socket } from "node:net";
 import { mock } from "node:test";
 
-const { mode, directory, denied, scopes, groups, members, memberOf } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const { mode, directory, denied, scopes, groups, members, memberOf, applications, servicePrincipals, appOwners, spOwners } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
 const expectedDelegated = scopes ?? "https://graph.microsoft.com/User.Read.All";
 const [major, minor] = process.versions.node.split(".").map(Number);
 const exportOption = major >= 26 || (major === 25 && minor >= 9) || (major === 24 && minor >= 15)
@@ -72,6 +72,26 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
       const group = groups.find(row => url.pathname === `/v1.0/groups/${row.id}`);
       assert.ok(group, "Unexpected group route");
       body = group;
+    } else if (applications !== undefined && url.pathname === "/v1.0/applications") {
+      body = url.searchParams.has("$skiptoken")
+        ? { value: applications.slice(2) }
+        : { value: applications.slice(0, 2), "@odata.nextLink": "https://graph.microsoft.com/v1.0/applications?%24skiptoken=page2" };
+    } else if (applications !== undefined && /^\/v1\.0\/applications\/[^/]+\/owners$/.test(url.pathname)) {
+      body = { value: appOwners };
+    } else if (applications !== undefined && /^\/v1\.0\/applications\/[^/]+$/.test(url.pathname)) {
+      const application = applications.find(row => url.pathname === `/v1.0/applications/${row.id}`);
+      assert.ok(application, "Unexpected application route");
+      body = application;
+    } else if (servicePrincipals !== undefined && url.pathname === "/v1.0/servicePrincipals") {
+      body = url.searchParams.has("$skiptoken")
+        ? { value: servicePrincipals.slice(2) }
+        : { value: servicePrincipals.slice(0, 2), "@odata.nextLink": "https://graph.microsoft.com/v1.0/servicePrincipals?%24skiptoken=page2" };
+    } else if (servicePrincipals !== undefined && /^\/v1\.0\/servicePrincipals\/[^/]+\/owners$/.test(url.pathname)) {
+      body = { value: spOwners };
+    } else if (servicePrincipals !== undefined && /^\/v1\.0\/servicePrincipals\/[^/]+$/.test(url.pathname)) {
+      const servicePrincipal = servicePrincipals.find(row => url.pathname === `/v1.0/servicePrincipals/${row.id}`);
+      assert.ok(servicePrincipal, "Unexpected service principal route");
+      body = servicePrincipal;
     } else {
       const user = directory.find(row => url.pathname === `/v1.0/users/${row.id}`);
       assert.ok(user, "Unexpected user route");

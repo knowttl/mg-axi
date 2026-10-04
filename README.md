@@ -12,6 +12,7 @@ API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface t
 READ-01 executes Entra user list/show through that session in both delegated and application modes; current usage follows below.
 READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the user usage below.
+READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -47,7 +48,7 @@ Create a delegated profile with your organization-owned public client registrati
 mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
 mg-axi profile list
 mg-axi profile show --profile soc
-mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All,https://graph.microsoft.com/GroupMember.Read.All,https://graph.microsoft.com/Group.Read.All
+mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All,https://graph.microsoft.com/GroupMember.Read.All,https://graph.microsoft.com/Group.Read.All,https://graph.microsoft.com/Application.Read.All
 ```
 
 After login, use:
@@ -61,6 +62,12 @@ mg-axi entra group show --profile soc --id <group-id> --scopes https://graph.mic
 mg-axi entra group member list --profile soc --group <group-id>
 mg-axi entra group member list --profile soc --group <group-id> --transitive
 mg-axi entra group member-of list --profile soc --group <group-id> --transitive
+mg-axi entra application list --profile soc --limit 10
+mg-axi entra application show --profile soc --id <application-object-id>
+mg-axi entra application owner list --profile soc --application <application-object-id>
+mg-axi entra service-principal list --profile soc --limit 10
+mg-axi entra service-principal show --profile soc --id <service-principal-object-id>
+mg-axi entra service-principal owner list --profile soc --service-principal <service-principal-object-id>
 ```
 
 `entra group list` defaults to compact properties (`id`, `displayName`, `mail`, `groupTypes`); `entra group show --id <group-id>` defaults to the richer reviewed group set including `isAssignableToRole`, which marks groups eligible for role assignment.
@@ -103,6 +110,19 @@ Graph omits CA policy detail without CA-data access, so an absent `appliedCondit
 Both modes need Policy.Read.All, Policy.Read.ConditionalAccess or Policy.ReadWrite.ConditionalAccess in addition to AuditLog.Read.All; delegated callers also need Conditional Access Administrator, Global Reader, Security Administrator or Security Reader.
 For delegated CA detail, log in and repeat the read with `--scopes https://graph.microsoft.com/AuditLog.Read.All,https://graph.microsoft.com/Policy.Read.All`.
 Denied log reads name the operation's supported directory roles and the conservative P1/P2 deployment prerequisite instead of only the generic grant/role/licence cause.
+
+`entra application list` and `entra service-principal list` default to compact properties (`id`, `appId`, `displayName`); `appId` is the client ID, distinct from the object `id`, and both are included by default, while custom `--select` or `--fields` can omit either.
+`entra application show --id <application-object-id>` defaults to the richer reviewed application set including `keyCredentials` and `passwordCredentials`.
+`entra service-principal show --id <service-principal-object-id>` defaults to the richer reviewed service-principal set including `servicePrincipalType` and both credential collections.
+Credential collections expose only expiry metadata (`keyId`, `displayName`, `startDateTime`, `endDateTime`); the shared session drops every other credential subfield before output or cursor buffering and applies the same filtering to buffered rows on resume, including older cursors.
+Non-array credential collections become empty arrays, and non-object entries are dropped; other properties retain the null/missing behavior described above.
+Secret-minting routes are never constructed.
+`entra application owner list --application <application-object-id>` and `entra service-principal owner list --service-principal <service-principal-object-id>` list owners; rows carry `@odata.type` naming the owner kind, and consent grants stay out - they belong to READ-08.
+Application lists return `applications`, service-principal lists return `servicePrincipals`, owner lists return `owners`, and single-object reads return `application` or `servicePrincipal`.
+App and service-principal `--select` accepts the [reviewed property sets](src/entra-apps.ts); `--fields` must be a subset of the fetched selection.
+Owner rows default to `id`, `displayName` and `mail`, the only selectable owner properties; rows without non-null descriptive properties are preserved with a hint about limited consent or unset properties.
+The named-list caps, `count`, cursor resume rules and 500-character text truncation described above also apply to these reads; resume owner lists with the same `--application` or `--service-principal` object ID.
+Delegated application reads default to `https://graph.microsoft.com/Application.Read.All`, while application profiles use the configured `.default` audience.
 
 Configure the registration's Mobile and desktop applications redirect URI as `http://localhost` for browser login.
 The first created profile is the default; `--profile` selects another identity explicitly.

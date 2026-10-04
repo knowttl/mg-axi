@@ -7,6 +7,7 @@ import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-ses
 import { listUsers, showUser } from "./entra-users.js";
 import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
 import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from "./entra-audit-logs.js";
+import { listApplicationOwners, listApplications, listServicePrincipalOwners, listServicePrincipals, showApplication, showServicePrincipal } from "./entra-apps.js";
 import { fetchTransport } from "./api.js";
 import type { DelegatedAuth } from "./auth.js";
 import type { ApplicationAuth } from "./app-auth.js";
@@ -152,13 +153,13 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       ? listGroupMembers(session, flags, selected.profile, operation, leafHelp(leaf), selected.name)
       : listGroupMemberOf(session, flags, selected.profile, operation, leafHelp(leaf), selected.name);
   }
-  if (leaf.path === "entra sign-in list" || leaf.path === "entra sign-in show" || leaf.path === "entra directory-audit list" || leaf.path === "entra directory-audit show") {
+  if (leaf.path === "entra sign-in list" || leaf.path === "entra sign-in show" || leaf.path === "entra directory-audit list" || leaf.path === "entra directory-audit show" || leaf.path === "entra application list" || leaf.path === "entra application show" || leaf.path === "entra service-principal list" || leaf.path === "entra service-principal show" || leaf.path === "entra application owner list" || leaf.path === "entra service-principal owner list") {
     const selected = profiles.resolve(flags.profile as string | undefined);
     const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
     if (!operation || operation.method !== "GET") {
       throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
     }
-    if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
+    if ((leaf.path.startsWith("entra sign-in ") || leaf.path.startsWith("entra directory-audit ")) && flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
     let delegated = overrides.delegated;
     let application = overrides.application;
     if (!delegated) {
@@ -177,7 +178,13 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra sign-in list": return listSignIns(session, flags, selected.profile, operation, help, selected.name);
       case "entra sign-in show": return showSignIn(session, flags, selected.profile, operation, help, selected.name);
       case "entra directory-audit list": return listDirectoryAudits(session, flags, selected.profile, operation, help, selected.name);
-      default: return showDirectoryAudit(session, flags, selected.profile, operation, help, selected.name);
+      case "entra directory-audit show": return showDirectoryAudit(session, flags, selected.profile, operation, help, selected.name);
+      case "entra application list": return listApplications(session, flags, selected.profile, operation, help, selected.name);
+      case "entra application show": return showApplication(session, flags, selected.profile, operation, help, selected.name);
+      case "entra service-principal list": return listServicePrincipals(session, flags, selected.profile, operation, help, selected.name);
+      case "entra service-principal show": return showServicePrincipal(session, flags, selected.profile, operation, help, selected.name);
+      case "entra application owner list": return listApplicationOwners(session, flags, selected.profile, operation, help, selected.name);
+      default: return listServicePrincipalOwners(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));

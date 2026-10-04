@@ -20,6 +20,7 @@ import {
 // Graph error pairs never carry az-axi's keyName/value envelope, so only the
 // key-name and secret-value rules are adapted here.
 export const REDACTED = "***redacted***";
+export const SAFE_CREDENTIAL_FIELDS: readonly string[] = ["keyId", "displayName", "startDateTime", "endDateTime"];
 export const GRAPH_HOST = "graph.microsoft.com";
 // Conservative read-query allowlist. Per-operation review (READ slices) can
 // extend it; unknown keys fail closed here. $search/$count=true need eventual
@@ -167,10 +168,17 @@ function redact(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redact);
   if (value === null || typeof value !== "object") return value;
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, child]) => [
-      key,
-      typeof child === "string" && secretKey(key) ? REDACTED : redact(child),
-    ]),
+    Object.entries(value as Record<string, unknown>).map(([key, child]) => {
+      if (key === "keyCredentials" || key === "passwordCredentials") {
+        const entries = Array.isArray(child) ? child : [];
+        return [key, entries
+          .filter(entry => entry !== null && typeof entry === "object" && !Array.isArray(entry))
+          .map(entry => redact(Object.fromEntries(SAFE_CREDENTIAL_FIELDS
+            .filter(field => Object.hasOwn(entry, field))
+            .map(field => [field, entry[field]]))))];
+      }
+      return [key, typeof child === "string" && secretKey(key) ? REDACTED : redact(child)];
+    }),
   );
 }
 
@@ -487,7 +495,7 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   const consistencyLevel = record.consistencyLevel ?? undefined;
   buildQuery(query);
   checkQueryContext(query, consistencyLevel);
-  return { next: record.next ?? undefined, buffered: record.buffered, seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity };
+  return { next: record.next ?? undefined, buffered: record.buffered.map(redact), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity };
 }
 
 function nextLinkOf(body: unknown): string | undefined {

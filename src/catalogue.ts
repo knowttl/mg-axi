@@ -22,7 +22,7 @@ const logRead = {
   select: { value: "comma-separated-properties", description: "Request server properties; CA policy detail additionally needs a policy permission in both modes and a supported CA-data role for delegated access; request delegated policy access with --scopes https://graph.microsoft.com/AuditLog.Read.All,https://graph.microsoft.com/Policy.Read.All" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
   full: { description: "Show complete text values without truncation; never lifts redaction, row caps or time bounds" },
-  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  cursor: { value: "opaque-cursor|-", description: "Resume a capped collection losslessly; - reads the token from stdin (16 MB ceiling for either input); repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to AuditLog.Read.All" },
 };
 const userRead = {
@@ -216,7 +216,8 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (Object.hasOwn(flags, name)) fail(`duplicate flag --${name}`);
     if (flag!.value) {
       const value = match![2] ?? argv[++i];
-      if (!value?.trim() || (value.startsWith("-") && !(leaf.path === "api get" && name === "cursor" && value === "-"))) fail(`--${name} requires a non-empty value`);
+      if (!value?.trim() || (value.startsWith("-") && !(name === "cursor" && value === "-"
+        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list")))) fail(`--${name} requires a non-empty value`);
       flags[name] = value!;
     } else {
       if (match![2] !== undefined) fail(`--${name} does not take a value`);

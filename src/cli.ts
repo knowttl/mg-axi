@@ -3,7 +3,7 @@ import { AxiError, runAxiCli } from "axi-sdk-js";
 import { home, leafHelp, operationFor, resolveCommand, DESCRIPTION, TOP_LEVEL_HELP } from "./catalogue.js";
 import { VERSION } from "./version.js";
 import { Profiles } from "./profiles.js";
-import { GraphSession, type GraphTransport } from "./graph-session.js";
+import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
 import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
 import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from "./entra-audit-logs.js";
@@ -37,6 +37,19 @@ export interface DispatchOverrides {
   application?: ApplicationAuth;
 }
 
+async function readCursor(cursor: string | undefined): Promise<string | undefined> {
+  if (cursor !== "-") return cursor;
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for await (const chunk of process.stdin) {
+    const buffer = Buffer.from(chunk);
+    bytes += buffer.length;
+    if (bytes > MAX_CURSOR_BYTES) throw new AxiError(`Collection cursor exceeds ${MAX_CURSOR_BYTES} bytes`, "VALIDATION_ERROR", ["Use a cursor within the supported size ceiling"]);
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 export async function executeArgv(argv: string[], overrides: DispatchOverrides = {}): Promise<string | Record<string, unknown>> {
   const { leaf, flags, positional } = resolveCommand(argv);
   if (flags.help) return leafHelp(leaf);
@@ -68,19 +81,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     const { ApplicationAuth } = await import("./app-auth.js");
     const { MsalProvider } = await import("./msal-provider.js");
     const { MsalApplicationProvider } = await import("./msal-app-provider.js");
-    const { MAX_CURSOR_BYTES } = await import("./graph-session.js");
-    let cursor = flags.cursor === undefined ? undefined : String(flags.cursor);
-    if (cursor === "-") {
-      const chunks: Buffer[] = [];
-      let bytes = 0;
-      for await (const chunk of process.stdin) {
-        const buffer = Buffer.from(chunk);
-        bytes += buffer.length;
-        if (bytes > MAX_CURSOR_BYTES) throw new AxiError(`Collection cursor exceeds ${MAX_CURSOR_BYTES} bytes`, "VALIDATION_ERROR", ["Use a cursor within the supported size ceiling"]);
-        chunks.push(buffer);
-      }
-      cursor = Buffer.concat(chunks).toString("utf8");
-    }
+    const cursor = await readCursor(flags.cursor === undefined ? undefined : String(flags.cursor));
     return runApiGet({
       path: positional!,
       apiVersion: String(flags["api-version"] ?? "v1.0"),
@@ -157,6 +158,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     if (!operation || operation.method !== "GET") {
       throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
     }
+    if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
     let delegated = overrides.delegated;
     let application = overrides.application;
     if (!delegated) {

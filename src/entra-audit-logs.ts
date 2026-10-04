@@ -217,7 +217,7 @@ function shellValue(value: string): string {
 }
 
 function fullHint(noun: string, action: string, flags: LogFlags, profileName: string): string {
-  const args = Object.entries({ ...flags, profile: profileName, full: true })
+  const args = Object.entries({ ...flags, ...(flags.cursor === undefined ? {} : { cursor: "-" }), profile: profileName, full: true })
     .map(([name, value]) => value === true ? `--${name}` : `--${name} ${shellValue(String(value))}`);
   return `mg-axi entra ${noun} ${action} ${args.join(" ")}`;
 }
@@ -338,12 +338,13 @@ async function listLogs(
   }
   const showHint = `${shape.showHint} ${profileHint(profileName)}`;
   const truncationHints = truncated ? [fullHint(shape.noun, "list", effectiveFlags, profileName)] : [];
+  if (truncated && cursor !== undefined) truncationHints.push("Supply the original input cursor on stdin to replay this result with --full");
   if (!result.complete) {
     return {
       [shape.key]: rows,
       count: { returned: rows.length, complete: false, reason: result.reason },
       cursor: result.cursor,
-      help: [...truncationHints, `Resume losslessly with the same flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`, showHint],
+      help: [...truncationHints, `Resume losslessly with the same flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`, showHint],
     };
   }
   const count = { returned: rows.length, complete: true };

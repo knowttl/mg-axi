@@ -9,6 +9,7 @@ import { decode } from "@toon-format/toon";
 import { executeArgv } from "../dist/cli.js";
 import { Profiles } from "../dist/profiles.js";
 import { DelegatedAuth } from "../dist/auth.js";
+import { MAX_CURSOR_BYTES } from "../dist/graph-session.js";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
@@ -215,17 +216,91 @@ function hintArgv(hint) {
   return argv;
 }
 
-function runReadCli(args, state, mode, denied = false) {
+function runReadCli(args, state, mode, denied = false, input) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-audit-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
   ], {
-    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000,
+    encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], input, timeout: 30000,
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
       MG_AXI_READ_FIXTURE: JSON.stringify({ mode, signIns, audits, denied }),
     },
+  });
+}
+
+for (const [noun, key, field] of [
+  ["sign-in", "signIns", "userPrincipalName"],
+  ["directory-audit", "directoryAudits", "activityDisplayName"],
+]) {
+  for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+    test(`${mode} executable resumes large ${noun} cursors and recovers full text through stdin`, async () => {
+      const state = setupProfiles();
+      try {
+        const rows = Array.from({ length: 1000 }, (_, i) => ({ id: String(i), [field]: "x".repeat(600) }));
+        const fixture = transport(() => json(200, { value: rows }));
+        const { overrides } = overridesFor(mode, fixture);
+        const first = await executeArgv(["entra", noun, "list", "--profile", profile,
+          "--since", SINCE, "--select", `id,${field}`], overrides);
+        assert.equal(first.count.returned, 100);
+        assert.equal(first.count.complete, false);
+        assert.ok(Buffer.byteLength(first.cursor) > 128 * 1024);
+        assert.match(first.help.join("\n"), /--cursor -.*stdin/);
+        const second = runReadCli(["entra", noun, "list", "--profile", profile, "--cursor", "-"],
+          state, mode, true, `${first.cursor}\n`);
+        assert.equal(second.error, undefined);
+        assert.equal(second.status, 0, second.stdout);
+        assert.equal(second.stderr, "");
+        const partial = decode(second.stdout);
+        assert.deepEqual(partial[key].map(row => row.id), rows.slice(100, 200).map(row => row.id));
+        assert.match(partial[key][0][field], /truncated/);
+        assert.ok(!partial.help[0].includes(first.cursor));
+        assert.ok(partial.help[0].includes("--cursor -"));
+        assert.ok(partial.help.some(hint => hint.includes("original input cursor on stdin")));
+        const recovered = runReadCli(hintArgv(partial.help[0]), state, mode, true, first.cursor);
+        assert.equal(recovered.status, 0, recovered.stdout);
+        assert.deepEqual(decode(recovered.stdout)[key], rows.slice(100, 200));
+        const last = runReadCli(["entra", noun, "list", "--profile", profile, "--cursor", "-", "--all", "--full"],
+          state, mode, true, partial.cursor);
+        assert.equal(last.status, 0, last.stdout);
+        const complete = decode(last.stdout);
+        assert.deepEqual(complete[key], rows.slice(200));
+        assert.deepEqual(complete.count, { returned: 800, complete: true });
+      } finally { teardownProfiles(state); }
+    });
+  }
+
+  for (const [input, expectedError] of [
+    ["", /needs the opaque cursor/],
+    ["invalid", /Invalid collection cursor/],
+    ["a".repeat(MAX_CURSOR_BYTES + 1), /cursor exceeds 16000000 bytes/],
+  ]) {
+    test(`${noun} executable rejects ${input.length > MAX_CURSOR_BYTES ? "oversized" : input || "empty"} stdin cursors`, () => {
+      const state = setupProfiles();
+      try {
+        const result = runReadCli(["entra", noun, "list", "--profile", "soc", "--cursor", "-"],
+          state, "delegated", true, input);
+        assert.equal(result.status, 2, result.stdout);
+        assert.equal(result.stderr, "");
+        const output = decode(result.stdout);
+        assert.equal(output.code, "VALIDATION_ERROR");
+        assert.match(output.error, expectedError);
+      } finally { teardownProfiles(state); }
+    });
+  }
+
+  test(`${noun} stdin cursor rejects another collection's binding`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor("delegated");
+      const otherNoun = noun === "sign-in" ? "directory-audit" : "sign-in";
+      const first = await executeArgv(["entra", otherNoun, "list", "--profile", "soc", "--since", SINCE, "--limit", "1"], overrides);
+      const result = runReadCli(["entra", noun, "list", "--profile", "soc", "--cursor", "-"],
+        state, "delegated", true, first.cursor);
+      assert.equal(result.status, 2, result.stdout);
+      assert.equal(decode(result.stdout).code, "VALIDATION_ERROR");
+    } finally { teardownProfiles(state); }
   });
 }
 

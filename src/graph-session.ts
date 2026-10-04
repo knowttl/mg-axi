@@ -216,17 +216,19 @@ function redact(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redact);
   if (value === null || typeof value !== "object") return value;
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, child]) => {
-      if (key === "keyCredentials" || key === "passwordCredentials") {
-        const entries = Array.isArray(child) ? child : [];
-        return [key, entries
-          .filter(entry => entry !== null && typeof entry === "object" && !Array.isArray(entry))
-          .map(entry => redact(Object.fromEntries(SAFE_CREDENTIAL_FIELDS
-            .filter(field => Object.hasOwn(entry, field))
-            .map(field => [field, entry[field]]))))];
-      }
-      return [key, typeof child === "string" && (secretKey(key) || key === "phoneNumber") ? REDACTED : redact(child)];
-    }),
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => key !== "clientSecret" && key !== "certificateData")
+      .map(([key, child]) => {
+        if (key === "keyCredentials" || key === "passwordCredentials") {
+          const entries = Array.isArray(child) ? child : [];
+          return [key, entries
+            .filter(entry => entry !== null && typeof entry === "object" && !Array.isArray(entry))
+            .map(entry => redact(Object.fromEntries(SAFE_CREDENTIAL_FIELDS
+              .filter(field => Object.hasOwn(entry, field))
+              .map(field => [field, entry[field]]))))];
+        }
+        return [key, typeof child === "string" && (secretKey(key) || key === "phoneNumber") ? REDACTED : redact(child)];
+      }),
   );
 }
 

@@ -60,6 +60,8 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile,
   for (const [name, body, expected] of [
     ["root string", "AccountKey=fixture-secret", "***redacted***"],
     ["root array", ["SharedAccessKey=fixture-secret", "ordinary", 42, null], ["***redacted***", "ordinary", 42, null]],
+    ["provider secrets", { id: "Apple", certificateData: "YmFzZTY0LWtleQ==", clientSecret: "ordinary-secret", nested: { certificateData: ["key-material"], clientSecret: { value: "secret" }, keyId: "KEY123" } },
+      { id: "Apple", nested: { keyId: "KEY123" } }],
     ["nested object", { value: [{ id: "a", displayName: "AccountKey=fixture-secret", details: { password: "fixture-secret", enabled: true } }] },
       { value: [{ id: "a", displayName: "***redacted***", details: { password: "***redacted***", enabled: true } }] }],
   ]) test(`${profile.mode} success redacts sentinels in a ${name}`, async () => {
@@ -75,6 +77,36 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile,
       value: [{ id: "a", displayName: "***redacted***" }],
     });
     assert.equal(f.requests.length, 2);
+  });
+}
+
+for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: ["https://graph.microsoft.com/IdentityProvider.Read.All"] }], [appProfile, {}]]) {
+  const operation = resolveSessionOperation("v1.0", "GET", "/identity/identityProviders");
+  const rows = [{ id: "Google", clientSecret: "ordinary-secret" }, { id: "Apple", certificateData: "YmFzZTY0LWtleQ==", keyId: "KEY123" }, { id: "builtin" }];
+
+  test(`${profile.mode} provider cursor excludes secrets from capped pages`, async () => {
+    const f = fixture(json(200, { value: rows }));
+    const first = await f.session.collect({ profile, operation, ...scopeArgs, limit: 1 });
+    assert.deepEqual(first.value, [{ id: "Google" }]);
+    const cursor = JSON.parse(Buffer.from(first.cursor, "base64url").toString("utf8"));
+    assert.deepEqual(cursor.buffered, [{ id: "Apple", keyId: "KEY123" }, { id: "builtin" }]);
+    const resumed = await f.session.collect({ profile, operation, ...scopeArgs, cursor: first.cursor });
+    assert.deepEqual(resumed.value, [{ id: "Apple", keyId: "KEY123" }, { id: "builtin" }]);
+    assert.equal(resumed.complete, true);
+    assert.equal(f.requests.length, 1);
+  });
+
+  test(`${profile.mode} provider cursor scrubs legacy buffered secrets before returning or reserializing`, async () => {
+    const f = fixture(json(200, { value: rows }));
+    const first = await f.session.collect({ profile, operation, ...scopeArgs, limit: 1 });
+    const cursor = JSON.parse(Buffer.from(first.cursor, "base64url").toString("utf8"));
+    cursor.buffered = [rows[1], rows[0]];
+    const legacyCursor = Buffer.from(JSON.stringify(cursor)).toString("base64url");
+    const resumed = await f.session.collect({ profile, operation, ...scopeArgs, cursor: legacyCursor, limit: 1 });
+    assert.deepEqual(resumed.value, [{ id: "Apple", keyId: "KEY123" }]);
+    const next = JSON.parse(Buffer.from(resumed.cursor, "base64url").toString("utf8"));
+    assert.deepEqual(next.buffered, [{ id: "Google" }]);
+    assert.equal(f.requests.length, 1);
   });
 }
 

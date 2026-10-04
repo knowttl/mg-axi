@@ -15,16 +15,19 @@ function json(status, body, headers = {}) {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function fixture(handler) {
+function fixture(handler, credentialHandler) {
   const credentialCalls = [];
   const requests = [];
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
   const delegated = new DelegatedAuth({
     storage: "session-only",
     login: async () => credential,
-    silent: async (...args) => { credentialCalls.push(["silent", ...args]); return credential; },
+    silent: async (...args) => { credentialCalls.push(["silent", ...args]); return credentialHandler ? credentialHandler(credential) : credential; },
   });
-  const application = new ApplicationAuth({ storage: "session-only", acquire: async () => credential });
+  const application = new ApplicationAuth({ storage: "session-only", acquire: async (...args) => {
+    credentialCalls.push(["acquire", ...args]);
+    return credentialHandler ? credentialHandler(credential) : credential;
+  } });
   const transport = async request => {
     requests.push(request);
     const response = typeof handler === "function" ? await handler(request, requests.length) : handler;
@@ -551,4 +554,108 @@ test("alternate nextLink capitalization is ignored", async () => {
   assert.equal(result.complete, true);
   assert.deepEqual(result.value, [{ id: "a" }]);
   assert.equal(f.requests.length, 1);
+});
+
+for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "application", credentialRef: { provider: "federated", key } }]) {
+  for (const method of ["collect", "execute"]) {
+    const args = { profile, operation: users, ...(profile.mode === "delegated" ? { scopes } : {}) };
+
+    test(`${method} with ${profile.mode} credentials rejects pre-aborted calls before acquisition`, async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const f = fixture(json(200, { value: [] }));
+      await assert.rejects(f.session[method]({ ...args, signal: controller.signal }), { name: "AbortError" });
+      assert.equal(f.credentialCalls.length, 0);
+      assert.equal(f.requests.length, 0);
+    });
+
+    test(`${method} with ${profile.mode} credentials cancels pending acquisition`, async () => {
+      const controller = new AbortController();
+      const f = fixture(json(200, { value: [] }), () => { controller.abort(); return new Promise(() => {}); });
+      await assert.rejects(f.session[method]({ ...args, signal: controller.signal }), { name: "AbortError" });
+      assert.equal(f.credentialCalls.length, 1);
+      assert.equal(f.requests.length, 0);
+    });
+
+    test(`${method} with ${profile.mode} credentials bounds pending acquisition through the clock`, async () => {
+      const f = fixture(json(200, { value: [] }), () => new Promise(() => {}));
+      const pending = f.session[method]({ ...args, clock: fakeClock().clock, budget: { deadlineMs: 1000 } });
+      if (method === "collect") {
+        const result = await pending;
+        assert.equal(result.complete, false);
+        assert.match(result.reason, /deadline/);
+        assert.equal(result.requests, 0);
+        assert.equal(result.bytes, 0);
+        assert.equal(decodeCursor(result.cursor).next, "https://graph.microsoft.com/v1.0/users");
+      } else {
+        await assert.rejects(pending, error => error.code === "GRAPH_ERROR" && /deadline/.test(error.message));
+      }
+      assert.equal(f.credentialCalls.length, 1);
+      assert.equal(f.requests.length, 0);
+    });
+
+    test(`${method} with ${profile.mode} credentials rejects acquisition that completes too late`, async () => {
+      let now = 0;
+      const clock = { now: () => now, sleep: () => new Promise(() => {}) };
+      const f = fixture(json(200, { value: [] }), credential => { now = 30_001; return credential; });
+      const pending = f.session[method]({ ...args, clock });
+      if (method === "collect") {
+        const result = await pending;
+        assert.equal(result.complete, false);
+        assert.match(result.reason, /deadline/);
+        assert.equal(result.requests, 0);
+      } else {
+        await assert.rejects(pending, error => error.code === "GRAPH_ERROR" && /deadline/.test(error.message));
+      }
+      assert.equal(f.requests.length, 0);
+    });
+
+    test(`${method} with ${profile.mode} credentials shares its deadline with transport`, async () => {
+      let now = 0;
+      const clock = { now: () => now, sleep: () => new Promise(() => {}) };
+      const f = fixture(() => { now = 30_001; return json(200, { value: [{ id: "late" }] }); }, credential => { now = 29_990; return credential; });
+      const pending = f.session[method]({ ...args, clock });
+      if (method === "collect") {
+        const result = await pending;
+        assert.equal(result.complete, false);
+        assert.match(result.reason, /deadline/);
+      } else {
+        await assert.rejects(pending, error => error.code === "GRAPH_ERROR" && /deadline/.test(error.message));
+      }
+      assert.equal(f.requests.length, 1);
+    });
+
+    test(`${method} with ${profile.mode} credentials still succeeds before the shared deadline`, async () => {
+      let now = 0;
+      const clock = { now: () => now, sleep: () => new Promise(() => {}) };
+      const f = fixture(() => { now = 200; return json(200, { value: [{ id: "a" }] }); }, credential => { now = 100; return credential; });
+      const result = await f.session[method]({ ...args, clock });
+      assert.deepEqual(result.value, [{ id: "a" }]);
+      assert.equal(f.requests.length, 1);
+      assert.equal(f.requests[0].headers.Authorization, "Bearer opaque-fixture-secret");
+    });
+
+    test(`${method} with ${profile.mode} credentials preserves authentication failures`, async () => {
+      const f = fixture(json(200, { value: [] }), () => { throw new Error("provider unavailable"); });
+      await assert.rejects(f.session[method](args), { code: "AUTH_REQUIRED" });
+      assert.equal(f.requests.length, 0);
+    });
+  }
+}
+
+test("credential deadline preserves buffered rows and context on a resumed collection", async () => {
+  const next = "https://graph.microsoft.com/v1.0/users?$skiptoken=next";
+  const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }], "@odata.nextLink": next }));
+  const first = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, query: { $search: "ana" }, consistencyLevel: "eventual", limit: 1 });
+  const blocked = fixture(json(200, { value: [] }), () => new Promise(() => {}));
+  const partial = await blocked.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor, clock: fakeClock().clock });
+  assert.equal(partial.complete, false);
+  assert.deepEqual(partial.value, []);
+  assert.equal(partial.requests, 0);
+  const f = fixture(json(200, { value: [{ id: "c" }] }));
+  const resumed = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: partial.cursor });
+  assert.equal(resumed.complete, true);
+  assert.deepEqual(resumed.value, [{ id: "b" }, { id: "c" }]);
+  assert.equal(f.requests[0].url, next);
+  assert.equal(f.requests[0].headers.ConsistencyLevel, "eventual");
 });

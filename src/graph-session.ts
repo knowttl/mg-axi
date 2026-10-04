@@ -412,13 +412,13 @@ function digestUrl(url: string): string {
 
 class DeadlineExceeded extends Error {}
 
-async function requestBeforeDeadline(transport: GraphTransport, request: TransportRequest, clock: Clock, deadline: number): Promise<TransportResponse> {
-  request.signal?.throwIfAborted();
+async function beforeDeadline<T>(action: (signal: AbortSignal) => Promise<T>, clock: Clock, deadline: number, callerSignal?: AbortSignal): Promise<T> {
+  callerSignal?.throwIfAborted();
   const remaining = deadline - clock.now();
   if (remaining <= 0) throw new DeadlineExceeded();
   const controller = new AbortController();
   const timer = new AbortController();
-  const signal = request.signal ? AbortSignal.any([request.signal, controller.signal]) : controller.signal;
+  const signal = callerSignal ? AbortSignal.any([callerSignal, controller.signal]) : controller.signal;
   let onAbort: () => void;
   const aborted = new Promise<never>((_, reject) => {
     onAbort = () => reject(signal.reason);
@@ -429,10 +429,13 @@ async function requestBeforeDeadline(transport: GraphTransport, request: Transpo
     throw signal.reason;
   });
   try {
-    const response = await Promise.race([Promise.resolve().then(() => transport({ ...request, signal })), timeout, aborted]);
+    const result = await Promise.race([Promise.resolve().then(() => {
+      signal.throwIfAborted();
+      return action(signal);
+    }), timeout, aborted]);
     signal.throwIfAborted();
     if (clock.now() >= deadline) throw new DeadlineExceeded();
-    return response;
+    return result;
   } finally {
     timer.abort();
     signal.removeEventListener("abort", onAbort!);
@@ -518,11 +521,20 @@ export class GraphSession {
     checkQueryContext(query, args.consistencyLevel);
     const params = args.params ?? {};
     const url = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params)}${buildQuery(query)}`;
-    const token =
-      profile.mode === "delegated"
+    const clock = args.clock ?? systemClock;
+    const signal = args.signal;
+    const deadline = clock.now() + DEFAULT_DEADLINE_MS;
+    let token: string;
+    try {
+      token = await beforeDeadline(async () => profile.mode === "delegated"
         ? (await this.deps.delegated.credential(validateDelegatedProfile(profile), args.scopes ?? [])).token
-        : (await this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes))).token;
-    return this.send(operation, params, url, token, { signal: args.signal, clock: args.clock, consistencyLevel: args.consistencyLevel });
+        : (await this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes))).token, clock, deadline, signal);
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (error instanceof DeadlineExceeded) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
+      throw error;
+    }
+    return this.send(operation, params, url, token, { signal, clock, deadline, consistencyLevel: args.consistencyLevel });
   }
 
   // CORE-02: follow exact @odata.nextLink continuations through the same
@@ -559,16 +571,6 @@ export class GraphSession {
     const signal = args.signal;
     const startUrl = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params)}${buildQuery(query)}`;
     const resumeUrl = resumed?.next === undefined ? undefined : authorizeUrl(operation, params, resumed.next, undefined, consistencyLevel);
-    const token =
-      profile.mode === "delegated"
-        ? (await this.deps.delegated.credential(validateDelegatedProfile(profile), args.scopes ?? [])).token
-        : (await this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes))).token;
-    const headersFor = (): Record<string, string> => ({
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      "client-request-id": randomUUID(),
-      ...(consistencyLevel === "eventual" ? { ConsistencyLevel: "eventual" } : {}),
-    });
     const deadline = clock.now() + budget.deadlineMs;
     let pending: unknown[] = resumed ? [...resumed.buffered] : [];
     let current: string | undefined = resumed ? resumeUrl : startUrl;
@@ -594,6 +596,22 @@ export class GraphSession {
       requests,
       bytes,
     });
+    let token: string;
+    try {
+      token = await beforeDeadline(async () => profile.mode === "delegated"
+        ? (await this.deps.delegated.credential(validateDelegatedProfile(profile), args.scopes ?? [])).token
+        : (await this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes))).token, clock, deadline, signal);
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (error instanceof DeadlineExceeded) return partial("deadline exceeded", current, pending);
+      throw error;
+    }
+    const headersFor = (): Record<string, string> => ({
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "client-request-id": randomUUID(),
+      ...(consistencyLevel === "eventual" ? { ConsistencyLevel: "eventual" } : {}),
+    });
     for (;;) {
       signal?.throwIfAborted();
       if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
@@ -618,7 +636,7 @@ export class GraphSession {
         let response: TransportResponse;
         try {
           requests += 1;
-          response = await requestBeforeDeadline(this.deps.transport, { method: "GET", url: fetchUrl, headers: headersFor(), signal }, clock, deadline);
+          response = await beforeDeadline(signal => this.deps.transport({ method: "GET", url: fetchUrl, headers: headersFor(), signal }), clock, deadline, signal);
         } catch (error) {
           signal?.throwIfAborted();
           if (error instanceof DeadlineExceeded) return partial("deadline exceeded", fetchUrl, pending);
@@ -728,10 +746,10 @@ export class GraphSession {
     return undefined;
   }
 
-  private async send(operation: SessionOperation, params: Record<string, string>, url: string, token: string, opts: { signal?: AbortSignal; clock?: Clock; consistencyLevel?: "eventual" } = {}): Promise<unknown> {
-    const clock = opts.clock ?? systemClock;
+  private async send(operation: SessionOperation, params: Record<string, string>, url: string, token: string, opts: { signal?: AbortSignal; clock: Clock; deadline: number; consistencyLevel?: "eventual" }): Promise<unknown> {
+    const clock = opts.clock;
     const signal = opts.signal;
-    const deadline = clock.now() + DEFAULT_DEADLINE_MS;
+    const deadline = opts.deadline;
     let requests = 0;
     let current = url;
     let hops = 0;
@@ -749,7 +767,7 @@ export class GraphSession {
       if (clock.now() >= deadline) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
       let response: TransportResponse;
       try {
-        response = await requestBeforeDeadline(this.deps.transport, { method: "GET", url: current, headers: headersFor(), signal }, clock, deadline);
+        response = await beforeDeadline(signal => this.deps.transport({ method: "GET", url: current, headers: headersFor(), signal }), clock, deadline, signal);
       } catch (error) {
         signal?.throwIfAborted();
         if (error instanceof DeadlineExceeded) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);

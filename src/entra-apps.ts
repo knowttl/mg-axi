@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { SAFE_CREDENTIAL_FIELDS } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-07: the Entra application and service-principal read mapping behind
@@ -70,8 +71,6 @@ const OWNER_TYPE_PROPERTY = "@odata.type";
 // Every other credential subfield (hint, secretText, value, key, key
 // material, custom identifiers) is dropped by projectCredentials, never
 // truncated, never redacted-after-the-fact - simply never projected.
-const SAFE_CREDENTIAL_FIELDS: readonly string[] = ["keyId", "displayName", "startDateTime", "endDateTime"];
-const SAFE_CREDENTIALS = new Set(SAFE_CREDENTIAL_FIELDS);
 
 // Compact rows: object id, client ID and display name. Both identifiers ride
 // together so appId is never mistaken for the object id.

@@ -332,6 +332,39 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
+  for (const [resource, key] of [["application", "applications"], ["service-principal", "servicePrincipals"]]) {
+    for (const field of ["passwordCredentials", "keyCredentials"]) {
+      test(`${mode} capped ${resource} ${field} retain only expiry metadata through resume`, async () => {
+        const state = setupProfiles();
+        try {
+          const metadata = field === "passwordCredentials"
+            ? { keyId: "secret-1", displayName: "Client secret", startDateTime: "2024-06-01T00:00:00Z", endDateTime: "2025-06-01T00:00:00Z" }
+            : { keyId: "key-1", displayName: "Signing key", startDateTime: "2024-01-01T00:00:00Z", endDateTime: "2026-01-01T00:00:00Z" };
+          const rows = [a1.id, a2.id, a3.id].map(id => ({ id, [field]: a1[field] }));
+          const fixture = transport(() => json(200, { value: rows }));
+          const { overrides } = overridesFor(mode, fixture);
+          const args = ["entra", resource, "list", "--profile", profile];
+          const first = await executeArgv([...args, "--select", `id,${field}`, "--limit", "1"], overrides);
+          assert.deepEqual(first[key], [{ id: a1.id, [field]: [metadata] }]);
+          const cursor = JSON.parse(Buffer.from(first.cursor, "base64url").toString("utf8"));
+          assert.deepEqual(cursor.buffered, rows.slice(1).map(row => ({ id: row.id, [field]: [metadata] })));
+          cursor.buffered = rows.slice(1);
+          const legacyCursor = Buffer.from(JSON.stringify(cursor)).toString("base64url");
+          const second = await executeArgv([...args, "--cursor", legacyCursor, "--limit", "1"], overrides);
+          assert.deepEqual(second[key], [{ id: a2.id, [field]: [metadata] }]);
+          assert.deepEqual(JSON.parse(Buffer.from(second.cursor, "base64url").toString("utf8")).buffered,
+            [{ id: a3.id, [field]: [metadata] }]);
+          const third = await executeArgv([...args, "--cursor", second.cursor], overrides);
+          assert.deepEqual(third[key], [{ id: a3.id, [field]: [metadata] }]);
+          assert.deepEqual(third.count, { returned: 1, complete: true });
+          assert.equal(fixture.requests.length, 1);
+        } finally {
+          teardownProfiles(state);
+        }
+      });
+    }
+  }
+
   test(`${mode} denied application reads surface as operational failures`, async () => {
     const state = setupProfiles();
     try {

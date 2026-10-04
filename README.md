@@ -8,8 +8,9 @@ AUTH-01 adds versioned dedicated-app delegated profiles and explicit login.
 AUTH-02 adds certificate and workload-federated application profiles and a client-credentials service.
 CORE-01 adds the shared policy-enforced Graph read session, exercised through an injected fixture HTTP transport.
 CORE-02 adds session collections, query validation, bounded retries and cancellation under the [read execution contract](docs/execution.md#read-mechanics-and-source-contracts).
-API-01 adds one executable read, `mg-axi api get <path>`, serving the reviewed v1.0 raw surface through that session; other named leaves remain scheduled for later [build slices](docs/build-plan.md).
-No tenant, credentials or network access are required for help or an unconfigured home view.
+API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface through that session.
+READ-01 executes `mg-axi entra user list/show` through that session: compact basic rows by default, richer properties via `--select`, local projection via `--fields`, full text via `--full`, lossless capped resumes via opaque `--cursor` values, and explicit null/missing/denied distinctions in both delegated and application modes.
+Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
 
@@ -23,9 +24,9 @@ node dist/bin/mg-axi.js entra user show --help
 ```
 
 The home view reports unavailable tenant summaries explicitly.
-The initial user leaves expose scheduled grammar only; valid invocations exit 1 with their inventory disposition and owning slice.
-They do not authenticate or send requests.
-Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before execution.
+User reads default to basic properties (`id`, `displayName`, `userPrincipalName`, `mail`); `--select` requests richer server properties, `--fields` projects locally, and `--full` removes text truncation without lifting redaction or row caps.
+Delegated reads default to `https://graph.microsoft.com/User.Read.All` with `--scopes` available for least-privilege basics; application profiles use the configured Graph `.default` audience and reject delegated scopes.
+Valid user invocations authenticate and send requests; unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before execution.
 Help and successful local views exit 0.
 Data and structured errors use TOON on stdout; diagnostics belong on stderr.
 Bare `-v`, `-V` and `--version` print only the package version without importing the catalogue.

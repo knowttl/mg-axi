@@ -15,6 +15,14 @@ const common = {
   "api-version": { value: API_VERSIONS.join("|"), default: "v1.0", description: "Explicit API version; no fallback" },
 };
 const PARSE_MODES = ["delegated", "application"];
+const userRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties; richer properties need User.Read.All, accountEnabled needs User.EnableDisableAccount.All" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to User.Read.All" },
+};
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
   { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
@@ -36,14 +44,24 @@ export const LEAVES: Leaf[] = [
     method: { value: "browser|device-code", default: "browser", description: "Device code additionally requires profile opt-in" },
     scopes: { value: "comma-separated-Graph-scopes", required: true, description: "Explicit delegated permissions using full https://graph.microsoft.com/ scope names" },
   }, examples: ["mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read", "mg-axi login --profile soc --method device-code --scopes https://graph.microsoft.com/User.Read"] },
-  { path: "entra user list", description: "List users (scheduled for READ-01; not executable yet)", operation: "GET:/users", flags: {
+  { path: "entra user list", description: "List users with basic properties (id, displayName, userPrincipalName, mail)", operation: "GET:/users", flags: {
     ...common,
-    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; incompatible with --all" },
-    all: { description: "Follow pages within a budget (ships with CORE-02)" },
-  }, examples: ["mg-axi entra user list --help", "mg-axi entra user list --limit 100"] },
-  { path: "entra user show", description: "Show a user (scheduled for READ-01; not executable yet)", operation: "GET:/users/{user-id}", flags: {
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: userRead.filter,
+    select: userRead.select,
+    fields: userRead.fields,
+    full: userRead.full,
+    cursor: userRead.cursor,
+    scopes: userRead.scopes,
+  }, examples: ["mg-axi entra user list --profile soc", "mg-axi entra user list --profile soc --limit 10", "mg-axi entra user list --profile soc --filter \"accountEnabled eq true\" --select id,displayName,accountEnabled"] },
+  { path: "entra user show", description: "Show one user with richer default properties", operation: "GET:/users/{user-id}", flags: {
     ...common, id: { value: "user-id-or-upn", required: true, description: "User object ID or UPN" },
-  }, examples: ["mg-axi entra user show --help", "mg-axi entra user show --id <user-id-or-upn>"] },
+    select: userRead.select,
+    fields: userRead.fields,
+    full: userRead.full,
+    scopes: userRead.scopes,
+  }, examples: ["mg-axi entra user show --id <user-id-or-upn> --profile soc", "mg-axi entra user show --id <user-id-or-upn> --profile soc --full"] },
   { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices and administrative units; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },

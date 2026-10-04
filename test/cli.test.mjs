@@ -69,11 +69,32 @@ for (const [name, args, error] of [
   assert.ok(output.help.length);
 });
 
-for (const version of ["v1.0", "beta"]) test(`valid ${version} leaf reports its INV-01 owner without execution`, () => {
+for (const version of ["v1.0", "beta"]) test(`valid ${version} leaf resolves its profile before execution`, () => {
   const result = run(["entra", "user", "show", "--id", "fixture", "--api-version", version]);
   assert.equal(result.status, 1);
   assert.equal(result.stderr, "");
-  assert.match(decode(result.stdout).error, /scheduled \(READ-01\)/);
+  const output = decode(result.stdout);
+  assert.match(output.error, /No configured profile selected/);
+  assert.equal(output.code, "AUTH_REQUIRED");
+});
+
+test("user list leaf help advertises the read journey flags", () => {
+  const result = run(["entra", "user", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /--select/);
+  assert.match(result.stdout, /--cursor/);
+  assert.match(result.stdout, /--full/);
+  assert.match(result.stdout, /--filter/);
+});
+
+test("user list without a profile fails operationally on stdout", () => {
+  const result = run(["entra", "user", "list"]);
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, "");
+  const output = decode(result.stdout);
+  assert.equal(output.code, "AUTH_REQUIRED");
+  assert.ok(output.help.length);
 });
 
 test("version probes work with the command graph absent", () => {

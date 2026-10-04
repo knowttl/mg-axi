@@ -67,7 +67,7 @@ Role-assignable membership changes need role-management permission and belong to
 Relationship rows keep `@odata.type` alongside the requested properties, so member kinds stay visible.
 Hidden members are omitted without `Member.Read.Hidden`, and narrow application consent yields limited-information rows carrying only id and type; both are reported in help rather than mistaken for empty results, and completion describes pagination, not visibility.
 Direct member results always carry the [v1.0 service-principal limitation](docs/graph-coverage.md#licensing-and-completeness-findings) warning; there is no silent beta or expansion fallback.
-`--filter` on group collections is sent with `ConsistencyLevel: eventual`, which the relationship endpoints require.
+`--filter` on group collections is sent with `$count=true` and `ConsistencyLevel: eventual`, which the relationship endpoints require.
 Delegated group reads default to `https://graph.microsoft.com/GroupMember.Read.All`; hidden members need `Member.Read.Hidden` and richer group properties may need `Group.Read.All`, while application profiles use the configured `.default` audience.
 
 Configure the registration's Mobile and desktop applications redirect URI as `http://localhost` for browser login.

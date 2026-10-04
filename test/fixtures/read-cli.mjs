@@ -54,12 +54,18 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
         ? { value: directory.slice(2) }
         : { value: directory.slice(0, 2), "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?%24skiptoken=page2" };
     } else if (groups !== undefined && url.pathname === "/v1.0/groups") {
-      if (url.searchParams.has("$filter")) assert.equal(request.headers.ConsistencyLevel, "eventual");
+      if (url.searchParams.has("$filter")) {
+        assert.equal(request.headers.ConsistencyLevel, "eventual");
+        assert.equal(url.searchParams.get("$count"), "true");
+      }
       body = url.searchParams.has("$skiptoken")
         ? { value: groups.slice(2) }
         : { value: groups.slice(0, 2), "@odata.nextLink": "https://graph.microsoft.com/v1.0/groups?%24skiptoken=page2" };
     } else if (groups !== undefined && /^\/v1\.0\/groups\/[^/]+\/(members|transitiveMembers|memberOf|transitiveMemberOf)$/.test(url.pathname)) {
-      if (url.searchParams.has("$filter")) assert.equal(request.headers.ConsistencyLevel, "eventual");
+      if (url.searchParams.has("$filter")) {
+        assert.equal(request.headers.ConsistencyLevel, "eventual");
+        assert.equal(url.searchParams.get("$count"), "true");
+      }
       const relationship = url.pathname.endsWith("memberOf") || url.pathname.endsWith("transitiveMemberOf") ? memberOf : members;
       body = { value: relationship };
     } else if (groups !== undefined && /^\/v1\.0\/groups\/[^/]+$/.test(url.pathname)) {

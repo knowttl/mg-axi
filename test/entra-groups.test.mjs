@@ -271,7 +271,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const limited = result.members.filter(row => row.id === mLimited.id || row.id === mNullName.id);
       assert.equal(limited.length, 2);
       assert.deepEqual(limited[0], { id: mLimited.id, "@odata.type": "#microsoft.graph.servicePrincipal" });
-      assert.ok(result.help.some(hint => hint.includes("2 of 4 rows carry limited information")));
+      assert.ok(result.help.some(hint => hint.includes("2 of 4 rows have no non-null selected descriptive properties")));
     } finally {
       teardownProfiles(state);
     }
@@ -356,44 +356,82 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
   });
 }
 
-test("group $filter carries ConsistencyLevel eventual and resumes when omitted", async () => {
-  const state = setupProfiles();
-  try {
-    const seen = [];
-    const fixture = transport(request => {
-      seen.push({ url: request.url, headers: request.headers });
-      if (new URL(request.url).searchParams.has("$skiptoken")) {
-        return json(200, { value: [{ id: g2.id, displayName: "Helpdesk Admins" }] });
-      }
-      return json(200, {
-        value: [{ id: g1.id, displayName: "Engineering" }],
-        "@odata.nextLink": `https://graph.microsoft.com/v1.0/groups/${g1.id}/members?%24skiptoken=next`,
+for (const [relationship, route, transitive] of [
+  ["member", "members", false],
+  ["member", "transitiveMembers", true],
+  ["member-of", "memberOf", false],
+  ["member-of", "transitiveMemberOf", true],
+]) {
+  test(`${route} filtering carries count and consistency through resume`, async () => {
+    const state = setupProfiles();
+    try {
+      const seen = [];
+      const fixture = transport(request => {
+        seen.push({ url: request.url, headers: request.headers });
+        assert.equal(new URL(request.url).searchParams.get("$count"), "true");
+        if (new URL(request.url).searchParams.has("$skiptoken")) {
+          return json(200, { value: [{ id: g2.id, displayName: "Helpdesk Admins" }] });
+        }
+        return json(200, {
+          value: [{ id: g1.id, displayName: "Engineering" }],
+          "@odata.nextLink": `https://graph.microsoft.com/v1.0/groups/${g1.id}/${route}?%24count=true&%24skiptoken=next`,
+        });
       });
-    });
-    const { overrides } = overridesFor("delegated", fixture);
-    const filtered = await executeArgv(["entra", "group", "member", "list", "--group", g1.id,
-      "--profile", "soc", "--filter", "startswith(displayName,'A')", "--limit", "1"], overrides);
-    assert.equal(seen[0].headers.ConsistencyLevel, "eventual");
-    assert.equal(filtered.count.complete, false);
-    const resumed = await executeArgv(["entra", "group", "member", "list", "--group", g1.id,
-      "--profile", "soc", "--cursor", filtered.cursor], overrides);
-    assert.equal(seen[1].headers.ConsistencyLevel, "eventual");
-    assert.deepEqual(resumed.count.complete, true);
-    await assert.rejects(executeArgv(["entra", "group", "member", "list", "--group", g1.id,
-      "--profile", "soc", "--cursor", filtered.cursor, "--filter", "startswith(displayName,'B')"], overrides),
-    { code: "VALIDATION_ERROR" });
-    const plain = transport(request => {
-      seen.push({ url: request.url, headers: request.headers });
-      return json(200, { value: [{ id: g1.id, displayName: "Engineering" }] });
-    });
-    const unfiltered = await executeArgv(["entra", "group", "list", "--profile", "soc", "--limit", "1"],
-      overridesFor("delegated", plain).overrides);
-    assert.equal(seen[seen.length - 1].headers.ConsistencyLevel, undefined);
-    assert.deepEqual(unfiltered.count, { returned: 1, complete: true });
-  } finally {
-    teardownProfiles(state);
+      const { overrides } = overridesFor("delegated", fixture);
+      const command = ["entra", "group", relationship, "list", "--group", g1.id, ...(transitive ? ["--transitive"] : [])];
+      const filtered = await executeArgv([...command,
+        "--profile", "soc", "--filter", "startswith(displayName,'A')", "--limit", "1"], overrides);
+      assert.equal(seen[0].headers.ConsistencyLevel, "eventual");
+      assert.equal(filtered.count.complete, false);
+      const resumed = await executeArgv([...command,
+        "--profile", "soc", "--cursor", filtered.cursor], overrides);
+      assert.equal(seen[1].headers.ConsistencyLevel, "eventual");
+      assert.deepEqual(resumed.count.complete, true);
+      await assert.rejects(executeArgv([...command,
+        "--profile", "soc", "--cursor", filtered.cursor, "--filter", "startswith(displayName,'B')"], overrides),
+      { code: "VALIDATION_ERROR" });
+      const plain = transport(request => {
+        seen.push({ url: request.url, headers: request.headers });
+        return json(200, { value: [{ id: g1.id, displayName: "Engineering" }] });
+      });
+      const unfiltered = await executeArgv(["entra", "group", "list", "--profile", "soc", "--limit", "1"],
+        overridesFor("delegated", plain).overrides);
+      assert.equal(seen[seen.length - 1].headers.ConsistencyLevel, undefined);
+      assert.equal(new URL(seen[seen.length - 1].url).searchParams.has("$count"), false);
+      assert.deepEqual(unfiltered.count, { returned: 1, complete: true });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  for (const [name, row, select, fields, expectedHint] of [
+    ["readable group projected to nullable mail", { ...mGroup, mail: null }, "id,displayName,mail", "id,mail", undefined],
+    ["readable name returned beyond selection", { ...mGroup, mail: null }, "id,mail", "id,mail", undefined],
+    ["null name projected to id", mNullName, "id,displayName", "id", "1 of 1 rows have no non-null selected descriptive properties"],
+    ["missing name projected to id", mLimited, "id,displayName", "id", "1 of 1 rows have no non-null selected descriptive properties"],
+    ["nullable mail alone", { id: mGroup.id, "@odata.type": mGroup["@odata.type"], mail: null }, "id,mail", "id,mail", "1 of 1 rows have no non-null selected descriptive properties"],
+    ["id-only selection", mLimited, "id", "id", undefined],
+  ]) {
+    for (const limit of ["1", "2"]) {
+      test(`${route} ${name} assesses fetched fields in ${limit === "1" ? "partial" : "complete"} output`, async () => {
+        const state = setupProfiles();
+        try {
+          const fixture = transport(() => json(200, { value: [row, { ...mUser, mail: "adele@contoso.com" }] }));
+          const { overrides } = overridesFor("application", fixture);
+          const result = await executeArgv(["entra", "group", relationship, "list", "--group", g1.id,
+            ...(transitive ? ["--transitive"] : []), "--profile", "batch", "--select", select, "--fields", fields, "--limit", limit], overrides);
+          const hints = result.help.filter(hint => hint.includes("selected descriptive properties"));
+          assert.deepEqual(hints, expectedHint === undefined ? [] : [
+            `${expectedHint.replace("1 of 1", `1 of ${limit}`)}; this may reflect limited read consent or unset properties`,
+          ]);
+          assert.equal(result.count.complete, limit === "2");
+        } finally {
+          teardownProfiles(state);
+        }
+      });
+    }
   }
-});
+}
 
 test("direct and transitive cursors do not cross resume", async () => {
   const state = setupProfiles();

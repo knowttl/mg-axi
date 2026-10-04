@@ -160,16 +160,15 @@ function project(
 // kind and limited-information rows survive local projection.
 function projectMember(
   row: unknown,
+  select: string[],
   fields: string[],
   full: boolean,
 ): { row: Record<string, unknown>; truncated: boolean; limitedInfo: boolean } {
   const { row: projected, truncated } = project(row, fields, full);
   const source = row !== null && typeof row === "object" && !Array.isArray(row) ? (row as Record<string, unknown>) : {};
   if (typeof source[MEMBER_TYPE_PROPERTY] === "string") projected[MEMBER_TYPE_PROPERTY] = source[MEMBER_TYPE_PROPERTY];
-  // Limited-information rows carry only @odata.type and id with the rest
-  // null; id alone cannot distinguish them, so detection needs at least one
-  // selected descriptive field, all of which must be null or absent.
-  const descriptive = fields.filter(field => field !== "id");
+  const descriptive = [...new Set([...select, ...Object.keys(source)])]
+    .filter(field => field !== "id" && !field.startsWith("@"));
   const limitedInfo = Object.hasOwn(source, "id") && descriptive.length > 0
     && descriptive.every(field => source[field] === null || source[field] === undefined || !Object.hasOwn(source, field));
   return { row: projected, truncated, limitedInfo };
@@ -247,7 +246,10 @@ function collectArgs(
   help: string,
 ): CollectArgs {
   const query: Record<string, string> = { $select: common.select.join(",") };
-  if (common.filter !== undefined) query.$filter = common.filter;
+  if (common.filter !== undefined) {
+    query.$filter = common.filter;
+    query.$count = "true";
+  }
   const args: CollectArgs = { profile, operation, query, scopes: common.scopes };
   if (common.filter !== undefined) args.consistencyLevel = "eventual";
   if (common.cursor !== undefined) args.cursor = common.cursor;
@@ -363,7 +365,7 @@ async function listRelationship(
   let truncated = false;
   let limitedInfo = 0;
   for (const row of result.value) {
-    const projected = projectMember(row, common.fields, common.full);
+    const projected = projectMember(row, common.select, common.fields, common.full);
     rows.push(projected.row);
     truncated = truncated || projected.truncated;
     if (projected.limitedInfo) limitedInfo += 1;
@@ -373,7 +375,7 @@ async function listRelationship(
     : `Flat nested view: mg-axi ${command} --group ${shellValue(group)} --transitive ${profileHint(profileName)}`;
   const truncationHints = truncated ? [fullHint(command, effectiveFlags, profileName)] : [];
   const limitedHints = limitedInfo > 0
-    ? [`${limitedInfo} of ${rows.length} rows carry limited information (id and type only); grant broader read consent to resolve full properties`]
+    ? [`${limitedInfo} of ${rows.length} rows have no non-null selected descriptive properties; this may reflect limited read consent or unset properties`]
     : [];
   const hiddenHint = "Hidden members are omitted without Member.Read.Hidden; completion describes pagination, not visibility";
   const warnings = directWarning === undefined ? undefined : { warnings: [directWarning] };

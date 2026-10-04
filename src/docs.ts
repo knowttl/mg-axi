@@ -81,6 +81,7 @@ export function capabilityDocument(): string {
   });
   const deferredDomainRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate R1 "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
+  const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
   return [
@@ -130,6 +131,16 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredOrganizationRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-04 partner contracts scope decisions",
+    "",
+    "Firstmate scope: approve narrowing this change to the three v1.0 partner-contract reads above (list, show, count).",
+    "The operations below remain scheduled with an explicit deferred disposition to a later EXT-04 subfamily; no new commands or raw access are approved.",
+    "Beta contracts need their own review; delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredContractRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## Named writes",
     "",

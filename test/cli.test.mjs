@@ -50,6 +50,9 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra domain verification-dns-record list/);
   assert.match(result.stdout, /entra domain service-configuration-record list/);
   assert.match(result.stdout, /entra domain-dns-record list/);
+  assert.match(result.stdout, /entra contract list/);
+  assert.match(result.stdout, /entra contract show/);
+  assert.match(result.stdout, /entra contract count/);
   assert.match(result.stdout, /entra conditional-access policy list/);
   assert.match(result.stdout, /entra conditional-access named-location list/);
   assert.match(result.stdout, /entra group member add/);
@@ -89,6 +92,8 @@ for (const [name, args, error] of [
   ["missing required domain for verification records", ["entra", "domain", "verification-dns-record", "list"], /--domain is required/],
   ["missing required domain for service records", ["entra", "domain", "service-configuration-record", "list"], /--domain is required/],
   ["domain list rejects filters", ["entra", "domain", "list", "--filter", "isVerified eq true"], /unknown flag --filter/],
+  ["missing required contract ID", ["entra", "contract", "show"], /--id is required/],
+  ["contract count rejects limits", ["entra", "contract", "count", "--limit", "5"], /unknown flag --limit/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
   ["missing required grant client", ["entra", "service-principal", "oauth2-grant", "list"], /--service-principal is required/],
   ["missing required app-role client", ["entra", "service-principal", "app-role-assignment", "list"], /--service-principal is required/],

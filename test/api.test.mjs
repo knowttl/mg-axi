@@ -137,6 +137,7 @@ for (const profile of [delegatedProfile, appProfile]) {
     "/domainDnsRecords/$count",
     "/domains/contoso.com/verificationDnsRecords/$count",
     "/domains/contoso.com/serviceConfigurationRecords/$count",
+    "/contracts/$count",
     "/domains/$count/verificationDnsRecords",
     "/users/$value",
     "/groups/$ref",

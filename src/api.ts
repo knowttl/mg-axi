@@ -3,6 +3,7 @@ import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { KNOWN_DECISION_FIELDS, KNOWN_DEFINITION_FIELDS, KNOWN_INSTANCE_FIELDS } from "./entra-access-reviews.js";
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
+import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
@@ -242,6 +243,14 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
     note: "No operation-level documentation page; access follows the documented domain/DNS-read contract and the domainDnsRecord resource reference.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/domaindnsrecord?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/contracts", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_CONTRACT_FIELDS,
+    access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
+    note: "Filtering is documented for customerId, defaultDomainName and displayName; no P1/P2 prerequisite is stated for contract reads.",
+    sources: ["https://learn.microsoft.com/graph/api/contract-list?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/contract?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/contracts/{contract-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CONTRACT_FIELDS,
+    access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
+    note: "No P1/P2 prerequisite is stated for contract reads.",
+    sources: ["https://learn.microsoft.com/graph/api/contract-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/contract?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/identityGovernance/accessReviews/definitions", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_DEFINITION_FIELDS,
     access: "D/A AccessReview.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (group/app reviews: review creator, Global Reader, Security Reader, User Administrator, Identity Governance Administrator or Security Administrator; Entra-role reviews: Security Reader, Identity Governance Administrator, Privileged Role Administrator or Security Administrator); personal Microsoft accounts are not supported.",
     note: "Definitions are review schedules (a series), never their occurrences; access reviews need P2 or ID Governance depending on capability.",

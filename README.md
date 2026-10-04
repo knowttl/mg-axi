@@ -153,13 +153,16 @@ mg-axi entra conditional-access named-location list --profile soc
 mg-axi entra conditional-access named-location show --profile soc --id <named-location-id>
 ```
 
-`entra conditional-access policy list` defaults to compact properties (`id`, `displayName`, `state`); `policy show --id <policy-id>` defaults to the full reviewed condition and control set, so the full view is safe to reason from.
+`entra conditional-access policy list` defaults to compact properties (`id`, `displayName`, `state`); `policy show --id <policy-id>` defaults to the full reviewed condition and control property set.
 `entra conditional-access named-location list` defaults to `id` and `displayName`; `named-location show --id <named-location-id>` defaults to the full reviewed location set.
 Policy `--select` accepts the [reviewed policy property set](src/entra-conditional-access.ts) and location `--select` accepts the [reviewed location property set](src/entra-conditional-access.ts); `--fields` must be a subset of the fetched selection in each family.
 Returned `@odata.type` stays visible on named-location rows so IP and country locations stay distinguishable alongside any `--fields` projection.
 Policy lists return `policies`, location lists return `namedLocations`, single-policy reads return `policy` and single-location reads return `namedLocation`.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to Conditional Access reads, including nested condition values; every truncated value carries a `--full` hint.
-Denied policy and location reads name the operation's supported directory roles (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access) and the P1/P2 licensing contract (Conditional Access needs P1; risk-based Conditional Access needs P2) instead of only the generic grant/role/licence cause.
+Use `--full` when reasoning from complete condition or control text; `--select` and `--fields` still determine which properties are visible, and missing properties remain unknown.
+To replay a resumed result with `--full`, reuse the original input cursor; the returned cursor continues after that result.
+Delegated policy and location reads default to `https://graph.microsoft.com/Policy.Read.All`; application profiles require admin-consented `Policy.Read.All`, use the configured Graph `.default` audience and reject `--scopes`.
+HTTP 403 policy and location errors name the operation's supported directory roles (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access) and include guidance from the [licensing contract](docs/graph-coverage.md#licence-matrix-by-area); the response alone does not identify the missing prerequisite.
 No policy mutation lives here; policy updates belong to a later write slice.
 
 Log in with `https://graph.microsoft.com/AuditLog.Read.All`, then query sign-ins and directory audits in bounded time windows:

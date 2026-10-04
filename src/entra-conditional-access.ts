@@ -55,8 +55,8 @@ const LOCATION_TYPE_PROPERTY = "@odata.type";
 // rides in the list because an enabled policy and a disabled one read the
 // same but act differently.
 const DEFAULT_POLICY_LIST_SELECT = ["id", "displayName", "state"];
-// Show rows: the full reviewed policy set, including every condition and
-// control block, so the full view is safe to reason from.
+// Fetch the reviewed condition and control blocks for policy inspection;
+// local projection and text truncation still apply unless overridden.
 const DEFAULT_POLICY_SHOW_SELECT = [...KNOWN_POLICY_FIELDS];
 // Compact location rows: identifier and name; the kind rides as @odata.type.
 const DEFAULT_LOCATION_LIST_SELECT = ["id", "displayName"];

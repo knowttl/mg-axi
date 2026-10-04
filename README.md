@@ -375,18 +375,10 @@ The pinned [Entra operation inventory](docs/inventory.md) defines the INV-01 dis
 ## Release
 
 This is the supported Entra read surface, not full Entra coverage.
-Only the commands in [docs/coverage.md](docs/coverage.md) have an implemented, tested leaf; every other operation remains scheduled, blocked, deprecated or excluded until its own slice ships.
+See the generated [capability report](docs/coverage.md) for implemented reads and discovery dispositions, and the [skill command table](skills/mg-axi/SKILL.md#orientation) for all executable leaves, including local commands.
 The package is marked private and ships no publish workflow: preparing this release never publishes it.
 The packed files are `dist`, the discovery inventory, `skills/mg-axi`, `docs/coverage.md` and this README.
-Verification: this read release was verified locally (build, lint and the full test suite) under the GitHub billing-outage posture with hosted CI disabled.
-
-Build from a checkout with the pinned toolchain, then verify the version probe stays fast without loading the command graph:
-
-```sh
-corepack pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false
-corepack pnpm build
-node dist/bin/mg-axi.js --version
-```
+Follow the [checkout instructions](#mg-axi) to install dependencies, build and run the version probe.
 
 From the repository root, `node dist/bin/mg-axi.js setup` shows the build steps, the selected configuration path, the configured profiles and the capability summary.
 It writes nothing, signs in nowhere and installs no hooks; ordinary commands never gain installation side effects.
@@ -398,6 +390,6 @@ Read failures report per profile with rerun guidance and a nonzero exit.
 
 The installable skill lives at [skills/mg-axi/SKILL.md](skills/mg-axi/SKILL.md).
 Install it explicitly through your agent's skill installation mechanism; the setup command only shows guidance and does not install skills.
-Its command table and [docs/coverage.md](docs/coverage.md) are generated from the command catalogue and the discovery inventory.
-Regenerate both with `corepack pnpm run docs:generate` and verify freshness with `corepack pnpm run docs:check`; CI runs the check after every build.
+Its command table is generated from the command catalogue; [docs/coverage.md](docs/coverage.md) also uses the discovery inventory.
+After building, regenerate both with `corepack pnpm run docs:generate` and verify freshness with `corepack pnpm run docs:check`; CI runs the freshness check.
 Critical journeys stay packaged offline: `test/pack.test.mjs` drives setup, doctor and the user, group, Conditional Access and sign-in reads through the packaged executable with fixture credentials and blocked networking.

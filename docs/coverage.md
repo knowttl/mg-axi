@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 48 (46 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 51 (49 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -71,6 +71,9 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra conditional-access policy show` | `GET:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}` | scheduled | READ-03 |
 | `mg-axi entra conditional-access named-location list` | `GET:/identity/conditionalAccess/namedLocations` | scheduled | READ-03 |
 | `mg-axi entra conditional-access named-location show` | `GET:/identity/conditionalAccess/namedLocations/{namedLocation-id}` | scheduled | READ-03 |
+| `mg-axi entra identity-provider list` | `GET:/identity/identityProviders` | scheduled | EXT-03 |
+| `mg-axi entra identity-provider show` | `GET:/identity/identityProviders/{identityProviderBase-id}` | scheduled | EXT-03 |
+| `mg-axi entra identity-provider count` | `GET:/identity/identityProviders/$count` | scheduled | EXT-03 |
 | `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |
 | `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |
 
@@ -117,6 +120,21 @@ Both firstmate decisions must also be stated in the PR body by the delivery phas
 | `v1.0:GET:/domains/{domain-id}/rootDomain` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review. |
 | `v1.0:GET:/domains/{domain-id}/serviceConfigurationRecords/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads. |
 | `v1.0:GET:/domains/{domain-id}/verificationDnsRecords/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads. |
+
+## EXT-03 identity-provider scope decisions
+
+This change covers the three v1.0 workforce identity-provider reads above (list, show, count).
+The operations below remain scheduled with an explicit deferred disposition to a later EXT-03 subfamily; no new commands or raw access are approved.
+Beta contracts need separate review; availableProviderTypes() needs a function-call and licence-dependent output review.
+Workforce context only; no external-customer (B2C/External ID tenant) support is claimed.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/identity/identityProviders` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: the approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/identity/identityProviders/$count` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: the approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/identity/identityProviders/availableProviderTypes()` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: the approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/identity/identityProviders/{identityProviderBase-id}` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: the approved reads cover v1.0 only; beta contracts need separate review. |
+| `v1.0:GET:/identity/identityProviders/availableProviderTypes()` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 provider-types subfamily: availableProviderTypes() needs a function-call and licence-dependent output review separate from the approved list/show/count reads. |
 
 ## Named writes
 

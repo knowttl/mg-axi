@@ -142,6 +142,14 @@ const caRead = {
   cursor: { value: "opaque-cursor|-", description: "Resume a capped collection losslessly; - reads the token from stdin (16 MB ceiling for either input); repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Policy.Read.All" },
 };
+const providerRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed identity-provider set; secret-bearing fields (clientSecret, certificateData) are never selectable" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to IdentityProvider.Read.All" },
+};
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
   { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
@@ -652,7 +660,30 @@ export const LEAVES: Leaf[] = [
     full: caRead.full,
     scopes: caRead.scopes,
   }, examples: ["mg-axi entra conditional-access named-location show --id <named-location-id> --profile soc", "mg-axi entra conditional-access named-location show --id <named-location-id> --profile soc --full"] },
-  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains and domain DNS records; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+  { path: "entra identity-provider list", description: "List workforce identity providers with compact properties (id, displayName); rows carry @odata.type naming the provider kind; client secrets and key material are never returned", operation: "GET:/identity/identityProviders", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: providerRead.filter,
+    select: providerRead.select,
+    fields: providerRead.fields,
+    full: providerRead.full,
+    cursor: providerRead.cursor,
+    scopes: providerRead.scopes,
+  }, examples: ["mg-axi entra identity-provider list --profile soc", "mg-axi entra identity-provider list --profile soc --limit 10", "mg-axi entra identity-provider list --profile soc --filter \"identityProviderType eq 'Google'\""] },
+  { path: "entra identity-provider show", description: "Show one workforce identity provider with the full reviewed property set; client secrets and key material are never returned", operation: "GET:/identity/identityProviders/{identityProviderBase-id}", flags: {
+    ...common, id: { value: "provider-id", required: true, description: "Identity provider object ID" },
+    select: providerRead.select,
+    fields: providerRead.fields,
+    full: providerRead.full,
+    scopes: providerRead.scopes,
+  }, examples: ["mg-axi entra identity-provider show --id <provider-id> --profile soc", "mg-axi entra identity-provider show --id <provider-id> --profile soc --full"] },
+  { path: "entra identity-provider count", description: "Count workforce identity providers as a scalar number; --filter narrows the count server-side", operation: "GET:/identity/identityProviders/$count", flags: {
+    ...common,
+    filter: providerRead.filter,
+    scopes: providerRead.scopes,
+  }, examples: ["mg-axi entra identity-provider count --profile soc", "mg-axi entra identity-provider count --profile soc --filter \"identityProviderType eq 'Google'\""] },
+  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains and domain DNS records, and identity providers; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
     cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --odata to reuse its query" },

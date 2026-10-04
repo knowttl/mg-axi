@@ -40,6 +40,7 @@ const READ_SCOPES = new Set([
   "Group.Read.All",
   "GroupMember.Read.All",
   "GroupMember.ReadBasic.All",
+  "IdentityProvider.Read.All",
   "IdentityRiskEvent.Read.All",
   "IdentityRiskyUser.Read.All",
   "LicenseAssignment.Read.All",
@@ -132,6 +133,9 @@ export interface ExecuteArgs {
   // Advanced queries needing eventual consistency declare it explicitly;
   // $search and $count=true fail closed without it.
   consistencyLevel?: "eventual";
+  // Scalar reads ($count-style text/plain numeric bodies) declare it
+  // explicitly; JSON stays the default and anything else is malformed.
+  scalar?: boolean;
   signal?: AbortSignal;
   clock?: Clock;
 }
@@ -608,7 +612,7 @@ export class GraphSession {
       if (error instanceof DeadlineExceeded) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
       throw error;
     }
-    return this.send(operation, params, url, token, { signal, clock, deadline, consistencyLevel: args.consistencyLevel });
+    return this.send(operation, params, url, token, { signal, clock, deadline, consistencyLevel: args.consistencyLevel, scalar: args.scalar });
   }
 
   // CORE-02: follow @odata.nextLink continuations through the same
@@ -846,7 +850,7 @@ export class GraphSession {
     return undefined;
   }
 
-  private async send(operation: SessionOperation, params: Record<string, string>, url: string, token: string, opts: { signal?: AbortSignal; clock: Clock; deadline: number; consistencyLevel?: "eventual" }): Promise<unknown> {
+  private async send(operation: SessionOperation, params: Record<string, string>, url: string, token: string, opts: { signal?: AbortSignal; clock: Clock; deadline: number; consistencyLevel?: "eventual"; scalar?: boolean }): Promise<unknown> {
     const clock = opts.clock;
     const signal = opts.signal;
     const deadline = opts.deadline;
@@ -898,7 +902,7 @@ export class GraphSession {
         await clock.sleep(wait, signal);
         continue;
       }
-      const result = this.translate(operation, response);
+      const result = opts.scalar === true ? this.translateScalar(operation, response) : this.translate(operation, response);
       signal?.throwIfAborted();
       if (clock.now() >= deadline) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
       return result;
@@ -915,6 +919,18 @@ export class GraphSession {
       } catch {
         throw new AxiError(`Graph returned a non-JSON success body for ${operation.id}`, "GRAPH_ERROR", ["Successful reads are JSON; anything else is malformed"]);
       }
+    }
+    throw this.translateError(operation, response);
+  }
+
+  // $count-style scalar reads carry a plain-text number, not JSON. Anything
+  // else is malformed; errors still translate through the shared mapping.
+  private translateScalar(operation: SessionOperation, response: TransportResponse): number {
+    const status = response.status;
+    if (status >= 200 && status < 300) {
+      const text = (response.body ?? "").trim();
+      if (/^\d+$/.test(text)) return Number(text);
+      throw new AxiError(`Graph returned a non-numeric success body for ${operation.id}`, "GRAPH_ERROR", ["Scalar count reads carry a plain number; treat anything else as unknown, not empty"]);
     }
     throw this.translateError(operation, response);
   }

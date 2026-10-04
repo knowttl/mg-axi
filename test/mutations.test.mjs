@@ -398,6 +398,31 @@ test("ambiguous transport failure reports unknown and the intent can never repla
   assert.equal(f.requests.length, 1);
 });
 
+for (const status of [408, 500, 502, 503, 504, 599]) {
+  test(`mutation applied before HTTP ${status} reports unknown and cannot replay`, async () => {
+    const notes = [];
+    const f = fixture({ handler: request => {
+      notes.push(JSON.parse(request.body).text);
+      return { status, headers: {}, body: "{}" };
+    } });
+    const options = { execute: true, readState: async () => ({ notes: [...notes] }), scopes, intentId: `http-${status}` };
+    const result = await f.coordinator().execute(mutation, options);
+    assert.deepEqual(notes, [mutation.payload.text]);
+    assert.equal(result.kind, "unknown");
+    assert.equal(result.httpStatus, status);
+    assert.equal(result.auditId, options.intentId);
+    assert.match(result.guidance, /read back target 'fixture-note-1'/);
+    assert.match(result.guidance, /never replay this intent/);
+    const records = journal(f.journalPath);
+    assert.equal(records.length, 2);
+    assert.equal(records[1].outcome, "OUTCOME_UNKNOWN");
+    assert.equal(records[1].httpStatus, status);
+    await assert.rejects(f.coordinator().execute(mutation, options), { code: "ALREADY_EXECUTED" });
+    assert.equal(f.requests.length, 1);
+    assert.deepEqual(notes, [mutation.payload.text]);
+  });
+}
+
 test("recreated coordinator refuses an intent recorded without a terminal outcome", async () => {
   const f = fixture({ handler: { status: 200, headers: {}, body: "{}" } });
   const intentId = "crash-intent";

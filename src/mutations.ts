@@ -157,9 +157,6 @@ function assertMutationDestination(url: string): void {
   }
 }
 
-// HTTP detail attached to mutation failures so the coordinator can tell a
-// definitive server rejection (status known) from an ambiguous outcome.
-// The key is read only through mutationHttpStatus/mutationAccepted below.
 function mutationFailure(
   message: string, code: string, suggestions: string[], details: { httpStatus: number; accepted?: boolean },
 ): AxiError {
@@ -213,7 +210,7 @@ function decodeMutationBody(response: MutationTransportResponse): unknown {
   }
   if (response.status < 200 || response.status > 299) {
     throw mutationFailure(`Graph mutation returned status ${response.status}`, "GRAPH_ERROR", [
-      "The server answered the mutation; a 2xx status means it was accepted",
+      "Read back the target before doing anything else; never replay this intent",
     ], { httpStatus: response.status });
   }
   try {
@@ -593,23 +590,20 @@ export function createMutationCoordinator(args: {
         throw error;
       }
       const httpStatus = mutationHttpStatus(error);
-      // A response means the server decided: accepted bodies report SUCCESS,
-      // other statuses report FAILED. No response is ambiguous and is never
-      // replayed; the audit ID plus read-back guidance replaces the retry.
       if (httpStatus > 0 && mutationAccepted(error)) {
         recordAudit({ ...meta, kind: "outcome", httpStatus, outcome: "SUCCESS" });
         return { kind: "success", preview: seen, auditId: id, status: httpStatus, response: {} };
       }
-      if (httpStatus > 0) {
+      if (httpStatus >= 400 && httpStatus < 500 && httpStatus !== 408) {
         recordAudit({ ...meta, kind: "outcome", httpStatus, outcome: "FAILED" });
         return { kind: "failed", preview: seen, auditId: id, status: httpStatus };
       }
-      recordAudit({ ...meta, kind: "outcome", httpStatus: 0, outcome: "OUTCOME_UNKNOWN" });
+      recordAudit({ ...meta, kind: "outcome", httpStatus, outcome: "OUTCOME_UNKNOWN" });
       return {
         kind: "unknown",
         preview: seen,
         auditId: id,
-        httpStatus: 0,
+        httpStatus,
         guidance: `Mutation ${definition.operation} may or may not have been applied (audit ${id}); read back target '${definition.target}' before doing anything else; never replay this intent`,
       };
     }

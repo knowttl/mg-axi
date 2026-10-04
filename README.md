@@ -209,10 +209,10 @@ Delegated device reads default to `https://graph.microsoft.com/Device.Read.All` 
 Denied directory reads return operation-specific permission, delegated-role and licensing guidance rather than empty results; HTTP 403 alone does not identify which prerequisite is missing.
 `--filter` on these collections is sent with `$count=true` and `ConsistencyLevel: eventual`.
 
-Log in with `https://graph.microsoft.com/Organization.Read.All`, then inspect the tenant organization and its sign-in branding:
+Log in with `https://graph.microsoft.com/Organization.Read.All` for organization reads and `https://graph.microsoft.com/User.Read` for branding reads, then inspect the tenant and its sign-in branding:
 
 ```sh
-mg-axi login --profile soc --scopes https://graph.microsoft.com/Organization.Read.All
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Organization.Read.All,https://graph.microsoft.com/User.Read
 mg-axi entra organization list --profile soc
 mg-axi entra organization show --profile soc --id <organization-id>
 mg-axi entra organization branding show --profile soc --organization <organization-id>
@@ -224,7 +224,7 @@ mg-axi entra organization branding-localization show --profile soc --organizatio
 `entra organization show --id <organization-id>` defaults to the full reviewed organization set including technical notification mails and the privacy profile.
 Delegated organization reads default to `https://graph.microsoft.com/Organization.Read.All` for full metadata; delegated `User.Read` returns only `id`, `displayName` and `verifiedDomains` with every other property null.
 `entra organization branding show --organization <organization-id>` reads the default branding metadata (non-Stream text and URLs); the session sends the documented `Accept-Language: 0` header and locale variants come from the localizations collection.
-Branding leaves default to delegated `https://graph.microsoft.com/User.Read`, the documented least-privileged scope; `OrganizationalBranding.Read.All` is the purpose-built alternative.
+Branding leaves default to delegated `https://graph.microsoft.com/User.Read`, the documented least-privileged scope; `OrganizationalBranding.Read.All` is the purpose-built alternative and `Organization.Read.All` also works when passed as `--scopes`.
 Stream image properties (`bannerLogo`, `backgroundImage` and friends) are refused before credentials: they need a later piece with its own binary-output contract.
 A branding 404 means no custom branding is configured (configuring it needs P1/P2), not denied access; contact fields on the organization are personal data.
 Delegated callers additionally need a supported Entra role (Directory Readers or Global Reader for organizations; Global Reader or Organizational Branding Administrator for branding); personal Microsoft accounts are not supported.

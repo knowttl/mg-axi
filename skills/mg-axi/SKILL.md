@@ -1,6 +1,6 @@
 ---
 name: mg-axi
-description: Use mg-axi for Microsoft Entra inspection and gated writes (account-state updates, user group membership adds, session revocation, risky-user dismissal) - users, groups, roles, devices, sign-ins, applications, consent grants, risk and Conditional Access through agent-ergonomic TOON output.
+description: Use mg-axi for Microsoft Entra inspection and gated writes (account-state updates, user group membership adds, session revocation, risky-user dismissal) - users, groups, roles, devices, organization and branding, sign-ins, applications, consent grants, risk and Conditional Access through agent-ergonomic TOON output.
 user-invocable: false
 ---
 

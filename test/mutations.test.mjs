@@ -30,13 +30,16 @@ const mutation = { operation: "mg.fixture.write", method: "POST", version: "v1.0
 const scratches = [];
 afterEach(() => { while (scratches.length) rmSync(scratches.pop(), { recursive: true, force: true }); });
 
-function fixture({ handler, credentialTenant = tenant } = {}) {
+function fixture({ handler, credentialTenant = tenant, onCredential } = {}) {
   const scratch = mkdtempSync(join(tmpdir(), "mg-write00-"));
   scratches.push(scratch);
   const journalPath = join(scratch, "nested", "writes.log");
   const credentialCalls = [];
   const requests = [];
-  const credential = account => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: credentialTenant, clientId: client, ...account });
+  const credential = account => {
+    onCredential?.();
+    return { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: credentialTenant, clientId: client, ...account };
+  };
   const delegated = new DelegatedAuth({
     storage: "session-only",
     login: async () => credential({ accountId: "synthetic-account" }),
@@ -108,6 +111,42 @@ test("forced read-only overrides a hand-enabled profile with zero sends", async 
     assert.equal(f.requests.length, 0);
   });
 });
+
+for (const [mode, profile, credentialOptions] of [
+  ["delegated", enabledDelegated, { scopes }],
+  ["application", enabledApp, {}],
+]) {
+  test(`forced read-only during the fresh read blocks ${mode} credentials and send`, async () => {
+    const f = fixture();
+    let reads = 0;
+    await withEnv("MG_AXI_READ_ONLY", undefined, async () => {
+      await assert.rejects(f.coordinator(profile).execute(mutation, {
+        execute: true, ...credentialOptions, intentId: "read-only-fresh-read",
+        readState: async () => {
+          reads += 1;
+          if (reads === 2) process.env.MG_AXI_READ_ONLY = "1";
+          return { notes: [] };
+        },
+      }), { code: "WRITES_DISABLED" });
+    });
+    assert.equal(reads, 2);
+    assert.equal(f.credentialCalls.length, 0);
+    assert.equal(f.requests.length, 0);
+    assert.equal(journal(f.journalPath)[1].outcome, "NOT_SENT");
+  });
+
+  test(`forced read-only during ${mode} credential acquisition blocks the send`, async () => {
+    const f = fixture({ onCredential: () => { process.env.MG_AXI_READ_ONLY = "1"; } });
+    await withEnv("MG_AXI_READ_ONLY", undefined, async () => {
+      await assert.rejects(f.coordinator(profile).execute(mutation, {
+        execute: true, ...credentialOptions, readState: readState(), intentId: "read-only-credential",
+      }), { code: "WRITES_DISABLED" });
+    });
+    assert.equal(f.credentialCalls.length, 1);
+    assert.equal(f.requests.length, 0);
+    assert.equal(journal(f.journalPath)[1].outcome, "NOT_SENT");
+  });
+}
 
 test("operation outside the configured scope is refused with zero sends", async () => {
   const f = fixture();
@@ -196,15 +235,6 @@ test("preview shows the actual redacted change without sending or journaling", a
   assert.throws(() => readFileSync(f.journalPath, "utf8"), /ENOENT/);
 });
 
-test("dry-run and execute cannot be combined", async () => {
-  const f = fixture();
-  await assert.rejects(
-    f.coordinator().execute(mutation, { execute: true, dryRun: true, readState: readState(), scopes }),
-    { code: "VALIDATION_ERROR" },
-  );
-  assert.equal(f.requests.length, 0);
-});
-
 test("omitting execute previews without sending or journaling", async () => {
   const f = fixture();
   const result = await f.coordinator().execute(mutation, { readState: readState(), scopes });
@@ -226,21 +256,12 @@ for (const confirm of [undefined, "wrong-target"]) {
   });
 }
 
-test("denied approval blocks the send", async () => {
-  const f = fixture();
-  await assert.rejects(
-    f.coordinator().execute(mutation, { execute: true, readState: readState(), scopes, approval: () => false }),
-    { code: "APPROVAL_DENIED" },
-  );
-  assert.equal(f.requests.length, 0);
-});
-
-test("confirmed execution sends the approved snapshot once with If-Match and journals intent plus outcome", async () => {
+test("confirmed execution sends the previewed snapshot once with If-Match and journals intent plus outcome", async () => {
   const f = fixture({ handler: { status: 200, headers: {}, body: '{"id":"1"}' } });
   const definition = { ...mutation, effect: "disruptive" };
   const result = await f.coordinator().execute(definition, {
     execute: true, confirm: "fixture-note-1", ifMatch: '"fixture-etag"',
-    readState: readState(), scopes, approval: seen => seen.target === "fixture-note-1", intentId: "approved-intent",
+    readState: readState(), scopes, intentId: "approved-intent",
   });
   assert.equal(result.kind, "success");
   assert.equal(result.auditId, "approved-intent");

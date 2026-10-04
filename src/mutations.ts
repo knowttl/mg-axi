@@ -13,7 +13,7 @@ import { validateApplicationProfile, validateDelegatedProfile, type AnyProfile }
 // tests drive the coordinator through a fixture mutation only. The gate order
 // follows az-axi's write gates as the reference: read-only default,
 // allowWrites plus a scope allowlist, preview, --execute, --confirm,
-// --if-match, a durable journal and an approval hook. The shared read-only
+// --if-match and a durable journal. The shared read-only
 // scope guard in graph-session.ts stays in force for reads; write scopes are
 // requested only through this coordinator path.
 
@@ -62,14 +62,10 @@ export type MutationPreview = {
   proposedChange: string | null;
 };
 
-export type MutationApproval = (preview: MutationPreview) => boolean | Promise<boolean>;
-
 export type MutationExecuteOptions = {
   execute?: boolean;
-  dryRun?: boolean;
   confirm?: string;
   ifMatch?: string;
-  approval?: MutationApproval;
   /** Delegated profiles resolve credentials with these explicit Graph scopes. */
   scopes?: string[];
   readState: () => unknown | Promise<unknown>;
@@ -280,12 +276,22 @@ export function createMutationSender(args: {
         ]);
       }
       options?.signal?.throwIfAborted();
+      if (readOnlyForced()) {
+        throw new AxiError("blocked: forced read-only disables mutations", "WRITES_DISABLED", [
+          "MG_AXI_READ_ONLY=1 overrides profile write enablement",
+        ]);
+      }
       // Provider checks bind the acquired credential to the snapshotted
       // tenant and client; a credential for another identity fails here and
       // nothing is sent.
       const token = await credential(options?.scopes, options?.signal);
       options?.signal?.throwIfAborted();
       assertMutationDestination(authorization.url);
+      if (readOnlyForced()) {
+        throw new AxiError("blocked: forced read-only disables mutations", "WRITES_DISABLED", [
+          "MG_AXI_READ_ONLY=1 overrides profile write enablement",
+        ]);
+      }
       // The request is handed to the transport here: any later failure is
       // ambiguous (bytes may have gone out) and is never replayed.
       handedOff = true;
@@ -525,11 +531,6 @@ export function createMutationCoordinator(args: {
     const body = serialize(definition.payload);
     definition = { ...definition, ...(body === undefined ? {} : { payload: JSON.parse(body) as unknown }) };
     options = { ...options };
-    if (options.execute === true && options.dryRun === true) {
-      throw new AxiError("--dry-run cannot be combined with --execute", "VALIDATION_ERROR", [
-        "Omit --execute to preview the mutation without sending it",
-      ]);
-    }
     const seen = preview(definition, await options.readState(), options.isNoop);
     // Gate 4: without --execute the caller runs the dry run instead.
     if (options.execute !== true) return { kind: "dry-run", preview: seen };
@@ -551,11 +552,6 @@ export function createMutationCoordinator(args: {
           [`Re-run with --confirm '${definition.target}'`],
         );
       }
-    }
-    // Gate 6: the approval hook reviews the previewed action.
-    if (options.approval !== undefined && !(await options.approval(seen))) {
-      throw new AxiError(`blocked: mutation ${definition.operation} was not approved`,
-        "APPROVAL_DENIED", ["Approve the reviewed preview before executing"]);
     }
     const id = options.intentId ?? randomUUID();
     // A re-read alone is not atomic protection; conditional writes travel as

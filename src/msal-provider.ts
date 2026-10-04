@@ -16,20 +16,25 @@ export class MsalProvider implements CredentialProvider {
     }
     const store = await import("keytar").then(module => module.default).catch(() => undefined);
     this.storage = store ? "os-protected" : "session-only";
-    const app = new PublicClientApplication({
+    const configuration = {
       auth: { clientId: profile.clientId, authority: `https://login.microsoftonline.com/${profile.tenantId}` },
       system: { loggerOptions: { loggerCallback: () => {}, piiLoggingEnabled: false } },
+    };
+    const app = new PublicClientApplication({
+      ...configuration,
       cache: store ? { cachePlugin: {
         beforeCacheAccess: async context => {
-          if (session.storage === "session-only") return;
           const saved = await store.getPassword("mg-axi", key);
           if (saved) context.tokenCache.deserialize(saved);
         },
         afterCacheAccess: async context => {
-          if (!context.cacheHasChanged || session.storage === "session-only") return;
+          if (!context.cacheHasChanged) return;
           const saved = context.tokenCache.serialize();
           if (process.platform === "win32" && Buffer.byteLength(saved, "utf8") > 2560) {
             await session.invalidate();
+            const memory = new PublicClientApplication(configuration);
+            memory.getTokenCache().deserialize(saved);
+            session.app = memory;
             session.storage = this.storage = "session-only";
             return;
           }
@@ -45,14 +50,13 @@ export class MsalProvider implements CredentialProvider {
   }
   async login(profile: DelegatedProfile, method: LoginMethod, scopes: string[]) {
     const session = await this.application(profile);
-    const app = session.app;
     // A new explicit login replaces the old account, never silently selects it.
-    const accounts = await app.getTokenCache().getAllAccounts();
+    const accounts = await session.app.getTokenCache().getAllAccounts();
     await session.invalidate();
-    for (const account of accounts) await app.getTokenCache().removeAccount(account);
+    for (const account of accounts) await session.app.getTokenCache().removeAccount(account);
     const result = method === "browser"
-      ? await app.acquireTokenInteractive({ scopes, openBrowser: async url => { await open(url); }, prompt: "select_account", errorTemplate: "Sign-in failed. Return to mg-axi for recovery guidance." })
-      : await app.acquireTokenByDeviceCode({ scopes, deviceCodeCallback: response => {
+      ? await session.app.acquireTokenInteractive({ scopes, openBrowser: async url => { await open(url); }, prompt: "select_account", errorTemplate: "Sign-in failed. Return to mg-axi for recovery guidance." })
+      : await session.app.acquireTokenByDeviceCode({ scopes, deviceCodeCallback: response => {
         // The one-time user challenge belongs only to explicit login stderr.
         process.stderr.write(`Open https://microsoft.com/devicelogin and enter ${response.userCode}\n`);
       } });

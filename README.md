@@ -86,7 +86,7 @@ Direct member results always carry the [v1.0 service-principal limitation](docs/
 Delegated group reads default to `https://graph.microsoft.com/GroupMember.Read.All`; hidden members need `Member.Read.Hidden` and richer group properties may need `Group.Read.All`, while application profiles use the configured `.default` audience.
 When richer group access is needed, pass `--scopes https://graph.microsoft.com/Group.Read.All`; for hidden-member access, explicitly log in and read with `--scopes https://graph.microsoft.com/GroupMember.Read.All,https://graph.microsoft.com/Member.Read.Hidden` and satisfy the operation's delegated role requirements.
 
-Read directory roles, direct assignments and PIM activity as four distinct views:
+Read directory roles, current assignments and PIM activity through four views:
 
 ```sh
 mg-axi entra directory-role list --profile soc --limit 10
@@ -98,7 +98,8 @@ mg-axi entra pim active list --profile soc --filter "assignmentType eq 'Activate
 
 `entra directory-role list` defaults to `id`, `displayName`, `description` and `roleTemplateId`; `entra directory-role show --id <role-id>` defaults to the full reviewed role set.
 Directory roles are activated instances only: a role appears after activation, never before, so an empty result never proves the role does not exist.
-`entra role-assignment list` defaults to `id`, `principalId`, `roleDefinitionId` and `directoryScopeId` and covers direct persistent assignments only; activated PIM eligibility never appears there.
+`entra role-assignment list` defaults to `id`, `principalId`, `roleDefinitionId` and `directoryScopeId` and returns the current assignment inventory, including direct and PIM-activated assignments.
+Use `entra pim active list` to distinguish `assignmentType` Assigned from Activated.
 `entra pim eligible list` covers PIM-eligible assignments, which are not active, and eligible instances carry no `assignmentType`.
 `entra pim active list` covers both directly assigned (`assignmentType` Assigned) and activated eligible (`assignmentType` Activated) assignments; `memberType` names how the instance reaches the principal.
 For built-in roles the unified `roleDefinitionId` matches the directory-role `roleTemplateId`.

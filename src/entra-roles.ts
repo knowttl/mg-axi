@@ -14,7 +14,7 @@ import type { AnyProfile } from "./profiles.js";
 // rbacapplication-list-roleassignments,
 // rbacapplication-list-roleeligibilityscheduleinstances and
 // rbacapplication-list-roleassignmentscheduleinstances operation
-// documentation on 2026-10-04. Directory-role reads and direct role
+// documentation on 2026-10-04. Directory-role reads and role
 // assignments read D/A RoleManagement.Read.Directory; eligible PIM reads
 // D/A RoleEligibilitySchedule.Read.Directory; active PIM reads D/A
 // RoleAssignmentSchedule.Read.Directory. Delegated callers additionally need
@@ -22,9 +22,9 @@ import type { AnyProfile } from "./profiles.js";
 // documents an advanced-query contract, so --filter passes through as plain
 // $filter with no $count or ConsistencyLevel attached.
 //
-// The four assignment views stay distinct: directoryRoles are activated role
+// The four views cover: directoryRoles are activated role
 // instances only (a role appears here after activation, never before);
-// roleAssignments are direct persistent assignments; eligible schedule
+// roleAssignments include direct and PIM-activated assignments; eligible schedule
 // instances are PIM-eligible but not active; active schedule instances cover
 // both directly assigned (assignmentType Assigned) and activated eligible
 // (assignmentType Activated) assignments. memberType names how the instance
@@ -118,13 +118,8 @@ function scopesFor(flags: RoleFlags, profile: AnyProfile, defaults: readonly str
 }
 
 function truncateValue(value: unknown, full: boolean): { value: unknown; truncated: boolean } {
-  const truncate = (text: string) => full || text.length <= TRUNCATE_AT
-    ? { value: text, truncated: false }
-    : { value: `${text.slice(0, TRUNCATE_AT)}... (truncated, ${text.length} chars total)`, truncated: true };
-  if (typeof value === "string") return truncate(value);
-  if (Array.isArray(value) && value.every(entry => typeof entry === "string")) {
-    const projected = value.map(truncate);
-    return { value: projected.map(entry => entry.value), truncated: projected.some(entry => entry.truncated) };
+  if (typeof value === "string" && !full && value.length > TRUNCATE_AT) {
+    return { value: `${value.slice(0, TRUNCATE_AT)}... (truncated, ${value.length} chars total)`, truncated: true };
   }
   return { value, truncated: false };
 }
@@ -242,8 +237,8 @@ const ASSIGNMENT_LIST: CollectionShape = {
   defaultSelect: DEFAULT_ASSIGNMENT_SELECT,
   defaultScopes: DEFAULT_ROLE_SCOPES,
   denialHints: ASSIGNMENT_DENIAL_HINTS,
-  scopeNote: "Direct persistent assignments only; activated PIM eligibility appears in pim active, never here",
-  emptyNote: "0 direct assignments matched; the absence of results is the answer, not an error",
+  scopeNote: "Current role-assignment inventory includes direct and PIM-activated assignments; use pim active list for assignmentType Assigned versus Activated",
+  emptyNote: "0 current role assignments matched; the absence of results is the answer, not an error",
 };
 
 const PIM_ELIGIBLE: CollectionShape = {
@@ -266,7 +261,7 @@ const PIM_ACTIVE: CollectionShape = {
   defaultSelect: DEFAULT_ACTIVE_SELECT,
   defaultScopes: DEFAULT_ACTIVE_SCOPES,
   denialHints: ACTIVE_DENIAL_HINTS,
-  scopeNote: "Active covers directly assigned (assignmentType Assigned) and activated eligible (assignmentType Activated); the direct-only view is role-assignment list",
+  scopeNote: "Active distinguishes directly assigned (assignmentType Assigned) and activated eligible (assignmentType Activated) assignments",
   emptyNote: "0 active assignments matched; the absence of results is the answer, not an error",
 };
 

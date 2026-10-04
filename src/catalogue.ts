@@ -164,7 +164,7 @@ export const LEAVES: Leaf[] = [
     full: roleRead.full,
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to RoleManagement.Read.Directory; delegated callers also need a supported directory role" },
   }, examples: ["mg-axi entra directory-role show --id <role-id> --profile soc", "mg-axi entra directory-role show --id <role-id> --profile soc --full"] },
-  { path: "entra role-assignment list", description: "List direct role assignments (id, principalId, roleDefinitionId, directoryScopeId); activated PIM eligibility is not listed here", operation: "GET:/roleManagement/directory/roleAssignments", flags: {
+  { path: "entra role-assignment list", description: "List current role assignments (id, principalId, roleDefinitionId, directoryScopeId), including direct and PIM-activated assignments; use pim active list for assignmentType Assigned versus Activated", operation: "GET:/roleManagement/directory/roleAssignments", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
     all: { description: "Follow pages within request, byte and deadline budgets" },
@@ -186,7 +186,7 @@ export const LEAVES: Leaf[] = [
     cursor: roleRead.cursor,
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to RoleEligibilitySchedule.Read.Directory; delegated callers also need a supported PIM read role; PIM needs P2 or ID Governance" },
   }, examples: ["mg-axi entra pim eligible list --profile soc", "mg-axi entra pim eligible list --profile soc --filter \"roleDefinitionId eq '<role-definition-id>'\""] },
-  { path: "entra pim active list", description: "List active assignments: directly assigned plus activated eligible (see assignmentType); the direct-only view is role-assignment list", operation: "GET:/roleManagement/directory/roleAssignmentScheduleInstances", flags: {
+  { path: "entra pim active list", description: "List active assignments: directly assigned plus activated eligible, distinguished by assignmentType Assigned versus Activated", operation: "GET:/roleManagement/directory/roleAssignmentScheduleInstances", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
     all: { description: "Follow pages within request, byte and deadline budgets" },

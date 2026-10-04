@@ -113,8 +113,17 @@ test("pim active list leaf help advertises the state distinction and flags", () 
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
   assert.match(result.stdout, /directly assigned plus activated eligible/);
+  assert.match(result.stdout, /assignmentType Assigned versus Activated/);
   assert.match(result.stdout, /--filter/);
   assert.match(result.stdout, /--cursor/);
+});
+
+test("role-assignment list leaf help describes current inventory and points to state classification", () => {
+  const result = run(["entra", "role-assignment", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /including direct and PIM-activated assignments/);
+  assert.match(result.stdout, /pim active list for assignmentType Assigned versus Activated/);
 });
 
 test("pim eligible list leaf help marks eligibility as not active", () => {

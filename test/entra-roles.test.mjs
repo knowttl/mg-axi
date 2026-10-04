@@ -215,17 +215,24 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
-  test(`${mode} lists direct role assignments with the direct-only distinction`, async () => {
+  test(`${mode} lists direct and PIM-activated role assignments in current inventory`, async () => {
     const state = setupProfiles();
     try {
-      const { requests, overrides } = overridesFor(mode);
+      const { requests, overrides } = overridesFor(mode, transport(() => json(200, { value: [a1, {
+        id: vActivated.id,
+        principalId: vActivated.principalId,
+        roleDefinitionId: vActivated.roleDefinitionId,
+        directoryScopeId: vActivated.directoryScopeId,
+        appScopeId: vActivated.appScopeId,
+      }] })));
       const result = await executeArgv(["entra", "role-assignment", "list", "--profile", profile], overrides);
       assert.deepEqual(result.roleAssignments, [
         { id: a1.id, principalId: a1.principalId, roleDefinitionId: a1.roleDefinitionId, directoryScopeId: "/" },
+        { id: vActivated.id, principalId: vActivated.principalId, roleDefinitionId: vActivated.roleDefinitionId, directoryScopeId: "/" },
       ]);
-      assert.deepEqual(result.count, { returned: 1, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("Direct persistent assignments only")));
-      assert.ok(result.help.some(hint => hint.includes("pim active")));
+      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("inventory includes direct and PIM-activated assignments")));
+      assert.ok(result.help.some(hint => hint.includes("pim active list for assignmentType Assigned versus Activated")));
       assert.ok(result.help.some(hint => hint.includes("roleTemplateId")));
       assert.ok(new URL(requests[0].url).pathname.endsWith("/roleManagement/directory/roleAssignments"));
     } finally {
@@ -261,7 +268,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       ]);
       assert.deepEqual(result.count, { returned: 2, complete: true });
       assert.ok(result.help.some(hint => hint.includes("assignmentType Assigned")));
-      assert.ok(result.help.some(hint => hint.includes("role-assignment list")));
+      assert.ok(result.help.some(hint => hint.includes("assignmentType Activated")));
       assert.ok(new URL(requests[0].url).pathname.endsWith("/roleManagement/directory/roleAssignmentScheduleInstances"));
     } finally {
       teardownProfiles(state);

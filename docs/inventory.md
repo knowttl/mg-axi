@@ -55,7 +55,8 @@ The existing [coverage research](graph-coverage.md) provides useful representati
 An unreviewed value is never interpreted as unsupported, unrestricted, Free or supported.
 
 This discovery schema deliberately permits only unresolved evidence.
-Later slices must evolve the catalogue's reviewed access contract explicitly, with sourced supported/unsupported auth modes, exact permission choices and role/licence constraints.
+API-01's [implementation catalogue](../src/api.ts) owns reviewed raw routes, query keys, fields and sourced access constraints.
+Later slices must extend the implementation catalogue's reviewed access contract explicitly, with sourced supported/unsupported auth modes, exact permission choices and role/licence constraints.
 The discovery inventory remains reproducible independently of that implementation catalogue.
 
 ## Dispositions and ownership

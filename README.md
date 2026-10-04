@@ -65,13 +65,16 @@ mg-axi api get /groups --odata '$filter=securityEnabled eq true&$top=5' --scopes
 mg-axi api get /identity/conditionalAccess/policies --scopes https://graph.microsoft.com/Policy.Read.All
 ```
 
-`api get` accepts only GET routes in the reviewed inventory (`src/api.ts`, reviewed 2026-10-04) with reviewed query keys and `$select` fields.
+`api get` accepts only GET routes in the [reviewed route catalogue](src/api.ts), which owns route-specific query keys, `$select` fields and access constraints.
 Server OData parameters use `--odata`; `--query` is reserved for output queries and is not implemented here.
 Omitting `$select` requests the route's reviewed fields, and every response is filtered to reviewed fields before output.
 Relationship expansion (`$expand`) is unavailable.
 Unreviewed, secret-value, mail/file-content, beta and write routes fail before credentials, and pack, preview and sensitive-area policy still runs in the shared session.
 Delegated reads take explicit `--scopes` like login; application profiles use the configured `.default` audience and reject `--scopes`.
-Collections return truthful completion info, default to 100 rows, and follow pages within budget under `--all`.
+Collections return `returned`, `complete` and `value`, default to 100 rows, and follow pages within budget under `--all`.
+`--limit` and `--all` cannot be combined.
+Completion describes pagination, not visibility of every directory object; group-member results include a warning for the [v1.0 service-principal limitation](docs/graph-coverage.md#licensing-and-completeness-findings), even when `complete` is true.
+Strings longer than 4000 characters are truncated; `--full` removes string truncation without disabling redaction, reviewed-field filtering or row caps.
 Partial results include a `cursor` preserving buffered rows and the next page.
 Resume with `--cursor -` and supply the cursor token on stdin under the same collection path, profile and scopes, optionally with `--all` or a new `--limit`.
 For example, `mg-axi api get /users --cursor - --all --scopes https://graph.microsoft.com/User.Read.All < cursor.txt` reads a saved token through stdin.

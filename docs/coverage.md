@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 40 (38 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 45 (43 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 4 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -43,6 +43,11 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra administrative-unit list` | `GET:/directory/administrativeUnits` | scheduled | READ-10 |
 | `mg-axi entra administrative-unit show` | `GET:/directory/administrativeUnits/{administrativeUnit-id}` | scheduled | READ-10 |
 | `mg-axi entra administrative-unit member list` | `GET:/directory/administrativeUnits/{administrativeUnit-id}/members` | scheduled | READ-10 |
+| `mg-axi entra organization list` | `GET:/organization` | scheduled | EXT-01 |
+| `mg-axi entra organization show` | `GET:/organization/{organization-id}` | scheduled | EXT-01 |
+| `mg-axi entra organization branding show` | `GET:/organization/{organization-id}/branding` | scheduled | EXT-01 |
+| `mg-axi entra organization branding-localization list` | `GET:/organization/{organization-id}/branding/localizations` | scheduled | EXT-01 |
+| `mg-axi entra organization branding-localization show` | `GET:/organization/{organization-id}/branding/localizations/{organizationalBrandingLocalization-id}` | scheduled | EXT-01 |
 | `mg-axi entra sign-in list` | `GET:/auditLogs/signIns` | scheduled | READ-05 |
 | `mg-axi entra sign-in show` | `GET:/auditLogs/signIns/{signIn-id}` | scheduled | READ-05 |
 | `mg-axi entra directory-audit list` | `GET:/auditLogs/directoryAudits` | scheduled | READ-05 |

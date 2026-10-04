@@ -57,6 +57,11 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra administrative-unit list` | native | read |
 | `mg-axi entra administrative-unit show` | native | read |
 | `mg-axi entra administrative-unit member list` | native | read |
+| `mg-axi entra organization list` | native | read |
+| `mg-axi entra organization show` | native | read |
+| `mg-axi entra organization branding show` | native | read |
+| `mg-axi entra organization branding-localization list` | native | read |
+| `mg-axi entra organization branding-localization show` | native | read |
 | `mg-axi entra sign-in list` | native | read |
 | `mg-axi entra sign-in show` | native | read |
 | `mg-axi entra directory-audit list` | native | read |

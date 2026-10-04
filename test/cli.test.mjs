@@ -43,6 +43,9 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra pim active list/);
   assert.match(result.stdout, /entra device list/);
   assert.match(result.stdout, /entra administrative-unit list/);
+  assert.match(result.stdout, /entra organization list/);
+  assert.match(result.stdout, /entra organization branding show/);
+  assert.match(result.stdout, /entra organization branding-localization list/);
   assert.match(result.stdout, /entra conditional-access policy list/);
   assert.match(result.stdout, /entra conditional-access named-location list/);
   assert.match(result.stdout, /entra group member add/);
@@ -74,6 +77,10 @@ for (const [name, args, error] of [
   ["unknown flag on member add", ["entra", "group", "member", "add", "--transitive"], /unknown flag/],
   ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
   ["missing required user", ["entra", "user", "authentication-method", "list"], /--user is required/],
+  ["missing required organization ID", ["entra", "organization", "show"], /--id is required/],
+  ["missing required organization for branding", ["entra", "organization", "branding", "show"], /--organization is required/],
+  ["missing required organization for localizations", ["entra", "organization", "branding-localization", "list"], /--organization is required/],
+  ["organization list rejects filters", ["entra", "organization", "list", "--filter", "displayName eq 'Contoso'"], /unknown flag --filter/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
   ["missing required grant client", ["entra", "service-principal", "oauth2-grant", "list"], /--service-principal is required/],
   ["missing required app-role client", ["entra", "service-principal", "app-role-assignment", "list"], /--service-principal is required/],

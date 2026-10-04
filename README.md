@@ -19,6 +19,7 @@ READ-07 adds application and service-principal list/show with credential expiry 
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
 READ-08 adds service-principal delegated-grant and app-role-assignment consent reads for a named client through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
+EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -207,6 +208,31 @@ Resume unit-member lists with the same `--administrative-unit`, profile, scopes 
 Delegated device reads default to `https://graph.microsoft.com/Device.Read.All` and unit reads to `https://graph.microsoft.com/AdministrativeUnit.Read.All`, while application profiles use the configured `.default` audience; hidden unit memberships need `Member.Read.Hidden`.
 Denied directory reads return operation-specific permission, delegated-role and licensing guidance rather than empty results; HTTP 403 alone does not identify which prerequisite is missing.
 `--filter` on these collections is sent with `$count=true` and `ConsistencyLevel: eventual`.
+
+Log in with `https://graph.microsoft.com/Organization.Read.All`, then inspect the tenant organization and its sign-in branding:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Organization.Read.All
+mg-axi entra organization list --profile soc
+mg-axi entra organization show --profile soc --id <organization-id>
+mg-axi entra organization branding show --profile soc --organization <organization-id>
+mg-axi entra organization branding-localization list --profile soc --organization <organization-id>
+mg-axi entra organization branding-localization show --profile soc --organization <organization-id> --id fr-FR
+```
+
+`entra organization list` defaults to compact properties (`id`, `displayName`, `tenantType`, `verifiedDomains`); exactly one organization exists per tenant.
+`entra organization show --id <organization-id>` defaults to the full reviewed organization set including technical notification mails and the privacy profile.
+Delegated organization reads default to `https://graph.microsoft.com/Organization.Read.All` for full metadata; delegated `User.Read` returns only `id`, `displayName` and `verifiedDomains` with every other property null.
+`entra organization branding show --organization <organization-id>` reads the default branding metadata (non-Stream text and URLs); the session sends the documented `Accept-Language: 0` header and locale variants come from the localizations collection.
+Branding leaves default to delegated `https://graph.microsoft.com/User.Read`, the documented least-privileged scope; `OrganizationalBranding.Read.All` is the purpose-built alternative.
+Stream image properties (`bannerLogo`, `backgroundImage` and friends) are refused before credentials: they need a later piece with its own binary-output contract.
+A branding 404 means no custom branding is configured (configuring it needs P1/P2), not denied access; contact fields on the organization are personal data.
+Delegated callers additionally need a supported Entra role (Directory Readers or Global Reader for organizations; Global Reader or Organizational Branding Administrator for branding); personal Microsoft accounts are not supported.
+Organization and localization lists return `organizations` and `brandingLocalizations`, single-object reads return `organization`, `branding` and `brandingLocalization`.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to organization and branding reads.
+Organization and localization lists offer no `--filter`: Graph documents `$select` only on these routes, so the flag is refused before credentials.
+Denied organization and branding reads name the scope, role and licensing guidance instead of only the generic cause.
+No organization mutation lives here; certificate-based-auth configuration, extensions, beta-only settings and the POST lookup actions belong to later pieces.
 
 Log in with `https://graph.microsoft.com/Policy.Read.All`, then read Conditional Access policies and named locations as separate grammar:
 

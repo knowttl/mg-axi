@@ -45,6 +45,7 @@ const READ_SCOPES = new Set([
   "LicenseAssignment.Read.All",
   "Member.Read.Hidden",
   "Organization.Read.All",
+  "OrganizationalBranding.Read.All",
   "Policy.Read.All",
   "Policy.Read.AuthenticationMethod",
   "Policy.Read.ConditionalAccess",
@@ -855,6 +856,10 @@ export class GraphSession {
       Accept: "application/json",
       "client-request-id": randomUUID(),
       ...(opts.consistencyLevel === "eventual" ? { ConsistencyLevel: "eventual" } : {}),
+      // The branding GET documents Accept-Language as required; 0 selects
+      // the default branding object. Locale variants come from the
+      // localizations collection instead of this header.
+      ...(operation.path === "/organization/{organization-id}/branding" ? { "Accept-Language": "0" } : {}),
     });
     for (;;) {
       signal?.throwIfAborted();

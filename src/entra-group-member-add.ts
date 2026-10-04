@@ -94,8 +94,8 @@ function readBackHint(groupId: string, profileName: string): string {
 }
 
 // Pre-send target refusal. Runs inside the preview read so the group is
-// rechecked on the fresh read before the single send; a refusal journals
-// nothing and sends nothing.
+// rechecked on the fresh read before the single send. An initial refusal
+// journals nothing; a refusal after intent reservation records NOT_SENT.
 function assertGroupWritable(group: unknown, groupId: string): { id: string; displayName: unknown } {
   if (group === null || typeof group !== "object" || Array.isArray(group)) {
     fail("Graph returned a malformed group body", "GRAPH_ERROR", [

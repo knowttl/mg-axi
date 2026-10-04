@@ -3,7 +3,7 @@
 ## Named writes
 
 Only named, approved pack commands can mutate; raw API remains read-only.
-WRITE-00 implements the [mutation coordinator](../src/mutations.ts) for fixture-driven execution.
+WRITE-00 provides the shared [mutation coordinator](../src/mutations.ts).
 WRITE-01 ships the first named command (`entra group member add`) with a production POST transport; later families still ship independently with their own contracts.
 Profile enablement and environment configuration are documented in [README.md](../README.md).
 The coordinator snapshots the validated profile's tenant, identity and approved-operation scope at creation; later profile edits cannot widen that scope.
@@ -67,8 +67,8 @@ Each write ships independently after the shared coordinator and its own contract
 The table describes permission choices, not automatic consent or authority.
 Raw writes remain denied even after named writes ship.
 
-WRITE-01 (`entra group member add --group <group-id> --user <user-id>`, implemented in [entra-group-member-add](../src/entra-group-member-add.ts), operation `mg.entra.group.member.add`) is classified disruptive, so `--execute` needs `--confirm <group-id>`.
+The WRITE-01 implementation in [entra-group-member-add](../src/entra-group-member-add.ts) classifies membership adds as disruptive; command usage, enablement and permission requirements are owned by [README.md](../README.md).
 The $ref body carries exactly `{"@odata.id": "https://graph.microsoft.com/v1.0/directoryObjects/<user-id>"}`; both identifiers must be object IDs.
-The user is verified through `GET:/users/{user-id}` with `$select=id` before preview or no-op detection and again before sending; this read needs delegated User.ReadBasic.All or application User.Read.All, and failed or malformed user reads block the operation.
+The user is verified through `GET:/users/{user-id}` with `$select=id` before preview or no-op detection and again before sending; failed or malformed user reads block the operation.
+Group `isAssignableToRole` must be explicitly false or null; true, missing and malformed values are refused.
 Desired state is read through `GET:/groups/{group-id}/members` in the preview and rechecked before the single send; role-assignable, dynamic-membership and distribution groups are refused before sending, and an incomplete member window proceeds to the POST where a duplicate 400 lands as a no-op.
-The mutation requests only D/A GroupMember.ReadWrite.All for user members; delegated callers additionally need a groups role with `microsoft.directory/groups/members/update`.

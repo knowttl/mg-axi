@@ -28,7 +28,7 @@ import type { AnyProfile } from "./profiles.js";
 // $expand, and neither is used silently here - the limitation rides along as
 // an explicit warning instead. Role-assignable groups surface through
 // isAssignableToRole; changing their membership needs role-management
-// permission and belongs to WRITE-01, never to this slice.
+// permission and is refused by WRITE-01; it belongs to a later write slice.
 
 // Every group property this slice may request or display, matching the
 // reviewed raw surface. Anything else fails before credentials.

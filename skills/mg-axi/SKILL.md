@@ -1,6 +1,6 @@
 ---
 name: mg-axi
-description: Use mg-axi for read-only Microsoft Entra inspection - users, groups, roles, devices, sign-ins, applications, consent grants, risk and Conditional Access through agent-ergonomic TOON output.
+description: Use mg-axi for Microsoft Entra inspection and gated user group membership adds through agent-ergonomic TOON output.
 user-invocable: false
 ---
 

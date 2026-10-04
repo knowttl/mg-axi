@@ -182,7 +182,7 @@ Both log show commands default to the full reviewed property set.
 Log reads truncate text longer than 500 characters, including nested values; `--full` restores complete text without lifting redaction, row caps or time bounds.
 To replay a resumed result with `--full`, supply the original input cursor on stdin; the returned cursor continues after that result.
 Graph omits CA policy detail without CA-data access, so an absent `appliedConditionalAccessPolicies` value reports its required policy permission and delegated role as unavailable rather than empty.
-Both modes need Policy.Read.All, Policy.Read.ConditionalAccess or Policy.ReadWrite.ConditionalAccess in addition to AuditLog.Read.All; delegated callers also need Conditional Access Administrator, Global Reader, Security Administrator or Security Reader.
+For CA detail, use Policy.Read.All or Policy.Read.ConditionalAccess in addition to AuditLog.Read.All; delegated callers also need Conditional Access Administrator, Global Reader, Security Administrator or Security Reader.
 For delegated CA detail, log in and repeat the read with `--scopes https://graph.microsoft.com/AuditLog.Read.All,https://graph.microsoft.com/Policy.Read.All`.
 Denied log reads name the operation's supported directory roles and the conservative P1/P2 deployment prerequisite instead of only the generic grant/role/licence cause.
 
@@ -230,7 +230,7 @@ Server OData parameters use `--odata`; `--query` is reserved for output queries 
 Omitting `$select` requests the route's reviewed fields, and every response is filtered to reviewed fields before output.
 Relationship expansion (`$expand`) is unavailable.
 Unreviewed, secret-value, mail/file-content, beta and write routes fail before credentials, and pack, preview and sensitive-area policy still runs in the shared session.
-Delegated reads take explicit `--scopes` like login; application profiles use the configured `.default` audience and reject `--scopes`.
+Delegated raw reads require explicit `--scopes` from the supported read choices described above; application profiles use the configured `.default` audience and reject `--scopes`.
 Collections return `returned`, `complete` and `value`, default to 100 rows, and follow pages within budget under `--all`.
 `--limit` and `--all` cannot be combined.
 Completion describes pagination, not visibility of every directory object; group-member results include a warning for the [v1.0 service-principal limitation](docs/graph-coverage.md#licensing-and-completeness-findings), even when `complete` is true.

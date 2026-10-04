@@ -190,8 +190,8 @@ function fullHint(command: string, flags: GrantFlags, profileName: string): stri
 
 // Denials carry the session's generic grant/role/licence cause; each
 // operation adds the roles and read scopes that actually unlock it, because
-// a 403 alone never says which prerequisite is missing. Neither hint names
-// a write-consent scope: reads must never request one.
+// a 403 alone never says which prerequisite is missing. Write-consent
+// scopes are named only to warn against requesting them for reads.
 function withGuidance<T>(hints: string[], run: () => Promise<T>): Promise<T> {
   return run().catch(error => {
     if (error instanceof AxiError && error.code === "GRAPH_ERROR" && /\(403\)/.test(error.message)) {

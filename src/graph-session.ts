@@ -289,6 +289,11 @@ export function encodeGraphPathSegment(value: string): string {
       "Bind one resource identifier per placeholder; encoded separators and traversal are rejected",
     ]);
   }
+  if (value.startsWith("$")) {
+    throw new AxiError("OData reserved segments cannot be resource identifiers", "VALIDATION_ERROR", [
+      "Bind a resource identifier that does not start with $; $count, $value and $ref are reserved route segments",
+    ]);
+  }
   return encodeURIComponent(value);
 }
 
@@ -367,7 +372,7 @@ export function authorizeUrl(operation: SessionOperation, params: Record<string,
   if (!bindings) throw denied(operation, `the target leaves the catalogued route ${operation.path}`);
   for (const [name, actual] of Object.entries(bindings)) {
     const expected = params[name];
-    if (typeof expected !== "string" || actual.toLowerCase() !== encodeURIComponent(expected).toLowerCase()) {
+    if (typeof expected !== "string" || actual.toLowerCase() !== encodeGraphPathSegment(expected).toLowerCase()) {
       throw denied(operation, `the target changes the bound resource {${name}}`);
     }
   }

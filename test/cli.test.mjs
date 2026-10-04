@@ -35,6 +35,8 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra group list/);
   assert.match(result.stdout, /entra application list/);
   assert.match(result.stdout, /entra service-principal list/);
+  assert.match(result.stdout, /entra directory-role list/);
+  assert.match(result.stdout, /entra pim active list/);
   assert.match(result.stdout, /login/);
   assert.doesNotMatch(result.stdout, /Upgrade/);
 });
@@ -54,6 +56,7 @@ for (const [name, args, error] of [
   ["invalid limit", ["entra", "user", "list", "--limit", "0"], /positive safe integer/],
   ["invalid version", ["entra", "user", "list", "--api-version", "v2"], /v1.0 or beta/],
   ["missing required ID", ["entra", "user", "show"], /--id is required/],
+  ["missing required role ID", ["entra", "directory-role", "show"], /--id is required/],
   ["missing required group", ["entra", "group", "member", "list"], /--group is required/],
   ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
@@ -105,8 +108,34 @@ test("group member list leaf help advertises the relationship flags", () => {
   assert.match(result.stdout, /--cursor/);
 });
 
+test("pim active list leaf help advertises the state distinction and flags", () => {
+  const result = run(["entra", "pim", "active", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /directly assigned plus activated eligible/);
+  assert.match(result.stdout, /--filter/);
+  assert.match(result.stdout, /--cursor/);
+});
+
+test("pim eligible list leaf help marks eligibility as not active", () => {
+  const result = run(["entra", "pim", "eligible", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /not active/);
+  assert.match(result.stdout, /RoleEligibilitySchedule\.Read\.Directory/);
+});
+
 test("group member list without a profile fails operationally on stdout", () => {
   const result = run(["entra", "group", "member", "list", "--group", "fixture"]);
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, "");
+  const output = decode(result.stdout);
+  assert.equal(output.code, "AUTH_REQUIRED");
+  assert.ok(output.help.length);
+});
+
+test("directory-role show without a profile fails operationally on stdout", () => {
+  const result = run(["entra", "directory-role", "show", "--id", "fixture"]);
   assert.equal(result.status, 1);
   assert.equal(result.stderr, "");
   const output = decode(result.stdout);

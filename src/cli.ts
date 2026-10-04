@@ -6,6 +6,7 @@ import { Profiles } from "./profiles.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
 import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
+import { listDirectoryRoles, showDirectoryRole, listRoleAssignments, listPimEligible, listPimActive } from "./entra-roles.js";
 import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from "./entra-audit-logs.js";
 import { listApplicationOwners, listApplications, listServicePrincipalOwners, listServicePrincipals, showApplication, showServicePrincipal } from "./entra-apps.js";
 import { fetchTransport } from "./api.js";
@@ -152,6 +153,34 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     return leaf.path === "entra group member list"
       ? listGroupMembers(session, flags, selected.profile, operation, leafHelp(leaf), selected.name)
       : listGroupMemberOf(session, flags, selected.profile, operation, leafHelp(leaf), selected.name);
+  }
+  if (leaf.path === "entra directory-role list" || leaf.path === "entra directory-role show" || leaf.path === "entra role-assignment list" || leaf.path === "entra pim eligible list" || leaf.path === "entra pim active list") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra directory-role list": return listDirectoryRoles(session, flags, selected.profile, operation, help, selected.name);
+      case "entra directory-role show": return showDirectoryRole(session, flags, selected.profile, operation, help, selected.name);
+      case "entra role-assignment list": return listRoleAssignments(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim eligible list": return listPimEligible(session, flags, selected.profile, operation, help, selected.name);
+      default: return listPimActive(session, flags, selected.profile, operation, help, selected.name);
+    }
   }
   if (leaf.path === "entra sign-in list" || leaf.path === "entra sign-in show" || leaf.path === "entra directory-audit list" || leaf.path === "entra directory-audit show" || leaf.path === "entra application list" || leaf.path === "entra application show" || leaf.path === "entra service-principal list" || leaf.path === "entra service-principal show" || leaf.path === "entra application owner list" || leaf.path === "entra service-principal owner list") {
     const selected = profiles.resolve(flags.profile as string | undefined);

@@ -47,10 +47,8 @@ export interface ReviewedRawRoute {
 // Collections support server filtering, ordering and paging hints. Advanced
 // queries ($search, $count=true) need per-endpoint ConsistencyLevel review and
 // stay unsupported here; $skiptoken is server paging state, paged via --all.
-// Singles support local projection and plain relationship expansion; the
-// session still rejects sensitive relationships and nested query options.
 const COLLECTION_QUERY = ["$select", "$filter", "$top", "$orderby"] as const;
-const SINGLE_QUERY = ["$select", "$expand"] as const;
+const SINGLE_QUERY = ["$select"] as const;
 
 const USER_FIELDS = ["id", "displayName", "userPrincipalName", "mail", "accountEnabled", "userType", "jobTitle", "department", "officeLocation", "businessPhones", "mobilePhone", "createdDateTime"];
 const GROUP_FIELDS = ["id", "displayName", "description", "mail", "mailEnabled", "mailNickname", "securityEnabled", "groupTypes", "visibility", "classification", "isAssignableToRole", "createdDateTime", "expirationDateTime", "renewedDateTime", "membershipRule", "membershipRuleProcessingState"];
@@ -231,10 +229,10 @@ function parseQuery(raw: string | undefined): Record<string, string> {
   const params = new URLSearchParams(text);
   const out: Record<string, string> = Object.create(null);
   for (const [key, value] of params) {
-    if (Object.hasOwn(out, key)) throw new AxiError(`Duplicate query key ${key}`, "VALIDATION_ERROR", ["Pass each query key once: --query 'k=v&k2=v2'"]);
+    if (Object.hasOwn(out, key)) throw new AxiError(`Duplicate query key ${key}`, "VALIDATION_ERROR", ["Pass each query key once: --odata 'k=v&k2=v2'"]);
     out[key] = value;
   }
-  if (!Object.keys(out).length && text.trim() !== "") throw new AxiError(`Invalid --query '${raw}'`, "VALIDATION_ERROR", ["Example: --query '$top=5&$select=id,displayName'"]);
+  if (!Object.keys(out).length && text.trim() !== "") throw new AxiError(`Invalid --odata '${raw}'`, "VALIDATION_ERROR", ["Example: --odata '$top=5&$select=id,displayName'"]);
   return out;
 }
 
@@ -249,20 +247,15 @@ function checkQueryKeys(route: ReviewedRawRoute, query: Record<string, string>):
     if (key === "$skiptoken") {
       throw new AxiError("Server paging state cannot be supplied; page with --all", "VALIDATION_ERROR", ["mg-axi api get --help"]);
     }
-    if (key === "$expand") {
-      throw new AxiError(`$expand is reviewed for single objects only, not for ${route.id}`, "VALIDATION_ERROR", [
-        "Relationship expansion on collections belongs to the owning named slice",
-      ]);
-    }
     throw new AxiError(`Unsupported query key ${key} for ${route.id}`, "VALIDATION_ERROR", [
       `Reviewed query keys: ${route.query.join(", ")}`,
     ]);
   }
 }
 
-function checkSelect(route: ReviewedRawRoute, query: Record<string, string>): void {
-  const select = query["$select"];
-  if (select === undefined) return;
+function checkQuery(route: ReviewedRawRoute, query: Record<string, string>): void {
+  checkQueryKeys(route, query);
+  const select = query["$select"] ??= route.fields.join(",");
   const fields = select.split(",").map(field => field.trim()).filter(field => field.length > 0);
   if (!fields.length) throw new AxiError("Empty $select names no fields", "VALIDATION_ERROR", [`Reviewed fields: ${route.fields.join(", ")}`]);
   const unknown = fields.filter(field => !route.fields.includes(field));
@@ -275,6 +268,11 @@ function checkSelect(route: ReviewedRawRoute, query: Record<string, string>): vo
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+function reviewedFields(route: ReviewedRawRoute, value: unknown): unknown {
+  if (!isRecord(value)) return null;
+  return Object.fromEntries(Object.entries(value).filter(([key]) => route.fields.includes(key)));
 }
 
 // String truncation at the output boundary, mirroring az-axi's 4000-char
@@ -310,7 +308,8 @@ function truncateForOutput(value: unknown, full: boolean): { value: unknown; tru
 export interface ApiGetArgs {
   path: string;
   apiVersion: string;
-  query?: string;
+  odata?: string;
+  cursor?: string;
   scopes?: string;
   /** Row cap; undefined with --all follows pages within the session budget. */
   limit?: number;
@@ -329,7 +328,7 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
   const pathname = args.path ?? "";
   if (!pathname.startsWith("/") || pathname.includes("://") || pathname.includes("?") || pathname.includes("#") || pathname.includes("\\")) {
     throw new AxiError(`Refused raw path '${pathname || "(empty)"}'`, "VALIDATION_ERROR", [
-      "Pass a server-relative Graph path such as /users; query belongs in --query 'k=v&k2=v2'",
+      "Pass a server-relative Graph path such as /users; query belongs in --odata 'k=v&k2=v2'",
       "The command never takes a host, scheme or headers; the session owns the Graph destination",
     ]);
   }
@@ -347,40 +346,53 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
     ]);
   }
   const { route, params } = matched;
+  if (route.kind === "single" && args.cursor !== undefined) {
+    throw new AxiError("--cursor is available for collection reads only", "VALIDATION_ERROR", ["Resume with the same collection path that returned the cursor"]);
+  }
   if (args.profile.mode === "application" && args.scopes !== undefined) {
     throw new AxiError("Application profiles use the configured Graph .default audience; delegated scopes are unavailable", "VALIDATION_ERROR", [
       "mg-axi profile show --profile <name>",
     ]);
   }
-  const query = parseQuery(args.query);
-  checkQueryKeys(route, query);
-  checkSelect(route, query);
+  const query = args.cursor !== undefined && args.odata === undefined ? undefined : parseQuery(args.odata);
+  if (query !== undefined) checkQuery(route, query);
   // The inventory row is authoritative for destination, method and policy; the
   // review above only selects which row may run. Binding, query-shape and
   // policy failures below still throw before the session acquires credentials.
   const operation = resolveSessionOperation(version, "GET", route.id.slice(`${version}:GET:`.length));
   const scopes = args.scopes === undefined ? undefined : args.scopes.split(",").map(scope => scope.trim()).filter(scope => scope.length > 0);
-  const session = new GraphSession(deps);
+  const session = new GraphSession({ ...deps, transport: async request => {
+    const url = new URL(request.url);
+    const query = Object.fromEntries(url.searchParams);
+    delete query["$skiptoken"];
+    checkQuery(route, query);
+    url.searchParams.set("$select", query["$select"]!);
+    const response = await deps.transport({ ...request, url: url.toString() });
+    if (response.status < 200 || response.status >= 300 || !response.body) return response;
+    let body: unknown;
+    try { body = JSON.parse(response.body); } catch { return response; }
+    if (route.kind === "single") body = reviewedFields(route, body);
+    else if (isRecord(body) && Array.isArray(body.value)) body = { ...body, value: body.value.map(row => reviewedFields(route, row)) };
+    return { ...response, body: JSON.stringify(body) };
+  } });
   const full = !!args.full;
   if (route.kind === "single") {
     const body = await session.execute({ profile: args.profile, operation, params, query, scopes });
-    const shaped = truncateForOutput(body, full);
+    const shaped = truncateForOutput(reviewedFields(route, body), full);
     const record = isRecord(shaped.value) ? (shaped.value as Record<string, unknown>) : { value: shaped.value };
     return shaped.truncated ? { ...record, help: ["Strings truncated at 4000 chars; re-run with --full"] } : record;
   }
-  const collected = await session.collect({ profile: args.profile, operation, params, query, scopes, limit: args.limit });
-  const shaped = truncateForOutput(collected.value, full);
+  const collected = await session.collect({ profile: args.profile, operation, params, query, scopes, limit: args.limit, cursor: args.cursor });
+  const shaped = truncateForOutput(collected.value.map(row => reviewedFields(route, row)), full);
   const value = shaped.value as unknown[];
   if (collected.complete) {
     return shaped.truncated
       ? { returned: value.length, complete: true, value, help: ["Strings truncated at 4000 chars; re-run with --full"] }
       : { returned: value.length, complete: true, value };
   }
-  const hint = /row limit reached/.test(collected.reason ?? "")
-    ? "re-run with --limit <larger> or --all to follow pages within the request budget"
-    : "narrow the query (--query '$filter=...') and re-run; --all follows pages within the request budget";
+  const hint = "Resume the same path, profile and scopes with --cursor <cursor>; use --limit <rows> or --all";
   const help = shaped.truncated ? [hint, "Strings truncated at 4000 chars; re-run with --full"] : [hint];
-  return { returned: value.length, complete: false, reason: collected.reason, value, help };
+  return { returned: value.length, complete: false, reason: collected.reason, value, cursor: collected.cursor, help };
 }
 
 // Minimal HTTPS transport: sends only what the session authorized (GET on the

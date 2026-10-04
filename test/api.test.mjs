@@ -49,7 +49,7 @@ function fixture(handler) {
 
 const read = (overrides = {}, handler = json(200, { value: [] })) => {
   const f = fixture(handler);
-  return { ...f, run: args => runApiGet({ path: "/users", apiVersion: "v1.0", profile: delegatedProfile, scopes, ...overrides }, f.deps) };
+  return { ...f, run: args => runApiGet({ path: "/users", apiVersion: "v1.0", profile: delegatedProfile, scopes, ...overrides, ...args }, f.deps) };
 };
 
 test("every reviewed id binds a real inventory row", async () => {
@@ -98,21 +98,21 @@ test("beta version is refused: no reviewed beta raw surface", async () => {
   assert.equal(f.requests.length, 0);
 });
 
-for (const [name, query, pattern] of [
+for (const [name, odata, pattern] of [
   ["advanced $search", "$search=\"displayName:x\"", /not reviewed for raw reads/],
   ["$count", "$count=true", /not reviewed for raw reads/],
   ["server $skiptoken", "$skiptoken=abc", /page with --all/],
-  ["collection $expand", "$expand=members", /single objects only/],
+  ["collection $expand", "$expand=members", /Unsupported query key/],
   ["unknown key", "$foo=1", /Unsupported query key/],
 ]) test(`${name} is refused before credentials`, async () => {
-  const f = read({ query });
+  const f = read({ odata });
   await assert.rejects(f.run({}), error => error.code === "VALIDATION_ERROR" && pattern.test(error.message));
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
 });
 
 test("unreviewed $select fields are refused naming the reviewed set", async () => {
-  const f = read({ query: "$select=id,passwordProfile" });
+  const f = read({ odata: "$select=id,passwordProfile" });
   await assert.rejects(f.run({}), error => {
     assert.equal(error.code, "VALIDATION_ERROR");
     assert.match(error.message, /Unreviewed \$select field passwordProfile/);
@@ -189,7 +189,8 @@ for (const [path, body, result] of [
   const f = fixture();
   assert.deepEqual(await runApiGet({ path, apiVersion: "v1.0", profile: delegatedProfile, scopes }, { ...f.deps, transport: fetchTransport }), result);
   assert.equal(requests.length, 2);
-  assert.equal(requests[1].url, target);
+  assert.equal(new URL(requests[1].url).pathname, new URL(target).pathname);
+  assert.equal(new URL(requests[1].url).searchParams.get("$select"), "id");
   assert.equal(requests[0].options.redirect, "manual");
   assert.equal(requests[1].options.redirect, "manual");
   assert.equal(requests[1].options.headers.Authorization, "Bearer opaque-fixture-secret");
@@ -204,20 +205,64 @@ test("collection read returns redacted rows with truthful completion", async () 
   });
   assert.equal(f.requests.length, 1);
   assert.equal(f.requests[0].method, "GET");
-  assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/users");
+  assert.equal(new URL(f.requests[0].url).pathname, "/v1.0/users");
   assert.equal(f.requests[0].headers.Authorization, "Bearer opaque-fixture-secret");
 });
 
 test("reviewed $select travels on the authorized URL", async () => {
-  const f = read({ query: "$select=id,displayName" }, json(200, { value: [{ id: "a" }] }));
+  const f = read({ odata: "$select=id,displayName" }, json(200, { value: [{ id: "a" }] }));
   await f.run({});
   assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/users?%24select=id%2CdisplayName");
 });
 
-test("single read returns the redacted object itself", async () => {
-  const f = read({ path: "/users/a", profile: delegatedProfile }, json(200, { id: "a", password: "fixture-secret" }));
-  assert.deepEqual(await f.run({}), { id: "a", password: "***redacted***" });
-  assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/users/a");
+for (const route of REVIEWED_ROUTES) test(`${route.id} defaults to reviewed fields and filters its response`, async () => {
+  const path = route.id.slice("v1.0:GET:".length).replace(/\{[^}]+\}/g, "fixture-id");
+  const row = { id: "a", unreviewed: "must-not-escape" };
+  const body = route.kind === "single" ? row : { value: [row] };
+  const f = read({ path }, json(200, body));
+  const result = await f.run({});
+  assert.equal(new URL(f.requests[0].url).searchParams.get("$select"), route.fields.join(","));
+  assert.deepEqual(result, route.kind === "single" ? { id: "a" } : { returned: 1, complete: true, value: [{ id: "a" }] });
+});
+
+for (const path of ["/users/a", "/users"]) test(`explicit selection on ${path} still filters unexpected fields`, async () => {
+  const row = { id: "a", ownedObjects: [{ id: "unreviewed" }] };
+  const f = read({ path, odata: "$select=id" }, json(200, path === "/users" ? { value: [row] } : row));
+  assert.deepEqual(await f.run({}), path === "/users" ? { returned: 1, complete: true, value: [{ id: "a" }] } : { id: "a" });
+});
+
+test("singleton expansion is refused before credentials", async () => {
+  const f = read({ path: "/users/a", odata: "$expand=ownedObjects" });
+  await assert.rejects(f.run({}), { code: "VALIDATION_ERROR" });
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
+});
+
+for (const [kind, path] of [["single redirect", "/users/a"], ["collection redirect", "/users"], ["next page", "/users"]]) {
+  for (const [odata, code] of [["$select=passwordProfile", "GRAPH_ERROR"], ["$expand=ownedObjects", "GRAPH_ERROR"], ["$count=true", "VALIDATION_ERROR"]]) test(`${kind} cannot bypass review with ${odata}`, async () => {
+    const target = `https://graph.microsoft.com/v1.0${path}?${odata}`;
+    const response = kind === "next page"
+      ? json(200, { value: [{ id: "a" }], "@odata.nextLink": target })
+      : { status: 302, headers: { Location: target } };
+    const f = read({ path }, response);
+    await assert.rejects(f.run({}), { code });
+    assert.equal(f.requests.length, 1);
+  });
+}
+
+test("group member fields stay reviewed across later pages", async () => {
+  const f = read({ path: "/groups/g/members" }, (request, count) => count === 1
+    ? json(200, { value: [{ id: "a", mail: "hidden" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/groups/g/members?$skiptoken=next" })
+    : json(200, { value: [{ id: "b", userPrincipalName: "hidden" }] }));
+  assert.deepEqual(await f.run({}), { returned: 2, complete: true, value: [{ id: "a" }, { id: "b" }] });
+  assert.equal(new URL(f.requests[1].url).searchParams.get("$select"), "id,displayName");
+  assert.equal(new URL(f.requests[1].url).searchParams.get("$skiptoken"), "next");
+});
+
+test("single read returns only reviewed, redacted fields", async () => {
+  const f = read({ path: "/users/a", profile: delegatedProfile }, json(200, { id: "a", displayName: "AccountKey=fixture-secret", password: "fixture-secret" }));
+  assert.deepEqual(await f.run({}), { id: "a", displayName: "***redacted***" });
+  assert.equal(new URL(f.requests[0].url).pathname, "/v1.0/users/a");
 });
 
 test("--all follows @odata.nextLink continuations", async () => {
@@ -235,6 +280,59 @@ test("row cap ends partial with the buffered remainder reason", async () => {
   assert.match(result.reason, /row limit reached/);
   assert.deepEqual(result.value.map(row => row.id), ["a", "b"]);
   assert.match(result.help.join("\n"), /--all/);
+  assert.equal(typeof result.cursor, "string");
+});
+
+test("cursor resumes buffered rows and the next page with its original query", async () => {
+  const f = read({ path: "/groups/g/members", limit: 2 }, (request, count) => count === 1
+    ? json(200, { value: [{ id: "a", mail: "hidden" }, { id: "b" }, { id: "c", mail: "hidden" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/groups/g/members?$skiptoken=next" })
+    : json(200, { value: [{ id: "d", mail: "hidden" }] }));
+  const first = await f.run({ odata: "$select=id&$filter=id ne null" });
+  assert.equal(first.complete, false);
+  assert.deepEqual(first.value, [{ id: "a" }, { id: "b" }]);
+  assert.deepEqual(JSON.parse(Buffer.from(first.cursor, "base64url").toString("utf8")).buffered, [{ id: "c" }]);
+  assert.deepEqual(await f.run({ cursor: first.cursor, limit: undefined }), { returned: 2, complete: true, value: [{ id: "c" }, { id: "d" }] });
+  assert.equal(f.requests.length, 2);
+  assert.equal(new URL(f.requests[1].url).searchParams.get("$skiptoken"), "next");
+});
+
+test("cursor preserves untruncated buffered strings", async () => {
+  const long = "x".repeat(5000);
+  const f = read({ limit: 1 }, json(200, { value: [{ id: "a" }, { id: "b", displayName: long }] }));
+  const first = await f.run({});
+  const resumed = await f.run({ cursor: first.cursor, full: true });
+  assert.deepEqual(resumed, { returned: 1, complete: true, value: [{ id: "b", displayName: long }] });
+  assert.equal(f.requests.length, 1);
+});
+
+test("throttled partial output exposes a usable cursor", async () => {
+  const f = read({}, (request, count) => count === 1
+    ? { status: 429, headers: { "Retry-After": "3600" } }
+    : json(200, { value: [{ id: "a" }] }));
+  const first = await f.run({});
+  assert.equal(first.complete, false);
+  assert.match(first.reason, /throttled/);
+  assert.deepEqual(await f.run({ cursor: first.cursor }), { returned: 1, complete: true, value: [{ id: "a" }] });
+});
+
+for (const overrides of [
+  { path: "/users" },
+  { path: "/groups/h/members" },
+  { profile: { ...delegatedProfile, clientId: "44444444-4444-4444-8444-444444444444" } },
+  { scopes: "https://graph.microsoft.com/GroupMember.Read.All" },
+  { odata: "$select=displayName" },
+]) test(`cursor refuses changed bindings ${JSON.stringify(overrides)}`, async () => {
+  const f = read({ path: "/groups/g/members", limit: 1 }, json(200, { value: [{ id: "a" }, { id: "b" }] }));
+  const first = await f.run({ odata: "$select=id" });
+  await assert.rejects(f.run({ ...overrides, cursor: first.cursor }), { code: "VALIDATION_ERROR" });
+  assert.equal(f.requests.length, 1);
+});
+
+test("singleton reads refuse collection cursors before credentials", async () => {
+  const f = read({ path: "/users/a", cursor: "invalid" });
+  await assert.rejects(f.run({}), { code: "VALIDATION_ERROR" });
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
 });
 
 test("long strings truncate unless --full", async () => {
@@ -267,7 +365,9 @@ test("api get help shows the positional path and reviewed flags", () => {
   const result = cli(["api", "get", "--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /mg-axi api get <path>/);
-  assert.match(result.stdout, /--query/);
+  assert.match(result.stdout, /--odata/);
+  assert.match(result.stdout, /--cursor/);
+  assert.doesNotMatch(result.stdout, /\$expand/);
   assert.match(result.stdout, /--scopes/);
   assert.match(result.stdout, /--all/);
 });
@@ -301,9 +401,21 @@ test("beta CLI reads are refused before credentials", () => {
 });
 
 test("unreviewed CLI $select is refused before credentials", () => {
-  const result = cli(["api", "get", "/users", "--query", "$select=id,passwordProfile", "--scopes", scopes], profileConfig);
+  const result = cli(["api", "get", "/users", "--odata", "$select=id,passwordProfile", "--scopes", scopes], profileConfig);
   assert.equal(result.status, 2);
   assert.match(decode(result.stdout).error, /Unreviewed \$select field/);
+});
+
+test("CLI reserves --query and points to --odata", () => {
+  const result = cli(["api", "get", "/users", "--query", "$top=1"]);
+  assert.equal(result.status, 2);
+  assert.match(decode(result.stdout).error, /reserved.*--odata/);
+});
+
+test("CLI passes --cursor to collection validation", () => {
+  const result = cli(["api", "get", "/users", "--cursor", "invalid", "--scopes", scopes], profileConfig);
+  assert.equal(result.status, 2);
+  assert.match(decode(result.stdout).error, /Invalid collection cursor/);
 });
 
 test("top help lists the raw read leaf", () => {

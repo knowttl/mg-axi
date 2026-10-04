@@ -61,14 +61,20 @@ Read reviewed raw Graph data without waiting for a named command:
 
 ```sh
 mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All
-mg-axi api get /groups --query '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All
+mg-axi api get /groups --odata '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All
 mg-axi api get /identity/conditionalAccess/policies --scopes https://graph.microsoft.com/Policy.Read.All
 ```
 
 `api get` accepts only GET routes in the reviewed inventory (`src/api.ts`, reviewed 2026-10-04) with reviewed query keys and `$select` fields.
+Server OData parameters use `--odata`; `--query` is reserved for output queries and is not implemented here.
+Omitting `$select` requests the route's reviewed fields, and every response is filtered to reviewed fields before output.
+Relationship expansion (`$expand`) is unavailable.
 Unreviewed, secret-value, mail/file-content, beta and write routes fail before credentials, and pack, preview and sensitive-area policy still runs in the shared session.
 Delegated reads take explicit `--scopes` like login; application profiles use the configured `.default` audience and reject `--scopes`.
 Collections return truthful completion info, default to 100 rows, and follow pages within budget under `--all`.
+Partial results include a `cursor` preserving buffered rows and the next page.
+Resume with `--cursor <token>` under the same collection path, profile and scopes, optionally with `--all` or a new `--limit`.
+Omit `--odata` on resume to reuse the original query; supplying a different query is refused.
 
 Delegated MSAL caches use the OS credential store through optional `keytar`, with login reporting `storage: os-protected`.
 If `keytar` cannot load, caches remain in process memory and login reports `storage: session-only`; authentication then lasts only for that process.

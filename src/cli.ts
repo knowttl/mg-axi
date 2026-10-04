@@ -65,7 +65,8 @@ export async function main() {
           return runApiGet({
             path: positional!,
             apiVersion: String(flags["api-version"] ?? "v1.0"),
-            query: flags.query === undefined ? undefined : String(flags.query),
+            odata: flags.odata === undefined ? undefined : String(flags.odata),
+            cursor: flags.cursor === undefined ? undefined : String(flags.cursor),
             scopes: flags.scopes === undefined ? undefined : String(flags.scopes),
             limit: flags.all ? undefined : flags.limit === undefined ? 100 : Number(flags.limit),
             full: !!flags.full,

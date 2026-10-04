@@ -46,12 +46,13 @@ export const LEAVES: Leaf[] = [
   }, examples: ["mg-axi entra user show --help", "mg-axi entra user show --id <user-id-or-upn>"] },
   { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices and administrative units; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
-    query: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select/$expand on singles)" },
+    odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
+    cursor: { value: "token", description: "Resume a partial collection under the same path, profile and scopes; omit --odata to reuse its query" },
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit full https://graph.microsoft.com/ scope names; application profiles use the .default audience" },
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; use --all to follow pages within budget" },
     all: { description: "Follow @odata.nextLink pages within the request budget" },
     full: { description: "Disable 4000-character string truncation; never disables redaction or row caps" },
-  }, examples: ["mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All", "mg-axi api get /groups --query '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All", "mg-axi api get /identity/conditionalAccess/policies --scopes https://graph.microsoft.com/Policy.Read.All"] },
+  }, examples: ["mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All", "mg-axi api get /groups --odata '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All", "mg-axi api get /users --cursor <token> --all --scopes https://graph.microsoft.com/User.Read.All"] },
 ];
 
 export function leafHelp(leaf: Leaf): string {
@@ -80,7 +81,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (verb === undefined) throw new AxiError("unknown or incomplete command", "VALIDATION_ERROR", [TOP_LEVEL_HELP]);
     if (verb.toLowerCase() !== "get") throw new AxiError(`mg-axi api serves reviewed GET reads only; got api ${verb}`, "VALIDATION_ERROR", [help]);
     if (words.length < 3 || words[2]!.startsWith("-")) throw new AxiError("missing path for `mg-axi api get`", "VALIDATION_ERROR", ["Example: mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All", help]);
-    if (words.length > 3) throw new AxiError(`unexpected argument \`${words[3]}\` for \`mg-axi api get\``, "VALIDATION_ERROR", ["Pass one path before flags: mg-axi api get <path> [--query 'k=v']", help]);
+    if (words.length > 3) throw new AxiError(`unexpected argument \`${words[3]}\` for \`mg-axi api get\``, "VALIDATION_ERROR", ["Pass one path before flags: mg-axi api get <path> [--odata 'k=v']", help]);
     positional = words[2];
     flagStart = 3;
   }
@@ -93,7 +94,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (!match) fail("unexpected argument or short flag");
     const name = match![1]!;
     const flag = Object.hasOwn(leaf.flags, name) ? leaf.flags[name] : name === "help" ? { description: "Help" } : undefined;
-    if (!flag) fail(`unknown flag --${name}`);
+    if (!flag) fail(leaf.path === "api get" && name === "query" ? "--query is reserved for output queries; use --odata for server OData parameters" : `unknown flag --${name}`);
     if (Object.hasOwn(flags, name)) fail(`duplicate flag --${name}`);
     if (flag!.value) {
       const value = match![2] ?? argv[++i];

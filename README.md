@@ -224,14 +224,18 @@ mg-axi entra organization branding-localization show --profile soc --organizatio
 
 `entra organization list` defaults to compact properties (`id`, `displayName`, `tenantType`, `verifiedDomains`); exactly one organization exists per tenant.
 `entra organization show --id <organization-id>` defaults to the full reviewed organization set including technical notification mails and the privacy profile.
+`--select` requests properties from the [reviewed organization and branding field sets](src/entra-organization.ts); `--fields` projects locally and must be a subset of the fetched selection.
 Delegated organization reads default to `https://graph.microsoft.com/Organization.Read.All` for full metadata; delegated `User.Read` returns only `id`, `displayName` and `verifiedDomains` with every other property null.
 `entra organization branding show --organization <organization-id>` reads the default branding metadata (non-Stream text and URLs); the session sends the documented `Accept-Language: 0` header and locale variants come from the localizations collection.
 Branding leaves default to delegated `https://graph.microsoft.com/User.Read`, the documented least-privileged scope; `OrganizationalBranding.Read.All` is the purpose-built alternative and `Organization.Read.All` also works when passed as `--scopes`.
+Application profiles need admin-consented `Organization.Read.All` for organization metadata or `OrganizationalBranding.Read.All` for branding, using the configured Graph `.default` audience.
 Stream image properties (`bannerLogo`, `backgroundImage` and friends) are refused before credentials: they need a later piece with its own binary-output contract.
 A branding 404 may indicate unconfigured branding, a missing locale, or a missing or inaccessible organization; configuring custom branding needs P1/P2, and contact fields on the organization are personal data.
 Delegated callers additionally need a supported Entra role (Directory Readers or Global Reader for organizations; Global Reader or Organizational Branding Administrator for branding); personal Microsoft accounts are not supported.
 Organization and localization lists return `organizations` and `brandingLocalizations`, single-object reads return `organization`, `branding` and `brandingLocalization`.
+Localization lists default to `id`, `signInPageText`, `usernameHintText` and `backgroundColor`; branding and localization show commands default to the full reviewed non-Stream field set.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to organization and branding reads.
+All five named reads default to `--api-version v1.0`; explicit `--api-version beta` requires a preview-enabled profile, with no automatic fallback.
 Organization and localization lists offer no `--filter`: Graph documents `$select` only on these routes, so the flag is refused before credentials.
 Denied organization and branding reads name the scope, role and licensing guidance instead of only the generic cause.
 No organization mutation lives here; certificate-based-auth configuration, extensions, beta-only settings and the POST lookup actions belong to later pieces; see the [organization scope decisions](docs/coverage.md#ext-01-organization-scope-decisions) for deferred reads and later subfamilies.

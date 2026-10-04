@@ -157,6 +157,34 @@ test("beta reads require a preview-enabled profile", async () => {
   assert.equal(allowed.requests[0].url, "https://graph.microsoft.com/beta/users");
 });
 
+for (const [version, resource] of [["beta", "accessPackageResources"], ["v1.0", "resources"]]) {
+  for (const [suffix, fileParams] of [
+    ["", {}],
+    ["/$count", {}],
+    ["/{customDataProvidedResourceFile-id}", { "customDataProvidedResourceFile-id": "file-id" }],
+    ["/{customDataProvidedResourceFile-id}/$value", { "customDataProvidedResourceFile-id": "file-id" }],
+  ]) {
+    const operation = resolveSessionOperation(version, "GET", `/identityGovernance/entitlementManagement/${resource}/{accessPackageResource-id}/uploadSessions/{customDataProvidedResourceUploadSession-id}/files${suffix}`);
+    for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) test(`${profile.mode} governance file route ${operation.id} is denied before credentials`, async () => {
+      const f = fixture(json(200, {}));
+      await assert.rejects(
+        f.session.execute({
+          profile: { ...profile, preview: true }, operation,
+          params: {
+            "accessPackageResource-id": "resource-id",
+            "customDataProvidedResourceUploadSession-id": "upload-id",
+            ...fileParams,
+          },
+          ...scopeArgs,
+        }),
+        error => error.code === "POLICY_DENIED" && /Sensitive area files/.test(error.message),
+      );
+      assert.equal(f.credentialCalls.length, 0);
+      assert.equal(f.requests.length, 0);
+    });
+  }
+}
+
 test("application profiles cannot use /me", async () => {
   const f = fixture(json(200, {}));
   await assert.rejects(f.session.execute({ profile: appProfile, operation: me }), { code: "POLICY_DENIED" });

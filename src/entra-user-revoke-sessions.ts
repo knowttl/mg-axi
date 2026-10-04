@@ -92,10 +92,11 @@ function executeHint(user: string, profileName: string): string {
     + ` --profile ${shell(profileName)}`;
 }
 
-function showHint(user: string, profileName: string): string {
+function showHint(user: string, profileName: string, profile: AnyProfile): string {
   const shell = (value: string): string =>
     /^[A-Za-z0-9_.,:/@=-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
-  return `mg-axi entra user show --id ${shell(user)} --profile ${shell(profileName)}`;
+  return `mg-axi entra user show --id ${shell(user)} --profile ${shell(profileName)} --select id`
+    + (profile.mode === "application" ? "" : ` --scopes ${USER_REVOKE_READ_SCOPES.join(",")}`);
 }
 
 const ACTION_TEXT =
@@ -182,7 +183,7 @@ export async function revokeUserSessions(args: {
       help: [
         executeHint(user, profileName),
         `Revoking sessions is disruptive: the --execute run needs the typed --confirm value shown above`,
-        showHint(user, profileName),
+        showHint(user, profileName, profile),
       ],
     };
   }
@@ -206,7 +207,7 @@ export async function revokeUserSessions(args: {
   }
   if (result.kind === "unknown") {
     throw new AxiError(`Revocation for '${id}' may or may not have been applied (audit ${result.auditId}); never replay this intent`, "OUTCOME_UNKNOWN", [
-      `Audit ${result.auditId} recorded the uncertain outcome; read back '${id}' with ${showHint(id, profileName)} before doing anything else`,
+      `Audit ${result.auditId} recorded the uncertain outcome; read back '${id}' with ${showHint(id, profileName, profile)} before doing anything else`,
       "Never replay this intent",
     ]);
   }

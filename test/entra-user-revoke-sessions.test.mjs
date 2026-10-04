@@ -147,6 +147,32 @@ test("preview states the action, its limits and irreversibility, and sends nothi
   } finally { teardown(state); }
 });
 
+for (const profile of ["soc", "batch"]) {
+  for (const outcome of ["preview", "unknown"]) test(`${profile} ${outcome} readback hint uses the documented read permissions`, async () => {
+    const state = setupProfiles();
+    try {
+      enableWrites(state.dir, profile);
+      const f = fixture({ mutation: [new Error("socket timeout")] });
+      const args = ["entra", "user", "revoke-sessions", "--user", userId, "--profile", profile];
+      let hint;
+      if (outcome === "preview") {
+        const result = await executeArgv(args, f.overrides);
+        hint = result.help.find(value => value.startsWith("mg-axi entra user show"));
+      } else {
+        const error = await executeArgv([...args, "--execute", "--confirm", userId], f.overrides)
+          .then(() => assert.fail("timeout must throw"), caught => caught);
+        assert.equal(error.code, "OUTCOME_UNKNOWN");
+        hint = error.suggestions[0].split(" with ")[1].split(" before doing anything else")[0];
+      }
+      const readback = fixture();
+      const result = await executeArgv(hint.split(" ").slice(1), readback.overrides);
+      assert.deepEqual(result.user, { id: userId });
+      assert.equal(readback.readRequests.length, 1);
+      assert.deepEqual(readback.credCalls[0][2], profile === "soc" ? READ_SCOPES : undefined);
+    } finally { teardown(state); }
+  });
+}
+
 test("execute sends the exact POST with no body and records success", async () => {
   const state = setupProfiles();
   try {

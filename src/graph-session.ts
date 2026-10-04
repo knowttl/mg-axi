@@ -197,6 +197,7 @@ const SECRET_VALUE = [
 ];
 
 function secretKey(key: string): boolean {
+  if (key === "customAccountResetCredentialsUrl" || key === "customForgotMyPasswordText") return false;
   const name = key.toLowerCase().replace(/[-_]/g, "");
   return name === "sas" || name === "authorization" || SECRET_KEY.test(name) || KEY_SUFFIX.test(name);
 }

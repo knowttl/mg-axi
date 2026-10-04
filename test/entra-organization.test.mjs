@@ -59,6 +59,8 @@ const organizations = [org1, org2];
 
 const branding = {
   id: "0",
+  customAccountResetCredentialsUrl: "https://contoso.com/reset",
+  customForgotMyPasswordText: "Forgot your password?",
   backgroundColor: "",
   backgroundImageRelativeUrl: "c1c6b6c8/logintenantbranding/0/illustration?ts=637535563816027796",
   bannerLogoRelativeUrl: "c1c6b6c8/logintenantbranding/0/bannerlogo?ts=637535563824629275",

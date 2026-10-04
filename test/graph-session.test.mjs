@@ -62,6 +62,10 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile,
     ["root array", ["SharedAccessKey=fixture-secret", "ordinary", 42, null], ["***redacted***", "ordinary", 42, null]],
     ["nested object", { value: [{ id: "a", displayName: "AccountKey=fixture-secret", details: { password: "fixture-secret", enabled: true } }] },
       { value: [{ id: "a", displayName: "***redacted***", details: { password: "***redacted***", enabled: true } }] }],
+    ["public branding metadata", { customAccountResetCredentialsUrl: "https://contoso.com/reset", customForgotMyPasswordText: "Forgot your password?", password: "fixture-secret", customForgotMyPasswordTextSecret: "fixture-secret" },
+      { customAccountResetCredentialsUrl: "https://contoso.com/reset", customForgotMyPasswordText: "Forgot your password?", password: "***redacted***", customForgotMyPasswordTextSecret: "***redacted***" }],
+    ["branding metadata with secret values", { value: [{ customAccountResetCredentialsUrl: "https://contoso.com/reset?sig=fixture-secret", customForgotMyPasswordText: "AccountKey=fixture-secret" }] },
+      { value: [{ customAccountResetCredentialsUrl: "***redacted***", customForgotMyPasswordText: "***redacted***" }] }],
   ]) test(`${profile.mode} success redacts sentinels in a ${name}`, async () => {
     const f = fixture(json(200, body));
     assert.deepEqual(await f.session.execute({ profile, operation: users, ...scopeArgs }), expected);

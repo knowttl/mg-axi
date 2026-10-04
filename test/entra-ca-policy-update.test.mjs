@@ -371,6 +371,7 @@ for (const [name, scope] of [
   ["specific platforms", { platforms: { includePlatforms: ["windows"], excludePlatforms: [] } }],
   ["excluded platforms", { platforms: { includePlatforms: ["all"], excludePlatforms: ["windows"] } }],
   ["risk condition", { signInRiskLevels: ["high"] }],
+  ["user risk condition", { userRiskLevels: ["low", "medium"] }],
 ]) test(`scoped lockout warning for ${name} permits acknowledged execution`, async () => {
   const state = setupProfiles();
   try {
@@ -399,6 +400,13 @@ for (const [name, scope] of [
   ["all clients and apps", { clientAppTypes: ["all"], applications: { includeApplications: ["All"], excludeApplications: [] } }],
   ["browser and modern clients", { clientAppTypes: ["browser", "mobileAppsAndDesktopClients"] }],
   ["admin portals", { applications: { includeApplications: ["MicrosoftAdminPortals"], excludeApplications: [] } }],
+  ["condition type annotation", { "@odata.type": "#microsoft.graph.conditionalAccessConditionSet" }],
+  ["protocol annotations", { "@odata.context": "fixture-context", "@odata.etag": "fixture-etag" }],
+  ["unknown property", { futureCondition: { enabled: true, values: ["legacy"] } }],
+  ["null optional conditions", { platforms: null, locations: null, signInRiskLevels: null, userRiskLevels: null, futureCondition: null }],
+  ["empty risk conditions", { signInRiskLevels: [], userRiskLevels: [] }],
+  ["unknown risk values", { signInRiskLevels: ["futureRisk"], userRiskLevels: ["high", "futureRisk"] }],
+  ["risk conditions including no risk", { signInRiskLevels: ["none", "low", "medium", "high"], userRiskLevels: ["none"] }],
   ["all apps with unrelated exclusion", { applications: { includeApplications: ["All"], excludeApplications: ["33333333-3333-4333-8333-333333333333"] } }],
   ["admin portals with unrelated exclusion", { applications: { includeApplications: ["MicrosoftAdminPortals"], excludeApplications: ["33333333-3333-4333-8333-333333333333"] } }],
   ["all platforms", { platforms: { includePlatforms: ["all"], excludePlatforms: [] } }],
@@ -471,6 +479,8 @@ for (const readIndex of [1, 2]) test(`fresh read ${readIndex} refuses expansion 
       grantControls: { builtInControls: ["block"] },
       conditions: {
         ...allUsersPolicy().conditions,
+        "@odata.type": "#microsoft.graph.conditionalAccessConditionSet",
+        futureCondition: { enabled: true },
         platforms: { includePlatforms: ["all"], excludePlatforms: [] },
         locations: { includeLocations: ["All"], excludeLocations: [] },
         applications: { includeApplications: ["All"], excludeApplications: ["33333333-3333-4333-8333-333333333333"] },

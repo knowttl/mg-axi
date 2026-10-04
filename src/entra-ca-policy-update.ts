@@ -239,9 +239,12 @@ export function analyzeLockout(current: PolicyRecord, payload: Partial<Record<Ca
   const coversAdminApps = (includedApps.includes("All") || includedApps.includes("MicrosoftAdminPortals"))
     && !excludedApps.includes("All") && !excludedApps.includes("MicrosoftAdminPortals")
     && (applications as PolicyRecord)["applicationFilter"] == null;
-  let narrowedConditions = Object.entries(conditions as PolicyRecord).some(([field, value]) =>
-    !["users", "applications", "clientAppTypes", "platforms", "locations"].includes(field)
-    && value != null && !(Array.isArray(value) && value.length === 0));
+  let narrowedConditions = false;
+  for (const field of ["signInRiskLevels", "userRiskLevels"] as const) {
+    const levels = stringArray((conditions as PolicyRecord)[field]);
+    if (levels !== null && levels.length > 0
+      && levels.every(level => ["low", "medium", "high"].includes(level))) narrowedConditions = true;
+  }
   for (const [field, includeField, excludeField, all] of [
     ["platforms", "includePlatforms", "excludePlatforms", "all"],
     ["locations", "includeLocations", "excludeLocations", "All"],

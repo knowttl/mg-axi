@@ -34,7 +34,7 @@ export const KNOWN_USER_FIELDS: readonly string[] = [
 ];
 const KNOWN = new Set(KNOWN_USER_FIELDS);
 
-// Compact list rows: identifier, title, address and one status signal, all
+// Compact list rows: identifier, display name and addresses, all
 // readable with basic consent.
 const DEFAULT_LIST_SELECT = ["id", "displayName", "userPrincipalName", "mail"];
 // Show rows: the full default server set, a richer view of the same user.
@@ -51,8 +51,8 @@ const DEFAULT_SHOW_SELECT = [
   "surname",
   "userPrincipalName",
 ];
-// One SOC-capable default covers every READ-01 property; least-privilege
-// basic deployments pass --scopes explicitly instead.
+// Default consent covers the basic list and richer show defaults;
+// accountEnabled additionally needs the permission noted above.
 export const DEFAULT_DELEGATED_SCOPES = ["https://graph.microsoft.com/User.Read.All"];
 const TRUNCATE_AT = 500;
 

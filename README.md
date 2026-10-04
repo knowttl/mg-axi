@@ -9,7 +9,7 @@ AUTH-02 adds certificate and workload-federated application profiles and a clien
 CORE-01 adds the shared policy-enforced Graph read session, exercised through an injected fixture HTTP transport.
 CORE-02 adds session collections, query validation, bounded retries and cancellation under the [read execution contract](docs/execution.md#read-mechanics-and-source-contracts).
 API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface through that session.
-READ-01 executes `mg-axi entra user list/show` through that session: compact basic rows by default, richer properties via `--select`, local projection via `--fields`, full text via `--full`, lossless capped resumes via opaque `--cursor` values, and explicit null/missing/denied distinctions in both delegated and application modes.
+READ-01 executes Entra user list/show through that session in both delegated and application modes; current usage follows below.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -24,10 +24,18 @@ node dist/bin/mg-axi.js entra user show --help
 ```
 
 The home view reports unavailable tenant summaries explicitly.
-User reads default to basic properties (`id`, `displayName`, `userPrincipalName`, `mail`); `--select` requests richer server properties, `--fields` projects locally, and `--full` removes text truncation without lifting redaction or row caps.
+`entra user list` defaults to basic properties (`id`, `displayName`, `userPrincipalName`, `mail`); `entra user show --id <user-id-or-upn>` defaults to the richer server property set.
+`--select` requests properties from the [supported user property set](src/entra-users.ts); `--fields` projects locally and must be a subset of the fetched selection.
+Text values longer than 500 characters are truncated, including strings in `businessPhones`; `--full` removes text truncation without lifting redaction or row caps.
+Explicit null values stay null, missing properties stay absent, and denied reads return structured errors rather than empty results.
+Lists accept `--filter` for an OData filter and default to a 100-row cap; `--limit` changes the cap, while the incompatible `--all` follows pages within request, byte and deadline budgets.
+Partial lists report `count.complete: false`, a reason and an opaque `cursor` preserving unreturned rows.
+Resume with `--cursor <cursor-from-output>` using the same profile, authentication scopes and API version; original `--select` and `--filter` values may be repeated or omitted, and conflicting values fail validation.
+Repeat `--fields` and `--full` when the same local view is wanted; these are not saved in the cursor.
 Delegated reads default to `https://graph.microsoft.com/User.Read.All` with `--scopes` available for least-privilege basics; application profiles use the configured Graph `.default` audience and reject delegated scopes.
-Valid user invocations authenticate and send requests; unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before execution.
-Help and successful local views exit 0.
+User reads acquire credentials silently; a resume containing only buffered rows can finish without another Graph request.
+Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
+Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
 Data and structured errors use TOON on stdout; diagnostics belong on stderr.
 Bare `-v`, `-V` and `--version` print only the package version without importing the catalogue.
 
@@ -37,7 +45,15 @@ Create a delegated profile with your organization-owned public client registrati
 mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
 mg-axi profile list
 mg-axi profile show --profile soc
-mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read
+mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All
+```
+
+After login, use:
+
+```sh
+mg-axi entra user list --profile soc --limit 10
+mg-axi entra user list --profile soc --select id,displayName,department --fields id,department
+mg-axi entra user show --profile soc --id <user-id-or-upn> --full
 ```
 
 Configure the registration's Mobile and desktop applications redirect URI as `http://localhost` for browser login.

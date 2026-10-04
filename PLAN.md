@@ -107,7 +107,7 @@ The inventory and strict leaf schema define every supported command before publi
 Use az-like group/subgroup/verb grammar, `list` for collections and `show` for one object.
 `--id` identifies a Graph object unless the command explicitly supports another identifier.
 Never silently conflate object ID with application/client ID.
-`--filter` is OData, `--select` requests server properties, and `--fields` projects locally.
+`--filter` is OData and `--fields` projects locally; [README.md](README.md) owns command-specific `--select` behavior.
 Reserve `--query` for az-compatible output-query semantics rather than assigning it an unrelated meaning.
 `--limit` caps output and `--all` follows pages within an explicit budget.
 Unsupported advanced-query combinations fail early instead of forwarding a misleading request.

@@ -65,6 +65,12 @@ function decodeCursor(cursor) {
   return JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
 }
 
+async function cursorWith(overrides) {
+  const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
+  const partial = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, limit: 1 });
+  return Buffer.from(JSON.stringify({ ...decodeCursor(partial.cursor), ...overrides })).toString("base64url");
+}
+
 test("collect follows exact nextLink and preserves required headers", async () => {
   const next = "https://graph.microsoft.com/v1.0/users?$skiptoken=abc123&$top=2";
   const f = fixture((request, count) => count === 1
@@ -325,7 +331,7 @@ test("invalid budgets fail before credential or HTTP", async () => {
 for (const next of ["https://example.invalid/", "https://graph.microsoft.com/v1.0/applications", "https://graph.microsoft.com/v1.0/users/other"]) {
   test(`cursor destination is authorized before credentials: ${next}`, async () => {
     const f = fixture(json(200, { value: [] }));
-    const cursor = Buffer.from(JSON.stringify({ v: 2, op: users.id, next, buffered: [], seen: [], query: {}, consistencyLevel: null })).toString("base64url");
+    const cursor = await cursorWith({ next, buffered: [], seen: [] });
     await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor }), { code: "POLICY_DENIED" });
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
@@ -424,7 +430,7 @@ for (const [query, code] of [
   const target = `https://graph.microsoft.com/v1.0/users?${query}`;
   test(`cursor validates query context: ${query}`, async () => {
     const f = fixture(json(200, { value: [] }));
-    const cursor = Buffer.from(JSON.stringify({ v: 2, op: users.id, next: target, buffered: [], seen: [], query: {}, consistencyLevel: "eventual" })).toString("base64url");
+    const cursor = await cursorWith({ next: target, buffered: [], seen: [], consistencyLevel: "eventual" });
     await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor, consistencyLevel: "eventual" }), { code });
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
@@ -527,7 +533,7 @@ for (const context of [
 ]) {
   test(`invalid saved cursor context fails before credentials: ${JSON.stringify(context)}`, async () => {
     const f = fixture(json(200, { value: [] }));
-    const cursor = Buffer.from(JSON.stringify({ v: 2, op: users.id, next: null, buffered: [{ id: "a" }], seen: [], ...context })).toString("base64url");
+    const cursor = await cursorWith(context);
     await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor }), { code: "VALIDATION_ERROR" });
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
@@ -659,3 +665,108 @@ test("credential deadline preserves buffered rows and context on a resumed colle
   assert.equal(f.requests[0].url, next);
   assert.equal(f.requests[0].headers.ConsistencyLevel, "eventual");
 });
+
+for (const next of [undefined, "https://graph.microsoft.com/v1.0/groups/group-a/members?$skiptoken=next"]) {
+  test(`cursor rejects changed resource bindings with nextLink: ${Boolean(next)}`, async () => {
+    const operation = resolveSessionOperation("v1.0", "GET", "/groups/{group-id}/members");
+    const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }], ...(next ? { "@odata.nextLink": next } : {}) }));
+    const first = await maker.session.collect({ profile: delegatedProfile, operation, scopes, params: { "group-id": "group-a" }, limit: 1 });
+    const f = fixture(json(200, { value: [] }));
+    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation, scopes, params: { "group-id": "group-b" }, cursor: first.cursor }), { code: "VALIDATION_ERROR" });
+    assert.equal(f.credentialCalls.length, 0);
+    assert.equal(f.requests.length, 0);
+    const resumed = await f.session.collect({ profile: delegatedProfile, operation, scopes, params: { "group-id": "group-a" }, cursor: first.cursor });
+    assert.deepEqual(resumed.value, [{ id: "b" }]);
+    assert.equal(resumed.complete, true);
+  });
+}
+
+for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "application", credentialRef: { provider: "federated", key } }]) {
+  for (const next of [undefined, "https://graph.microsoft.com/v1.0/users?$skiptoken=next"]) {
+    for (const [field, changedProfile, changedScopes] of [
+      ["tenant", { ...profile, tenantId: "44444444-4444-4444-8444-444444444444" }, undefined],
+      ["client", { ...profile, clientId: "55555555-5555-4555-8555-555555555555" }, undefined],
+      ["credential reference", { ...profile, credentialRef: { ...profile.credentialRef, key: "66666666-6666-4666-8666-666666666666" } }, undefined],
+      ["authentication mode", profile.mode === "delegated" ? { ...profile, mode: "application", credentialRef: { provider: "federated", key } } : delegatedProfile, undefined],
+      ["scopes", profile, ["https://graph.microsoft.com/Directory.Read.All"]],
+    ]) {
+      test(`${profile.mode} cursor rejects changed ${field}, nextLink: ${Boolean(next)}`, async () => {
+        const originalScopes = profile.mode === "delegated" ? scopes : undefined;
+        const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }], ...(next ? { "@odata.nextLink": next } : {}) }));
+        const first = await maker.session.collect({ profile, operation: users, scopes: originalScopes, limit: 1 });
+        const f = fixture(json(200, { value: [] }));
+        await assert.rejects(f.session.collect({ profile: changedProfile, operation: users, scopes: changedScopes ?? originalScopes, cursor: first.cursor }), { code: "VALIDATION_ERROR" });
+        assert.equal(f.credentialCalls.length, 0);
+        assert.equal(f.requests.length, 0);
+      });
+    }
+  }
+}
+
+for (const next of [undefined, "https://graph.microsoft.com/v1.0/users?$skiptoken=next"]) {
+  test(`cursor rejects a different delegated account before returning rows, nextLink: ${Boolean(next)}`, async () => {
+    const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }], ...(next ? { "@odata.nextLink": next } : {}) }));
+    const first = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, limit: 1 });
+    const f = fixture(json(200, { value: [] }), credential => ({ ...credential, accountId: "different-account" }));
+    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor }), { code: "VALIDATION_ERROR" });
+    assert.equal(f.credentialCalls.length, 1);
+    assert.equal(f.requests.length, 0);
+  });
+}
+
+test("same account can resume with a refreshed token and reordered scopes", async () => {
+  const originalScopes = [...scopes, "https://graph.microsoft.com/Directory.Read.All"];
+  const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
+  const first = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes: originalScopes, limit: 1 });
+  const f = fixture(json(200, { value: [] }), credential => ({ ...credential, token: "refreshed-opaque-token" }));
+  const resumed = await f.session.collect({ profile: delegatedProfile, operation: users, scopes: [originalScopes[1], ...scopes, ...scopes], cursor: first.cursor });
+  assert.deepEqual(resumed.value, [{ id: "b" }]);
+  assert.equal(resumed.complete, true);
+  assert.equal(f.requests.length, 0);
+});
+
+test("credential timeout before acquisition still binds the cursor to its original profile", async () => {
+  const maker = fixture(json(200, { value: [] }), () => new Promise(() => {}));
+  const partial = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, clock: fakeClock().clock });
+  const f = fixture(json(200, { value: [] }));
+  await assert.rejects(f.session.collect({ profile: { ...delegatedProfile, tenantId: "44444444-4444-4444-8444-444444444444" }, operation: users, scopes, cursor: partial.cursor }), { code: "VALIDATION_ERROR" });
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
+  const resumed = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: partial.cursor });
+  assert.equal(resumed.complete, true);
+});
+
+for (const overrides of [{ context: null }, { identity: "invalid" }, { identity: null }]) {
+  test(`invalid cursor identity binding fails before credentials: ${JSON.stringify(overrides)}`, async () => {
+    const cursor = await cursorWith(overrides);
+    const f = fixture(json(200, { value: [] }));
+    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor }), { code: "VALIDATION_ERROR" });
+    assert.equal(f.credentialCalls.length, 0);
+    assert.equal(f.requests.length, 0);
+  });
+}
+
+for (const credentialRef of [{ provider: "federated", key }, { provider: "certificate", key, thumbprint: "a".repeat(40) }]) {
+  test(`application cursor resumes under the same ${credentialRef.provider} identity`, async () => {
+    const profile = { ...delegatedProfile, mode: "application", credentialRef };
+    const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
+    const first = await maker.session.collect({ profile, operation: users, limit: 1 });
+    const f = fixture(json(200, { value: [] }), credential => ({ ...credential, token: "refreshed-app-token" }));
+    const resumed = await f.session.collect({ profile, operation: users, cursor: first.cursor });
+    assert.deepEqual(resumed.value, [{ id: "b" }]);
+    assert.equal(resumed.complete, true);
+    assert.equal(f.requests.length, 0);
+  });
+}
+
+for (const credentialRef of [{ provider: "federated", key }, { provider: "certificate", key, thumbprint: "b".repeat(40) }]) {
+  test(`certificate cursor rejects changed credential details: ${JSON.stringify(credentialRef)}`, async () => {
+    const profile = { ...delegatedProfile, mode: "application", credentialRef: { provider: "certificate", key, thumbprint: "a".repeat(40) } };
+    const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
+    const first = await maker.session.collect({ profile, operation: users, limit: 1 });
+    const f = fixture(json(200, { value: [] }));
+    await assert.rejects(f.session.collect({ profile: { ...profile, credentialRef }, operation: users, cursor: first.cursor }), { code: "VALIDATION_ERROR" });
+    assert.equal(f.credentialCalls.length, 0);
+    assert.equal(f.requests.length, 0);
+  });
+}

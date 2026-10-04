@@ -452,10 +452,12 @@ interface CursorState {
   seen: string[];
   query: Record<string, string>;
   consistencyLevel?: "eventual";
+  context: string;
+  identity: string | null;
 }
 
 function encodeCursor(operation: SessionOperation, state: CursorState): string {
-  const payload = { v: 2, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN), query: state.query, consistencyLevel: state.consistencyLevel ?? null };
+  const payload = { v: 3, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN), query: state.query, consistencyLevel: state.consistencyLevel ?? null, context: state.context, identity: state.identity };
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
@@ -466,19 +468,20 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   } catch {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
-  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown; query?: unknown; consistencyLevel?: unknown };
-  if (!record || typeof record !== "object" || record.v !== 2 || record.op !== operation.id || !(record.next === null || typeof record.next === "string") || !Array.isArray(record.buffered) || !Array.isArray(record.seen) || !record.query || typeof record.query !== "object" || Array.isArray(record.query) || !(record.consistencyLevel === null || record.consistencyLevel === "eventual")) {
+  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown; query?: unknown; consistencyLevel?: unknown; context?: unknown; identity?: unknown };
+  if (!record || typeof record !== "object" || record.v !== 3 || record.op !== operation.id || !(record.next === null || typeof record.next === "string") || !Array.isArray(record.buffered) || !Array.isArray(record.seen) || !record.query || typeof record.query !== "object" || Array.isArray(record.query) || !(record.consistencyLevel === null || record.consistencyLevel === "eventual") || typeof record.context !== "string" || !/^[0-9a-f]{64}$/.test(record.context) || !(record.identity === null || (typeof record.identity === "string" && /^[0-9a-f]{64}$/.test(record.identity)))) {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
   if (record.seen.length > MAX_SEEN || record.seen.some(entry => typeof entry !== "string" || !/^[0-9a-f]{16}$/.test(entry))) {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
   if (record.buffered.length > 5000) throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["The cursor buffers at most one fetched page"]);
+  if (record.identity === null && (record.buffered.length > 0 || record.seen.length > 0)) throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Fetched rows and consumed pages require a bound credential identity"]);
   const query = record.query as Record<string, string>;
   const consistencyLevel = record.consistencyLevel ?? undefined;
   buildQuery(query);
   checkQueryContext(query, consistencyLevel);
-  return { next: record.next ?? undefined, buffered: record.buffered, seen: [...record.seen], query, consistencyLevel };
+  return { next: record.next ?? undefined, buffered: record.buffered, seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity };
 }
 
 function nextLinkOf(body: unknown): string | undefined {
@@ -569,7 +572,13 @@ export class GraphSession {
     const params = args.params ?? {};
     const clock = args.clock ?? systemClock;
     const signal = args.signal;
-    const startUrl = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params)}${buildQuery(query)}`;
+    const path = buildPath(operation.path, params);
+    const context = createHash("sha256").update(JSON.stringify([
+      path, profile.mode, profile.tenantId.toLowerCase(), profile.clientId.toLowerCase(), profile.cloud,
+      profile.credentialRef, [...new Set(args.scopes ?? [])].sort(),
+    ])).digest("hex");
+    if (resumed && resumed.context !== context) throw new AxiError("Collection cursor resource or authentication context does not match", "VALIDATION_ERROR", ["Resume under the original resource bindings, profile identity, credential reference and scopes"]);
+    const startUrl = `https://${GRAPH_HOST}/${operation.version}/${path}${buildQuery(query)}`;
     const resumeUrl = resumed?.next === undefined ? undefined : authorizeUrl(operation, params, resumed.next, undefined, consistencyLevel);
     const deadline = clock.now() + budget.deadlineMs;
     let pending: unknown[] = resumed ? [...resumed.buffered] : [];
@@ -588,19 +597,27 @@ export class GraphSession {
     const results: unknown[] = [];
     let requests = 0;
     let bytes = 0;
+    let identity = resumed?.identity ?? null;
     const partial = (reason: string, next: string | undefined, buffered: unknown[]): CollectionResult => ({
       value: results,
       complete: false,
       reason,
-      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel }),
+      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel, context, identity }),
       requests,
       bytes,
     });
     let token: string;
     try {
-      token = await beforeDeadline(async () => profile.mode === "delegated"
-        ? (await this.deps.delegated.credential(validateDelegatedProfile(profile), args.scopes ?? [])).token
-        : (await this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes))).token, clock, deadline, signal);
+      const credential = await beforeDeadline(async () => profile.mode === "delegated"
+        ? this.deps.delegated.credential(validateDelegatedProfile(profile), args.scopes ?? [])
+        : this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes)), clock, deadline, signal);
+      const acquiredIdentity = createHash("sha256").update(JSON.stringify([
+        profile.mode, credential.tenantId.toLowerCase(), credential.clientId.toLowerCase(),
+        profile.mode === "delegated" && "accountId" in credential ? credential.accountId : null,
+      ])).digest("hex");
+      if (identity !== null && identity !== acquiredIdentity) throw new AxiError("Collection cursor credential identity does not match", "VALIDATION_ERROR", ["Resume with the original delegated account or application identity"]);
+      identity = acquiredIdentity;
+      token = credential.token;
     } catch (error) {
       signal?.throwIfAborted();
       if (error instanceof DeadlineExceeded) return partial("deadline exceeded", current, pending);

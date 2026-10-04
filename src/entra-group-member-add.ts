@@ -109,7 +109,7 @@ function assertGroupWritable(group: unknown, groupId: string): { id: string; dis
       "Verify the group with mg-axi entra group show --id <group-id>",
     ]);
   }
-  if (row["isAssignableToRole"] !== false) {
+  if (row["isAssignableToRole"] !== false && row["isAssignableToRole"] !== null) {
     fail(`Refusing group ${groupId}: its role-assignable state is unknown`, "OPERATION_BLOCKED", [
       "Read back the group with mg-axi entra group show --id <group-id> before doing anything else",
     ]);

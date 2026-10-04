@@ -264,12 +264,31 @@ test("Microsoft 365 groups are supported", async () => {
   assert.equal(f.postRequests.length, 1);
 });
 
-test("unknown role-assignable state fails closed before sending", async () => {
-  const { isAssignableToRole, ...rest } = plainGroup;
-  const f = fixture({ group: rest });
-  await assert.rejects(f.run({ execute: true, confirm: gid }), { code: "OPERATION_BLOCKED" });
-  assert.equal(f.postRequests.length, 0);
-});
+for (const [groupType, group] of [["security", plainGroup], ["Microsoft 365", m365Group]]) {
+  for (const profile of [enabledDelegated, enabledApp]) {
+    for (const [status, flags, members, sends] of [
+      ["preview", {}, [{ id: other }], 0],
+      ["added", { execute: true, confirm: gid }, [{ id: other }], 1],
+      ["already-member", { execute: true, confirm: gid }, [{ id: uid }], 0],
+    ]) {
+      test(`null role-assignable state supports ${status} for ${profile.mode} ${groupType} groups`, async () => {
+        const f = fixture({ group: { ...group, isAssignableToRole: null }, members });
+        const result = await f.run(flags, profile);
+        assert.equal(result.membership.status, status);
+        assert.equal(f.postRequests.length, sends);
+      });
+    }
+  }
+}
+
+for (const state of [undefined, "false", 0, {}, []]) {
+  test(`unknown role-assignable state ${JSON.stringify(state)} fails closed before sending`, async () => {
+    const f = fixture({ group: { ...plainGroup, isAssignableToRole: state } });
+    await assert.rejects(f.run({ execute: true, confirm: gid }), { code: "OPERATION_BLOCKED" });
+    assert.equal(f.postRequests.length, 0);
+    assert.throws(() => readFileSync(f.journalPath, "utf8"), /ENOENT/);
+  });
+}
 
 test("missing group reads as not found without sending", async () => {
   const f = fixture({ group: null });

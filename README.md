@@ -126,16 +126,18 @@ mg-axi entra administrative-unit show --profile soc --id <administrative-unit-id
 mg-axi entra administrative-unit member list --profile soc --administrative-unit <administrative-unit-id>
 ```
 
-`entra device list` defaults to compact properties (`id`, `displayName`, `operatingSystem`, `accountEnabled`); `entra device show --id <device-id>` defaults to the full reviewed device set with `deviceId` distinct from the object `id`.
+`entra device list` defaults to compact properties (`id`, `displayName`, `operatingSystem`, `accountEnabled`); `entra device show --id <device-id>` takes the object `id`, not `deviceId`, and defaults to the full reviewed device set.
 Directory devices are Entra directory objects; Intune managed devices and device actions are a separately authorized surface, never these commands.
 `entra administrative-unit list` defaults to `id`, `displayName`, `visibility` and `membershipType`; `entra administrative-unit show --id <administrative-unit-id>` defaults to the full reviewed unit set including the membership rule.
 Device and unit `--select` accept their [reviewed property sets](src/entra-directory.ts); `--fields` must be a subset of the fetched selection.
-Dynamic units carry a P1 licensing hint on show; scoped administration needs P1 while members are Free.
+Unit show adds a licensing hint when the projected `membershipType` is `Dynamic`; custom `--select` or `--fields` that omit it also omit the hint.
+See the [licence matrix](docs/graph-coverage.md#licence-matrix-by-area) for device and administrative-unit licensing requirements.
 `entra administrative-unit member list --administrative-unit <administrative-unit-id>` lists member users, groups and devices with the same `id`/`displayName`/`mail` selection, `@odata.type` preservation, hidden-membership and limited-information behavior as group relationships.
 Device and unit lists return `devices` and `administrativeUnits`, member lists return `members`, and single-object reads return `device` and `administrativeUnit`.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to device and administrative-unit reads.
 Resume unit-member lists with the same `--administrative-unit`, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
 Delegated device reads default to `https://graph.microsoft.com/Device.Read.All` and unit reads to `https://graph.microsoft.com/AdministrativeUnit.Read.All`, while application profiles use the configured `.default` audience; hidden unit memberships need `Member.Read.Hidden`.
+Denied directory reads return operation-specific permission, delegated-role and licensing guidance rather than empty results; HTTP 403 alone does not identify which prerequisite is missing.
 `--filter` on these collections is sent with `$count=true` and `ConsistencyLevel: eventual`.
 
 Log in with `https://graph.microsoft.com/AuditLog.Read.All`, then query sign-ins and directory audits in bounded time windows:

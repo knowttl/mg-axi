@@ -41,6 +41,22 @@ const groupRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to GroupMember.Read.All, hidden members need Member.Read.Hidden" },
 };
+const appRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph with ConsistencyLevel eventual; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties; credential fields carry expiry metadata only, never secret values" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Application.Read.All" },
+};
+const ownerRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph with ConsistencyLevel eventual; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from id, displayName, mail; richer owner fields need single-object reads" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Application.Read.All" },
+};
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
   { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
@@ -162,6 +178,64 @@ export const LEAVES: Leaf[] = [
     full: logRead.full,
     scopes: logRead.scopes,
   }, examples: ["mg-axi entra directory-audit show --id <directory-audit-id> --profile soc", "mg-axi entra directory-audit show --id <directory-audit-id> --profile soc --full"] },
+  { path: "entra application list", description: "List applications with compact properties (id, appId, displayName); appId is the client ID, distinct from the object id", operation: "GET:/applications", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: appRead.filter,
+    select: appRead.select,
+    fields: appRead.fields,
+    full: appRead.full,
+    cursor: appRead.cursor,
+    scopes: appRead.scopes,
+  }, examples: ["mg-axi entra application list --profile soc", "mg-axi entra application list --profile soc --limit 10", "mg-axi entra application list --profile soc --filter \"startswith(displayName,'A')\""] },
+  { path: "entra application show", description: "Show one application with credential expiry metadata only; never any secret value, hint or key material", operation: "GET:/applications/{application-id}", flags: {
+    ...common, id: { value: "application-object-id", required: true, description: "Application object ID; appId is the client ID, not the object ID" },
+    select: appRead.select,
+    fields: appRead.fields,
+    full: appRead.full,
+    scopes: appRead.scopes,
+  }, examples: ["mg-axi entra application show --id <application-object-id> --profile soc", "mg-axi entra application show --id <application-object-id> --profile soc --full"] },
+  { path: "entra service-principal list", description: "List service principals with compact properties (id, appId, displayName); appId is the client ID, distinct from the object id", operation: "GET:/servicePrincipals", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: appRead.filter,
+    select: appRead.select,
+    fields: appRead.fields,
+    full: appRead.full,
+    cursor: appRead.cursor,
+    scopes: appRead.scopes,
+  }, examples: ["mg-axi entra service-principal list --profile soc", "mg-axi entra service-principal list --profile soc --limit 10"] },
+  { path: "entra service-principal show", description: "Show one service principal with richer default properties including servicePrincipalType", operation: "GET:/servicePrincipals/{servicePrincipal-id}", flags: {
+    ...common, id: { value: "service-principal-object-id", required: true, description: "Service principal object ID; appId is the client ID, not the object ID" },
+    select: appRead.select,
+    fields: appRead.fields,
+    full: appRead.full,
+    scopes: appRead.scopes,
+  }, examples: ["mg-axi entra service-principal show --id <service-principal-object-id> --profile soc"] },
+  { path: "entra application owner list", description: "List owners of one application; rows carry @odata.type naming the owner kind", operation: "GET:/applications/{application-id}/owners", flags: {
+    ...common, application: { value: "application-object-id", required: true, description: "Application object ID whose owners are listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: ownerRead.filter,
+    select: ownerRead.select,
+    fields: ownerRead.fields,
+    full: ownerRead.full,
+    cursor: ownerRead.cursor,
+    scopes: ownerRead.scopes,
+  }, examples: ["mg-axi entra application owner list --application <application-object-id> --profile soc"] },
+  { path: "entra service-principal owner list", description: "List owners of one service principal; rows carry @odata.type naming the owner kind", operation: "GET:/servicePrincipals/{servicePrincipal-id}/owners", flags: {
+    ...common, "service-principal": { value: "service-principal-object-id", required: true, description: "Service principal object ID whose owners are listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: ownerRead.filter,
+    select: ownerRead.select,
+    fields: ownerRead.fields,
+    full: ownerRead.full,
+    cursor: ownerRead.cursor,
+    scopes: ownerRead.scopes,
+  }, examples: ["mg-axi entra service-principal owner list --service-principal <service-principal-object-id> --profile soc"] },
   { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices and administrative units; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
@@ -247,6 +321,6 @@ export function home() {
     profile: "unavailable: no profile configured",
     tenant: "unavailable: no tenant selected",
     domains: [{ name: "entra", status: "scheduled", summary: "Tenant summaries await Graph execution" }],
-    help: ["mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi api get --help"],
+    help: ["mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi entra application list --help", "mg-axi entra service-principal list --help", "mg-axi api get --help"],
   };
 }

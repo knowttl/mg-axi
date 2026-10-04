@@ -33,6 +33,8 @@ test("top help lists only the shell catalogue", () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /entra user list/);
   assert.match(result.stdout, /entra group list/);
+  assert.match(result.stdout, /entra application list/);
+  assert.match(result.stdout, /entra service-principal list/);
   assert.match(result.stdout, /login/);
   assert.doesNotMatch(result.stdout, /Upgrade/);
 });
@@ -53,6 +55,9 @@ for (const [name, args, error] of [
   ["invalid version", ["entra", "user", "list", "--api-version", "v2"], /v1.0 or beta/],
   ["missing required ID", ["entra", "user", "show"], /--id is required/],
   ["missing required group", ["entra", "group", "member", "list"], /--group is required/],
+  ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
+  ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
+  ["transitive on application list", ["entra", "application", "list", "--transitive"], /unknown flag/],
   ["transitive on group list", ["entra", "group", "list", "--transitive"], /unknown flag/],
   ["empty ID", ["entra", "user", "show", "--id="], /non-empty/],
   ["extra positional", ["entra", "user", "show", "--id", "fixture", "extra"], /unexpected/],

@@ -3,7 +3,9 @@ import { Socket } from "node:net";
 import { mock } from "node:test";
 
 const { mode, directory, denied } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
-const exportOption = process.versions.node.startsWith("22.") ? "namedExports" : "exports";
+const [major, minor] = process.versions.node.split(".").map(Number);
+const exportOption = major >= 26 || (major === 25 && minor >= 9) || (major === 24 && minor >= 15)
+  ? "exports" : "namedExports";
 const noNetwork = () => { throw new Error("Network access is disabled in the offline read journey"); };
 mock.method(globalThis, "fetch", noNetwork);
 mock.method(Socket.prototype, "connect", noNetwork);

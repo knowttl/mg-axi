@@ -1,6 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { GraphSession, SessionOperation } from "./graph-session.js";
-import { encodeGraphPathSegment, redactGraphValue } from "./graph-session.js";
+import { encodeGraphPathSegment, redactGraphValue, REDACTED } from "./graph-session.js";
 import type { MutationCoordinator } from "./mutations.js";
 import type { AnyProfile } from "./profiles.js";
 
@@ -81,8 +81,14 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
+function containsRedactedValue(value: unknown): boolean {
+  return value === REDACTED || (value !== null && typeof value === "object"
+    && Object.values(value).some(containsRedactedValue));
+}
+
 function sameValue(current: unknown, proposed: unknown): boolean {
-  return JSON.stringify(canonicalize(current)) === JSON.stringify(canonicalize(proposed));
+  return !containsRedactedValue(current)
+    && JSON.stringify(canonicalize(current)) === JSON.stringify(canonicalize(proposed));
 }
 
 function parseJsonObject(raw: string, flag: string, help: string): Record<string, unknown> {

@@ -201,6 +201,44 @@ test("policy diff redacts secrets while PATCH retains reviewed values", async ()
   } finally { teardown(state); }
 });
 
+for (const [field, flag, current, proposed, raw] of [
+  ["displayName", "display-name", "AccountKey=old-private-name", "***redacted***", "***redacted***"],
+  ["conditions", "conditions", { applications: { includeApplications: ["AccountKey=old-private-app"] } },
+    { applications: { includeApplications: ["***redacted***"] } }, '{"applications":{"includeApplications":["***redacted***"]}}'],
+  ["grantControls", "grant-controls", { termsOfUse: ["SharedAccessKey=old-private-term"] },
+    { termsOfUse: ["***redacted***"] }, '{"termsOfUse":["***redacted***"]}'],
+  ["sessionControls", "session-controls", { cloudAppSecurity: { sessionControlType: "AccountKey=old-private-control" } },
+    { cloudAppSecurity: { sessionControlType: "***redacted***" } }, '{"cloudAppSecurity":{"sessionControlType":"***redacted***"}}'],
+]) {
+  test(`redacted current ${field} cannot prove a preview no-op`, async () => {
+    const state = setupProfiles();
+    try {
+      enableWrites(state.dir);
+      const f = fixture({ reads: [basePolicy({ state: "disabled", [field]: current })] });
+      const result = await executeArgv(updateArgs([`--${flag}`, raw]), f.overrides);
+      assert.equal(result.preview.noop, false);
+      assert.equal(f.mutRequests.length, 0);
+    } finally { teardown(state); }
+  });
+  for (const readIndex of [0, 1, 2]) test(`redacted current ${field} at read ${readIndex} cannot prove a no-op`, async () => {
+    const state = setupProfiles();
+    try {
+      enableWrites(state.dir);
+      const ordinary = basePolicy({ state: "disabled" });
+      const hidden = basePolicy({ state: "disabled", [field]: current });
+      const reads = [ordinary, ordinary, ordinary];
+      reads[readIndex] = hidden;
+      const f = fixture({ reads });
+      const result = await executeArgv(updateArgs([`--${flag}`, raw,
+        "--execute", "--confirm", policyId]), f.overrides);
+      assert.deepEqual(result.policy, { id: policyId });
+      assert.equal(f.mutRequests.length, 1);
+      assert.deepEqual(JSON.parse(f.mutRequests[0].body), { [field]: proposed });
+      assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+    } finally { teardown(state); }
+  });
+}
+
 test("disable sends the exact PATCH target and body with the documented scopes", async () => {
   const state = setupProfiles();
   try {

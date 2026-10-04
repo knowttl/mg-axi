@@ -10,6 +10,16 @@ from inventory import ROOT, build, make_row, scoped_slice, validate
 
 
 class InventoryTests(unittest.TestCase):
+    def test_identity_provider_reads_defer_only_beta(self):
+        for suffix in ("", "/{identityProviderBase-id}", "/$count", "/availableProviderTypes()"):
+            for version, reason in [
+                ("v1.0", "No implemented command or reviewed raw contract yet."),
+                ("beta", "Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review."),
+            ]:
+                with self.subTest(suffix=suffix, version=version):
+                    row = make_row(version, f"/identity/identityProviders{suffix}", "GET", {"operationId": "fixture"})
+                    self.assertEqual((row["disposition"], row["owningSlice"], row["reason"]), ("scheduled", "EXT-03", reason))
+
     def test_workflow_task_validation_is_a_read_across_resources_and_names(self):
         for version in ("v1.0", "beta"):
             for resource in ("workflows", "deletedItems/workflows"):

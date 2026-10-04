@@ -80,6 +80,7 @@ export function capabilityDocument(): string {
     return `| \`mg-axi ${leaf.path}\` | \`${leaf.operation}\` | ${row?.owningSlice ?? "-"} |`;
   });
   const deferredDomainRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate R1 "));
+  const deferredProviderRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred to a later EXT-03 "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
   const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
   const readCount = readLeaves.length + 2;
@@ -121,6 +122,17 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredDomainRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-03 identity-provider scope decisions",
+    "",
+    "This change covers the four v1.0 workforce identity-provider reads above (list, show, count, available-types).",
+    "The four beta operations below remain scheduled with an explicit deferred disposition to a later EXT-03 subfamily.",
+    "Identity-provider reads support v1.0 only; beta needs its own review.",
+    "Workforce context only; no external-customer (B2C/External ID tenant) support is claimed.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredProviderRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-01 organization scope decisions",
     "",

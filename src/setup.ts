@@ -32,6 +32,7 @@ const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["entra risky-user", "risk"],
   ["entra risk-detection", "risk"],
   ["entra conditional-access", "Conditional Access"],
+  ["entra identity-provider", "identity-provider"],
   ["entra access-review", "access-review"],
 ];
 

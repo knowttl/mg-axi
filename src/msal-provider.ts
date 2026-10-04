@@ -57,6 +57,7 @@ export class MsalProvider implements CredentialProvider {
     const result = method === "browser"
       ? await session.app.acquireTokenInteractive({ scopes, openBrowser: async url => { await open(url); }, prompt: "select_account", errorTemplate: "Sign-in failed. Return to mg-axi for recovery guidance." })
       : await session.app.acquireTokenByDeviceCode({ scopes, deviceCodeCallback: response => {
+        if (typeof response.userCode !== "string" || !response.userCode.trim() || typeof response.deviceCode !== "string" || !response.deviceCode.trim() || !Number.isFinite(response.expiresIn) || response.expiresIn <= 0) throw new Error("Invalid device-code challenge");
         // The one-time user challenge belongs only to explicit login stderr.
         process.stderr.write(`Open https://microsoft.com/devicelogin and enter ${response.userCode}\n`);
       } });

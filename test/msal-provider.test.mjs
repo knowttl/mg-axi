@@ -29,6 +29,7 @@ for (const method of ["browser", "device-code"]) for (const scenario of cases) t
     import { mock } from "node:test";
     const scenario = ${JSON.stringify(scenario)};
     const method = ${JSON.stringify(method)};
+    mock.timers.enable({ apis: ["Date"], now: 1700000000000 });
     const tenant = "11111111-1111-4111-8111-111111111111";
     const profile = { mode: "delegated", tenantId: tenant, clientId: "22222222-2222-4222-8222-222222222222", cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: true, credentialRef: { provider: "os-or-session", key: "33333333-3333-4333-8333-333333333333" } };
     const scopes = ["https://graph.microsoft.com/User.Read"];

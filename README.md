@@ -11,6 +11,7 @@ CORE-02 adds session collections, query validation, bounded retries and cancella
 API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface through that session.
 READ-01 executes Entra user list/show through that session in both delegated and application modes; current usage follows below.
 READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
+READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the user usage below.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -77,6 +78,31 @@ Direct member results always carry the [v1.0 service-principal limitation](docs/
 `--filter` on group collections is sent with `$count=true` and `ConsistencyLevel: eventual`, which the relationship endpoints require.
 Delegated group reads default to `https://graph.microsoft.com/GroupMember.Read.All`; hidden members need `Member.Read.Hidden` and richer group properties may need `Group.Read.All`, while application profiles use the configured `.default` audience.
 When richer group access is needed, pass `--scopes https://graph.microsoft.com/Group.Read.All`; for hidden-member access, explicitly log in and read with `--scopes https://graph.microsoft.com/GroupMember.Read.All,https://graph.microsoft.com/Member.Read.Hidden` and satisfy the operation's delegated role requirements.
+
+Log in with `https://graph.microsoft.com/AuditLog.Read.All`, then query sign-ins and directory audits in bounded time windows:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/AuditLog.Read.All
+mg-axi entra sign-in list --profile soc --since 2026-09-01T00:00:00Z --limit 10
+mg-axi entra sign-in list --profile soc --since 2026-09-01T00:00:00Z --filter "status/errorCode ne 0" --all
+mg-axi entra sign-in show --profile soc --id <sign-in-id>
+mg-axi entra directory-audit list --profile soc --since 2026-09-01T00:00:00Z
+mg-axi entra directory-audit show --profile soc --id <directory-audit-id>
+```
+
+Log lists always carry an explicit time bound: `--since` is required for a new query (with optional `--until` and `--filter` refinements), and resume reuses `--cursor` instead.
+Resume validates the saved time bounds; a cursor from an unbounded raw query is rejected, so start a new query with `--since`.
+Resume sign-in and directory-audit lists with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra sign-in list --profile soc --cursor - < cursor.txt`.
+Small cursors can also use `--cursor <token>`; both forms enforce a 16 MB size ceiling.
+`entra sign-in list` defaults to `id`, `createdDateTime`, `userPrincipalName` and `appDisplayName`; `entra directory-audit list` defaults to `id`, `activityDateTime`, `activityDisplayName` and `result`.
+Both log show commands default to the full reviewed property set.
+`--select` requests properties from the [supported log property sets](src/entra-audit-logs.ts); `--fields` projects locally and must be a subset of the fetched selection.
+Log reads truncate text longer than 500 characters, including nested values; `--full` restores complete text without lifting redaction, row caps or time bounds.
+To replay a resumed result with `--full`, supply the original input cursor on stdin; the returned cursor continues after that result.
+Graph omits CA policy detail without CA-data access, so an absent `appliedConditionalAccessPolicies` value reports its required policy permission and delegated role as unavailable rather than empty.
+Both modes need Policy.Read.All, Policy.Read.ConditionalAccess or Policy.ReadWrite.ConditionalAccess in addition to AuditLog.Read.All; delegated callers also need Conditional Access Administrator, Global Reader, Security Administrator or Security Reader.
+For delegated CA detail, log in and repeat the read with `--scopes https://graph.microsoft.com/AuditLog.Read.All,https://graph.microsoft.com/Policy.Read.All`.
+Denied log reads name the operation's supported directory roles and the conservative P1/P2 deployment prerequisite instead of only the generic grant/role/licence cause.
 
 Configure the registration's Mobile and desktop applications redirect URI as `http://localhost` for browser login.
 The first created profile is the default; `--profile` selects another identity explicitly.

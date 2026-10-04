@@ -3,9 +3,10 @@ import { AxiError, runAxiCli } from "axi-sdk-js";
 import { home, leafHelp, operationFor, resolveCommand, DESCRIPTION, TOP_LEVEL_HELP } from "./catalogue.js";
 import { VERSION } from "./version.js";
 import { Profiles } from "./profiles.js";
-import { GraphSession, type GraphTransport } from "./graph-session.js";
+import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
 import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
+import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from "./entra-audit-logs.js";
 import { fetchTransport } from "./api.js";
 import type { DelegatedAuth } from "./auth.js";
 import type { ApplicationAuth } from "./app-auth.js";
@@ -34,6 +35,19 @@ export interface DispatchOverrides {
   transport?: GraphTransport;
   delegated?: DelegatedAuth;
   application?: ApplicationAuth;
+}
+
+async function readCursor(cursor: string | undefined): Promise<string | undefined> {
+  if (cursor !== "-") return cursor;
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for await (const chunk of process.stdin) {
+    const buffer = Buffer.from(chunk);
+    bytes += buffer.length;
+    if (bytes > MAX_CURSOR_BYTES) throw new AxiError(`Collection cursor exceeds ${MAX_CURSOR_BYTES} bytes`, "VALIDATION_ERROR", ["Use a cursor within the supported size ceiling"]);
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 export async function executeArgv(argv: string[], overrides: DispatchOverrides = {}): Promise<string | Record<string, unknown>> {
@@ -67,19 +81,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     const { ApplicationAuth } = await import("./app-auth.js");
     const { MsalProvider } = await import("./msal-provider.js");
     const { MsalApplicationProvider } = await import("./msal-app-provider.js");
-    const { MAX_CURSOR_BYTES } = await import("./graph-session.js");
-    let cursor = flags.cursor === undefined ? undefined : String(flags.cursor);
-    if (cursor === "-") {
-      const chunks: Buffer[] = [];
-      let bytes = 0;
-      for await (const chunk of process.stdin) {
-        const buffer = Buffer.from(chunk);
-        bytes += buffer.length;
-        if (bytes > MAX_CURSOR_BYTES) throw new AxiError(`Collection cursor exceeds ${MAX_CURSOR_BYTES} bytes`, "VALIDATION_ERROR", ["Use a cursor within the supported size ceiling"]);
-        chunks.push(buffer);
-      }
-      cursor = Buffer.concat(chunks).toString("utf8");
-    }
+    const cursor = await readCursor(flags.cursor === undefined ? undefined : String(flags.cursor));
     return runApiGet({
       path: positional!,
       apiVersion: String(flags["api-version"] ?? "v1.0"),
@@ -149,6 +151,34 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     return leaf.path === "entra group member list"
       ? listGroupMembers(session, flags, selected.profile, operation, leafHelp(leaf), selected.name)
       : listGroupMemberOf(session, flags, selected.profile, operation, leafHelp(leaf), selected.name);
+  }
+  if (leaf.path === "entra sign-in list" || leaf.path === "entra sign-in show" || leaf.path === "entra directory-audit list" || leaf.path === "entra directory-audit show") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra sign-in list": return listSignIns(session, flags, selected.profile, operation, help, selected.name);
+      case "entra sign-in show": return showSignIn(session, flags, selected.profile, operation, help, selected.name);
+      case "entra directory-audit list": return listDirectoryAudits(session, flags, selected.profile, operation, help, selected.name);
+      default: return showDirectoryAudit(session, flags, selected.profile, operation, help, selected.name);
+    }
   }
   const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
   throw new AxiError(`Command is not executable: ${operation?.disposition ?? "unavailable"} (${operation?.owningSlice ?? "no inventory mapping"})`, "NOT_IMPLEMENTED", [leafHelp(leaf)]);

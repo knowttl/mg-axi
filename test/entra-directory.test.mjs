@@ -343,6 +343,27 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
+  for (const [action, args, roles] of [
+    ["list", [], /Privileged Role Administrator is the least-privileged role/],
+    ["show", ["--id", au1.id], /Directory Readers for basic properties, Global Reader for all properties/],
+  ]) {
+    test(`${mode} denied administrative-unit ${action} gives operation-specific roles`, async () => {
+      const state = setupProfiles();
+      try {
+        const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
+        const { overrides } = overridesFor(mode, denied);
+        await assert.rejects(executeArgv(["entra", "administrative-unit", action, ...args, "--profile", profile], overrides), error => {
+          assert.equal(error.code, "GRAPH_ERROR");
+          const guidance = error.suggestions.join("\n");
+          assert.match(guidance, roles);
+          assert.match(guidance, /admin-consented AdministrativeUnit.Read.All for application access/);
+          assert.match(guidance, /never diagnose licence solely from HTTP 403/);
+          return true;
+        });
+      } finally { teardownProfiles(state); }
+    });
+  }
+
   test(`${mode} executable lists devices and units, shows one of each and lists members`, () => {
     const state = setupProfiles();
     try {

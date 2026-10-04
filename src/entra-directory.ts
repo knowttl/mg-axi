@@ -226,8 +226,13 @@ const DEVICE_DENIAL_HINTS = [
   "Base device reads carry no P1/P2 prerequisite; never diagnose licence solely from HTTP 403",
 ];
 
-const AU_DENIAL_HINTS = [
-  "Administrative-unit reads need AdministrativeUnit.Read.All plus a member-user account or a supported directory role for delegated access (Privileged Role Administrator is the least-privileged role), or admin-consented AdministrativeUnit.Read.All for application access",
+const AU_LIST_DENIAL_HINTS = [
+  "Administrative-unit lists need AdministrativeUnit.Read.All plus a member-user account or a supported directory role for delegated access (Privileged Role Administrator is the least-privileged role), or admin-consented AdministrativeUnit.Read.All for application access",
+  "Scoped administration needs P1, members are Free, and dynamic membership needs additional P1 licensing; never diagnose licence solely from HTTP 403",
+];
+
+const AU_SHOW_DENIAL_HINTS = [
+  "Administrative-unit reads need AdministrativeUnit.Read.All plus a member-user account or a supported directory role for delegated access (Directory Readers for basic properties, Global Reader for all properties), or admin-consented AdministrativeUnit.Read.All for application access",
   "Scoped administration needs P1, members are Free, and dynamic membership needs additional P1 licensing; never diagnose licence solely from HTTP 403",
 ];
 
@@ -382,7 +387,7 @@ export async function listAdministrativeUnits(
 ): Promise<Record<string, unknown>> {
   const common = collectionCommon(session, flags, KNOWN_AUS, KNOWN_AU_FIELDS,
     DEFAULT_AU_LIST_SELECT, DEFAULT_AU_SCOPES, operation, help, profile);
-  const result = await withGuidance(AU_DENIAL_HINTS, () => session.collect(collectArgs(profile, operation, common, flags, help)));
+  const result = await withGuidance(AU_LIST_DENIAL_HINTS, () => session.collect(collectArgs(profile, operation, common, flags, help)));
   const effectiveFlags: DirectoryFlags = { ...flags, select: result.query.$select ?? DEFAULT_AU_LIST_SELECT.join(",") };
   if (result.query.$filter !== undefined) effectiveFlags.filter = result.query.$filter;
   const units: Record<string, unknown>[] = [];
@@ -427,7 +432,7 @@ export async function showAdministrativeUnit(
   const { select, fields } = selectedFields(flags, KNOWN_AUS, KNOWN_AU_FIELDS, DEFAULT_AU_SHOW_SELECT, help);
   const scopes = scopesFor(flags, DEFAULT_AU_SCOPES, profile, help);
   const full = flags.full === true;
-  const raw = await withGuidance(AU_DENIAL_HINTS, () => session.execute({
+  const raw = await withGuidance(AU_SHOW_DENIAL_HINTS, () => session.execute({
     profile,
     operation,
     params: { "administrativeUnit-id": String(flags.id) },

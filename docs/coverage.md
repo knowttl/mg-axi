@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 40 (38 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 48 (46 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 3 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -43,6 +43,14 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra administrative-unit list` | `GET:/directory/administrativeUnits` | scheduled | READ-10 |
 | `mg-axi entra administrative-unit show` | `GET:/directory/administrativeUnits/{administrativeUnit-id}` | scheduled | READ-10 |
 | `mg-axi entra administrative-unit member list` | `GET:/directory/administrativeUnits/{administrativeUnit-id}/members` | scheduled | READ-10 |
+| `mg-axi entra domain list` | `GET:/domains` | scheduled | EXT-01 |
+| `mg-axi entra domain show` | `GET:/domains/{domain-id}` | scheduled | EXT-01 |
+| `mg-axi entra domain verification-dns-record list` | `GET:/domains/{domain-id}/verificationDnsRecords` | scheduled | EXT-01 |
+| `mg-axi entra domain verification-dns-record show` | `GET:/domains/{domain-id}/verificationDnsRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
+| `mg-axi entra domain service-configuration-record list` | `GET:/domains/{domain-id}/serviceConfigurationRecords` | scheduled | EXT-01 |
+| `mg-axi entra domain service-configuration-record show` | `GET:/domains/{domain-id}/serviceConfigurationRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
+| `mg-axi entra domain-dns-record list` | `GET:/domainDnsRecords` | scheduled | EXT-01 |
+| `mg-axi entra domain-dns-record show` | `GET:/domainDnsRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
 | `mg-axi entra sign-in list` | `GET:/auditLogs/signIns` | scheduled | READ-05 |
 | `mg-axi entra sign-in show` | `GET:/auditLogs/signIns/{signIn-id}` | scheduled | READ-05 |
 | `mg-axi entra directory-audit list` | `GET:/auditLogs/directoryAudits` | scheduled | READ-05 |
@@ -76,6 +84,7 @@ Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, i
 | `mg-axi entra user revoke-sessions` | `POST:/users/{user-id}/revokeSignInSessions` | WRITE-03 |
 | `mg-axi entra group member add` | `POST:/groups/{group-id}/members/$ref` | WRITE-01 |
 
-Extended families (EXT-01 through EXT-04), later writes (WRITE-04 and
-beyond) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining
+Shipped initial writes: WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`).
+Pending initial writes: WRITE-04 (`PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}`), WRITE-05 (`POST:/identityProtection/riskyUsers/dismiss`).
+Extended families (EXT-01 through EXT-04) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining
 scheduled rows; see docs/build-plan.md for their dispatch.

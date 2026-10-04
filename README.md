@@ -18,6 +18,7 @@ READ-05 executes Entra sign-in and directory-audit list/show through that sessio
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
 READ-08 adds service-principal delegated-grant and app-role-assignment consent reads for a named client through the same session.
+EXT-01 (domains) adds tenant-domain list/show, per-domain verification and service-configuration DNS record reads, and top-level domain DNS record reads through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
@@ -207,6 +208,32 @@ Resume unit-member lists with the same `--administrative-unit`, profile, scopes 
 Delegated device reads default to `https://graph.microsoft.com/Device.Read.All` and unit reads to `https://graph.microsoft.com/AdministrativeUnit.Read.All`, while application profiles use the configured `.default` audience; hidden unit memberships need `Member.Read.Hidden`.
 Denied directory reads return operation-specific permission, delegated-role and licensing guidance rather than empty results; HTTP 403 alone does not identify which prerequisite is missing.
 `--filter` on these collections is sent with `$count=true` and `ConsistencyLevel: eventual`.
+
+Log in with `https://graph.microsoft.com/Domain.Read.All`, then inspect tenant domains and their DNS records:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Domain.Read.All
+mg-axi entra domain list --profile soc
+mg-axi entra domain show --profile soc --id contoso.com
+mg-axi entra domain verification-dns-record list --profile soc --domain contoso.com
+mg-axi entra domain service-configuration-record list --profile soc --domain contoso.com
+mg-axi entra domain-dns-record list --profile soc
+mg-axi entra domain-dns-record show --profile soc --id <record-id>
+```
+
+`entra domain list` defaults to compact properties (`id`, `authenticationType`, `isVerified`, `isDefault`); domain ids are fully qualified names, not object UUIDs.
+Domain lists offer no `--filter`: Graph documents a known issue with `$search`, `$top` and `$filter` on domain lists, so the flag is refused before credentials.
+`entra domain show --id <domain-name>` defaults to the full reviewed domain set; an unverified domain points at its verification DNS records.
+Verification and service-configuration record lists take `--domain <domain-name>` and default to `id`, `label`, `recordType` and `supportedService`.
+Record rows carry `@odata.type` naming the derived record kind; derived-type detail (`mailExchange`, `preference`, `canonicalName`, SRV fields, `text`) needs an explicit `--select` naming the derived property.
+Domain and record `--select` accept their [reviewed property sets](src/entra-domains.ts); `--fields` must be a subset of the fetched selection.
+Domain lists return `domains` and single-domain reads return `domain`; record lists return `verificationDnsRecords`, `serviceConfigurationRecords` and `domainDnsRecords`, with single-record reads returning the singular key.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to domain and DNS record reads.
+Resume record lists with the same `--domain` where applicable, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
+Delegated domain and DNS record reads default to `https://graph.microsoft.com/Domain.Read.All`, while application profiles use the configured `.default` audience.
+Delegated callers additionally need a supported Entra role (Domain Name Administrator or Global Reader are least-privileged); personal Microsoft accounts are not supported.
+No P1/P2 prerequisite is stated for domain reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
+No domain mutation lives here; verification, promotion and federation belong to later pieces.
 
 Log in with `https://graph.microsoft.com/Policy.Read.All`, then read Conditional Access policies and named locations as separate grammar:
 

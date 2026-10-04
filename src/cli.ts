@@ -16,6 +16,7 @@ import { listApplicationOwners, listApplications, listServicePrincipalOwners, li
 import { listAppRoleAssignments, listOAuth2Grants } from "./entra-grants.js";
 import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection } from "./entra-risk.js";
 import { listPolicies, showPolicy, listNamedLocations, showNamedLocation } from "./entra-conditional-access.js";
+import { listDomains, showDomain, listVerificationDnsRecords, showVerificationDnsRecord, listServiceConfigurationRecords, showServiceConfigurationRecord, listDomainDnsRecords, showDomainDnsRecord } from "./entra-domains.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
 import { addGroupMember } from "./entra-group-member-add.js";
 import { fetchTransport } from "./api.js";
@@ -470,6 +471,40 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra risky-user show": return showRiskyUser(session, flags, selected.profile, operation, help, selected.name);
       case "entra risk-detection list": return listRiskDetections(session, flags, selected.profile, operation, help, selected.name);
       default: return showRiskDetection(session, flags, selected.profile, operation, help, selected.name);
+    }
+  }
+  if (leaf.path === "entra domain list" || leaf.path === "entra domain show"
+    || leaf.path === "entra domain verification-dns-record list" || leaf.path === "entra domain verification-dns-record show"
+    || leaf.path === "entra domain service-configuration-record list" || leaf.path === "entra domain service-configuration-record show"
+    || leaf.path === "entra domain-dns-record list" || leaf.path === "entra domain-dns-record show") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra domain list": return listDomains(session, flags, selected.profile, operation, help, selected.name);
+      case "entra domain show": return showDomain(session, flags, selected.profile, operation, help, selected.name);
+      case "entra domain verification-dns-record list": return listVerificationDnsRecords(session, flags, selected.profile, operation, help, selected.name);
+      case "entra domain verification-dns-record show": return showVerificationDnsRecord(session, flags, selected.profile, operation, help, selected.name);
+      case "entra domain service-configuration-record list": return listServiceConfigurationRecords(session, flags, selected.profile, operation, help, selected.name);
+      case "entra domain service-configuration-record show": return showServiceConfigurationRecord(session, flags, selected.profile, operation, help, selected.name);
+      case "entra domain-dns-record list": return listDomainDnsRecords(session, flags, selected.profile, operation, help, selected.name);
+      default: return showDomainDnsRecord(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));

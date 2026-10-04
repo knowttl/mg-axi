@@ -511,7 +511,7 @@ test("setup counts the write beside reads and local leaves", async () => {
   const state = setupProfiles();
   try {
     const output = setupView(new Profiles());
-    assert.equal(output.capabilities.reads, 40);
+    assert.equal(output.capabilities.reads, 48);
     assert.equal(output.capabilities.writes, 3);
     assert.equal(output.capabilities.local, 6);
     assert.ok(output.capabilities.implemented.includes("entra user update"));

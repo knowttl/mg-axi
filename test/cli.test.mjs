@@ -43,6 +43,9 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra pim active list/);
   assert.match(result.stdout, /entra device list/);
   assert.match(result.stdout, /entra administrative-unit list/);
+  assert.match(result.stdout, /entra organization list/);
+  assert.match(result.stdout, /entra organization branding show/);
+  assert.match(result.stdout, /entra organization branding-localization list/);
   assert.match(result.stdout, /entra domain list/);
   assert.match(result.stdout, /entra domain verification-dns-record list/);
   assert.match(result.stdout, /entra domain service-configuration-record list/);
@@ -78,6 +81,10 @@ for (const [name, args, error] of [
   ["unknown flag on member add", ["entra", "group", "member", "add", "--transitive"], /unknown flag/],
   ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
   ["missing required user", ["entra", "user", "authentication-method", "list"], /--user is required/],
+  ["missing required organization ID", ["entra", "organization", "show"], /--id is required/],
+  ["missing required organization for branding", ["entra", "organization", "branding", "show"], /--organization is required/],
+  ["missing required organization for localizations", ["entra", "organization", "branding-localization", "list"], /--organization is required/],
+  ["organization list rejects filters", ["entra", "organization", "list", "--filter", "displayName eq 'Contoso'"], /unknown flag --filter/],
   ["missing required domain ID", ["entra", "domain", "show"], /--id is required/],
   ["missing required domain for verification records", ["entra", "domain", "verification-dns-record", "list"], /--domain is required/],
   ["missing required domain for service records", ["entra", "domain", "service-configuration-record", "list"], /--domain is required/],

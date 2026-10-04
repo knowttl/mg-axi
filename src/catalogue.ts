@@ -119,6 +119,20 @@ const auRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to AdministrativeUnit.Read.All, hidden members need Member.Read.Hidden" },
 };
+const orgRead = {
+  select: { value: "comma-separated-properties", description: "Request server properties; full metadata needs Organization.Read.All (delegated User.Read returns only id, displayName and verifiedDomains, everything else null)" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Organization.Read.All" },
+};
+const brandingRead = {
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed non-Stream branding set; Stream image properties need a later piece and fail before credentials" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to User.Read, the documented least-privileged scope; OrganizationalBranding.Read.All is the purpose-built alternative" },
+};
 const domainRead = {
   select: { value: "comma-separated-properties", description: "Request server properties; domain reads need Domain.Read.All" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
@@ -367,6 +381,48 @@ export const LEAVES: Leaf[] = [
     cursor: auRead.cursor,
     scopes: auRead.scopes,
   }, examples: ["mg-axi entra administrative-unit member list --administrative-unit <administrative-unit-id> --profile soc", "mg-axi entra administrative-unit member list --administrative-unit <administrative-unit-id> --profile soc --limit 10"] },
+  { path: "entra organization list", description: "List tenant organizations with compact properties (id, displayName, tenantType, verifiedDomains); exactly one row exists per tenant; --filter is unsupported on /organizations (Graph documents $select only)", operation: "GET:/organization", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    select: orgRead.select,
+    fields: orgRead.fields,
+    full: orgRead.full,
+    cursor: orgRead.cursor,
+    scopes: orgRead.scopes,
+  }, examples: ["mg-axi entra organization list --profile soc", "mg-axi entra organization list --profile soc --select id,displayName,technicalNotificationMails"] },
+  { path: "entra organization show", description: "Show one tenant organization with the full reviewed property set including technical notification mails and privacy profile", operation: "GET:/organization/{organization-id}", flags: {
+    ...common, id: { value: "organization-id", required: true, description: "Tenant organization UUID" },
+    select: orgRead.select,
+    fields: orgRead.fields,
+    full: orgRead.full,
+    scopes: orgRead.scopes,
+  }, examples: ["mg-axi entra organization show --id <organization-id> --profile soc", "mg-axi entra organization show --id <organization-id> --profile soc --full"] },
+  { path: "entra organization branding show", description: "Show the default sign-in branding metadata (non-Stream text and URLs only); Stream image bytes need a later piece; a 404 may indicate unconfigured branding or a missing or inaccessible organization", operation: "GET:/organization/{organization-id}/branding", flags: {
+    ...common, organization: { value: "organization-id", required: true, description: "Tenant organization UUID whose default branding is shown" },
+    select: brandingRead.select,
+    fields: brandingRead.fields,
+    full: brandingRead.full,
+    scopes: brandingRead.scopes,
+  }, examples: ["mg-axi entra organization branding show --organization <organization-id> --profile soc", "mg-axi entra organization branding show --organization <organization-id> --profile soc --select id,signInPageText,usernameHintText"] },
+  { path: "entra organization branding-localization list", description: "List locale branding variants with compact properties (id, signInPageText, usernameHintText, backgroundColor); --filter is unsupported (Graph documents $select only)", operation: "GET:/organization/{organization-id}/branding/localizations", flags: {
+    ...common, organization: { value: "organization-id", required: true, description: "Tenant organization UUID whose locale branding is listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    select: brandingRead.select,
+    fields: brandingRead.fields,
+    full: brandingRead.full,
+    cursor: brandingRead.cursor,
+    scopes: brandingRead.scopes,
+  }, examples: ["mg-axi entra organization branding-localization list --organization <organization-id> --profile soc"] },
+  { path: "entra organization branding-localization show", description: "Show one locale branding variant with the full reviewed non-Stream property set; Stream image bytes need a later piece", operation: "GET:/organization/{organization-id}/branding/localizations/{organizationalBrandingLocalization-id}", flags: {
+    ...common, organization: { value: "organization-id", required: true, description: "Tenant organization UUID owning the locale branding" },
+    id: { value: "locale-id", required: true, description: "Branding locale id, for example fr-FR" },
+    select: brandingRead.select,
+    fields: brandingRead.fields,
+    full: brandingRead.full,
+    scopes: brandingRead.scopes,
+  }, examples: ["mg-axi entra organization branding-localization show --organization <organization-id> --id fr-FR --profile soc"] },
   { path: "entra domain list", description: "List tenant domains with compact properties (id, authenticationType, isVerified, isDefault). Domain ids are fully qualified names; --filter is unsupported on /domains (Graph known issue with $search, $top and $filter)", operation: "GET:/domains", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
@@ -652,7 +708,7 @@ export const LEAVES: Leaf[] = [
     full: caRead.full,
     scopes: caRead.scopes,
   }, examples: ["mg-axi entra conditional-access named-location show --id <named-location-id> --profile soc", "mg-axi entra conditional-access named-location show --id <named-location-id> --profile soc --full"] },
-  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains and domain DNS records; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, organizations and branding; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
     cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --odata to reuse its query" },

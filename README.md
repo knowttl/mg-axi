@@ -189,6 +189,8 @@ mg-axi entra risk-detection list --profile soc --since 2026-09-01T00:00:00Z --li
 mg-axi entra risk-detection show --profile soc --id <risk-detection-id>
 ```
 
+Delegated risky-user reads default to `https://graph.microsoft.com/IdentityRiskyUser.Read.All`; risk-detection reads default to `https://graph.microsoft.com/IdentityRiskEvent.Read.All`.
+`--scopes` overrides those defaults; application profiles use the configured Graph `.default` audience and reject delegated scopes.
 `entra risky-user list` is a state collection with an optional `--filter`; `entra risk-detection list` always carries an explicit time bound, so `--since` is required for a new query (with optional `--until` and `--filter` refinements) and resume reuses `--cursor` instead.
 Resume validates the saved detectedDateTime bounds; a cursor from an unbounded raw query is rejected, so start a new query with `--since`.
 Resume risk lists with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra risk-detection list --profile soc --cursor - < cursor.txt`.
@@ -196,9 +198,9 @@ Resume risk lists with `--cursor -` and supply the returned cursor on stdin, for
 Both risk show commands default to the full reviewed property set.
 `--select` requests properties from the [supported risk property sets](src/entra-risk.ts); `--fields` projects locally and must be a subset of the fetched selection.
 Risk reads truncate text longer than 500 characters, including nested values such as `location` and the `additionalInfo` JSON string; `--full` restores complete text without lifting redaction, row caps or time bounds.
-The riskyUsers API requires a P2 licence, while risk detection permits P1 or P2.
+See the [access and licence contract](docs/graph-coverage.md#licence-matrix-by-area) for the riskyUsers P2 requirement and risk-detection P1/P2 detail boundaries.
 Limited views stay limited: a premium detection without P2 detail reports `riskEventType` generic, hidden risk levels report the licence boundary instead of the level, and a null detection `correlationId` means no sign-in is associated.
-Detections correlate to sign-ins through the sign-in list above: filter on the detection's `userPrincipalName` in the `activityDateTime` window; there is no riskySignIns endpoint.
+To correlate a detection to sign-ins, use `risk-detection show` or select `activityDateTime`, then filter the sign-in list above on the detection's `userPrincipalName` in that activity window; sign-in reads require the separate `AuditLog.Read.All` login above, and there is no riskySignIns endpoint.
 Risk dismissal is a separately reviewed write, so risk reads never confirm, dismiss or remediate risk.
 
 Configure the registration's Mobile and desktop applications redirect URI as `http://localhost` for browser login.

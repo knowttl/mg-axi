@@ -62,8 +62,6 @@ const RISKY_USER_KNOWN = new Set(KNOWN_RISKY_USER_FIELDS);
 const RISK_DETECTION_KNOWN = new Set(KNOWN_RISK_DETECTION_FIELDS);
 
 // Compact list rows: identifier, who is at risk, and the triage state.
-// Detection rows also carry the detection time so sign-in correlation needs
-// no second call to place the event.
 const DEFAULT_RISKY_USER_LIST_SELECT = ["id", "userPrincipalName", "riskLevel", "riskState"];
 const DEFAULT_RISK_DETECTION_LIST_SELECT = ["id", "detectedDateTime", "userPrincipalName", "riskLevel"];
 // Show rows: the full reviewed server set for one object.

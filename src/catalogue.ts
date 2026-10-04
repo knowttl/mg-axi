@@ -147,7 +147,7 @@ const accessReviewRead = {
   select: { value: "comma-separated-properties", description: "Request server properties from the reviewed access-review set; reads need AccessReview.Read.All in both modes plus a supported Entra role for delegated access" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
   full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
-  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  cursor: { value: "opaque-cursor|-", description: "Resume a capped collection losslessly; - reads the token from stdin (16 MB ceiling for either input); repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to AccessReview.Read.All" },
 };
 export const LEAVES: Leaf[] = [

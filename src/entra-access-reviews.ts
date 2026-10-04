@@ -138,8 +138,22 @@ function scopesFor(flags: AccessReviewFlags, profile: AnyProfile, defaults: read
 }
 
 function truncateValue(value: unknown, full: boolean): { value: unknown; truncated: boolean } {
-  if (typeof value === "string" && !full && value.length > TRUNCATE_AT) {
+  if (full) return { value, truncated: false };
+  if (typeof value === "string" && value.length > TRUNCATE_AT) {
     return { value: `${value.slice(0, TRUNCATE_AT)}... (truncated, ${value.length} chars total)`, truncated: true };
+  }
+  if (Array.isArray(value)) {
+    const results = value.map(item => truncateValue(item, full));
+    return { value: results.map(result => result.value), truncated: results.some(result => result.truncated) };
+  }
+  if (value !== null && typeof value === "object") {
+    let truncated = false;
+    const entries = Object.entries(value).map(([key, item]) => {
+      const result = truncateValue(item, full);
+      truncated = truncated || result.truncated;
+      return [key, result.value];
+    });
+    return { value: Object.fromEntries(entries), truncated };
   }
   return { value, truncated: false };
 }
@@ -188,7 +202,7 @@ function shellValue(value: string): string {
 }
 
 function fullHint(command: string, flags: AccessReviewFlags, profileName: string): string {
-  const args = Object.entries({ ...flags, profile: profileName, full: true })
+  const args = Object.entries({ ...flags, ...(flags.cursor === undefined ? {} : { cursor: "-" }), profile: profileName, full: true })
     .map(([name, value]) => value === true ? `--${name}` : `--${name} ${shellValue(String(value))}`);
   return `mg-axi ${command} ${args.join(" ")}`;
 }
@@ -312,6 +326,7 @@ async function listCollection(
     truncated = truncated || projected.truncated;
   }
   const truncationHints = truncated ? [fullHint(shape.command, effectiveFlags, profileName)] : [];
+  if (truncated && cursor !== undefined) truncationHints.push("Supply the original input cursor on stdin to replay this result with --full");
   const standing = [shape.denialScopeNote, ...shape.standing(profileName)];
   if (!result.complete) {
     return {
@@ -372,7 +387,7 @@ export async function listDefinitions(
   profileName: string,
 ): Promise<Record<string, unknown>> {
   return listCollection(DEFINITION_LIST, session, flags, profile, operation, help, profileName, {},
-    `Resume losslessly with the same flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`);
+    `Resume losslessly with the same flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
 }
 
 export async function showDefinition(
@@ -401,7 +416,7 @@ export async function listInstances(
   const definition = parentId(flags, "definition", "access-review definition", help);
   return listCollection(INSTANCE_LIST, session, flags, profile, operation, help, profileName,
     { "accessReviewScheduleDefinition-id": definition },
-    `Resume losslessly with the same --definition and flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`);
+    `Resume losslessly with the same --definition and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
 }
 
 export async function showInstance(
@@ -432,5 +447,5 @@ export async function listDecisions(
   const instance = parentId(flags, "instance", "access-review instance", help);
   return listCollection(DECISION_LIST, session, flags, profile, operation, help, profileName,
     { "accessReviewScheduleDefinition-id": definition, "accessReviewInstance-id": instance },
-    `Resume losslessly with the same --definition, --instance and flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`);
+    `Resume losslessly with the same --definition, --instance and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
 }

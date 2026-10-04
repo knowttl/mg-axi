@@ -180,12 +180,12 @@ function overridesFor(mode, handler, calls = []) {
   };
 }
 
-function runAccessReviewCli(args, state, mode, scopes) {
+function runAccessReviewCli(args, state, mode, scopes, input) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-access-reviews-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
   ], {
-    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000,
+    encoding: "utf8", input, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], timeout: 30000,
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
@@ -520,3 +520,66 @@ test("application access-review reads reject delegated scopes", async () => {
     teardownProfiles(state);
   }
 });
+
+for (const [noun, parents, key, field] of [
+  ["definition", [], "definitions", "scope"],
+  ["instance", ["--definition", definitionId], "instances", "scope"],
+  ["decision", ["--definition", definitionId, "--instance", instanceId], "decisions", "principal"],
+]) {
+  test(`${noun} list resumes large cursors from stdin and replays full output`, async () => {
+    const state = setupProfiles();
+    try {
+      const text = "x".repeat(140_000);
+      const rows = [{ id: "first" }, { id: "second", [field]: { query: text } }, { id: "third" }];
+      const { overrides } = overridesFor("delegated", transport(() => json(200, { value: rows })));
+      const args = ["entra", "access-review", noun, "list", ...parents, "--profile", "soc", "--limit", "1", "--select", `id,${field}`];
+      const first = await executeArgv(args, overrides);
+      assert.ok(first.cursor.length > 128 * 1024);
+      assert.ok(first.help.some(hint => hint.includes("--cursor -") && hint.includes("stdin")));
+      const resumed = runAccessReviewCli([...args, "--cursor", "-"], state, "delegated", undefined, first.cursor);
+      assert.equal(resumed.error, undefined);
+      assert.equal(resumed.status, 0, resumed.stdout);
+      const output = decode(resumed.stdout);
+      assert.deepEqual(output[key], [{ id: "second", [field]: { query: `${"x".repeat(500)}... (truncated, 140000 chars total)` } }]);
+      assert.equal(output.count.complete, false);
+      assert.ok(output.help.some(hint => hint.includes("--full") && hint.includes("--cursor -")));
+      assert.ok(output.help.some(hint => hint.includes("original input cursor on stdin")));
+      assert.ok(output.help.every(hint => !hint.includes(first.cursor) && !hint.includes(output.cursor)));
+      const replay = runAccessReviewCli([...args, "--cursor", "-", "--full"], state, "delegated", undefined, first.cursor);
+      assert.equal(replay.error, undefined);
+      assert.equal(replay.status, 0, replay.stdout);
+      assert.deepEqual(decode(replay.stdout)[key], [rows[1]]);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+}
+
+for (const [noun, action, parents, key, fields] of [
+  ["definition", "list", [], "definitions", ["scope", "instanceEnumerationScope", "reviewers", "fallbackReviewers", "settings"]],
+  ["definition", "show", ["--id", definitionId], "definition", ["scope", "instanceEnumerationScope", "reviewers", "fallbackReviewers", "settings"]],
+  ["instance", "list", ["--definition", definitionId], "instances", ["scope", "reviewers", "fallbackReviewers"]],
+  ["instance", "show", ["--definition", definitionId, "--id", instanceId], "instance", ["scope", "reviewers", "fallbackReviewers"]],
+  ["decision", "list", ["--definition", definitionId, "--instance", instanceId], "decisions", ["reviewedBy", "principal", "target"]],
+]) {
+  test(`${noun} ${action} truncates nested text while preserving structure and full output`, async () => {
+    const state = setupProfiles();
+    try {
+      const value = { query: "x".repeat(700), nested: [null, { text: "y".repeat(501), boundary: "z".repeat(500), enabled: true, count: 2 }, ["short"]] };
+      const compact = { query: `${"x".repeat(500)}... (truncated, 700 chars total)`, nested: [null, { text: `${"y".repeat(500)}... (truncated, 501 chars total)`, boundary: "z".repeat(500), enabled: true, count: 2 }, ["short"]] };
+      const row = Object.fromEntries(fields.map(field => [field, value]));
+      const expected = Object.fromEntries(fields.map(field => [field, compact]));
+      const { overrides } = overridesFor("delegated", transport(() => json(200, action === "list" ? { value: [row] } : row)));
+      const args = ["entra", "access-review", noun, action, ...parents, "--profile", "soc", "--select", fields.join(",")];
+      const result = await executeArgv(args, overrides);
+      assert.deepEqual(result[key], action === "list" ? [expected] : expected);
+      assert.ok(result.help.some(hint => hint.includes("--full")));
+      const full = await executeArgv([...args, "--full"], overrides);
+      assert.deepEqual(full[key], action === "list" ? [row] : row);
+      assert.ok(!(full.help ?? []).some(hint => hint.includes("--full")));
+      assert.equal(value.query.length, 700);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+}

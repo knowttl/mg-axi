@@ -22,6 +22,39 @@ import {
 export const REDACTED = "***redacted***";
 export const SAFE_CREDENTIAL_FIELDS: readonly string[] = ["keyId", "displayName", "startDateTime", "endDateTime"];
 export const GRAPH_HOST = "graph.microsoft.com";
+const READ_SCOPES = new Set([
+  "AccessReview.Read.All",
+  "AdministrativeUnit.Read.All",
+  "Application.Read.All",
+  "AuditLog.Read.All",
+  "CustomSecAttributeDefinition.Read.All",
+  "DelegatedAdminRelationship.Read.All",
+  "Device.Read.All",
+  "Directory.Read.All",
+  "Domain.Read.All",
+  "EntitlementManagement.Read.All",
+  "Group.Read.All",
+  "GroupMember.Read.All",
+  "GroupMember.ReadBasic.All",
+  "IdentityRiskEvent.Read.All",
+  "IdentityRiskyUser.Read.All",
+  "LicenseAssignment.Read.All",
+  "Member.Read.Hidden",
+  "Organization.Read.All",
+  "Policy.Read.All",
+  "Policy.Read.AuthenticationMethod",
+  "Policy.Read.ConditionalAccess",
+  "PrivilegedEligibilitySchedule.Read.AzureADGroup",
+  "RoleAssignmentSchedule.Read.Directory",
+  "RoleEligibilitySchedule.Read.Directory",
+  "RoleManagement.Read.Directory",
+  "Synchronization.Read.All",
+  "User.Read",
+  "User.Read.All",
+  "User.ReadBasic.All",
+  "UserAuthenticationMethod.Read",
+  "UserAuthenticationMethod.Read.All",
+].map(scope => `https://${GRAPH_HOST}/${scope}`));
 // Conservative read-query allowlist. Per-operation review (READ slices) can
 // extend it; unknown keys fail closed here. $search/$count=true need eventual
 // consistency (see checkQueryContext); $skiptoken carries paging state.
@@ -548,7 +581,7 @@ export class GraphSession {
     let token: string;
     try {
       token = await beforeDeadline(async () => profile.mode === "delegated"
-        ? (await this.deps.delegated.credential(validateDelegatedProfile(profile), args.scopes ?? [])).token
+        ? (await this.deps.delegated.credential(validateDelegatedProfile(profile), this.readScopes(args.scopes))).token
         : (await this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes))).token, clock, deadline, signal);
     } catch (error) {
       signal?.throwIfAborted();
@@ -628,7 +661,7 @@ export class GraphSession {
     let token: string;
     try {
       const credential = await beforeDeadline(async () => profile.mode === "delegated"
-        ? this.deps.delegated.credential(validateDelegatedProfile(profile), args.scopes ?? [])
+        ? this.deps.delegated.credential(validateDelegatedProfile(profile), this.readScopes(args.scopes))
         : this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes)), clock, deadline, signal);
       const acquiredIdentity = createHash("sha256").update(JSON.stringify([
         profile.mode, credential.tenantId.toLowerCase(), credential.clientId.toLowerCase(),
@@ -771,6 +804,15 @@ export class GraphSession {
         "Blocked, deprecated and unavailable operations stay denied even when reached by redirect",
       ]);
     }
+  }
+
+  private readScopes(scopes: string[] | undefined): string[] {
+    if (!scopes?.length || scopes.some(scope => !READ_SCOPES.has(scope))) {
+      throw new AxiError("Graph reads require supported read scopes", "VALIDATION_ERROR", [
+        `Supported read scopes: ${[...READ_SCOPES].join(", ")}`,
+      ]);
+    }
+    return scopes;
   }
 
   private applicationScopes(scopes: string[] | undefined): string[] | undefined {

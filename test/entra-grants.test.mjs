@@ -381,6 +381,22 @@ test("grant creation routes are refused before credentials", async () => {
   }
 });
 
+for (const [command, scope] of [
+  ["oauth2-grant", "https://graph.microsoft.com/Directory.ReadWrite.All"],
+  ["app-role-assignment", "https://graph.microsoft.com/Application.ReadWrite.All"],
+]) test(`${command} rejects write scopes before credential acquisition`, async () => {
+  const state = setupProfiles();
+  try {
+    const { requests, calls, overrides } = overridesFor("delegated");
+    await assert.rejects(executeArgv(["entra", "service-principal", command, "list",
+      "--service-principal", sp, "--profile", "soc", "--scopes", scope], overrides), { code: "VALIDATION_ERROR" });
+    assert.deepEqual(calls, []);
+    assert.deepEqual(requests, []);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
 test("application mode rejects delegated scopes before HTTP", async () => {
   const state = setupProfiles();
   try {

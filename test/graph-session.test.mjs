@@ -250,6 +250,42 @@ test("delegated reads require explicit scopes before HTTP", async () => {
   assert.equal(f.requests.length, 0);
 });
 
+for (const method of ["execute", "collect"]) {
+  for (const scope of [
+    "https://graph.microsoft.com/Directory.ReadWrite.All",
+    "https://graph.microsoft.com/Application.ReadWrite.All",
+    "https://graph.microsoft.com/Policy.ReadWrite.ConditionalAccess",
+    "https://graph.microsoft.com/Mail.Write.All",
+    "https://graph.microsoft.com/User.EnableDisableAccount.All",
+    "https://graph.microsoft.com/Mail.Read",
+    "https://example.invalid/User.Read.All",
+    "User.Read.All",
+  ]) test(`${method} rejects unsupported read scope ${scope} before credentials`, async () => {
+    const f = fixture(json(200, { value: [] }));
+    await assert.rejects(f.session[method]({ profile: delegatedProfile, operation: users, scopes: [...scopes, scope] }), error => {
+      assert.equal(error.code, "VALIDATION_ERROR");
+      assert.match(error.suggestions[0], /Supported read scopes:.*https:\/\/graph\.microsoft\.com\/Directory\.Read\.All/);
+      assert.match(error.suggestions[0], /https:\/\/graph\.microsoft\.com\/Application\.Read\.All/);
+      return true;
+    });
+    assert.deepEqual(f.credentialCalls, []);
+    assert.deepEqual(f.requests, []);
+  });
+
+  test(`${method} accepts documented read scope combinations`, async () => {
+    const f = fixture(json(200, { value: [] }));
+    const requested = [
+      "https://graph.microsoft.com/User.ReadBasic.All",
+      "https://graph.microsoft.com/GroupMember.ReadBasic.All",
+      "https://graph.microsoft.com/Member.Read.Hidden",
+      "https://graph.microsoft.com/Policy.Read.ConditionalAccess",
+    ];
+    await f.session[method]({ profile: delegatedProfile, operation: users, scopes: requested });
+    assert.deepEqual(f.credentialCalls[0][2], [...requested].sort());
+    assert.equal(f.requests.length, 1);
+  });
+}
+
 test("application reads reject caller scopes before credential or HTTP", async () => {
   const f = fixture(json(200, {}));
   await assert.rejects(f.session.execute({ profile: appProfile, operation: users, scopes }), { code: "VALIDATION_ERROR" });

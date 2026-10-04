@@ -277,7 +277,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 }
 
 for (const [action, args] of [["list", []], ["show", ["--id", u1.id]]]) {
-  for (const scopes of [",", "https://example.invalid/User.Read", "https://graph.microsoft.com/.default"]) {
+  for (const scopes of [",", "https://example.invalid/User.Read", "https://graph.microsoft.com/.default", "https://graph.microsoft.com/Directory.ReadWrite.All"]) {
     test(`${action} rejects delegated scopes ${scopes} before provider acquisition`, async () => {
       const state = setupProfiles();
       try {

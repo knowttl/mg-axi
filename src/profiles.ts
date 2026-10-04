@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { AxiError } from "axi-sdk-js";
 
-// WRITE-00 hand-edited write opt-in. Absent or { allowWrites: false } keeps
+// WRITE-00 hand-edited write opt-in. Absent or allowWrites: false keeps
 // the profile read-only. No CLI command writes this object; it is added by
 // editing the configuration file, and later named writes bind to it.
 export type WritePolicy = Readonly<{

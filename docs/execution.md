@@ -3,14 +3,25 @@
 ## Named writes
 
 Only named, approved pack commands can mutate; raw API remains read-only.
-The proposed coordinator checks forced read-only environment, hand-enabled profile, original tenant and approved-operation scope, preview versus explicit execution, and target confirmation.
+WRITE-00 implements the [mutation coordinator](../src/mutations.ts) for fixture-driven execution; named mutation commands and production mutation transport remain unavailable.
+Profile enablement and environment configuration are documented in [README.md](../README.md).
+The coordinator snapshots the validated profile's tenant, identity and approved-operation scope at creation; later profile edits cannot widen that scope.
+It checks forced read-only and profile enablement before preview, and the sender checks forced read-only again before credential acquisition and immediately before transport handoff.
+Preview redacts current state and proposed payload using the shared Graph redaction boundary.
+Omitting explicit execution returns a preview without sending or journaling; verified already-desired state is a no-op.
 Tenant/object confirmation applies to security-impacting mutations and deletion, including access changes through POST/PATCH and membership references.
+The coordinator requires exact target confirmation for definitions classified as disruptive.
 Every execute rechecks state and endpoint-supported preconditions.
 There is no assumption of universal Graph dry-run, what-if, ETag or rollback.
 If server concurrency protection is unavailable, the race is stated and high-impact operations stay disabled until their individual contract is reviewed.
 Audit intent is persisted before sending; failure prevents send.
+The journal contains redacted metadata, never payloads, headers or response bodies, and each record is fsynced before reporting.
+The journal directory is created before intent reservation; directory fsync is skipped on native Windows, where the journal file is pre-created and fsynced instead.
+After intent reservation, a failed fresh read, a newly satisfied desired state or a sender gate failure records `NOT_SENT`.
 Outcome audit failure after sending preserves the possibility that the mutation occurred.
-An ambiguous timeout is `outcome: unknown` with a verification command, never automatic mutation replay.
+HTTP 4xx responses other than 408 record `FAILED`; transport failures, HTTP 408 and server errors return `kind: unknown` and record `OUTCOME_UNKNOWN`, with guidance to read back the target before doing anything else.
+An accepted 2xx response records `SUCCESS` even if its response body cannot be decoded.
+No mutation is automatically retried or replayed; an already reserved intent ID is refused even after an outcome was recorded.
 Unknown actions, raw writes, secret-returning endpoints, and unsupported beta writes fail closed.
 
 ## Read mechanics and source contracts

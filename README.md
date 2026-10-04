@@ -15,6 +15,7 @@ READ-09 adds directory-role list/show, current role-assignment inventory and act
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the user usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
+READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -177,6 +178,30 @@ App and service-principal `--select` accepts the [reviewed property sets](src/en
 Owner rows default to `id`, `displayName` and `mail`, the only selectable owner properties; rows without non-null descriptive properties are preserved with a hint about limited consent or unset properties.
 The named-list caps, `count`, cursor resume rules and 500-character text truncation described above also apply to these reads; resume owner lists with the same `--application` or `--service-principal` object ID.
 Delegated application reads default to `https://graph.microsoft.com/Application.Read.All`, while application profiles use the configured `.default` audience.
+
+Log in with `https://graph.microsoft.com/IdentityRiskyUser.Read.All` and `https://graph.microsoft.com/IdentityRiskEvent.Read.All`, then triage risky users and risk detections:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/IdentityRiskyUser.Read.All,https://graph.microsoft.com/IdentityRiskEvent.Read.All
+mg-axi entra risky-user list --profile soc --limit 10
+mg-axi entra risky-user show --profile soc --id <risky-user-id>
+mg-axi entra risk-detection list --profile soc --since 2026-09-01T00:00:00Z --limit 10
+mg-axi entra risk-detection show --profile soc --id <risk-detection-id>
+```
+
+Delegated risky-user reads default to `https://graph.microsoft.com/IdentityRiskyUser.Read.All`; risk-detection reads default to `https://graph.microsoft.com/IdentityRiskEvent.Read.All`.
+`--scopes` overrides those defaults; application profiles use the configured Graph `.default` audience and reject delegated scopes.
+`entra risky-user list` is a state collection with an optional `--filter`; `entra risk-detection list` always carries an explicit time bound, so `--since` is required for a new query (with optional `--until` and `--filter` refinements) and resume reuses `--cursor` instead.
+Resume validates the saved detectedDateTime bounds; a cursor from an unbounded raw query is rejected, so start a new query with `--since`.
+Resume risk lists with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra risk-detection list --profile soc --cursor - < cursor.txt`.
+`entra risky-user list` defaults to `id`, `userPrincipalName`, `riskLevel` and `riskState`; `entra risk-detection list` defaults to `id`, `detectedDateTime`, `userPrincipalName` and `riskLevel`.
+Both risk show commands default to the full reviewed property set.
+`--select` requests properties from the [supported risk property sets](src/entra-risk.ts); `--fields` projects locally and must be a subset of the fetched selection.
+Risk reads truncate text longer than 500 characters, including nested values such as `location` and the `additionalInfo` JSON string; `--full` restores complete text without lifting redaction, row caps or time bounds.
+See the [access and licence contract](docs/graph-coverage.md#licence-matrix-by-area) for the riskyUsers P2 requirement and risk-detection P1/P2 detail boundaries.
+Limited views stay limited: a premium detection without P2 detail reports `riskEventType` generic, hidden risk levels report the licence boundary instead of the level, and a null detection `correlationId` means no sign-in is associated.
+To correlate a detection to sign-ins, use `risk-detection show` or select `activityDateTime`, then filter the sign-in list above on the detection's `userPrincipalName` in that activity window; sign-in reads require the separate `AuditLog.Read.All` login above, and there is no riskySignIns endpoint.
+Risk dismissal is a separately reviewed write, so risk reads never confirm, dismiss or remediate risk.
 
 Configure the registration's Mobile and desktop applications redirect URI as `http://localhost` for browser login.
 The first created profile is the default; `--profile` selects another identity explicitly.

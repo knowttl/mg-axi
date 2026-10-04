@@ -62,6 +62,24 @@ test("path parameters bind one encoded resource per placeholder", async () => {
   assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/users/analyst%40example.invalid");
 });
 
+for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) {
+  for (const params of [{}, { appId: client }]) test(`${profile.mode} embedded path templates with ${Object.keys(params).length} bindings fail before credentials`, async () => {
+    const operation = resolveSessionOperation("v1.0", "GET", "/applications(appId='{appId}')");
+    const f = fixture(json(200, {}));
+    await assert.rejects(
+      f.session.execute({ profile, operation, params, ...scopeArgs }),
+      error => error.code === "VALIDATION_ERROR" && /Unsupported path template/.test(error.message),
+    );
+    assert.equal(f.credentialCalls.length, 0);
+    assert.equal(f.requests.length, 0);
+  });
+}
+
+for (const target of ["/v1.0/applications(appId='{appId}')", `/v1.0/applications(appId='${client}')`]) test(`embedded-template continuation ${target} is denied`, () => {
+  const operation = resolveSessionOperation("v1.0", "GET", "/applications(appId='{appId}')");
+  assert.throws(() => authorizeUrl(operation, { appId: client }, target), { code: "POLICY_DENIED" });
+});
+
 test("uncatalogued operation ids fail before credential or HTTP", async () => {
   assert.throws(() => resolveSessionOperation("v1.0", "GET", "/nope"), { code: "VALIDATION_ERROR" });
   const f = fixture(json(200, {}));

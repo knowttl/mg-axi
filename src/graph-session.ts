@@ -138,6 +138,7 @@ function matchRoute(route: string, pathname: string): Record<string, string> | n
     const slot = template[i]!;
     const segment = actual[i]!;
     const name = bindingName(slot);
+    if (!name && /[{}]/.test(slot)) return null;
     if (name) params[name] = segment;
     else if (slot.toLowerCase() !== segment.toLowerCase()) return null;
   }
@@ -179,7 +180,14 @@ function buildPath(route: string, params: Record<string, string>): string {
   const path = splitPath(route)
     .map(segment => {
       const name = bindingName(segment);
-      if (!name) return segment;
+      if (!name) {
+        if (/[{}]/.test(segment)) {
+          throw new AxiError(`Unsupported path template ${route}`, "VALIDATION_ERROR", [
+            "Use a catalogued route with whole-segment placeholders",
+          ]);
+        }
+        return segment;
+      }
       if (!Object.hasOwn(params, name)) {
         throw new AxiError(`Missing path parameter {${name}} for ${route}`, "VALIDATION_ERROR", [
           "Bind one resource identifier per placeholder from the catalogued route",
@@ -281,17 +289,13 @@ function faultBody(body: string): string {
 }
 
 export class GraphSession {
-  private maxRedirects: number;
   constructor(
     private deps: {
       delegated: DelegatedAuth;
       application: ApplicationAuth;
       transport: GraphTransport;
-      maxRedirects?: number;
     },
-  ) {
-    this.maxRedirects = deps.maxRedirects ?? MAX_REDIRECTS;
-  }
+  ) {}
 
   async execute(args: ExecuteArgs): Promise<unknown> {
     checkOperation(args.operation);
@@ -366,7 +370,7 @@ export class GraphSession {
     for (let hop = 0; ; hop++) {
       if (visited.has(current.toLowerCase())) throw denied(operation, "the redirect loops");
       visited.add(current.toLowerCase());
-      if (hop > this.maxRedirects) throw denied(operation, `the redirect exceeds ${this.maxRedirects} hops`);
+      if (hop > MAX_REDIRECTS) throw denied(operation, `the redirect exceeds ${MAX_REDIRECTS} hops`);
       let response: TransportResponse;
       try {
         response = await this.deps.transport({

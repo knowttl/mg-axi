@@ -19,7 +19,7 @@ const logRead = {
   since: { value: "iso-time", description: "Required for a new query: earliest instant bounding the server time range; resume with --cursor instead of repeating it" },
   until: { value: "iso-time", description: "Latest instant bounding the server time range; must be after --since" },
   filter: { value: "odata-filter", description: "OData $filter combined with the time bounds; unsupported combinations fail before credentials" },
-  select: { value: "comma-separated-properties", description: "Request server properties; CA policy detail additionally needs a CA-data role or policy permission" },
+  select: { value: "comma-separated-properties", description: "Request server properties; CA policy detail additionally needs a policy permission in both modes and a supported CA-data role for delegated access; request delegated policy access with --scopes https://graph.microsoft.com/AuditLog.Read.All,https://graph.microsoft.com/Policy.Read.All" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
   full: { description: "Show complete text values without truncation; never lifts redaction, row caps or time bounds" },
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
@@ -135,7 +135,7 @@ export const LEAVES: Leaf[] = [
     cursor: logRead.cursor,
     scopes: logRead.scopes,
   }, examples: ["mg-axi entra sign-in list --profile soc --since 2026-09-01T00:00:00Z", "mg-axi entra sign-in list --profile soc --since 2026-09-01T00:00:00Z --filter \"status/errorCode ne 0\" --limit 10", "mg-axi entra sign-in list --profile soc --since 2026-09-01T00:00:00Z --until 2026-09-08T00:00:00Z --all"] },
-  { path: "entra sign-in show", description: "Show one sign-in with the full reviewed property set; absent CA policy detail reports its missing role/permission instead of an empty value", operation: "GET:/auditLogs/signIns/{signIn-id}", flags: {
+  { path: "entra sign-in show", description: "Show one sign-in with the full reviewed property set; absent CA policy detail reports its required policy permission and delegated role instead of an empty value", operation: "GET:/auditLogs/signIns/{signIn-id}", flags: {
     ...common, id: { value: "sign-in-id", required: true, description: "Sign-in object ID" },
     select: logRead.select,
     fields: logRead.fields,

@@ -72,7 +72,7 @@ const TRUNCATE_AT = 500;
 // absent value reports the missing prerequisite rather than an empty result.
 const SIGNIN_UNAVAILABLE: Readonly<Record<string, string>> = {
   appliedConditionalAccessPolicies:
-    "unavailable: Graph omits CA policy detail without CA-data access - delegated needs Conditional Access Administrator, Global Reader, Security Administrator or Security Reader; application needs Policy.Read.All, Policy.Read.ConditionalAccess or Policy.ReadWrite.ConditionalAccess",
+    "unavailable: Graph omits CA policy detail without CA-data access - both modes need Policy.Read.All, Policy.Read.ConditionalAccess or Policy.ReadWrite.ConditionalAccess in addition to AuditLog.Read.All; delegated also needs Conditional Access Administrator, Global Reader, Security Administrator or Security Reader. For delegated access, log in and repeat this read with --scopes https://graph.microsoft.com/AuditLog.Read.All,https://graph.microsoft.com/Policy.Read.All",
 };
 
 export type LogFlags = Record<string, string | boolean>;
@@ -117,12 +117,15 @@ function scopesFor(flags: LogFlags, profile: AnyProfile, help: string): string[]
 
 function isoInstant(raw: unknown, flag: string, help: string): string {
   const text = String(raw).trim();
-  const parsed = Date.parse(text);
-  if (!text.length || Number.isNaN(parsed)) {
+  const match = /^(\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d)(?:\.(\d+))?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(text);
+  const local = match === null ? NaN : Date.parse(`${match[1]}Z`);
+  const parsed = match === null ? NaN : Date.parse(`${match[1]}${match[3]}`);
+  if (Number.isNaN(local) || Number.isNaN(parsed) || new Date(local).toISOString().slice(0, 19) !== match![1]
+    || new Date(parsed).toISOString().length !== 24) {
     throw new AxiError(`--${flag} needs an ISO-8601 instant such as 2026-09-01T00:00:00Z`, "VALIDATION_ERROR", [help]);
   }
-  // Canonical form keeps repeated and resumed queries byte-identical.
-  return new Date(parsed).toISOString();
+  const fraction = (match![2] ?? "").replace(/0+$/, "").padEnd(3, "0");
+  return `${new Date(parsed).toISOString().slice(0, 19)}.${fraction}Z`;
 }
 
 // Every collection query carries an explicit time bound; there is no
@@ -131,7 +134,7 @@ function isoInstant(raw: unknown, flag: string, help: string): string {
 function boundedFilter(dateField: string, flags: LogFlags, help: string): string | undefined {
   const since = flags.since === undefined ? undefined : isoInstant(flags.since, "since", help);
   const until = flags.until === undefined ? undefined : isoInstant(flags.until, "until", help);
-  if (since !== undefined && until !== undefined && Date.parse(until) <= Date.parse(since)) {
+  if (since !== undefined && until !== undefined && until.slice(0, -1) <= since.slice(0, -1)) {
     throw new AxiError("--until must be after --since", "VALIDATION_ERROR", [help]);
   }
   const parts: string[] = [];
@@ -150,9 +153,16 @@ function truncateValue(value: unknown, full: boolean): { value: unknown; truncat
     ? { value: text, truncated: false }
     : { value: `${text.slice(0, TRUNCATE_AT)}... (truncated, ${text.length} chars total)`, truncated: true };
   if (typeof value === "string") return truncate(value);
-  if (Array.isArray(value) && value.every(entry => typeof entry === "string")) {
-    const projected = value.map(truncate);
+  if (Array.isArray(value)) {
+    const projected = value.map(entry => truncateValue(entry, full));
     return { value: projected.map(entry => entry.value), truncated: projected.some(entry => entry.truncated) };
+  }
+  if (value !== null && typeof value === "object") {
+    const projected = Object.entries(value).map(([key, entry]) => [key, truncateValue(entry, full)] as const);
+    return {
+      value: Object.fromEntries(projected.map(([key, entry]) => [key, entry.value])),
+      truncated: projected.some(([, entry]) => entry.truncated),
+    };
   }
   return { value, truncated: false };
 }

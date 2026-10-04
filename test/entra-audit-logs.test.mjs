@@ -332,6 +332,72 @@ test("directory-audit list bounds activityDateTime and returns compact rows", as
   }
 });
 
+for (const [noun, dateField] of [["sign-in", "createdDateTime"], ["directory-audit", "activityDateTime"]]) {
+  test(`${noun} resumes precise bounds canonically and rejects a changed fractional bound`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor("delegated");
+      const first = await executeArgv(["entra", noun, "list", "--profile", "soc",
+        "--since", "2026-09-10T21:20:02.7215374Z", "--limit", "1"], overrides);
+      const resumed = await executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", first.cursor,
+        "--since", "2026-09-10T23:20:02.721537400+02:00"], overrides);
+      assert.equal(resumed.count.complete, true);
+      await assert.rejects(executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", first.cursor,
+        "--since", "2026-09-10T21:20:02.7215375Z"], overrides), { code: "VALIDATION_ERROR" });
+    } finally { teardownProfiles(state); }
+  });
+
+  for (const [since, until, expectedSince, expectedUntil] of [
+    ["2026-09-10T21:20:02.7215373Z", "2026-09-10T21:20:02.7215374Z",
+      "2026-09-10T21:20:02.7215373Z", "2026-09-10T21:20:02.7215374Z"],
+    ["2026-09-10T23:20:02.721+02:00", "2026-09-10T14:20:02.7215374-07:00",
+      "2026-09-10T21:20:02.721Z", "2026-09-10T21:20:02.7215374Z"],
+    ["2024-02-29T00:00:00Z", "2024-03-01T00:00:00Z",
+      "2024-02-29T00:00:00.000Z", "2024-03-01T00:00:00.000Z"],
+  ]) {
+    test(`${noun} retains exact time bounds: ${since} to ${until}`, async () => {
+      const state = setupProfiles();
+      try {
+        const fixture = transport(() => json(200, { value: [] }));
+        const { requests, overrides } = overridesFor("delegated", fixture);
+        await executeArgv(["entra", noun, "list", "--profile", "soc", "--since", since, "--until", until], overrides);
+        assert.equal(new URL(requests[0].url).searchParams.get("$filter"),
+          `${dateField} ge ${expectedSince} and ${dateField} le ${expectedUntil}`);
+      } finally { teardownProfiles(state); }
+    });
+  }
+
+  for (const flag of ["since", "until"]) {
+    for (const invalid of ["2026-02-30T00:00:00Z", "2026-02-29T00:00:00Z", "2026-09-10T21:20:02",
+      "2026-09-10", "2026-09-10T24:00:00Z", "2026-09-10T21:20:60Z", "2026-09-10T21:20:02+24:00"]) {
+      test(`${noun} rejects invalid --${flag} ${invalid} before credentials`, async () => {
+        const state = setupProfiles();
+        try {
+          const { requests, calls, overrides } = overridesFor("delegated");
+          const bounds = flag === "since" ? ["--since", invalid] : ["--since", SINCE, "--until", invalid];
+          await assert.rejects(executeArgv(["entra", noun, "list", "--profile", "soc", ...bounds], overrides),
+            { code: "VALIDATION_ERROR" });
+          assert.deepEqual(calls, []);
+          assert.deepEqual(requests, []);
+        } finally { teardownProfiles(state); }
+      });
+    }
+  }
+
+  for (const until of ["2026-09-10T21:20:02.7215373Z", "2026-09-10T23:20:02.721537400+02:00"]) {
+    test(`${noun} rejects reversed or equal fractional bounds: ${until}`, async () => {
+      const state = setupProfiles();
+      try {
+        const { requests, calls, overrides } = overridesFor("delegated");
+        await assert.rejects(executeArgv(["entra", noun, "list", "--profile", "soc",
+          "--since", "2026-09-10T21:20:02.7215374Z", "--until", until], overrides), { code: "VALIDATION_ERROR" });
+        assert.deepEqual(calls, []);
+        assert.deepEqual(requests, []);
+      } finally { teardownProfiles(state); }
+    });
+  }
+}
+
 for (const args of [
   ["entra", "sign-in", "list", "--profile", "soc"],
   ["entra", "sign-in", "list", "--profile", "soc", "--until", UNTIL],
@@ -396,11 +462,51 @@ test("show reports omitted CA policy detail as unavailable rather than empty", a
       appliedConditionalAccessPolicies: result.signIn.appliedConditionalAccessPolicies,
     });
     assert.match(result.signIn.appliedConditionalAccessPolicies, /^unavailable: Graph omits CA policy detail/);
+    assert.match(result.signIn.appliedConditionalAccessPolicies, /both modes need Policy.Read.All/);
+    assert.match(result.signIn.appliedConditionalAccessPolicies, /delegated also needs Conditional Access Administrator, Global Reader/);
+    assert.match(result.signIn.appliedConditionalAccessPolicies,
+      /log in and repeat this read with --scopes https:\/\/graph.microsoft.com\/AuditLog.Read.All,https:\/\/graph.microsoft.com\/Policy.Read.All/);
     assert.equal(result.help, undefined);
   } finally {
     teardownProfiles(state);
   }
 });
+
+const longNestedText = "x".repeat(600);
+const compactNestedText = `${"x".repeat(500)}... (truncated, 600 chars total)`;
+for (const [noun, key, id, field, value, expected] of [
+  ["sign-in", "signIn", s1.id, "status", { errorCode: 0, failureReason: longNestedText, additionalDetails: null },
+    { errorCode: 0, failureReason: compactNestedText, additionalDetails: null }],
+  ["sign-in", "signIn", s1.id, "location", { city: longNestedText, geoCoordinates: { latitude: 1, longitude: 2 } },
+    { city: compactNestedText, geoCoordinates: { latitude: 1, longitude: 2 } }],
+  ["sign-in", "signIn", s1.id, "appliedConditionalAccessPolicies", [{ displayName: longNestedText }, { displayName: "short" }],
+    [{ displayName: compactNestedText }, { displayName: "short" }]],
+  ["directory-audit", "directoryAudit", a1.id, "initiatedBy", { user: { displayName: longNestedText }, app: null },
+    { user: { displayName: compactNestedText }, app: null }],
+  ["directory-audit", "directoryAudit", a1.id, "targetResources",
+    [{ modifiedProperties: [{ oldValue: null, newValue: longNestedText }], displayName: "short" }],
+    [{ modifiedProperties: [{ oldValue: null, newValue: compactNestedText }], displayName: "short" }]],
+]) {
+  for (const action of ["list", "show"]) {
+    test(`${noun} ${action} truncates nested ${field} and recovers with --full`, async () => {
+      const state = setupProfiles();
+      try {
+        const row = { id, [field]: value };
+        const fixture = transport(() => json(200, action === "list" ? { value: [row] } : row));
+        const { overrides } = overridesFor("delegated", fixture);
+        const binding = action === "list" ? ["--since", SINCE] : ["--id", id];
+        const argv = ["entra", noun, action, "--profile", "soc", ...binding, "--select", `id,${field}`];
+        const compact = await executeArgv(argv, overrides);
+        const compactRow = action === "list" ? compact[`${key}s`][0] : compact[key];
+        assert.deepEqual(compactRow, { id, [field]: expected });
+        const full = await executeArgv(hintArgv(compact.help[0]), overrides);
+        const fullRow = action === "list" ? full[`${key}s`][0] : full[key];
+        assert.deepEqual(fullRow, row);
+        assert.ok(!(full.help ?? []).some(hint => hint.includes("--full")));
+      } finally { teardownProfiles(state); }
+    });
+  }
+}
 
 test("explicit nulls stay null and missing base properties stay absent", async () => {
   const state = setupProfiles();

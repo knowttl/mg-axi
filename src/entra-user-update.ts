@@ -65,40 +65,40 @@ export function userAccountDefinition(user: string, desired: boolean) {
     method: "PATCH" as const,
     version: "v1.0",
     path: `/v1.0/users/${encodeGraphPathSegment(target)}`,
-    // Disabling is disruptive and needs typed confirmation; enabling is an
-    // ordinary write. The coordinator enforces the distinction.
-    effect: (desired ? "write" : "disruptive") as "write" | "disruptive",
+    effect: "disruptive" as const,
     target,
     payload: { accountEnabled: desired },
   };
 }
 
-async function readAccountEnabled(
+async function readUserAccount(
   session: GraphSession,
   profile: AnyProfile,
   readOperation: SessionOperation,
   user: string,
-): Promise<boolean | null> {
+): Promise<{ id: string; accountEnabled: boolean | null }> {
   const raw = await session.execute({
     profile,
     operation: readOperation,
     params: { "user-id": user },
-    query: { $select: "accountEnabled" },
+    query: { $select: "id,accountEnabled" },
     ...(profile.mode === "application" ? {} : { scopes: [...USER_ACCOUNT_READ_SCOPES] }),
   });
-  if (raw !== null && typeof raw === "object" && !Array.isArray(raw) && "accountEnabled" in raw) {
+  if (raw !== null && typeof raw === "object" && !Array.isArray(raw) && "id" in raw && typeof raw.id === "string" && raw.id.length > 0) {
     const value = (raw as Record<string, unknown>).accountEnabled;
     // Null, missing or malformed is unverifiable, never a desired state.
-    return typeof value === "boolean" ? value : null;
+    return { id: raw.id, accountEnabled: typeof value === "boolean" ? value : null };
   }
-  return null;
+  throw new AxiError("Graph returned a user without an object ID", "GRAPH_ERROR", [
+    "Read back the user before attempting an account update",
+  ]);
 }
 
-function executeHint(flags: UserUpdateFlags, user: string, desired: boolean, profileName: string, confirm: boolean): string {
+function executeHint(user: string, desired: boolean, profileName: string): string {
   const shell = (value: string): string =>
     /^[A-Za-z0-9_.,:/@=-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
   return `mg-axi entra user update --user ${shell(user)} --account-enabled ${desired} --execute`
-    + (confirm ? ` --confirm ${shell(user)}` : "")
+    + ` --confirm ${shell(user)}`
     + ` --profile ${shell(profileName)}`;
 }
 
@@ -134,34 +134,7 @@ export async function updateUserAccount(args: {
   // Gates first: preview refuses read-only, unscoped and beta-bound profiles
   // before any read, credential or transport.
   const preview = coordinator.preview(definition);
-  const current = await readAccountEnabled(session, profile, readOperation, user);
-  const state = {
-    operation: definition.operation,
-    target: definition.target,
-    method: definition.method,
-    url: preview.url,
-    effect: definition.effect,
-    current,
-    desired,
-    noop: current === desired,
-  };
-  if (!execute) {
-    return {
-      preview: state,
-      help: [
-        state.noop
-          ? "Already in the desired state; re-running with --execute would send nothing"
-          : executeHint(flags, user, desired, profileName, definition.effect === "disruptive"),
-        ...(definition.effect === "disruptive" && !state.noop
-          ? ["Disabling an account is disruptive: the --execute run needs the typed --confirm value shown above"]
-          : []),
-      ],
-    };
-  }
-  // Typed confirmation is decided on the previewed state so an
-  // already-desired value stays an idempotent no-op without it; anything
-  // that may send still needs it before credentials.
-  if (!state.noop && definition.effect === "disruptive") {
+  if (execute) {
     if (flags.confirm === undefined) {
       throw new AxiError(
         `blocked: disruptive PATCH needs --confirm '${definition.target}'`,
@@ -177,18 +150,49 @@ export async function updateUserAccount(args: {
       );
     }
   }
+  let account = await readUserAccount(session, profile, readOperation, user);
+  const current = account.accountEnabled;
+  const state = {
+    operation: definition.operation,
+    target: definition.target,
+    method: definition.method,
+    url: preview.url,
+    effect: definition.effect,
+    current,
+    desired,
+    noop: current === desired,
+  };
+  if (!execute) {
+    return {
+      preview: state,
+      help: [
+        state.noop
+          ? "Already in the desired state; no update is needed"
+          : executeHint(user, desired, profileName),
+        ...(!state.noop
+          ? ["Changing account access is disruptive: the --execute run needs the typed --confirm value shown above"]
+          : []),
+      ],
+    };
+  }
   const result = await coordinator.execute(definition, {
     execute: true,
-    ...(flags.confirm === undefined ? {} : { confirm: String(flags.confirm) }),
+    confirm: String(flags.confirm),
     ...(profile.mode === "application" ? {} : { scopes: [...USER_ACCOUNT_WRITE_SCOPES] }),
-    readState: () => readAccountEnabled(session, profile, readOperation, user),
+    readState: async () => {
+      account = await readUserAccount(session, profile, readOperation, user);
+      return account.accountEnabled;
+    },
     isNoop: currentState => currentState === desired,
   });
   if (result.kind === "failed") {
     throw new AxiError(
-      `Graph refused the account update (status ${result.status}); the grant, role, licence or policy prerequisite is missing and Graph does not say which`,
+      `Graph refused the account update (status ${result.status})`,
       "GRAPH_ERROR",
-      [PERMISSION_GUIDANCE, ROLE_GUIDANCE, `Audit ${result.auditId} recorded the refusal; read back the target and never replay this intent`],
+      [
+        ...(result.status === 403 ? [PERMISSION_GUIDANCE, ROLE_GUIDANCE] : []),
+        `Audit ${result.auditId} recorded the refusal; read back the target and never replay this intent`,
+      ],
     );
   }
   if (result.kind === "unknown") {
@@ -200,13 +204,13 @@ export async function updateUserAccount(args: {
   // Anything but success, failure or uncertainty is the verified no-op:
   // dry-run needs execute !== true, always set above.
   if (result.kind !== "success") {
-    return { noop: true, user: { id: user, accountEnabled: desired } };
+    return { noop: true, user: { id: account.id, accountEnabled: desired } };
   }
   // Success carries no proof: user-update answers 204 with an empty body, so
   // only the reread decides between updated and conflict.
-  let verified: boolean | null;
+  let verified: { id: string; accountEnabled: boolean | null };
   try {
-    verified = await readAccountEnabled(session, profile, readOperation, user);
+    verified = await readUserAccount(session, profile, readOperation, user);
   } catch {
     throw new AxiError(
       `Update of '${user}' was sent (audit ${result.auditId}) but the verification read failed; the outcome is unknown`,
@@ -214,14 +218,14 @@ export async function updateUserAccount(args: {
       [`Read back '${user}' before doing anything else; never replay this intent`],
     );
   }
-  if (verified !== desired) {
+  if (verified.accountEnabled !== desired) {
     throw new AxiError(
-      `Update of '${user}' conflicts: the reread shows accountEnabled ${verified === null ? "unreadable" : String(verified)} instead of the sent ${String(desired)} (audit ${result.auditId})`,
+      `Update of '${user}' conflicts: the reread shows accountEnabled ${verified.accountEnabled === null ? "unreadable" : String(verified.accountEnabled)} instead of the sent ${String(desired)} (audit ${result.auditId})`,
       "WRITE_CONFLICT",
       [`Read back '${user}' with ${showHint(user, profileName)} before doing anything else`, "Never replay this intent"],
     );
   }
-  return { user: { id: user, accountEnabled: desired }, auditId: result.auditId };
+  return { user: { id: verified.id, accountEnabled: desired }, auditId: result.auditId };
 }
 
 // Production mutation transport: plain HTTPS with redirects held for manual

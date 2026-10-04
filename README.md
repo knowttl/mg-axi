@@ -50,7 +50,7 @@ Write scopes are refused with `VALIDATION_ERROR` and a list of supported read sc
 User reads acquire credentials silently; a resume containing only buffered rows can finish without another Graph request.
 WRITE-02 adds the first named write: `mg-axi entra user update --user <user-id-or-upn> --account-enabled true|false` sets one user's `accountEnabled` through `PATCH /users/{id}` with only that property sent.
 Without `--execute` the command previews the desired-state diff read through the user show route and journals nothing; an already-desired value is a no-op with exit 0.
-Disabling is disruptive: `--execute` runs need `--confirm '<user-id-or-upn>'` repeating the target exactly, while enabling needs no confirmation.
+Enabling and disabling are disruptive: every `--execute` run needs `--confirm '<user-id-or-upn>'` repeating the target exactly, including already-desired states.
 After a successful PATCH the command rereads the user and reports a `WRITE_CONFLICT` when the value is not what was sent; user-update answers 204 with an empty body, so the reread is the only proof.
 The least-privileged pair is `User.EnableDisableAccount.All` plus `User.Read.All` in both modes, requested as documented scopes that callers cannot override.
 Delegated callers need `Privileged Authentication Administrator` for admin targets and must generally outrank the target; app-only callers need the pair plus a higher-privileged admin role assignment, and denials surface both rules because a 403 never says which prerequisite is missing.

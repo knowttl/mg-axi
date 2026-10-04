@@ -50,7 +50,7 @@ function json(status, body) {
 
 // reads: scripted accountEnabled answers (boolean, null, or { status } for
 // read errors); every read must hit the READ-01 user route with the
-// accountEnabled select. mutation: scripted PATCH answers or thrown errors.
+// id and accountEnabled select. mutation: scripted PATCH answers or thrown errors.
 function fixture({ reads = [true], mutation = [{ status: 204, body: "" }] } = {}) {
   const readRequests = [];
   const mutRequests = [];
@@ -62,12 +62,12 @@ function fixture({ reads = [true], mutation = [{ status: 204, body: "" }] } = {}
     const url = new URL(request.url);
     const match = /^\/v1\.0\/users\/([^/]+)$/.exec(url.pathname);
     assert.ok(match, `unexpected read route ${url.pathname}`);
-    assert.equal(url.searchParams.get("$select"), "accountEnabled");
+    assert.equal(url.searchParams.get("$select"), "id,accountEnabled");
     const next = readIndex < reads.length ? reads[readIndex++] : reads[reads.length - 1];
     if (next !== null && typeof next === "object") {
       return json(next.status, { error: { code: "fixture-read-error", message: "synthetic read failure" } });
     }
-    return json(200, { id: decodeURIComponent(match[1]), accountEnabled: next });
+    return json(200, { id: userId, accountEnabled: next });
   };
   const mutationTransport = async request => {
     mutRequests.push(request);
@@ -171,51 +171,63 @@ test("disable sends the exact PATCH target and body, then verifies", async () =>
   } finally { teardown(state); }
 });
 
-test("enable is an ordinary write needing no confirmation", async () => {
+test("enable requires confirmation and records a disruptive write", async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
     const f = fixture({ reads: [false, false, false, true] });
-    const result = await executeArgv(updateArgs(userId, "true", ["--execute"]), f.overrides);
+    const preview = await executeArgv(updateArgs(userId, "true"), fixture({ reads: [false] }).overrides);
+    assert.equal(preview.preview.effect, "disruptive");
+    assert.ok(preview.help.some(hint => hint.includes("--execute") && hint.includes(`--confirm ${userId}`)));
+    const result = await executeArgv(updateArgs(userId, "true", ["--execute", "--confirm", userId]), f.overrides);
     assert.deepEqual(result.user, { id: userId, accountEnabled: true });
     assert.equal(f.mutRequests.length, 1);
     assert.equal(f.mutRequests[0].body, JSON.stringify({ accountEnabled: true }));
     assert.ok(f.credCalls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(WRITE_SCOPES)));
-    assert.equal(journal(f.journalPath)[0].effect, "write");
+    assert.equal(journal(f.journalPath)[0].effect, "disruptive");
   } finally { teardown(state); }
 });
 
-test("already-desired state is a no-op without confirmation", async () => {
+for (const [target, desired] of [
+  [userId, true],
+  [userId, false],
+  ["AdeleV@contoso.com", true],
+  ["AdeleV@contoso.com", false],
+  ["alice_example.com#EXT#@tenant.onmicrosoft.com", true],
+  ["alice_example.com#EXT#@tenant.onmicrosoft.com", false],
+]) test(`already-desired ${desired} for ${target} returns the Graph object ID without sending`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
-    const f = fixture({ reads: [false] });
-    const result = await executeArgv(updateArgs(userId, "false", ["--execute"]), f.overrides);
-    assert.deepEqual(result, { noop: true, user: { id: userId, accountEnabled: false } });
+    const f = fixture({ reads: [desired] });
+    const result = await executeArgv(updateArgs(target, String(desired), ["--execute", "--confirm", target]), f.overrides);
+    assert.deepEqual(result, { noop: true, user: { id: userId, accountEnabled: desired } });
     assert.equal(f.mutRequests.length, 0);
   } finally { teardown(state); }
 });
 
-test("disable without --confirm is refused before sending", async () => {
+for (const [desired, current] of [["true", false], ["false", true], ["true", true], ["false", false]]) test(`${desired} from ${current} without --confirm is refused before credentials`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
-    const f = fixture({ reads: [true] });
-    await assert.rejects(executeArgv(updateArgs(userId, "false", ["--execute"]), f.overrides), { code: "CONFIRM_REQUIRED" });
+    const f = fixture({ reads: [current] });
+    await assert.rejects(executeArgv(updateArgs(userId, desired, ["--execute"]), f.overrides), { code: "CONFIRM_REQUIRED" });
     assert.equal(f.mutRequests.length, 0);
+    assert.equal(f.credCalls.length, 0);
   } finally { teardown(state); }
 });
 
-test("mismatched --confirm is refused before sending", async () => {
+for (const desired of ["true", "false"]) test(`${desired} with mismatched --confirm is refused before credentials`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
     const f = fixture({ reads: [true] });
     await assert.rejects(
-      executeArgv(updateArgs(userId, "false", ["--execute", "--confirm", "someone-else"]), f.overrides),
+      executeArgv(updateArgs(userId, desired, ["--execute", "--confirm", "someone-else"]), f.overrides),
       { code: "CONFIRM_MISMATCH" },
     );
     assert.equal(f.mutRequests.length, 0);
+    assert.equal(f.credCalls.length, 0);
   } finally { teardown(state); }
 });
 
@@ -247,6 +259,22 @@ test("denial surfaces the permission pair and role hierarchy", async () => {
     assert.match(guidance, /Privileged Authentication Administrator/);
     assert.match(guidance, /never replay/i);
     assert.equal(journal(f.journalPath)[1].outcome, "FAILED");
+  } finally { teardown(state); }
+});
+
+for (const status of [400, 404, 429]) test(`PATCH refusal ${status} preserves status without permission or role diagnosis`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const f = fixture({ reads: [true], mutation: [{ status }] });
+    const error = await executeArgv(updateArgs(userId, "false", ["--execute", "--confirm", userId]), f.overrides)
+      .then(() => assert.fail("refusal must throw"), caught => caught);
+    assert.equal(error.code, "GRAPH_ERROR");
+    assert.equal(error.message, `Graph refused the account update (status ${status})`);
+    assert.equal(error.suggestions.length, 1);
+    assert.match(error.suggestions[0], /read back the target and never replay/);
+    assert.equal(f.mutRequests.length, 1);
+    assert.equal(journal(f.journalPath)[1].httpStatus, status);
   } finally { teardown(state); }
 });
 
@@ -297,6 +325,18 @@ test("unknown target sends nothing and journals no intent", async () => {
     await assert.rejects(executeArgv(updateArgs(userId, "false", ["--execute", "--confirm", userId]), f.overrides));
     assert.equal(f.mutRequests.length, 0);
     assert.ok(!existsSync(f.journalPath), "a failed preview read reserves no intent");
+  } finally { teardown(state); }
+});
+
+test("a read without a Graph object ID blocks the update", async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const f = fixture();
+    f.overrides.transport = async () => json(200, { accountEnabled: true });
+    await assert.rejects(executeArgv(updateArgs(userId, "false", ["--execute", "--confirm", userId]), f.overrides), { code: "GRAPH_ERROR" });
+    assert.equal(f.mutRequests.length, 0);
+    assert.ok(!existsSync(f.journalPath));
   } finally { teardown(state); }
 });
 
@@ -380,7 +420,7 @@ for (const upn of ["AdeleV@contoso.com", "alice_example.com#EXT#@tenant.onmicros
     assert.equal(preview.preview.url, `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(upn)}`);
     assert.equal(preview.preview.target, upn);
     const result = await executeArgv(updateArgs(upn, "false", ["--execute", "--confirm", upn]), f.overrides);
-    assert.deepEqual(result.user, { id: upn, accountEnabled: false });
+    assert.deepEqual(result.user, { id: userId, accountEnabled: false });
     assert.equal(f.mutRequests[0].url, `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(upn)}`);
     assert.equal(f.mutRequests[0].body, JSON.stringify({ accountEnabled: false }));
     assert.equal(f.readRequests.length, 4);

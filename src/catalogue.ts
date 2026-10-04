@@ -64,6 +64,21 @@ const ownerRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Application.Read.All" },
 };
+const authMethodRead = {
+  select: { value: "comma-separated-properties", description: "Select output properties locally from the reviewed method set; phoneNumber is always redacted; no $select is sent to Graph" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must belong to the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to UserAuthenticationMethod.Read.All" },
+};
+const registrationRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed report set" },
+  fields: authMethodRead.fields,
+  full: authMethodRead.full,
+  cursor: authMethodRead.cursor,
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to AuditLog.Read.All" },
+};
 const grantRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties from id, clientId, consentType, principalId, resourceId, scope" },
@@ -151,6 +166,27 @@ export const LEAVES: Leaf[] = [
     full: userRead.full,
     scopes: userRead.scopes,
   }, examples: ["mg-axi entra user show --id <user-id-or-upn> --profile soc", "mg-axi entra user show --id <user-id-or-upn> --profile soc --full"] },
+  { path: "entra user authentication-method list", description: "List authentication methods for one named user (id, displayName, createdDateTime); targeted inspection only, never a tenant scan; phone numbers redacted", operation: "GET:/users/{user-id}/authentication/methods", flags: {
+    ...common, user: { value: "user-id-or-upn", required: true, description: "User object ID or UPN whose methods are listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    select: authMethodRead.select,
+    fields: authMethodRead.fields,
+    full: authMethodRead.full,
+    cursor: authMethodRead.cursor,
+    scopes: authMethodRead.scopes,
+  }, examples: ["mg-axi entra user authentication-method list --user <user-id> --profile soc", "mg-axi entra user authentication-method list --user <user-id> --profile soc --select id,displayName,phoneType"] },
+  { path: "entra registration list", description: "List the tenant authentication-method registration report (MFA/SSPR posture); the report does not cover disabled users", operation: "GET:/reports/authenticationMethods/userRegistrationDetails", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: registrationRead.filter,
+    select: registrationRead.select,
+    fields: registrationRead.fields,
+    full: registrationRead.full,
+    cursor: registrationRead.cursor,
+    scopes: registrationRead.scopes,
+  }, examples: ["mg-axi entra registration list --profile soc", "mg-axi entra registration list --profile soc --filter \"isMfaRegistered eq false\""] },
   { path: "entra group list", description: "List groups with compact properties (id, displayName, mail, groupTypes)", operation: "GET:/groups", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

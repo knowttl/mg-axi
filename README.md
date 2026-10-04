@@ -11,6 +11,7 @@ CORE-02 adds session collections, query validation, bounded retries and cancella
 API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface through that session.
 READ-01 executes Entra user list/show through that session in both delegated and application modes; current usage follows below.
 READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
+READ-04 adds targeted per-user authentication-method reads and the tenant registration report through the same session, with phone numbers redacted.
 READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
 READ-03 adds Conditional Access policy and named-location list/show as separate grammar through the same session; Conditional Access usage follows the device and administrative-unit usage below.
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the Conditional Access usage below.
@@ -36,7 +37,7 @@ The home view reports unavailable tenant summaries explicitly.
 `--select` requests properties from the [supported user property set](src/entra-users.ts); `--fields` projects locally and must be a subset of the fetched selection.
 Text values longer than 500 characters are truncated, including strings in `businessPhones`; `--full` removes text truncation without lifting redaction or row caps.
 Explicit null values stay null, missing properties stay absent, and denied reads return structured errors rather than empty results.
-Lists accept `--filter` for an OData filter and default to a 100-row cap; `--limit` changes the cap, while the incompatible `--all` follows pages within request, byte and deadline budgets.
+User lists accept `--filter` for an OData filter and default to a 100-row cap; `--limit` changes the cap, while the incompatible `--all` follows pages within request, byte and deadline budgets.
 Partial lists report `count.complete: false`, a reason and an opaque `cursor` preserving unreturned rows.
 Resume with `--cursor <cursor-from-output>` using the same profile, authentication scopes and API version; original `--select` and `--filter` values may be repeated or omitted, and conflicting values fail validation.
 Repeat `--fields` and `--full` when the same local view is wanted; these are not saved in the cursor.
@@ -189,6 +190,32 @@ Delegated policy and location reads default to `https://graph.microsoft.com/Poli
 HTTP 403 policy and location errors name the operation's supported directory roles (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access) and include guidance from the [licensing contract](docs/graph-coverage.md#licence-matrix-by-area); the response alone does not identify the missing prerequisite.
 No policy mutation lives here; policy updates belong to a later write slice.
 
+Inspect one user's authentication methods and the tenant registration report; delegated profiles first need explicit login with the read scopes:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/UserAuthenticationMethod.Read.All,https://graph.microsoft.com/AuditLog.Read.All
+mg-axi entra user authentication-method list --profile soc --user <user-id>
+mg-axi entra user authentication-method list --profile soc --user <user-id> --select id,displayName,phoneType
+mg-axi entra registration list --profile soc
+mg-axi entra registration list --profile soc --filter "isMfaRegistered eq false"
+```
+
+`entra user authentication-method list` targets one named user (`--user` takes the user object ID or UPN) and defaults to `id`, `displayName` and `createdDateTime`; rows carry `@odata.type` naming the method kind.
+There is no tenant scan through per-user methods: aggregate MFA coverage belongs to `entra registration list`, and the method output points there.
+`entra registration list` defaults to `id`, `userPrincipalName`, `userDisplayName` and `isMfaRegistered` and returns the tenant MFA/SSPR posture.
+Method lists return `authenticationMethods`; registration reports return `registrationDetails`.
+The report does not cover disabled users, so absence from it is never proof of no MFA; that gap rides in the leaf help and every report output.
+Phone numbers are protected values: the shared session replaces them with the redaction marker before output or cursor buffering (including resume cursors), so neither output nor cursors ever carry one; `--full` never lifts that redaction.
+Method registration and deletion belong to no read slice and are never constructed.
+For methods, `--select` selects output properties locally from the [reviewed authentication property sets](src/entra-auth-methods.ts); no `$select` is sent to Graph.
+For the registration report, `--select` requests server properties; `--fields` must be a subset of the default or explicit selection for either command.
+Only the registration report supports `--filter`, passed through as plain `$filter` with no `$count` or `ConsistencyLevel` contract.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply.
+Resume method lists with the same `--user` ID or UPN, profile, scopes and API version; omit or repeat the original `--select`, and repeat local `--fields` and `--full` when wanted.
+Delegated method reads default to `https://graph.microsoft.com/UserAuthenticationMethod.Read.All` (delegated self-reads may use `UserAuthenticationMethod.Read`) and registration reads default to `https://graph.microsoft.com/AuditLog.Read.All`, while application profiles use the configured `.default` audience.
+Delegated callers acting on another user additionally need Global Reader, Authentication Administrator or Privileged Authentication Administrator for methods, and Reports Reader, Security Reader, Security Administrator or Global Reader for the report.
+Denied reads name that role requirement instead of only the generic grant/role/licence cause.
+
 Log in with `https://graph.microsoft.com/AuditLog.Read.All`, then query sign-ins and directory audits in bounded time windows:
 
 ```sh
@@ -279,8 +306,11 @@ mg-axi api get /identity/conditionalAccess/policies --scopes https://graph.micro
 ```
 
 `api get` accepts only GET routes in the [reviewed route catalogue](src/api.ts), which owns route-specific query keys, `$select` fields and access constraints.
-Server OData parameters use `--odata`; `--query` is reserved for output queries and is not implemented here.
-Omitting `$select` requests the route's reviewed fields, and every response is filtered to reviewed fields before output.
+OData parameters use `--odata`; `--query` is reserved for output queries and is not implemented here.
+Omitting `$select` selects the route's reviewed fields, and every response is filtered to reviewed fields before output.
+For `/users/<user-id>/authentication/methods`, `$select` is the only supported OData parameter and selects output properties locally; an explicit selection restricts output to that subset.
+Method requests omit `$select` on initial requests, continuations, redirects and retries, while cursors preserve the local selection.
+Other routes send `$select` to Graph.
 Relationship expansion (`$expand`) is unavailable.
 Unreviewed, secret-value, mail/file-content, beta and write routes fail before credentials, and pack, preview and sensitive-area policy still runs in the shared session.
 Delegated raw reads require explicit `--scopes` from the supported read choices described above; application profiles use the configured `.default` audience and reject `--scopes`.

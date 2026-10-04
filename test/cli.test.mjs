@@ -36,6 +36,8 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra application list/);
   assert.match(result.stdout, /entra service-principal list/);
   assert.match(result.stdout, /entra directory-role list/);
+  assert.match(result.stdout, /entra user authentication-method list/);
+  assert.match(result.stdout, /entra registration list/);
   assert.match(result.stdout, /entra service-principal oauth2-grant list/);
   assert.match(result.stdout, /entra service-principal app-role-assignment list/);
   assert.match(result.stdout, /entra pim active list/);
@@ -67,6 +69,7 @@ for (const [name, args, error] of [
   ["missing required location ID", ["entra", "conditional-access", "named-location", "show"], /--id is required/],
   ["missing required group", ["entra", "group", "member", "list"], /--group is required/],
   ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
+  ["missing required user", ["entra", "user", "authentication-method", "list"], /--user is required/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
   ["missing required grant client", ["entra", "service-principal", "oauth2-grant", "list"], /--service-principal is required/],
   ["missing required app-role client", ["entra", "service-principal", "app-role-assignment", "list"], /--service-principal is required/],

@@ -21,6 +21,10 @@ import {
 // key-name and secret-value rules are adapted here.
 export const REDACTED = "***redacted***";
 export const SAFE_CREDENTIAL_FIELDS: readonly string[] = ["keyId", "displayName", "startDateTime", "endDateTime"];
+// READ-04 protected values: authentication-method phone numbers are PII the
+// server itself masks for the Authentication Administrator role, so the
+// session replaces them with the marker for every role before collection
+// buffering, execute output and cursor decode.
 export const GRAPH_HOST = "graph.microsoft.com";
 const READ_SCOPES = new Set([
   "AccessReview.Read.All",
@@ -210,7 +214,7 @@ function redact(value: unknown): unknown {
             .filter(field => Object.hasOwn(entry, field))
             .map(field => [field, entry[field]]))))];
       }
-      return [key, typeof child === "string" && secretKey(key) ? REDACTED : redact(child)];
+      return [key, typeof child === "string" && (secretKey(key) || key === "phoneNumber") ? REDACTED : redact(child)];
     }),
   );
 }
@@ -591,7 +595,7 @@ export class GraphSession {
     return this.send(operation, params, url, token, { signal, clock, deadline, consistencyLevel: args.consistencyLevel });
   }
 
-  // CORE-02: follow exact @odata.nextLink continuations through the same
+  // CORE-02: follow @odata.nextLink continuations through the same
   // operation re-authorization and shared success redaction. Row caps never
   // discard fetched rows: overflow stays buffered in the opaque cursor.
   // Request/byte/deadline ceilings and continuation cycles end as truthful
@@ -705,7 +709,9 @@ export class GraphSession {
         let response: TransportResponse;
         try {
           requests += 1;
-          response = await beforeDeadline(signal => this.deps.transport({ method: "GET", url: fetchUrl, headers: headersFor(), signal }), clock, deadline, signal);
+          const requestUrl = new URL(fetchUrl);
+          if (operation.path === "/users/{user-id}/authentication/methods") requestUrl.searchParams.delete("$select");
+          response = await beforeDeadline(signal => this.deps.transport({ method: "GET", url: requestUrl.toString(), headers: headersFor(), signal }), clock, deadline, signal);
         } catch (error) {
           signal?.throwIfAborted();
           if (error instanceof DeadlineExceeded) return partial("deadline exceeded", fetchUrl, pending);

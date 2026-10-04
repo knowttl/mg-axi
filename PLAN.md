@@ -107,7 +107,7 @@ The inventory and strict leaf schema define every supported command before publi
 Use az-like group/subgroup/verb grammar, `list` for collections and `show` for one object.
 `--id` identifies a Graph object unless the command explicitly supports another identifier.
 Never silently conflate object ID with application/client ID.
-`--filter` is OData, `--select` requests server properties, and `--fields` projects locally.
+`--filter` is OData and `--fields` projects locally; [README.md](README.md) owns command-specific `--select` behavior.
 Reserve `--query` for az-compatible output-query semantics rather than assigning it an unrelated meaning.
 `--limit` caps output and `--all` follows pages within an explicit budget.
 Unsupported advanced-query combinations fail early instead of forwarding a misleading request.
@@ -149,7 +149,7 @@ A 403 alone cannot establish whether the missing prerequisite is permission, rol
 
 ## Read and write safety
 
-Follow exact Graph `@odata.nextLink` values with required headers and revalidate origin/version before attaching credentials.
+The [read execution contract](docs/execution.md#read-mechanics-and-source-contracts) owns continuation URL handling, required headers and origin/version validation before attaching credentials.
 A row cap cannot discard the remainder of an already fetched page.
 Preserve buffered rows/query context when a continuation is exposed.
 Use bounded safe-read retries, Retry-After, cancellation and truthful partial-result information.

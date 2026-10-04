@@ -37,7 +37,7 @@ The home view reports unavailable tenant summaries explicitly.
 `--select` requests properties from the [supported user property set](src/entra-users.ts); `--fields` projects locally and must be a subset of the fetched selection.
 Text values longer than 500 characters are truncated, including strings in `businessPhones`; `--full` removes text truncation without lifting redaction or row caps.
 Explicit null values stay null, missing properties stay absent, and denied reads return structured errors rather than empty results.
-Lists accept `--filter` for an OData filter and default to a 100-row cap; `--limit` changes the cap, while the incompatible `--all` follows pages within request, byte and deadline budgets.
+User lists accept `--filter` for an OData filter and default to a 100-row cap; `--limit` changes the cap, while the incompatible `--all` follows pages within request, byte and deadline budgets.
 Partial lists report `count.complete: false`, a reason and an opaque `cursor` preserving unreturned rows.
 Resume with `--cursor <cursor-from-output>` using the same profile, authentication scopes and API version; original `--select` and `--filter` values may be repeated or omitted, and conflicting values fail validation.
 Repeat `--fields` and `--full` when the same local view is wanted; these are not saved in the cursor.

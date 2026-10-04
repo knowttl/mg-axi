@@ -149,7 +149,7 @@ A 403 alone cannot establish whether the missing prerequisite is permission, rol
 
 ## Read and write safety
 
-Follow exact Graph `@odata.nextLink` values with required headers and revalidate origin/version before attaching credentials.
+The [read execution contract](docs/execution.md#read-mechanics-and-source-contracts) owns continuation URL handling, required headers and origin/version validation before attaching credentials.
 A row cap cannot discard the remainder of an already fetched page.
 Preserve buffered rows/query context when a continuation is exposed.
 Use bounded safe-read retries, Retry-After, cancellation and truthful partial-result information.

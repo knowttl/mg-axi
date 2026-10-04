@@ -595,7 +595,7 @@ export class GraphSession {
     return this.send(operation, params, url, token, { signal, clock, deadline, consistencyLevel: args.consistencyLevel });
   }
 
-  // CORE-02: follow exact @odata.nextLink continuations through the same
+  // CORE-02: follow @odata.nextLink continuations through the same
   // operation re-authorization and shared success redaction. Row caps never
   // discard fetched rows: overflow stays buffered in the opaque cursor.
   // Request/byte/deadline ceilings and continuation cycles end as truthful

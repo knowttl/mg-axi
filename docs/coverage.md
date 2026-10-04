@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 48 (46 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 53 (51 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 4 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -71,6 +71,11 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra conditional-access policy show` | `GET:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}` | scheduled | READ-03 |
 | `mg-axi entra conditional-access named-location list` | `GET:/identity/conditionalAccess/namedLocations` | scheduled | READ-03 |
 | `mg-axi entra conditional-access named-location show` | `GET:/identity/conditionalAccess/namedLocations/{namedLocation-id}` | scheduled | READ-03 |
+| `mg-axi entra access-review definition list` | `GET:/identityGovernance/accessReviews/definitions` | scheduled | EXT-02 |
+| `mg-axi entra access-review definition show` | `GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}` | scheduled | EXT-02 |
+| `mg-axi entra access-review instance list` | `GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances` | scheduled | EXT-02 |
+| `mg-axi entra access-review instance show` | `GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}` | scheduled | EXT-02 |
+| `mg-axi entra access-review decision list` | `GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/decisions` | scheduled | EXT-02 |
 | `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |
 | `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |
 

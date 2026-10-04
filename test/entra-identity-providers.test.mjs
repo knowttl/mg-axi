@@ -13,6 +13,7 @@ const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
 const key = "33333333-3333-4333-8333-333333333333";
 const providerScopes = ["https://graph.microsoft.com/IdentityProvider.Read.All"];
+const unsupportedProviderFields = ["issuerUri", "metadataExchangeUri", "passiveSignInUri", "preferredAuthenticationProtocol", "activeSignInUri", "signOutUri", "developerId", "serviceId", "keyId"];
 
 const google = {
   "@odata.type": "#microsoft.graph.socialIdentityProvider",
@@ -22,29 +23,15 @@ const google = {
   clientId: "google-client-id",
   clientSecret: "must-never-surface",
 };
-const longMetadata = `https://login.contoso.example.com/metadata/${"x".repeat(600)}.xml`;
-const saml = {
-  "@odata.type": "#microsoft.graph.samlOrWsFedProvider",
-  id: "saml-contoso",
-  displayName: "Contoso SAML",
-  issuerUri: "https://login.contoso.example.com/issuer",
-  metadataExchangeUri: longMetadata,
-  passiveSignInUri: null,
-  preferredAuthenticationProtocol: "saml",
-  activeSignInUri: "https://login.contoso.example.com/active",
-  signOutUri: "https://login.contoso.example.com/signout",
-};
-const apple = {
-  "@odata.type": "#microsoft.graph.appleManagedIdentityProvider",
-  id: "Apple-Managed",
-  displayName: "Apple",
-  developerId: "DEV123",
-  serviceId: "com.example.service",
-  keyId: "KEY123",
-  certificateData: "must-never-surface",
+const facebook = {
+  "@odata.type": "#microsoft.graph.socialIdentityProvider",
+  id: "Facebook-OAUTH",
+  displayName: "Facebook",
+  identityProviderType: "Facebook",
+  clientId: null,
 };
 const builtin = { id: "builtin-aad" };
-const providers = [google, saml, apple, builtin];
+const providers = [google, facebook, builtin];
 
 function setupProfiles() {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-read-providers-"));
@@ -90,7 +77,7 @@ function json(status, body, headers = {}) {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function providerTransport({ denied = false, countBody = "4", countStatus = 200, typesBody = { value: ["Google", "Apple", "SAML"] } } = {}) {
+function providerTransport({ denied = false, countBody = "3", countStatus = 200, typesBody = { value: ["Google", "Facebook"] } } = {}) {
   return transport(request => {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -100,9 +87,9 @@ function providerTransport({ denied = false, countBody = "4", countStatus = 200,
       return { status: countStatus, headers: {}, body: countBody };
     }
     if (path === "/v1.0/identity/identityProviders") {
-      if (url.searchParams.has("$skiptoken")) return json(200, { value: [apple, builtin] });
+      if (url.searchParams.has("$skiptoken")) return json(200, { value: [facebook, builtin] });
       return json(200, {
-        value: [google, saml],
+        value: [google],
         "@odata.nextLink": "https://graph.microsoft.com/v1.0/identity/identityProviders?%24skiptoken=page2",
       });
     }
@@ -136,11 +123,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = await executeArgv(["entra", "identity-provider", "list", "--profile", profile], overrides);
       assert.deepEqual(result.identityProviders, [
         { id: google.id, displayName: "Google", "@odata.type": "#microsoft.graph.socialIdentityProvider" },
-        { id: saml.id, displayName: "Contoso SAML", "@odata.type": "#microsoft.graph.samlOrWsFedProvider" },
-        { id: apple.id, displayName: "Apple", "@odata.type": "#microsoft.graph.appleManagedIdentityProvider" },
+        { id: facebook.id, displayName: "Facebook", "@odata.type": "#microsoft.graph.socialIdentityProvider" },
         { id: builtin.id },
       ]);
-      assert.deepEqual(result.count, { returned: 4, complete: true });
+      assert.deepEqual(result.count, { returned: 3, complete: true });
       assert.ok(result.help.some(hint => hint.includes("entra identity-provider show --id <provider-id>")));
       assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
       assert.ok(!JSON.stringify(result).includes("must-never-surface"));
@@ -158,8 +144,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { requests, calls, overrides } = overridesFor(mode, providerTransport());
       const result = await executeArgv(["entra", "identity-provider", "available-types", "--profile", profile], overrides);
-      assert.deepEqual(result.availableProviderTypes, ["Google", "Apple", "SAML"]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.availableProviderTypes, ["Google", "Facebook"]);
+      assert.deepEqual(result.count, { returned: 2, complete: true });
       assert.equal(requests.length, 1);
       assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/identity/identityProviders/availableProviderTypes()");
       assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
@@ -187,9 +173,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode, providerTransport());
-      const first = await executeArgv(["entra", "identity-provider", "list", "--profile", profile, "--limit", "3"], overrides);
-      assert.equal(first.identityProviders.length, 3);
-      assert.deepEqual(first.count, { returned: 3, complete: false, reason: "row limit reached; buffered remainder is preserved in the cursor" });
+      const first = await executeArgv(["entra", "identity-provider", "list", "--profile", profile, "--limit", "2"], overrides);
+      assert.equal(first.identityProviders.length, 2);
+      assert.deepEqual(first.count, { returned: 2, complete: false, reason: "row limit reached; buffered remainder is preserved in the cursor" });
       assert.equal(typeof first.cursor, "string");
       const { overrides: resumeOverrides } = overridesFor(mode, providerTransport());
       const second = await executeArgv(["entra", "identity-provider", "list", "--profile", profile, "--cursor", first.cursor], resumeOverrides);
@@ -204,17 +190,16 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode, providerTransport());
-      const result = await executeArgv(["entra", "identity-provider", "show", "--id", saml.id, "--profile", profile], overrides);
-      assert.equal(result.identityProvider.id, saml.id);
-      assert.equal(result.identityProvider.issuerUri, saml.issuerUri);
-      assert.equal(result.identityProvider["@odata.type"], "#microsoft.graph.samlOrWsFedProvider");
+      const result = await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", profile], overrides);
+      assert.deepEqual(result.identityProvider, {
+        id: google.id, displayName: "Google", identityProviderType: "Google", clientId: "google-client-id",
+        "@odata.type": "#microsoft.graph.socialIdentityProvider",
+      });
       assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
-      const social = await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", profile], overrides);
-      assert.equal(social.identityProvider.clientId, "google-client-id");
-      assert.ok(!("clientSecret" in social.identityProvider));
-      const managed = await executeArgv(["entra", "identity-provider", "show", "--id", apple.id, "--profile", profile], overrides);
-      assert.equal(managed.identityProvider.keyId, "KEY123");
-      assert.ok(!("certificateData" in managed.identityProvider));
+      const social = await executeArgv(["entra", "identity-provider", "show", "--id", facebook.id, "--profile", profile], overrides);
+      assert.equal(social.identityProvider.clientId, null);
+      const builtIn = await executeArgv(["entra", "identity-provider", "show", "--id", builtin.id, "--profile", profile], overrides);
+      assert.deepEqual(builtIn.identityProvider, { id: builtin.id });
     } finally {
       teardownProfiles(state);
     }
@@ -225,12 +210,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { requests, overrides } = overridesFor(mode, providerTransport());
       const result = await executeArgv(["entra", "identity-provider", "count", "--profile", profile], overrides);
-      assert.deepEqual(result.count, { returned: 4, complete: true });
+      assert.deepEqual(result.count, { returned: 3, complete: true });
       assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identity/identityProviders/$count"));
       const filtered = await executeArgv(
         ["entra", "identity-provider", "count", "--profile", profile, "--filter", "identityProviderType eq 'Google'"], overrides);
-      assert.equal(filtered.count.returned, 4);
+      assert.equal(filtered.count.returned, 3);
       assert.ok(new URL(requests[requests.length - 1].url).searchParams.has("$filter"));
       assert.ok(filtered.help.some(hint => hint.includes("drop --filter for the tenant total")));
     } finally {
@@ -244,7 +229,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { calls, requests, overrides } = overridesFor(mode, providerTransport({ denied: true }));
       for (const args of [
         ["entra", "identity-provider", "list", "--profile", profile],
-        ["entra", "identity-provider", "show", "--id", saml.id, "--profile", profile],
+        ["entra", "identity-provider", "show", "--id", google.id, "--profile", profile],
         ["entra", "identity-provider", "count", "--profile", profile],
         ["entra", "identity-provider", "available-types", "--profile", profile],
       ]) {
@@ -283,12 +268,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 test("truncated provider text carries a --full hint without lifting redaction or caps", async () => {
   const state = setupProfiles();
   try {
-    const { overrides } = overridesFor("delegated", providerTransport());
-    const result = await executeArgv(["entra", "identity-provider", "show", "--id", saml.id, "--profile", "soc"], overrides);
-    assert.match(result.identityProvider.metadataExchangeUri, /\.\.\. \(truncated, \d+ chars total\)/);
+    const displayName = "x".repeat(600);
+    const { overrides } = overridesFor("delegated", transport(() => json(200, { ...google, displayName })));
+    const result = await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", "soc"], overrides);
+    assert.match(result.identityProvider.displayName, /\.\.\. \(truncated, \d+ chars total\)/);
     assert.ok(result.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "identity-provider", "show", "--id", saml.id, "--profile", "soc", "--full"], overrides);
-    assert.equal(full.identityProvider.metadataExchangeUri, longMetadata);
+    const full = await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", "soc", "--full"], overrides);
+    assert.equal(full.identityProvider.displayName, displayName);
     assert.ok(!full.help.some(hint => hint.includes("--full")));
     const social = await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", "soc", "--full"], overrides);
     assert.ok(!("clientSecret" in social.identityProvider));
@@ -327,7 +313,7 @@ test("unknown properties, secret fields and unfetched fields fail before HTTP", 
       /secret-bearing provider fields are never returned/,
     );
     await assert.rejects(
-      executeArgv(["entra", "identity-provider", "list", "--profile", "soc", "--fields", "issuerUri"], overrides),
+      executeArgv(["entra", "identity-provider", "list", "--profile", "soc", "--fields", "clientId"], overrides),
       /was not fetched; request it with --select/,
     );
     assert.equal(calls.length, 0);
@@ -345,6 +331,28 @@ test("provider read flags validate before profiles or HTTP", async () => {
   await assert.rejects(executeArgv(["entra", "identity-provider", "count", "--limit", "10"]), /unknown flag --limit/);
   await assert.rejects(executeArgv(["entra", "identity-provider", "list", "--limit", "10", "--all"]), { code: "VALIDATION_ERROR" });
 });
+
+for (const field of unsupportedProviderFields) {
+  for (const args of [
+    ["list", "--select"], ["list", "--fields"],
+    ["show", "--id", google.id, "--select"], ["show", "--id", google.id, "--fields"],
+  ]) {
+    test(`named provider ${args.join(" ")} refuses ${field} before credentials`, async () => {
+      const state = setupProfiles();
+      try {
+        const { calls, requests, overrides } = overridesFor("delegated", providerTransport());
+        await assert.rejects(
+          executeArgv(["entra", "identity-provider", ...args, field, "--profile", "soc"], overrides),
+          error => error.code === "VALIDATION_ERROR" && error.message.includes(`Unknown provider property ${field}`),
+        );
+        assert.equal(calls.length, 0);
+        assert.equal(requests.length, 0);
+      } finally {
+        teardownProfiles(state);
+      }
+    });
+  }
+}
 
 for (const body of [null, [], {}, { value: null }, { value: ["Google", 1] }, { value: [{ displayName: "Google" }] }]) {
   test(`available provider types rejects malformed body ${JSON.stringify(body)}`, async () => {
@@ -381,7 +389,7 @@ for (const id of ["$count", "$value", "$ref"]) {
 for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
   for (const args of [
     ["entra", "identity-provider", "list", "--profile", profile],
-    ["entra", "identity-provider", "show", "--id", saml.id, "--profile", profile],
+    ["entra", "identity-provider", "show", "--id", google.id, "--profile", profile],
     ["entra", "identity-provider", "count", "--profile", profile],
     ["entra", "identity-provider", "available-types", "--profile", profile],
   ]) {
@@ -465,7 +473,7 @@ function rawBody(request) {
 test("raw api serves reviewed provider list and show without secret fields", async () => {
   const f = rawFixture(rawBody);
   const list = await runApiGet({ path: "/identity/identityProviders", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0] }, f.deps);
-  assert.equal(list.returned, 4);
+  assert.equal(list.returned, 3);
   assert.equal(list.complete, true);
   assert.ok(!JSON.stringify(list.value).includes("must-never-surface"));
   assert.ok(list.value[0].clientId === "google-client-id");
@@ -493,3 +501,17 @@ test("raw api refuses unreviewed provider $select fields before credentials", as
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
 });
+
+for (const field of unsupportedProviderFields) {
+  for (const path of ["/identity/identityProviders", "/identity/identityProviders/Google-OAUTH"]) {
+    test(`raw provider ${path} refuses ${field} before credentials`, async () => {
+      const f = rawFixture(rawBody);
+      await assert.rejects(
+        runApiGet({ path, apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0], odata: `$select=id,${field}` }, f.deps),
+        error => error.code === "VALIDATION_ERROR" && error.message.includes(`Unreviewed $select field ${field}`),
+      );
+      assert.equal(f.credentialCalls.length, 0);
+      assert.equal(f.requests.length, 0);
+    });
+  }
+}

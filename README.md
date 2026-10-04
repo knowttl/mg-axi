@@ -257,7 +257,8 @@ Provider lists return `identityProviders`, single-provider reads return `identit
 `available-types` returns `availableProviderTypes`, an array of type names available for the tenant, with a `count` aggregate.
 Available types depend on tenant configuration and licensing; availability does not mean a provider is configured.
 Provider lists accept `--filter` as plain `$filter`; counts accept `--filter` to narrow the total server-side.
-Rows carry `@odata.type` naming the provider kind (social, SAML/WS-Fed, Apple-managed, built-in); kind-specific detail needs an explicit `--select` naming the property.
+Rows carry `@odata.type` naming the provider kind (social or built-in).
+The reviewed workforce fields are `id`, `displayName`, `identityProviderType`, and `clientId`.
 `clientSecret` and `certificateData` are never selectable and any row carrying them is scrubbed before output, so key material can never reach stdout, errors or logs.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to identity-provider reads.
 Delegated provider reads default to `https://graph.microsoft.com/IdentityProvider.Read.All`, while application profiles use the configured `.default` audience.

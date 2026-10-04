@@ -41,15 +41,6 @@ export const KNOWN_PROVIDER_FIELDS: readonly string[] = [
   "displayName",
   "identityProviderType",
   "clientId",
-  "issuerUri",
-  "metadataExchangeUri",
-  "passiveSignInUri",
-  "preferredAuthenticationProtocol",
-  "activeSignInUri",
-  "signOutUri",
-  "developerId",
-  "serviceId",
-  "keyId",
 ];
 const KNOWN_PROVIDERS = new Set(KNOWN_PROVIDER_FIELDS);
 // @odata.type is preserved on provider rows without being selectable: it

@@ -72,7 +72,7 @@ const DEVICE_FIELDS = ["id", "deviceId", "displayName", "operatingSystem", "oper
 const AU_FIELDS = ["id", "displayName", "description", "visibility", "membershipType", "membershipRule"];
 const DOMAIN_FIELDS = ["id", "authenticationType", "availabilityStatus", "isAdminManaged", "isDefault", "isInitial", "isRoot", "isVerified", "supportedServices", "passwordValidityPeriodInDays", "passwordNotificationWindowInDays", "state"];
 const DNS_RECORD_FIELDS = ["id", "isOptional", "label", "recordType", "supportedService", "ttl", "mailExchange", "preference", "canonicalName", "nameTarget", "port", "priority", "protocol", "service", "weight", "text"];
-const PROVIDER_FIELDS = ["id", "displayName", "identityProviderType", "clientId", "issuerUri", "metadataExchangeUri", "passiveSignInUri", "preferredAuthenticationProtocol", "activeSignInUri", "signOutUri", "developerId", "serviceId", "keyId"];
+const PROVIDER_FIELDS = ["id", "displayName", "identityProviderType", "clientId"];
 
 // The reviewed surface, exported for capability reporting (PACK-01) and tests.
 export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [

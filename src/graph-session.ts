@@ -676,7 +676,9 @@ export class GraphSession {
         let response: TransportResponse;
         try {
           requests += 1;
-          response = await beforeDeadline(signal => this.deps.transport({ method: "GET", url: fetchUrl, headers: headersFor(), signal }), clock, deadline, signal);
+          const requestUrl = new URL(fetchUrl);
+          if (operation.path === "/users/{user-id}/authentication/methods") requestUrl.searchParams.delete("$select");
+          response = await beforeDeadline(signal => this.deps.transport({ method: "GET", url: requestUrl.toString(), headers: headersFor(), signal }), clock, deadline, signal);
         } catch (error) {
           signal?.throwIfAborted();
           if (error instanceof DeadlineExceeded) return partial("deadline exceeded", fetchUrl, pending);

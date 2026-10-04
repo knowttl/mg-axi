@@ -185,7 +185,8 @@ There is no tenant scan through per-user methods: aggregate MFA coverage belongs
 The report does not cover disabled users, so absence from it is never proof of no MFA; that gap rides in the leaf help and every report output.
 Phone numbers are protected values: the shared session replaces them with the redaction marker before output or cursor buffering (including resume cursors), so neither output nor cursors ever carry one; `--full` never lifts that redaction.
 Method registration and deletion belong to no read slice and are never constructed.
-`--select` requests properties from the [reviewed authentication property sets](src/entra-auth-methods.ts); `--fields` must be a subset of the fetched selection.
+For methods, `--select` selects output properties locally from the [reviewed authentication property sets](src/entra-auth-methods.ts); no `$select` is sent to Graph.
+For the registration report, `--select` requests server properties; `--fields` must be a subset of the default or explicit selection for either command.
 `--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; the named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply.
 Delegated method reads default to `https://graph.microsoft.com/UserAuthenticationMethod.Read.All` (delegated self-reads may use `UserAuthenticationMethod.Read`) and registration reads default to `https://graph.microsoft.com/AuditLog.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers acting on another user additionally need Global Reader, Authentication Administrator or Privileged Authentication Administrator for methods, and Reports Reader, Security Reader, Security Administrator or Global Reader for the report.

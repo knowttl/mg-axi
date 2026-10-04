@@ -66,8 +66,8 @@ const ownerRead = {
 };
 const authMethodRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
-  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed method set; phoneNumber is redacted whenever it is fetched" },
-  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  select: { value: "comma-separated-properties", description: "Select output properties locally from the reviewed method set; phoneNumber is always redacted; no $select is sent to Graph" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must belong to the default or --select set" },
   full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to UserAuthenticationMethod.Read.All" },

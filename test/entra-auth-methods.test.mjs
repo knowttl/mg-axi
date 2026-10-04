@@ -107,7 +107,10 @@ function authTransport(denied = false) {
     const url = new URL(request.url);
     const path = url.pathname;
     if (denied) return json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } });
-    if (/^\/v1\.0\/users\/[^/]+\/authentication\/methods$/.test(path)) return json(200, { value: methods });
+    if (/^\/v1\.0\/users\/[^/]+\/authentication\/methods$/.test(path)) {
+      if (url.searchParams.has("$select")) return json(400, { error: { code: "BadRequest", message: "Unsupported $select" } });
+      return json(200, { value: methods });
+    }
     if (path === "/v1.0/reports/authenticationMethods/userRegistrationDetails") return json(200, { value: report });
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
@@ -159,7 +162,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       const url = new URL(requests[0].url);
       assert.ok(url.pathname.endsWith(`/users/${userId}/authentication/methods`));
-      assert.equal(url.searchParams.get("$select"), "id,displayName,createdDateTime");
+      assert.equal(url.searchParams.has("$select"), false);
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
     } finally {
       teardownProfiles(state);
@@ -169,7 +172,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
   test(`${mode} redacts method phone numbers in output and resume cursors`, async () => {
     const state = setupProfiles();
     try {
-      const { overrides } = overridesFor(mode);
+      const { requests, overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "user", "authentication-method", "list",
         "--user", userId, "--profile", profile, "--select", "id,displayName,phoneNumber,phoneType", "--limit", "2"], overrides);
       assert.equal(first.authenticationMethods.length, 2);
@@ -178,9 +181,35 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(first.count, { returned: 2, complete: false, reason: first.count.reason });
       assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
       assert.ok(!JSON.stringify(first).includes("+1 5550100"));
+      assert.equal(new URL(requests[0].url).searchParams.has("$select"), false);
       const second = await executeArgv(["entra", "user", "authentication-method", "list",
         "--user", userId, "--profile", profile, "--cursor", first.cursor], overrides);
       assert.ok(!JSON.stringify(second).includes("+1 5550100"));
+      assert.deepEqual(second.count, { returned: 1, complete: true });
+      assert.deepEqual(second.authenticationMethods, [{ id: m3.id, "@odata.type": m3["@odata.type"] }]);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} resumes method selection locally across a continuation request`, async () => {
+    const state = setupProfiles();
+    try {
+      const path = `https://graph.microsoft.com/v1.0/users/${userId}/authentication/methods`;
+      const fixture = transport(request => {
+        const url = new URL(request.url);
+        assert.equal(url.searchParams.has("$select"), false);
+        return url.searchParams.has("$skiptoken")
+          ? json(200, { value: [m3] })
+          : json(200, { value: [m1], "@odata.nextLink": `${path}?$skiptoken=next&$select=id,emailAddress` });
+      });
+      const { requests, overrides } = overridesFor(mode, fixture);
+      const first = await executeArgv(["entra", "user", "authentication-method", "list",
+        "--user", userId, "--profile", profile, "--select", "id,emailAddress", "--limit", "1"], overrides);
+      const second = await executeArgv(["entra", "user", "authentication-method", "list",
+        "--user", userId, "--profile", profile, "--cursor", first.cursor], overrides);
+      assert.equal(requests.length, 2);
+      assert.deepEqual(second.authenticationMethods, [{ id: m3.id, emailAddress: m3.emailAddress, "@odata.type": m3["@odata.type"] }]);
       assert.deepEqual(second.count, { returned: 1, complete: true });
     } finally {
       teardownProfiles(state);

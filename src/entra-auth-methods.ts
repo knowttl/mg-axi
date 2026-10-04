@@ -195,7 +195,7 @@ function selectedFields(
   const fields = flags.fields === undefined ? [...select] : fieldList(flags.fields, known, knownList, "fields", help);
   const missing = fields.find(field => !select.includes(field));
   if (missing) {
-    throw new AxiError(`--fields ${missing} was not fetched; request it with --select`, "VALIDATION_ERROR", [help]);
+    throw new AxiError(`--fields ${missing} was not selected; request it with --select`, "VALIDATION_ERROR", [help]);
   }
   return { select, fields };
 }

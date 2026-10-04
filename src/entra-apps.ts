@@ -20,13 +20,11 @@ import type { AnyProfile } from "./profiles.js";
 // (appRoleAssignments, oauth2PermissionGrants) are READ-08 and stay out of
 // this slice; only owners are projected as relationships.
 //
-// Credential safety: keyCredentials and passwordCredentials are projected to
-// expiry metadata only (keyId, displayName, start/end dates). Graph GET never
-// returns secret values, and this module additionally strips every other
-// credential subfield - hint, secretText, value, key and key material - even
-// if a server ever returned one, before output, errors or logs. The six GET
-// operations below are the only ones this module ever binds; secret-minting
-// routes (addPassword, addKey) and every write stay refused before
+// Credential safety belongs to the shared session's SAFE_CREDENTIAL_FIELDS
+// projection, applied before collection buffering and again on cursor decode.
+// Local projection uses that same allowlist for the displayed view.
+// The six GET operations below are the only ones this module ever binds;
+// secret-minting routes (addPassword, addKey) and every write stay refused before
 // credentials via checkReadOperation.
 
 // Every application property this slice may request or display. Anything
@@ -67,11 +65,6 @@ const KNOWN_OWNERS = new Set(KNOWN_OWNER_FIELDS);
 // the owner kind (user, servicePrincipal, application).
 const OWNER_TYPE_PROPERTY = "@odata.type";
 
-// Expiry metadata only: identifiers, display names and validity windows.
-// Every other credential subfield (hint, secretText, value, key, key
-// material, custom identifiers) is dropped by projectCredentials, never
-// truncated, never redacted-after-the-fact - simply never projected.
-
 // Compact rows: object id, client ID and display name. Both identifiers ride
 // together so appId is never mistaken for the object id.
 const DEFAULT_APP_LIST_SELECT = ["id", "appId", "displayName"];
@@ -82,7 +75,7 @@ const DEFAULT_SP_SHOW_SELECT = [...KNOWN_SP_FIELDS];
 // Compact owner rows: identifier, display name and address.
 const DEFAULT_OWNER_SELECT = ["id", "displayName", "mail"];
 // Application.Read.All covers applications, service principals and owners in
-// both modes; delegated callers pass it explicitly via --scopes.
+// both modes; delegated reads default to it unless --scopes overrides it.
 export const DEFAULT_DELEGATED_SCOPES = ["https://graph.microsoft.com/Application.Read.All"];
 const TRUNCATE_AT = 500;
 

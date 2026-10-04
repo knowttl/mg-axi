@@ -6,7 +6,8 @@ The Entra pack comes first, with phased full coverage and later gated named writ
 CLI-01 provides a local TypeScript/AXI shell, strict command catalogue, leaf help and fast version probes.
 AUTH-01 adds versioned dedicated-app delegated profiles and explicit login.
 AUTH-02 adds certificate and workload-federated application profiles and a client-credentials service.
-Graph execution remains scheduled for later [build slices](docs/build-plan.md); the CLI does not yet acquire application tokens.
+CORE-01 adds the shared policy-enforced Graph read session, exercised through an injected fixture HTTP transport.
+CLI Graph execution remains scheduled for later [build slices](docs/build-plan.md); the CLI does not yet acquire application tokens.
 No tenant, credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):

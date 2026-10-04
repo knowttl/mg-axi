@@ -76,6 +76,7 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra risk-detection show` | native | read |
 | `mg-axi entra conditional-access policy list` | native | read |
 | `mg-axi entra conditional-access policy show` | native | read |
+| `mg-axi entra conditional-access policy update` | native | write |
 | `mg-axi entra conditional-access named-location list` | native | read |
 | `mg-axi entra conditional-access named-location show` | native | read |
 | `mg-axi api get` | native | read |

@@ -4,8 +4,8 @@
 
 Only named, approved pack commands can mutate; raw API remains read-only.
 WRITE-00 provides the shared [mutation coordinator](../src/mutations.ts).
-WRITE-01 ships the first named command (`entra group member add`); WRITE-02 adds the named `entra user update` account-state command; WRITE-03 adds the named `entra user revoke-sessions` session-revocation action; WRITE-05 adds the named `entra risky-user dismiss` single-user action.
-All four commands use the shared production [mutation transport](../src/mutations.ts); later families still ship independently with their own contracts.
+WRITE-01 ships the first named command (`entra group member add`); WRITE-02 adds the named `entra user update` account-state command; WRITE-03 adds the named `entra user revoke-sessions` session-revocation action; WRITE-04 adds the named `entra conditional-access policy update` command; WRITE-05 adds the named `entra risky-user dismiss` single-user action.
+All five commands use the shared production [mutation transport](../src/mutations.ts); later families still ship independently with their own contracts.
 Profile enablement, environment configuration and named-write usage, confirmation, identity pinning, permissions and limitations are documented in [README.md](../README.md).
 The coordinator snapshots the validated profile's tenant, identity and approved-operation scope at creation; later profile edits cannot widen that scope.
 It checks forced read-only and profile enablement before preview, and the sender checks forced read-only again before credential acquisition and immediately before transport handoff.
@@ -73,3 +73,9 @@ The $ref body carries exactly `{"@odata.id": "https://graph.microsoft.com/v1.0/d
 The user is verified through `GET:/users/{user-id}` with `$select=id` before preview or no-op detection and again before sending; failed or malformed user reads block the operation.
 Group `isAssignableToRole` must be explicitly false or null; true, missing and malformed values are refused.
 Desired state is read through `GET:/groups/{group-id}/members` in the preview and rechecked before the single send; an incomplete member window proceeds to the POST where a duplicate 400 lands as a no-op.
+
+The WRITE-04 implementation in [entra-ca-policy-update](../src/entra-ca-policy-update.ts) PATCHes one policy with only the reviewed fields `displayName`, `state`, `conditions`, `grantControls` and `sessionControls`; any other property has no flag and is refused before credentials, and only v1.0 mutates.
+Current state is read through the READ-03 policy show route for a current-versus-proposed diff preview and rechecked before the single send; an already-desired value set is a no-op.
+Every execute is disruptive and needs the typed policy-ID confirmation.
+The preview carries a lockout analysis over the proposed effective policy: all-users block coverage without exclusions is refused, lesser all-users coverage without exclusions needs `--acknowledge-lockout-risk`, and enforcement-touching changes stay disabled while the analysis inputs are unreadable.
+The endpoint documents no ETag or If-Match precondition, so the command sends none and the race is stated in the preview and usage guidance; the coordinator outcome on the 204 response is the only proof, verified afterwards with policy show.

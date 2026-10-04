@@ -232,7 +232,12 @@ Use `--full` when reasoning from complete condition or control text; `--select` 
 To replay a resumed result with `--full`, reuse the original input cursor; the returned cursor continues after that result.
 Delegated policy and location reads default to `https://graph.microsoft.com/Policy.Read.All`; application profiles require admin-consented `Policy.Read.All`, use the configured Graph `.default` audience and reject `--scopes`.
 HTTP 403 policy and location errors name the operation's supported directory roles (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access) and include guidance from the [licensing contract](docs/graph-coverage.md#licence-matrix-by-area); the response alone does not identify the missing prerequisite.
-No policy mutation lives here; policy updates belong to a later write slice.
+WRITE-04 adds a named write: `mg-axi entra conditional-access policy update --id <policy-id>` PATCHes one policy with only the reviewed fields `--display-name`, `--state`, `--conditions`, `--grant-controls` and `--session-controls` (JSON objects for the last three); any other property has no flag and is refused before credentials.
+Without `--execute` the command previews the current-versus-proposed diff read through the policy show route and journals nothing; an already-desired value set is a no-op with exit 0.
+Every `--execute` run is disruptive and needs `--confirm '<policy-id>'` repeating the target exactly.
+The preview carries a lockout analysis over the proposed effective policy: an enabled all-users policy with no exclusions under block controls is refused outright, lesser all-users coverage without exclusions needs `--acknowledge-lockout-risk`, and enforcement-touching changes stay disabled while the current conditions, user scope or grant controls are unreadable.
+Graph documents no ETag or If-Match precondition for this endpoint, so the command sends none and promises no concurrency protection.
+The mutation needs D/A `Policy.Read.All` plus `Policy.ReadWrite.ConditionalAccess`; delegated callers additionally need Conditional Access Administrator or Security Administrator, and CA needs P1 (P2 for risk-based features).
 
 Inspect one user's authentication methods and the tenant registration report; delegated profiles first need explicit login with the read scopes:
 
@@ -353,6 +358,7 @@ For the supported membership write, see the group usage above.
 Named writes run through the shared coordinator under the [named-write execution contract](docs/execution.md#named-writes).
 WRITE-02 binds the `entra.user.update` operation name: hand-enable account writes with `{ "allowWrites": true, "operations": ["entra.user.update"] }`.
 WRITE-03 binds the `entra.user.revokeSessions` operation name: hand-enable session revocation with `{ "allowWrites": true, "operations": ["entra.user.revokeSessions"] }`.
+WRITE-04 binds the `entra.conditional-access.policy.update` operation name: hand-enable policy writes with `{ "allowWrites": true, "operations": ["entra.conditional-access.policy.update"] }`.
 WRITE-05 binds the `entra.risky-user.dismiss` operation name: hand-enable risk dismissals with `{ "allowWrites": true, "operations": ["entra.risky-user.dismiss"] }`.
 The journal defaults to `~/.mg-axi/writes.log`; a nonblank `MG_AXI_WRITE_LOG` overrides that path.
 

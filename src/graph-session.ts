@@ -22,8 +22,8 @@ import {
 export const REDACTED = "***redacted***";
 export const GRAPH_HOST = "graph.microsoft.com";
 // Conservative read-query allowlist. Per-operation review (READ slices) can
-// extend it; unknown keys fail closed here. $search/$expand need eventual
-// consistency (see checkConsistency); $skiptoken carries paging state.
+// extend it; unknown keys fail closed here. $search/$count=true need eventual
+// consistency (see checkQueryContext); $skiptoken carries paging state.
 export const ALLOWED_QUERY_KEYS: readonly string[] = ["$select", "$filter", "$top", "$orderby", "$count", "$skiptoken", "$search", "$expand"];
 const ALLOWED_KEYS = new Set(ALLOWED_QUERY_KEYS);
 // Only these dispositions may execute. `scheduled` stays executable at this
@@ -292,7 +292,7 @@ function denied(operation: SessionOperation, reason: string): AxiError {
 // same commercial host, same version, same route template, identical bound
 // resource values and only allowed query keys. Returns the canonical URL.
 // CORE-02 reuses this when following @odata.nextLink pages.
-export function authorizeUrl(operation: SessionOperation, params: Record<string, string>, raw: string, base?: string): string {
+export function authorizeUrl(operation: SessionOperation, params: Record<string, string>, raw: string, base?: string, consistencyLevel?: "eventual"): string {
   let url: URL;
   try {
     url = new URL(raw, base ?? `https://${GRAPH_HOST}/${operation.version}/`);
@@ -312,13 +312,17 @@ export function authorizeUrl(operation: SessionOperation, params: Record<string,
       throw denied(operation, `the target changes the bound resource {${name}}`);
     }
   }
+  const queryKeys = new Set<string>();
   for (const [key, value] of url.searchParams) {
+    if (queryKeys.has(key)) throw denied(operation, `the target repeats query ${key}`);
+    queryKeys.add(key);
     try {
       checkQueryEntry(key, value);
     } catch {
       throw denied(operation, `the target carries unsupported query ${key}`);
     }
   }
+  checkQueryContext(Object.fromEntries(url.searchParams), consistencyLevel);
   url.hash = "";
   return url.toString();
 }
@@ -341,13 +345,27 @@ function faultBody(body: string): string {
   }
 }
 
-function checkConsistency(query: Record<string, string>, consistencyLevel: "eventual" | undefined): void {
+function checkQueryContext(query: Record<string, string>, consistencyLevel: "eventual" | undefined): void {
   if (consistencyLevel !== undefined && consistencyLevel !== "eventual") {
     throw new AxiError(`Unsupported consistency ${consistencyLevel}`, "VALIDATION_ERROR", [
       "Advanced queries use ConsistencyLevel eventual or no header",
     ]);
   }
   const needsEventual = Object.hasOwn(query, "$search") || String(query["$count"] ?? "").toLowerCase() === "true";
+  if (Object.hasOwn(query, "$expand")) {
+    if (needsEventual) {
+      throw new AxiError("Advanced queries cannot use $expand", "VALIDATION_ERROR", ["Use $expand separately from $search and $count=true"]);
+    }
+    for (const relationship of query["$expand"]!.split(",")) {
+      const path = relationship.trim();
+      if (!/^[a-zA-Z][a-zA-Z0-9]*(\/[a-zA-Z][a-zA-Z0-9]*)*$/.test(path)) {
+        throw new AxiError("Unsupported $expand relationship", "VALIDATION_ERROR", ["Expand explicit relationship paths without nested query options"]);
+      }
+      if (sensitiveArea(path)) {
+        throw new AxiError("Sensitive relationships cannot be expanded", "POLICY_DENIED", ["Mail and file content stay disabled for this profile"]);
+      }
+    }
+  }
   if (needsEventual && consistencyLevel !== "eventual") {
     throw new AxiError("Advanced query needs ConsistencyLevel eventual", "VALIDATION_ERROR", [
       "Pass consistencyLevel eventual with $search or $count=true; unsupported combinations fail before credentials",
@@ -389,7 +407,36 @@ function backoffMs(attempt: number): number {
 }
 
 function digestUrl(url: string): string {
-  return createHash("sha256").update(url.toLowerCase()).digest("hex").slice(0, 16);
+  return createHash("sha256").update(url).digest("hex").slice(0, 16);
+}
+
+class DeadlineExceeded extends Error {}
+
+async function requestBeforeDeadline(transport: GraphTransport, request: TransportRequest, clock: Clock, deadline: number): Promise<TransportResponse> {
+  request.signal?.throwIfAborted();
+  const remaining = deadline - clock.now();
+  if (remaining <= 0) throw new DeadlineExceeded();
+  const controller = new AbortController();
+  const timer = new AbortController();
+  const signal = request.signal ? AbortSignal.any([request.signal, controller.signal]) : controller.signal;
+  let onAbort: () => void;
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  const timeout = clock.sleep(remaining, timer.signal).then(() => {
+    controller.abort(new DeadlineExceeded());
+    throw signal.reason;
+  });
+  try {
+    const response = await Promise.race([Promise.resolve().then(() => transport({ ...request, signal })), timeout, aborted]);
+    signal.throwIfAborted();
+    if (clock.now() >= deadline) throw new DeadlineExceeded();
+    return response;
+  } finally {
+    timer.abort();
+    signal.removeEventListener("abort", onAbort!);
+  }
 }
 
 function bodyBytes(body: string): number {
@@ -464,7 +511,7 @@ export class GraphSession {
     const profile = validateProfile(args.profile);
     this.authorizePolicy(profile, operation);
     const query = args.query ?? {};
-    checkConsistency(query, args.consistencyLevel);
+    checkQueryContext(query, args.consistencyLevel);
     const params = args.params ?? {};
     const url = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params)}${buildQuery(query)}`;
     const token =
@@ -492,7 +539,7 @@ export class GraphSession {
     const profile = validateProfile(args.profile);
     this.authorizePolicy(profile, operation);
     const query = args.query ?? {};
-    checkConsistency(query, args.consistencyLevel);
+    checkQueryContext(query, args.consistencyLevel);
     checkLimit(args.limit);
     const budget = checkBudget(args.budget);
     if (args.cursor !== undefined && (typeof args.cursor !== "string" || !args.cursor)) {
@@ -503,6 +550,7 @@ export class GraphSession {
     const clock = args.clock ?? systemClock;
     const signal = args.signal;
     const startUrl = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params)}${buildQuery(query)}`;
+    const resumeUrl = resumed?.next === undefined ? undefined : authorizeUrl(operation, params, resumed.next, undefined, args.consistencyLevel);
     const token =
       profile.mode === "delegated"
         ? (await this.deps.delegated.credential(validateDelegatedProfile(profile), args.scopes ?? [])).token
@@ -515,7 +563,7 @@ export class GraphSession {
     });
     const deadline = clock.now() + budget.deadlineMs;
     let pending: unknown[] = resumed ? [...resumed.buffered] : [];
-    let current: string | undefined = resumed ? resumed.next : startUrl;
+    let current: string | undefined = resumed ? resumeUrl : startUrl;
     const seenList: string[] = resumed ? [...resumed.seen] : [];
     const seen = new Set(seenList);
     const remember = (url: string): void => {
@@ -540,44 +588,46 @@ export class GraphSession {
     });
     for (;;) {
       signal?.throwIfAborted();
+      if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
       while (pending.length > 0 && (args.limit === undefined || results.length < args.limit)) results.push(pending.shift()!);
+      if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
       if (args.limit !== undefined && results.length >= args.limit) {
         if (pending.length === 0 && !current) return { value: results, complete: true, requests, bytes };
         return partial("row limit reached; buffered remainder is preserved in the cursor", current, pending);
       }
       if (!current) return { value: results, complete: true, requests, bytes };
       if (requests >= budget.maxRequests) return partial(`request budget exhausted after ${requests} requests`, current, pending);
-      if (clock.now() > deadline) return partial("deadline exceeded", current, pending);
       const cycleKey = digestUrl(current);
       if (seen.has(cycleKey)) return partial("continuation cycle detected; result is partial, never complete", current, pending);
-      remember(current);
       let fetchUrl = current;
+      const redirects = new Set([digestUrl(fetchUrl)]);
       let hops = 0;
       let throttleAttempt = 0;
       for (;;) {
         signal?.throwIfAborted();
         if (requests >= budget.maxRequests) return partial(`request budget exhausted after ${requests} requests`, fetchUrl, pending);
-        if (clock.now() > deadline) return partial("deadline exceeded", fetchUrl, pending);
+        if (clock.now() >= deadline) return partial("deadline exceeded", fetchUrl, pending);
         let response: TransportResponse;
         try {
-          response = await this.deps.transport({ method: "GET", url: fetchUrl, headers: headersFor(), signal });
-        } catch {
+          requests += 1;
+          response = await requestBeforeDeadline(this.deps.transport, { method: "GET", url: fetchUrl, headers: headersFor(), signal }, clock, deadline);
+        } catch (error) {
           signal?.throwIfAborted();
+          if (error instanceof DeadlineExceeded) return partial("deadline exceeded", fetchUrl, pending);
           throw new AxiError(`Graph request for ${operation.id} failed before a response was received`, "GRAPH_ERROR", [
             `Check network access to https://${GRAPH_HOST}`,
             "Transport failures carry no Graph diagnosis; do not retry blindly",
           ]);
         }
-        requests += 1;
         bytes += bodyBytes(response.body ?? "");
         const status = response.status;
         if (status === 301 || status === 302 || status === 303 || status === 307 || status === 308) {
           const location = header(response.headers, "location");
           if (!location) throw new AxiError(`Graph redirect for ${operation.id} is missing its target`, "GRAPH_ERROR", ["A redirect without a target cannot be re-authorized"]);
           if (hops >= MAX_REDIRECTS) throw denied(operation, `the redirect exceeds ${MAX_REDIRECTS} hops`);
-          const target = authorizeUrl(operation, params, location, fetchUrl);
-          if (seen.has(digestUrl(target))) return partial("continuation cycle detected; result is partial, never complete", target, pending);
-          remember(target);
+          const target = authorizeUrl(operation, params, location, fetchUrl, args.consistencyLevel);
+          if (seen.has(digestUrl(target)) || redirects.has(digestUrl(target))) return partial("continuation cycle detected; result is partial, never complete", target, pending);
+          redirects.add(digestUrl(target));
           fetchUrl = target;
           hops += 1;
           if (bytes > budget.maxBytes) return partial(`byte budget exceeded after ${bytes} bytes`, fetchUrl, pending);
@@ -596,41 +646,30 @@ export class GraphSession {
           await clock.sleep(wait, signal);
           continue;
         }
-        if (bytes > budget.maxBytes) {
-          if (status >= 200 && status < 300) {
-            try {
-              const parsed = status === 204 || status === 205 ? { value: [] } : (redact(JSON.parse(response.body)) as unknown);
-              const rows = status === 204 || status === 205 ? [] : valuesOf(operation, parsed);
-              const rawNext = status === 204 || status === 205 ? undefined : nextLinkOf(parsed);
-              const nextUrl = rawNext ? authorizeUrl(operation, params, rawNext, fetchUrl) : undefined;
-              pending = [...pending, ...rows];
-              return partial(`byte budget exceeded after ${bytes} bytes`, nextUrl, pending);
-            } catch (error) {
-              if (error instanceof AxiError) throw error;
-              throw new AxiError(`Graph returned a non-JSON success body for ${operation.id}`, "GRAPH_ERROR", ["Successful reads are JSON; anything else is malformed"]);
-            }
-          }
-          return partial(`byte budget exceeded after ${bytes} bytes`, fetchUrl, pending);
-        }
+        if (status < 200 || status >= 300) throw this.translateError(operation, response);
         if (status === 204 || status === 205) {
+          remember(current);
+          remember(fetchUrl);
           current = undefined;
+          if (bytes > budget.maxBytes) return partial(`byte budget exceeded after ${bytes} bytes`, current, pending);
           break;
         }
-        if (status >= 200 && status < 300) {
-          if (!response.body) throw new AxiError(`Graph returned an empty success body for ${operation.id}`, "GRAPH_ERROR", ["Empty reads are malformed; treat the result as unknown, not empty"]);
-          let parsed: unknown;
-          try {
-            parsed = redact(JSON.parse(response.body));
-          } catch {
-            throw new AxiError(`Graph returned a non-JSON success body for ${operation.id}`, "GRAPH_ERROR", ["Successful reads are JSON; anything else is malformed"]);
-          }
-          const rows = valuesOf(operation, parsed);
-          const rawNext = nextLinkOf(parsed);
-          current = rawNext ? authorizeUrl(operation, params, rawNext, fetchUrl) : undefined;
-          pending = [...pending, ...rows];
-          break;
+        if (!response.body) throw new AxiError(`Graph returned an empty success body for ${operation.id}`, "GRAPH_ERROR", ["Empty reads are malformed; treat the result as unknown, not empty"]);
+        let parsed: unknown;
+        try {
+          parsed = redact(JSON.parse(response.body));
+        } catch {
+          throw new AxiError(`Graph returned a non-JSON success body for ${operation.id}`, "GRAPH_ERROR", ["Successful reads are JSON; anything else is malformed"]);
         }
-        throw this.translateError(operation, response);
+        const rows = valuesOf(operation, parsed);
+        const rawNext = nextLinkOf(parsed);
+        const nextUrl = rawNext ? authorizeUrl(operation, params, rawNext, fetchUrl, args.consistencyLevel) : undefined;
+        remember(current);
+        remember(fetchUrl);
+        current = nextUrl;
+        pending = [...pending, ...rows];
+        if (bytes > budget.maxBytes) return partial(`byte budget exceeded after ${bytes} bytes`, current, pending);
+        break;
       }
     }
   }
@@ -689,7 +728,7 @@ export class GraphSession {
     let current = url;
     let hops = 0;
     let throttleAttempt = 0;
-    const visited = new Set([current.toLowerCase()]);
+    const visited = new Set([current]);
     const headersFor = (): Record<string, string> => ({
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
@@ -699,12 +738,13 @@ export class GraphSession {
     for (;;) {
       signal?.throwIfAborted();
       if (requests >= DEFAULT_MAX_REQUESTS) throw new AxiError(`Graph request budget for ${operation.id} is exhausted after ${requests} requests`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
-      if (clock.now() > deadline) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
+      if (clock.now() >= deadline) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
       let response: TransportResponse;
       try {
-        response = await this.deps.transport({ method: "GET", url: current, headers: headersFor(), signal });
-      } catch {
+        response = await requestBeforeDeadline(this.deps.transport, { method: "GET", url: current, headers: headersFor(), signal }, clock, deadline);
+      } catch (error) {
         signal?.throwIfAborted();
+        if (error instanceof DeadlineExceeded) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
         throw new AxiError(`Graph request for ${operation.id} failed before a response was received`, "GRAPH_ERROR", [
           `Check network access to https://${GRAPH_HOST}`,
           "Transport failures carry no Graph diagnosis; do not retry blindly",
@@ -715,9 +755,9 @@ export class GraphSession {
         const location = header(response.headers, "location");
         if (!location) throw new AxiError(`Graph redirect for ${operation.id} is missing its target`, "GRAPH_ERROR", ["A redirect without a target cannot be re-authorized"]);
         if (hops >= MAX_REDIRECTS) throw denied(operation, `the redirect exceeds ${MAX_REDIRECTS} hops`);
-        const target = authorizeUrl(operation, params, location, current);
-        if (visited.has(target.toLowerCase())) throw denied(operation, "the redirect loops");
-        visited.add(target.toLowerCase());
+        const target = authorizeUrl(operation, params, location, current, opts.consistencyLevel);
+        if (visited.has(target)) throw denied(operation, "the redirect loops");
+        visited.add(target);
         current = target;
         hops += 1;
         throttleAttempt = 0;
@@ -732,7 +772,10 @@ export class GraphSession {
         await clock.sleep(wait, signal);
         continue;
       }
-      return this.translate(operation, response);
+      const result = this.translate(operation, response);
+      signal?.throwIfAborted();
+      if (clock.now() >= deadline) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
+      return result;
     }
   }
 

@@ -40,11 +40,20 @@ function fakeClock(start = 1_000_000) {
     sleeps,
     clock: {
       now: () => t,
-      sleep: async (ms, signal) => {
+      sleep: (ms, signal) => new Promise((resolve, reject) => {
         signal?.throwIfAborted();
-        sleeps.push(ms);
-        t += ms;
-      },
+        const onAbort = () => {
+          clearImmediate(timer);
+          reject(signal.reason);
+        };
+        const timer = setImmediate(() => {
+          signal?.removeEventListener("abort", onAbort);
+          sleeps.push(ms);
+          t += ms;
+          resolve();
+        });
+        signal?.addEventListener("abort", onAbort, { once: true });
+      }),
     },
   };
 }
@@ -309,3 +318,138 @@ test("invalid budgets fail before credential or HTTP", async () => {
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
 });
+
+for (const next of ["https://example.invalid/", "https://graph.microsoft.com/v1.0/applications", "https://graph.microsoft.com/v1.0/users/other"]) {
+  test(`cursor destination is authorized before credentials: ${next}`, async () => {
+    const f = fixture(json(200, { value: [] }));
+    const cursor = Buffer.from(JSON.stringify({ v: 1, op: users.id, next, buffered: [], seen: [] })).toString("base64url");
+    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor }), { code: "POLICY_DENIED" });
+    assert.equal(f.credentialCalls.length, 0);
+    assert.equal(f.requests.length, 0);
+  });
+}
+
+for (const [name, response, budget] of [
+  ["throttle", json(429, {}, { "retry-after": "120" }), {}],
+  ["throttle byte budget", json(503, { message: "busy" }), { maxBytes: 1 }],
+  ["redirect request budget", json(302, {}, { location: "/v1.0/users?$skiptoken=target" }), { maxRequests: 1 }],
+  ["redirect byte budget", json(302, {}, { location: "/v1.0/users?$skiptoken=target" }), { maxBytes: 1 }],
+  ["retry request budget", json(429, {}, { "retry-after": "1" }), { maxRequests: 1 }],
+  ["retry deadline", json(429, {}, { "retry-after": "5" }), { deadlineMs: 1000 }],
+]) {
+  test(`unfinished ${name} request can resume`, async () => {
+    const f = fixture((request, count) => count === 1 ? response : json(200, { value: [{ id: "resumed" }] }));
+    const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, budget, clock: fakeClock().clock });
+    assert.equal(first.complete, false);
+    const second = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor });
+    assert.deepEqual(second.value, [{ id: "resumed" }]);
+    assert.equal(second.complete, true);
+    assert.equal(f.requests.length, 2);
+  });
+}
+
+for (const method of ["collect", "execute"]) {
+  test(`${method} keeps continuation token case distinct`, async () => {
+    const f = fixture((request, count) => method === "collect"
+      ? json(200, { value: [{ id: count }], ...(count < 3 ? { "@odata.nextLink": `https://graph.microsoft.com/v1.0/users?$skiptoken=${count === 1 ? "AbC" : "abc"}` } : {}) })
+      : count < 3 ? json(302, {}, { location: `/v1.0/users?$skiptoken=${count === 1 ? "AbC" : "abc"}` }) : json(200, { value: [{ id: 3 }] }));
+    const result = await f.session[method]({ profile: delegatedProfile, operation: users, scopes });
+    assert.equal(f.requests.length, 3);
+    assert.equal(result.value.at(-1).id, 3);
+  });
+
+  test(`${method} bounds an unresponsive transport and aborts it`, async () => {
+    const f = fixture(() => new Promise(() => {}));
+    const pending = f.session[method]({ profile: delegatedProfile, operation: users, scopes, clock: fakeClock().clock });
+    if (method === "collect") {
+      const result = await pending;
+      assert.equal(result.complete, false);
+      assert.match(result.reason, /deadline/);
+      assert.equal(decodeCursor(result.cursor).seen.length, 0);
+    } else {
+      await assert.rejects(pending, error => error.code === "GRAPH_ERROR" && /deadline/.test(error.message));
+    }
+    assert.equal(f.requests[0].signal.aborted, true);
+  });
+
+  test(`${method} rejects a success received after its deadline`, async () => {
+    let now = 0;
+    const clock = { now: () => now, sleep: () => new Promise(() => {}) };
+    const f = fixture(() => { now = 30_001; return json(200, { value: [{ id: "late" }] }); });
+    const pending = f.session[method]({ profile: delegatedProfile, operation: users, scopes, clock });
+    if (method === "collect") {
+      const result = await pending;
+      assert.equal(result.complete, false);
+      assert.match(result.reason, /deadline/);
+      assert.deepEqual(result.value, []);
+    } else {
+      await assert.rejects(pending, error => error.code === "GRAPH_ERROR" && /deadline/.test(error.message));
+    }
+  });
+
+  for (const [query, code] of [
+    [{ $expand: "files" }, "POLICY_DENIED"],
+    [{ $expand: "manager/messages" }, "POLICY_DENIED"],
+    [{ $expand: "manager($expand=messages)" }, "VALIDATION_ERROR"],
+    [{ $expand: "*" }, "VALIDATION_ERROR"],
+    [{ $search: '"displayName:ana"', $expand: "manager" }, "VALIDATION_ERROR"],
+    [{ $count: "true", $expand: "manager" }, "VALIDATION_ERROR"],
+  ]) {
+    test(`${method} rejects unsafe query ${JSON.stringify(query)} before credentials`, async () => {
+      const f = fixture(json(200, { value: [] }));
+      await assert.rejects(f.session[method]({ profile: delegatedProfile, operation: users, scopes, query, consistencyLevel: "eventual" }), { code });
+      assert.equal(f.credentialCalls.length, 0);
+      assert.equal(f.requests.length, 0);
+    });
+  }
+}
+
+for (const [status, code] of [[401, "AUTH_REQUIRED"], [403, "GRAPH_ERROR"], [404, "GRAPH_ERROR"], [500, "GRAPH_ERROR"]]) {
+  test(`byte budget preserves terminal ${status} error`, async () => {
+    const f = fixture(json(status, { error: { code: "Denied", message: "terminal failure" } }));
+    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, budget: { maxBytes: 1 } }), error => error.code === code && error.message.includes(String(status)));
+    assert.equal(f.requests.length, 1);
+  });
+}
+
+for (const [query, code] of [
+  ["$expand=files", "POLICY_DENIED"],
+  ["$search=x&$expand=manager", "VALIDATION_ERROR"],
+  ["$count=true&$expand=manager", "VALIDATION_ERROR"],
+  ["$expand=files&$expand=manager", "POLICY_DENIED"],
+]) {
+  const target = `https://graph.microsoft.com/v1.0/users?${query}`;
+  test(`cursor validates query context: ${query}`, async () => {
+    const f = fixture(json(200, { value: [] }));
+    const cursor = Buffer.from(JSON.stringify({ v: 1, op: users.id, next: target, buffered: [], seen: [] })).toString("base64url");
+    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor, consistencyLevel: "eventual" }), { code });
+    assert.equal(f.credentialCalls.length, 0);
+    assert.equal(f.requests.length, 0);
+  });
+  for (const [method, response] of [
+    ["collect", json(200, { value: [], "@odata.nextLink": target })],
+    ["collect", json(302, {}, { location: target })],
+    ["execute", json(302, {}, { location: target })],
+  ]) {
+    test(`${method} validates ${response.status} target query: ${query}`, async () => {
+      const f = fixture(response);
+      await assert.rejects(f.session[method]({ profile: delegatedProfile, operation: users, scopes, consistencyLevel: "eventual" }), { code });
+      assert.equal(f.requests.length, 1);
+    });
+  }
+}
+
+for (const method of ["collect", "execute"]) {
+  test(`${method} still accepts a metadata expansion`, async () => {
+    const f = fixture(json(200, { value: [{ id: "a", manager: { id: "b" } }] }));
+    const result = await f.session[method]({ profile: delegatedProfile, operation: users, scopes, query: { $expand: "manager" } });
+    assert.deepEqual(result.value, [{ id: "a", manager: { id: "b" } }]);
+  });
+
+  test(`${method} cancels an in-flight transport that ignores the signal`, async () => {
+    const controller = new AbortController();
+    const f = fixture(() => { controller.abort(); return new Promise(() => {}); });
+    await assert.rejects(f.session[method]({ profile: delegatedProfile, operation: users, scopes, signal: controller.signal }), { name: "AbortError" });
+    assert.equal(f.requests.length, 1);
+  });
+}

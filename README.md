@@ -73,7 +73,9 @@ Unreviewed, secret-value, mail/file-content, beta and write routes fail before c
 Delegated reads take explicit `--scopes` like login; application profiles use the configured `.default` audience and reject `--scopes`.
 Collections return truthful completion info, default to 100 rows, and follow pages within budget under `--all`.
 Partial results include a `cursor` preserving buffered rows and the next page.
-Resume with `--cursor <token>` under the same collection path, profile and scopes, optionally with `--all` or a new `--limit`.
+Resume with `--cursor -` and supply the cursor token on stdin under the same collection path, profile and scopes, optionally with `--all` or a new `--limit`.
+For example, `mg-axi api get /users --cursor - --all --scopes https://graph.microsoft.com/User.Read.All < cursor.txt` reads a saved token through stdin.
+Small tokens can also use `--cursor <token>`; both input forms use the same validation and a 16 MB size ceiling.
 Omit `--odata` on resume to reuse the original query; supplying a different query is refused.
 
 Delegated MSAL caches use the OS credential store through optional `keytar`, with login reporting `storage: os-protected`.

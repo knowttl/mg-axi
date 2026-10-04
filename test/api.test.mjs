@@ -8,12 +8,12 @@ import { decode } from "@toon-format/toon";
 import { ApplicationAuth } from "../dist/app-auth.js";
 import { DelegatedAuth } from "../dist/auth.js";
 import { REVIEWED_ROUTES, fetchTransport, matchReviewed, runApiGet } from "../dist/api.js";
+import { MAX_CURSOR_BYTES } from "../dist/graph-session.js";
 
 // API-01 through the lowest real interface observing behavior: runApiGet with
 // real DelegatedAuth/ApplicationAuth and a fake credential/transport boundary
 // (the same seam CORE-01/CORE-02 tests use), plus CLI subprocess checks for
-// grammar and refusal precedence. CLI checks stop at validation: execution
-// would need a real tenant, which offline verification never touches.
+// grammar and refusal precedence.
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
@@ -350,12 +350,12 @@ test("long strings truncate unless --full", async () => {
 const bin = resolve("dist/bin/mg-axi.js");
 const profileConfig = JSON.stringify({ version: 1, defaultProfile: "soc", profiles: { soc: delegatedProfile } });
 
-function cli(args, config = null) {
+function cli(args, config = null, input = "", bootstrap) {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-api-"));
   try {
     if (config) writeFileSync(join(dir, "config.json"), config);
-    return spawnSync(process.execPath, [bin, ...args], {
-      encoding: "utf8", input: "", timeout: 10000,
+    return spawnSync(process.execPath, bootstrap === undefined ? [bin, ...args] : ["--input-type=module", "-e", bootstrap, ...args], {
+      encoding: "utf8", input, timeout: 10000,
       env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, MG_AXI_CONFIG: join(dir, "config.json") },
     });
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -416,6 +416,56 @@ test("CLI passes --cursor to collection validation", () => {
   const result = cli(["api", "get", "/users", "--cursor", "invalid", "--scopes", scopes], profileConfig);
   assert.equal(result.status, 2);
   assert.match(decode(result.stdout).error, /Invalid collection cursor/);
+});
+
+test("CLI resumes a cursor larger than the argv limit through stdin", async () => {
+  const rows = Array.from({ length: 200 }, (_, i) => ({ id: String(i), description: "x".repeat(1000) }));
+  const f = read({ path: "/groups", limit: 1, odata: "$top=200&$select=id,description" }, json(200, { value: rows }));
+  const first = await f.run({});
+  assert.ok(Buffer.byteLength(first.cursor) > 265000);
+  assert.match(first.help.join("\n"), /--cursor -.*stdin/);
+  const bootstrap = `
+    import { MsalProvider } from "./dist/msal-provider.js";
+    MsalProvider.prototype.silent = async profile => ({
+      token: "opaque-fixture-secret", expiresAt: Date.now() + 3600000,
+      tenantId: profile.tenantId, clientId: profile.clientId, accountId: "synthetic-account",
+    });
+    globalThis.fetch = async () => { throw new Error("Unexpected network request"); };
+    process.argv = [process.execPath, ${JSON.stringify(bin)}, ...process.argv.slice(1)];
+    await (await import("./dist/cli.js")).main();
+  `;
+  const result = cli(["api", "get", "/groups", "--cursor", "-", "--all", "--scopes", scopes], profileConfig, `${first.cursor}\n`, bootstrap);
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.deepEqual(decode(result.stdout), { returned: 199, complete: true, value: rows.slice(1) });
+});
+
+for (const token of ["", "invalid"]) test(`CLI stdin cursor refuses ${token || "empty input"}`, () => {
+  const result = cli(["api", "get", "/users", "--cursor", "-", "--scopes", scopes], profileConfig, token);
+  assert.equal(result.status, 2);
+  assert.match(decode(result.stdout).error, /Invalid collection cursor/);
+});
+
+test("stdin cursors retain resource binding checks", async () => {
+  const f = read({ path: "/groups/g/members", limit: 1 }, json(200, { value: [{ id: "a" }, { id: "b" }] }));
+  const first = await f.run({});
+  const result = cli(["api", "get", "/groups/h/members", "--cursor", "-", "--scopes", scopes], profileConfig, first.cursor);
+  assert.equal(result.status, 2);
+  assert.match(decode(result.stdout).error, /context does not match/);
+});
+
+test("stdin cursor input enforces the size ceiling", () => {
+  const result = cli(["api", "get", "/users", "--cursor", "-", "--scopes", scopes], profileConfig, "a".repeat(MAX_CURSOR_BYTES + 1));
+  assert.equal(result.status, 2);
+  assert.match(decode(result.stdout).error, /cursor exceeds 16000000 bytes/);
+});
+
+test("inline cursor input enforces the same size ceiling before credentials", async () => {
+  const f = read({ cursor: "a".repeat(MAX_CURSOR_BYTES + 1) });
+  await assert.rejects(f.run({}), error => error.code === "VALIDATION_ERROR" && /cursor exceeds 16000000 bytes/.test(error.message));
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
 });
 
 test("top help lists the raw read leaf", () => {

@@ -390,7 +390,7 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
       ? { returned: value.length, complete: true, value, help: ["Strings truncated at 4000 chars; re-run with --full"] }
       : { returned: value.length, complete: true, value };
   }
-  const hint = "Resume the same path, profile and scopes with --cursor <cursor>; use --limit <rows> or --all";
+  const hint = "Resume the same path, profile and scopes with --cursor - and supply the cursor token on stdin; use --limit <rows> or --all";
   const help = shaped.truncated ? [hint, "Strings truncated at 4000 chars; re-run with --full"] : [hint];
   return { returned: value.length, complete: false, reason: collected.reason, value, cursor: collected.cursor, help };
 }

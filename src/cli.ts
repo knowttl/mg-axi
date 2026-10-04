@@ -62,11 +62,24 @@ export async function main() {
           const { ApplicationAuth } = await import("./app-auth.js");
           const { MsalProvider } = await import("./msal-provider.js");
           const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+          const { MAX_CURSOR_BYTES } = await import("./graph-session.js");
+          let cursor = flags.cursor === undefined ? undefined : String(flags.cursor);
+          if (cursor === "-") {
+            const chunks: Buffer[] = [];
+            let bytes = 0;
+            for await (const chunk of process.stdin) {
+              const buffer = Buffer.from(chunk);
+              bytes += buffer.length;
+              if (bytes > MAX_CURSOR_BYTES) throw new AxiError(`Collection cursor exceeds ${MAX_CURSOR_BYTES} bytes`, "VALIDATION_ERROR", ["Use a cursor within the supported size ceiling"]);
+              chunks.push(buffer);
+            }
+            cursor = Buffer.concat(chunks).toString("utf8");
+          }
           return runApiGet({
             path: positional!,
             apiVersion: String(flags["api-version"] ?? "v1.0"),
             odata: flags.odata === undefined ? undefined : String(flags.odata),
-            cursor: flags.cursor === undefined ? undefined : String(flags.cursor),
+            cursor,
             scopes: flags.scopes === undefined ? undefined : String(flags.scopes),
             limit: flags.all ? undefined : flags.limit === undefined ? 100 : Number(flags.limit),
             full: !!flags.full,

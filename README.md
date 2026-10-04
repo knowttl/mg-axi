@@ -228,7 +228,7 @@ Delegated organization reads default to `https://graph.microsoft.com/Organizatio
 `entra organization branding show --organization <organization-id>` reads the default branding metadata (non-Stream text and URLs); the session sends the documented `Accept-Language: 0` header and locale variants come from the localizations collection.
 Branding leaves default to delegated `https://graph.microsoft.com/User.Read`, the documented least-privileged scope; `OrganizationalBranding.Read.All` is the purpose-built alternative and `Organization.Read.All` also works when passed as `--scopes`.
 Stream image properties (`bannerLogo`, `backgroundImage` and friends) are refused before credentials: they need a later piece with its own binary-output contract.
-A branding 404 means no custom branding is configured (configuring it needs P1/P2), not denied access; contact fields on the organization are personal data.
+A branding 404 may indicate unconfigured branding, a missing locale, or a missing or inaccessible organization; configuring custom branding needs P1/P2, and contact fields on the organization are personal data.
 Delegated callers additionally need a supported Entra role (Directory Readers or Global Reader for organizations; Global Reader or Organizational Branding Administrator for branding); personal Microsoft accounts are not supported.
 Organization and localization lists return `organizations` and `brandingLocalizations`, single-object reads return `organization`, `branding` and `brandingLocalization`.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to organization and branding reads.

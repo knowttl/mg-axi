@@ -25,8 +25,7 @@ import type { AnyProfile } from "./profiles.js";
 // callers additionally need Global Reader or Organizational Branding
 // Administrator least-privileged. Personal Microsoft accounts are not
 // supported on any of these reads. No P1/P2 prerequisite is stated for the
-// reads, but configuring custom branding itself needs P1/P2, so a branding
-// 404 means no branding is configured rather than denied access. Contact
+// reads, but configuring custom branding itself needs P1/P2. Contact
 // fields on the organization (businessPhones, notification mails) are
 // personal data. Every reviewed read documents $select only, so none of
 // these leaves offers --filter. The branding GET documents Accept-Language
@@ -264,7 +263,7 @@ const ORGANIZATION_DENIAL_HINTS = [
 const BRANDING_DENIAL_HINTS = [
   "Branding reads need User.Read least-privileged or the purpose-built OrganizationalBranding.Read.All (Organization.Read.All also works) plus Global Reader or Organizational Branding Administrator for delegated access, or admin-consented OrganizationalBranding.Read.All for application access",
   "Personal Microsoft accounts are not supported for branding reads",
-  "Configuring custom branding needs P1/P2, so a branding 404 means no branding is configured rather than denied access; never diagnose licence solely from HTTP 403",
+  "Configuring custom branding needs P1/P2; a branding 404 may indicate unconfigured branding or a missing or inaccessible organization; never diagnose licence solely from HTTP 403",
 ];
 
 const STREAM_HINT = "Stream image properties (backgroundImage, bannerLogo, customCSS, favicon, headerLogo, squareLogo, squareLogoDark) are served by a later piece with its own binary-output contract";
@@ -420,27 +419,13 @@ export async function showBranding(
   const scopes = scopesFor(flags, DEFAULT_BRANDING_SCOPES, profile, help);
   const full = flags.full === true;
   const organization = organizationId(flags, help, "organization");
-  let raw: unknown;
-  try {
-    raw = await withGuidance(BRANDING_DENIAL_HINTS, () => session.execute({
-      profile,
-      operation,
-      params: { "organization-id": organization },
-      query: { $select: select.join(",") },
-      scopes,
-    }));
-  } catch (error) {
-    // No default branding object exists until custom branding is configured
-    // (P1/P2); that absence is the answer, not a denial.
-    if (error instanceof AxiError && error.code === "GRAPH_ERROR" && /\(404\)/.test(error.message)) {
-      throw new AxiError("Graph reports no default branding is configured for this organization (404)", "GRAPH_ERROR", [
-        "Configuring custom branding needs P1/P2; an unconfigured tenant has no branding object to read",
-        `Branding locales that do exist are listed with mg-axi entra organization branding-localization list --organization ${shellValue(organization)} ${profileHint(profileName)}`,
-        ...BRANDING_DENIAL_HINTS,
-      ]);
-    }
-    throw error;
-  }
+  const raw = await withGuidance(BRANDING_DENIAL_HINTS, () => session.execute({
+    profile,
+    operation,
+    params: { "organization-id": organization },
+    query: { $select: select.join(",") },
+    scopes,
+  }));
   const { row, truncated } = singleResult(raw, fields, full, "branding");
   const helpHints: string[] = [
     ...(truncated ? [fullHint("entra organization branding show", flags, profileName)] : []),
@@ -507,24 +492,13 @@ export async function showBrandingLocalization(
   const organization = organizationId(flags, help, "organization");
   const locale = String(flags.id);
   if (!locale.trim()) throw new AxiError("--id needs the branding locale id, for example fr-FR", "VALIDATION_ERROR", [help]);
-  let raw: unknown;
-  try {
-    raw = await withGuidance(BRANDING_DENIAL_HINTS, () => session.execute({
-      profile,
-      operation,
-      params: { "organization-id": organization, "organizationalBrandingLocalization-id": locale },
-      query: { $select: select.join(",") },
-      scopes,
-    }));
-  } catch (error) {
-    if (error instanceof AxiError && error.code === "GRAPH_ERROR" && /\(404\)/.test(error.message)) {
-      throw new AxiError(`Graph reports no branding localization ${locale} for this organization (404)`, "GRAPH_ERROR", [
-        `List the configured locales with mg-axi entra organization branding-localization list --organization ${shellValue(organization)} ${profileHint(profileName)}`,
-        ...BRANDING_DENIAL_HINTS,
-      ]);
-    }
-    throw error;
-  }
+  const raw = await withGuidance(BRANDING_DENIAL_HINTS, () => session.execute({
+    profile,
+    operation,
+    params: { "organization-id": organization, "organizationalBrandingLocalization-id": locale },
+    query: { $select: select.join(",") },
+    scopes,
+  }));
   const { row, truncated } = singleResult(raw, fields, full, "branding localization");
   if (truncated) return { brandingLocalization: row, help: [fullHint("entra organization branding-localization show", flags, profileName)] };
   return { brandingLocalization: row };

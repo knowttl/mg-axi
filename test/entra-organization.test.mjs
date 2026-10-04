@@ -307,7 +307,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
-  test(`${mode} unconfigured branding reads as absent, not denied`, async () => {
+  test(`${mode} branding 404 preserves missing or inaccessible guidance`, async () => {
     const state = setupProfiles();
     try {
       const missing = transport(() => json(404, { error: { code: "Request_ResourceNotFound", message: "no branding" } }));
@@ -319,13 +319,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       await assert.rejects(executeArgv(["entra", "organization", "branding", "show",
         "--organization", orgId, "--profile", profile], overrides), error => {
         assert.equal(error.code, "GRAPH_ERROR");
-        return /no default branding is configured/.test(error.message);
+        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(error.message);
       });
       await assert.rejects(executeArgv(["entra", "organization", "branding-localization", "show",
         "--organization", orgId, "--id", "xx-XX", "--profile", profile],
         { ...overrides, transport: organizationTransport().send }), error => {
         assert.equal(error.code, "GRAPH_ERROR");
-        return /no branding localization xx-XX/.test(error.message);
+        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(error.message);
       });
     } finally {
       teardownProfiles(state);

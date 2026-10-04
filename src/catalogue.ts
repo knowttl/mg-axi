@@ -398,7 +398,7 @@ export const LEAVES: Leaf[] = [
     full: orgRead.full,
     scopes: orgRead.scopes,
   }, examples: ["mg-axi entra organization show --id <organization-id> --profile soc", "mg-axi entra organization show --id <organization-id> --profile soc --full"] },
-  { path: "entra organization branding show", description: "Show the default sign-in branding metadata (non-Stream text and URLs only); Stream image bytes need a later piece; a 404 means no branding is configured, not denied access", operation: "GET:/organization/{organization-id}/branding", flags: {
+  { path: "entra organization branding show", description: "Show the default sign-in branding metadata (non-Stream text and URLs only); Stream image bytes need a later piece; a 404 may indicate unconfigured branding or a missing or inaccessible organization", operation: "GET:/organization/{organization-id}/branding", flags: {
     ...common, organization: { value: "organization-id", required: true, description: "Tenant organization UUID whose default branding is shown" },
     select: brandingRead.select,
     fields: brandingRead.fields,

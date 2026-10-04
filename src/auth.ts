@@ -1,5 +1,5 @@
 import { AxiError } from "axi-sdk-js";
-import { validateProfile, type DelegatedProfile } from "./profiles.js";
+import { validateDelegatedProfile, type DelegatedProfile } from "./profiles.js";
 
 export type LoginMethod = "browser" | "device-code";
 export type Credential = { token: string; expiresAt: number; tenantId: string; clientId: string; accountId: string };
@@ -14,7 +14,7 @@ export class DelegatedAuth {
   private cache = new Map<string, Credential>();
   constructor(private provider: CredentialProvider, private now: () => number = Date.now) {}
   async login(profile: DelegatedProfile, method: string = "browser", scopes: string[] = []) {
-    profile = validateProfile(profile);
+    profile = validateDelegatedProfile(profile);
     if (method !== "browser" && method !== "device-code") throw new AxiError("Login method must be browser or device-code", "VALIDATION_ERROR", ["mg-axi login --help"]);
     if (method === "device-code" && !profile.allowDeviceCode) throw new AxiError("Device code is disabled for this profile", "VALIDATION_ERROR", ["Enable device code only when organization policy permits it; browser login is the default"]);
     const requested = this.scopes(scopes);
@@ -27,7 +27,7 @@ export class DelegatedAuth {
     } catch { throw this.failure("LOGIN_FAILED"); }
   }
   async credential(profile: DelegatedProfile, scopes: string[]) {
-    profile = validateProfile(profile);
+    profile = validateDelegatedProfile(profile);
     const requested = this.scopes(scopes);
     const key = this.key(profile, requested);
     const hit = this.cache.get(key);

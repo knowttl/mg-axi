@@ -14,15 +14,19 @@ const common = {
   profile: { value: "name", description: "Select a configured profile" },
   "api-version": { value: API_VERSIONS.join("|"), default: "v1.0", description: "Explicit API version; no fallback" },
 };
+const PARSE_MODES = ["delegated", "application"];
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
-  { path: "profile create", description: "Create a dedicated-app delegated profile without signing in", flags: {
+  { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
     name: { value: "name", required: true, description: "New profile name; existing identities cannot be overwritten" },
     tenant: { value: "tenant-id", required: true, description: "Explicit workforce tenant UUID" },
-    client: { value: "client-id", required: true, description: "Organization-owned public client application UUID" },
+    client: { value: "client-id", required: true, description: "Organization-owned application UUID" },
     cloud: { value: "commercial", required: true, description: "Explicit cloud; only commercial is supported" },
-    "allow-device-code": { description: "Opt in only when permitted by organization policy; never enables fallback" },
-  }, examples: ["mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial", "mg-axi profile create --help"] },
+    mode: { value: "delegated|application", default: "delegated", description: "Delegated analyst sign-in or application client credentials" },
+    "allow-device-code": { description: "Delegated only: opt in only when permitted by organization policy; never enables fallback" },
+    "certificate-thumbprint": { value: "40-hex-digits", description: "Application only: certificate thumbprint; the private key stays in protected storage" },
+    federated: { description: "Application only: workload federation via the AZURE_FEDERATED_TOKEN_FILE assertion source" },
+  }, examples: ["mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial", "mg-axi profile create --name batch --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --federated", "mg-axi profile create --help"] },
   { path: "profile list", description: "List configured profiles without accessing credentials", flags: {}, examples: ["mg-axi profile list", "mg-axi profile list --help"] },
   { path: "profile show", description: "Show profile policy and credential reference, never credentials", flags: {
     profile: common.profile,
@@ -79,6 +83,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     }
   }
   if (flags["api-version"] && !API_VERSIONS.includes(String(flags["api-version"]))) fail(`--api-version must be ${API_VERSIONS.join(" or ")}`);
+  if (flags.mode && !PARSE_MODES.includes(String(flags.mode))) fail("--mode must be delegated or application");
   if (flags.limit && (!/^[1-9]\d*$/.test(String(flags.limit)) || !Number.isSafeInteger(Number(flags.limit)))) fail("--limit must be a positive safe integer");
   if (flags.limit && flags.all) fail("--limit and --all cannot be combined");
   if (!flags.help) for (const [name, flag] of Object.entries(leaf.flags)) if (flag.required && !flags[name]) fail(`--${name} is required`);

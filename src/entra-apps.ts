@@ -176,10 +176,8 @@ function projectCredentials(value: unknown, full: boolean): { value: unknown[]; 
   return { value: projected, truncated };
 }
 
-// Local projection preserves Graph's null/missing distinction: an explicit
-// null stays null, an absent property stays absent and is never synthesized.
-// Credential collections additionally collapse to expiry metadata, so secret
-// subfields can never reach output.
+// Missing properties stay absent. Non-credential properties preserve explicit
+// nulls; credential collections use the safe projection described above.
 function project(
   row: unknown,
   fields: string[],

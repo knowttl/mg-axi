@@ -10,6 +10,7 @@ import { executeArgv } from "../dist/cli.js";
 import { Profiles } from "../dist/profiles.js";
 import { DelegatedAuth } from "../dist/auth.js";
 import { MAX_CURSOR_BYTES } from "../dist/graph-session.js";
+import { runApiGet } from "../dist/api.js";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
@@ -302,6 +303,72 @@ for (const [noun, key, field] of [
       assert.equal(decode(result.stdout).code, "VALIDATION_ERROR");
     } finally { teardownProfiles(state); }
   });
+}
+
+for (const [noun, path, dateField, key, filterField] of [
+  ["sign-in", "/auditLogs/signIns", "createdDateTime", "signIns", "userDisplayName"],
+  ["directory-audit", "/auditLogs/directoryAudits", "activityDateTime", "directoryAudits", "activityDisplayName"],
+]) {
+  for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+    for (const filter of [undefined, "id eq 'example'", `${dateField} le 2026-09-08T00:00:00.000Z`,
+      `${dateField} ge 2026-09-01T00:00:00.000Z or id eq 'example'`]) {
+      test(`${mode} ${noun} rejects raw cursors without a mandatory lower time bound: ${filter ?? "no filter"}`, async () => {
+        const state = setupProfiles();
+        try {
+          const { requests, calls, overrides } = overridesFor(mode);
+          const raw = await runApiGet({ path, apiVersion: "v1.0", profile: new Profiles().resolve(profile).profile,
+            scopes: mode === "delegated" ? auditScopes[0] : undefined, limit: 1,
+            odata: `$select=id${filter === undefined ? "" : `&$filter=${filter}`}` }, overrides);
+          assert.equal(raw.complete, false);
+          const requestCount = requests.length;
+          const credentialCount = calls.length;
+          await assert.rejects(executeArgv(["entra", noun, "list", "--profile", profile, "--cursor", raw.cursor], overrides), error => {
+            assert.equal(error.code, "VALIDATION_ERROR");
+            assert.match(error.message, /bounded in time/);
+            assert.ok(error.suggestions.some(hint => hint.includes("Start a new query with --since")));
+            return true;
+          });
+          await assert.rejects(executeArgv(["entra", noun, "list", "--profile", profile, "--cursor", raw.cursor,
+            "--since", SINCE], overrides), { code: "VALIDATION_ERROR" });
+          assert.equal(requests.length, requestCount);
+          assert.equal(calls.length, credentialCount);
+          const executable = runReadCli(["entra", noun, "list", "--profile", profile, "--cursor", "-"],
+            state, mode, true, raw.cursor);
+          assert.equal(executable.status, 2, executable.stdout);
+          const output = decode(executable.stdout);
+          assert.equal(output.code, "VALIDATION_ERROR");
+          assert.ok(output.help.some(hint => hint.includes("Start a new query with --since")));
+        } finally { teardownProfiles(state); }
+      });
+    }
+  }
+
+  test(`${noun} resumes precise bounds with grouped filters and quoted parentheses`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor("delegated");
+      const first = await executeArgv(["entra", noun, "list", "--profile", "soc", "--limit", "1",
+        "--since", "2026-09-10T21:20:02.7215373Z", "--until", "2026-09-10T21:20:02.7215374Z",
+        "--filter", `(${filterField} eq 'O''Brien (west)' or ${filterField} eq 'other')`], overrides);
+      const resumed = await executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", first.cursor], overrides);
+      const expected = noun === "sign-in" ? signIns : audits;
+      assert.deepEqual(resumed[key].map(row => row.id), expected.slice(1).map(row => row.id));
+      assert.equal(resumed.count.complete, true);
+    } finally { teardownProfiles(state); }
+  });
+
+  for (const filter of [") or id eq 'example' or (", "(id eq 'example'", "id eq 'unterminated"]) {
+    test(`${noun} rejects filters that escape time-bound grouping: ${filter}`, async () => {
+      const state = setupProfiles();
+      try {
+        const { requests, calls, overrides } = overridesFor("delegated");
+        await assert.rejects(executeArgv(["entra", noun, "list", "--profile", "soc", "--since", SINCE,
+          "--filter", filter], overrides), { code: "VALIDATION_ERROR" });
+        assert.deepEqual(requests, []);
+        assert.deepEqual(calls, []);
+      } finally { teardownProfiles(state); }
+    });
+  }
 }
 
 for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {

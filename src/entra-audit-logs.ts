@@ -143,6 +143,14 @@ function boundedFilter(dateField: string, flags: LogFlags, help: string): string
   if (flags.filter !== undefined) {
     const filter = String(flags.filter).trim();
     if (!filter.length) throw new AxiError("--filter needs a non-empty OData expression", "VALIDATION_ERROR", [help]);
+    let quoted = false;
+    let depth = 0;
+    for (const char of filter) {
+      if (char === "'") quoted = !quoted;
+      else if (!quoted && char === "(") depth++;
+      else if (!quoted && char === ")" && --depth < 0) break;
+    }
+    if (quoted || depth !== 0) throw new AxiError("--filter needs balanced parentheses and quoted strings to preserve the time bounds", "VALIDATION_ERROR", [help]);
     parts.push(`(${filter})`);
   }
   return parts.length ? parts.join(" and ") : undefined;
@@ -300,13 +308,21 @@ async function listLogs(
 ): Promise<Record<string, unknown>> {
   const cursor = flags.cursor === undefined ? undefined : String(flags.cursor);
   if (cursor !== undefined && !cursor.trim()) throw new AxiError("--cursor needs the opaque cursor from a partial result", "VALIDATION_ERROR", [help]);
-  if (cursor === undefined && flags.since === undefined) {
+  const saved = cursor === undefined ? undefined : session.cursorQuery(operation, cursor);
+  const bounds = saved === undefined ? undefined : new RegExp(`^${shape.dateField} ge (\\S+)(?: and ${shape.dateField} le (\\S+))?(?: and \\(([\\s\\S]*)\\))?$`).exec(saved.$filter ?? "");
+  const savedFlags: LogFlags | undefined = bounds ? {
+    since: bounds[1]!,
+    ...(bounds[2] === undefined ? {} : { until: bounds[2] }),
+    ...(bounds[3] === undefined ? {} : { filter: bounds[3] }),
+  } : undefined;
+  if ((saved === undefined && flags.since === undefined)
+    || (saved !== undefined && (savedFlags === undefined || boundedFilter(shape.dateField, savedFlags, help) !== saved.$filter))) {
     throw new AxiError(`Log queries are bounded in time: pass --since <ISO-time> to bound ${shape.dateField}`, "VALIDATION_ERROR", [
       help,
+      "Start a new query with --since instead of resuming a cursor without a valid saved time bound",
       `Example: mg-axi entra ${shape.noun} list --since 2026-09-01T00:00:00Z ${profileHint(profileName)}`,
     ]);
   }
-  const saved = cursor === undefined ? undefined : session.cursorQuery(operation, cursor);
   const savedSelect = saved?.$select;
   const { select, fields } = selectedFields(flags,
     savedSelect === undefined ? shape.defaultSelect : fieldList(savedSelect, "select", shape.known, shape.knownList, help),

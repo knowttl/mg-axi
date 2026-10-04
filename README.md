@@ -39,13 +39,14 @@ mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read
 Configure the registration's Mobile and desktop applications redirect URI as `http://localhost` for browser login.
 The first created profile is the default; `--profile` selects another identity explicitly.
 Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate configuration file.
-Version 1 stores tenant/client/cloud, delegated mode, enabled packs, preview/sensitive policy and a unique credential reference only.
+Version 1 stores tenant/client/cloud, delegated mode, enabled packs, preview/sensitive policy, device-code opt-in and a unique credential reference only.
 Unknown fields, unsupported versions/clouds and application credentials are rejected with recovery guidance.
 Creation never overwrites an existing profile.
 Preview is disabled and sensitive areas are empty in newly created profiles.
 
 Browser login uses Microsoft's [MSAL interactive API](https://learn.microsoft.com/en-us/entra/msal/javascript/node/acquire-token-requests) and PKCE.
 Request delegated Graph scope names explicitly with `--scopes`, separated by commas.
+Use full `https://graph.microsoft.com/` scope names; delegated login rejects `.default`.
 The dedicated registration needs corresponding delegated consent, and operations can additionally require user roles.
 Login never changes app registration or requests blanket directory write consent automatically.
 Device code requires creating the profile with `--allow-device-code` and selecting `--method device-code` during login, only when organization policy permits it.
@@ -53,13 +54,18 @@ Browser failure never falls back to device code.
 Only explicit login can open a browser or display the device challenge on stderr.
 Ordinary credential acquisition uses silent refresh and returns actionable errors when login, consent or policy intervention is required.
 
-MSAL caches are held by the OS credential store through optional `keytar` when its native module and store are available.
-Otherwise they remain in process memory, and login reports `storage: session-only`; authentication then lasts only for that process.
+MSAL caches use the OS credential store through optional `keytar`, with login reporting `storage: os-protected`.
+If `keytar` cannot load, caches remain in process memory and login reports `storage: session-only`; authentication then lasts only for that process.
+Installing with `--ignore-scripts` can leave the native module unavailable.
+On Windows, a serialized cache exceeding 2,560 UTF-8 bytes also switches to session-only storage, after successfully invalidating any persisted cache.
+This mode uses an MSAL client without a persistence plugin and retains the authenticated cache in memory for silent acquisition.
+Store read, write or invalidation failures fail authentication with `LOGIN_FAILED` during login or `AUTH_REQUIRED` during silent acquisition, rather than switching storage modes.
+Restore OS credential store access before retrying; explicit login must read and invalidate prior stored accounts before accepting a replacement identity.
+An inaccessible credential service on a headless system can therefore block authentication even when the native module loads.
 There is no plaintext credential-cache fallback.
-Installing with `--ignore-scripts` can leave the native store unavailable, as can a headless system without a credential service.
 Tokens remain opaque and never appear in profile views, stdout or authentication diagnostics.
 The credential service binds account context to the configured tenant/client and refreshes at a 60-second expiry margin.
-Tests use fake credential providers and fake time; they never sign in or contact a token endpoint.
+Tests use fake credential providers, fake time and real MSAL cache handling with fake network and storage boundaries; they never sign in or contact a real token endpoint.
 
 Run `corepack pnpm build`, `corepack pnpm test` and `corepack pnpm lint` for shell validation.
 The [CI workflow](.github/workflows/ci.yml) defines the platform/runtime matrix for shell build, test and lint checks, and validates the Python inventory tooling separately.

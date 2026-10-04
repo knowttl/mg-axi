@@ -359,7 +359,7 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
   // review above only selects which row may run. Binding, query-shape and
   // policy failures below still throw before the session acquires credentials.
   const operation = resolveSessionOperation(version, "GET", route.id.slice(`${version}:GET:`.length));
-  const scopes = args.scopes === undefined ? [] : args.scopes.split(",").map(scope => scope.trim()).filter(scope => scope.length > 0);
+  const scopes = args.scopes === undefined ? undefined : args.scopes.split(",").map(scope => scope.trim()).filter(scope => scope.length > 0);
   const session = new GraphSession(deps);
   const full = !!args.full;
   if (route.kind === "single") {
@@ -388,7 +388,7 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
 // headers and text. Timeouts and cancellation arrive through the session's
 // AbortSignal; credential attachment happened before this call.
 export const fetchTransport: GraphTransport = async request => {
-  const response = await fetch(request.url, { method: "GET", headers: request.headers, signal: request.signal });
+  const response = await fetch(request.url, { method: "GET", headers: request.headers, signal: request.signal, redirect: "manual" });
   const headers: Record<string, string> = {};
   response.headers.forEach((value, key) => {
     headers[key] = value;

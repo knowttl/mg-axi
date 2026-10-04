@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { decode } from "@toon-format/toon";
 import { ApplicationAuth } from "../dist/app-auth.js";
 import { DelegatedAuth } from "../dist/auth.js";
-import { REVIEWED_ROUTES, matchReviewed, runApiGet } from "../dist/api.js";
+import { REVIEWED_ROUTES, fetchTransport, matchReviewed, runApiGet } from "../dist/api.js";
 
 // API-01 through the lowest real interface observing behavior: runApiGet with
 // real DelegatedAuth/ApplicationAuth and a fake credential/transport boundary
@@ -138,6 +138,61 @@ test("application profiles refuse delegated scopes before credentials", async ()
   );
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
+});
+
+for (const [path, body, result] of [
+  ["/users/a", { id: "a" }, { id: "a" }],
+  ["/users", { value: [{ id: "a" }] }, { returned: 1, complete: true, value: [{ id: "a" }] }],
+]) test(`application read ${path} uses the configured audience without caller scopes`, async () => {
+  const f = fixture(json(200, body));
+  assert.deepEqual(await runApiGet({ path, apiVersion: "v1.0", profile: appProfile }, f.deps), result);
+  assert.equal(f.credentialCalls.length, 1);
+  assert.equal(f.credentialCalls[0][0], "acquire");
+  assert.deepEqual(f.credentialCalls[0][2], ["https://graph.microsoft.com/.default"]);
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.requests[0].headers.Authorization, "Bearer opaque-fixture-secret");
+});
+
+for (const path of ["/users/a", "/users"]) {
+  for (const location of [
+    "https://example.invalid/v1.0/users",
+    "https://graph.microsoft.com/beta/users",
+    "https://graph.microsoft.com/v1.0/groups",
+  ]) test(`fetch-backed read ${path} refuses redirect to ${location}`, async t => {
+    const requests = [];
+    t.mock.method(globalThis, "fetch", async (url, options) => {
+      requests.push({ url, options });
+      return new Response("", { status: 302, headers: { Location: location } });
+    });
+    const f = fixture();
+    await assert.rejects(
+      runApiGet({ path, apiVersion: "v1.0", profile: delegatedProfile, scopes }, { ...f.deps, transport: fetchTransport }),
+      { code: "POLICY_DENIED" },
+    );
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].options.redirect, "manual");
+  });
+}
+
+for (const [path, body, result] of [
+  ["/users/a", { id: "a" }, { id: "a" }],
+  ["/users", { value: [{ id: "a" }] }, { returned: 1, complete: true, value: [{ id: "a" }] }],
+]) test(`fetch-backed read ${path} follows an authorized redirect`, async t => {
+  const requests = [];
+  const target = `https://graph.microsoft.com/v1.0${path}?$select=id`;
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    requests.push({ url, options });
+    return requests.length === 1
+      ? new Response("", { status: 302, headers: { Location: target } })
+      : new Response(JSON.stringify(body), { status: 200 });
+  });
+  const f = fixture();
+  assert.deepEqual(await runApiGet({ path, apiVersion: "v1.0", profile: delegatedProfile, scopes }, { ...f.deps, transport: fetchTransport }), result);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].url, target);
+  assert.equal(requests[0].options.redirect, "manual");
+  assert.equal(requests[1].options.redirect, "manual");
+  assert.equal(requests[1].options.headers.Authorization, "Bearer opaque-fixture-secret");
 });
 
 test("collection read returns redacted rows with truthful completion", async () => {

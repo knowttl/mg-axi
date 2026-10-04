@@ -131,6 +131,26 @@ for (const binding of ["..", "a%2Fb", "a/b"]) test(`binding ${binding} never rea
   assert.equal(f.requests.length, 0);
 });
 
+for (const profile of [delegatedProfile, appProfile]) {
+  for (const path of [
+    "/domains/$count",
+    "/domainDnsRecords/$count",
+    "/domains/contoso.com/verificationDnsRecords/$count",
+    "/domains/contoso.com/serviceConfigurationRecords/$count",
+    "/domains/$count/verificationDnsRecords",
+    "/users/$value",
+    "/groups/$ref",
+    "/users/$custom",
+    "/domains/%24count",
+    "/domains/%2524count",
+  ]) test(`${profile.mode} raw reserved binding ${path} fails before credentials`, async () => {
+    const f = fixture(json(200, {}));
+    await assert.rejects(runApiGet({ path, apiVersion: "v1.0", profile }, f.deps), { code: "VALIDATION_ERROR" });
+    assert.equal(f.credentialCalls.length, 0);
+    assert.equal(f.requests.length, 0);
+  });
+}
+
 test("application profiles refuse delegated scopes before credentials", async () => {
   const f = fixture(json(200, { value: [] }));
   await assert.rejects(

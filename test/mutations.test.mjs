@@ -77,6 +77,27 @@ async function withEnv(key, value, action) {
 
 const readState = (current = { notes: ["previous synthetic note"] }) => async () => current;
 
+for (const path of ["/v1.0/fixture/$count", "/v1.0/fixture/%24value", "/v1.0/fixture/notes/$ref"]) {
+  test(`mutation path rejects reserved resource binding ${path} before credentials`, async () => {
+    const f = fixture();
+    await assert.rejects(f.coordinator().execute({ ...mutation, path }, { readState: readState(), scopes }), { code: "VALIDATION_ERROR" });
+    assert.equal(f.credentialCalls.length, 0);
+    assert.equal(f.requests.length, 0);
+  });
+}
+
+test("group-member mutation rejects a reserved group binding before credentials", async () => {
+  const f = fixture();
+  const operation = "mg.entra.group.member.add";
+  const coordinator = f.coordinator({ ...enabledDelegated, writes: { allowWrites: true, operations: [operation] } });
+  await assert.rejects(
+    coordinator.execute({ ...mutation, operation, path: "/v1.0/groups/$count/members/$ref" }, { readState: readState(), scopes }),
+    { code: "VALIDATION_ERROR" },
+  );
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
+});
+
 test("read-only by default: no writes key means WRITES_DISABLED with zero sends", async () => {
   const f = fixture();
   const coordinator = f.coordinator(delegatedProfile);

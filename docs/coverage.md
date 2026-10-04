@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 40 (38 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 48 (46 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 4 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -43,6 +43,14 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra administrative-unit list` | `GET:/directory/administrativeUnits` | scheduled | READ-10 |
 | `mg-axi entra administrative-unit show` | `GET:/directory/administrativeUnits/{administrativeUnit-id}` | scheduled | READ-10 |
 | `mg-axi entra administrative-unit member list` | `GET:/directory/administrativeUnits/{administrativeUnit-id}/members` | scheduled | READ-10 |
+| `mg-axi entra domain list` | `GET:/domains` | scheduled | EXT-01 |
+| `mg-axi entra domain show` | `GET:/domains/{domain-id}` | scheduled | EXT-01 |
+| `mg-axi entra domain verification-dns-record list` | `GET:/domains/{domain-id}/verificationDnsRecords` | scheduled | EXT-01 |
+| `mg-axi entra domain verification-dns-record show` | `GET:/domains/{domain-id}/verificationDnsRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
+| `mg-axi entra domain service-configuration-record list` | `GET:/domains/{domain-id}/serviceConfigurationRecords` | scheduled | EXT-01 |
+| `mg-axi entra domain service-configuration-record show` | `GET:/domains/{domain-id}/serviceConfigurationRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
+| `mg-axi entra domain-dns-record list` | `GET:/domainDnsRecords` | scheduled | EXT-01 |
+| `mg-axi entra domain-dns-record show` | `GET:/domainDnsRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
 | `mg-axi entra sign-in list` | `GET:/auditLogs/signIns` | scheduled | READ-05 |
 | `mg-axi entra sign-in show` | `GET:/auditLogs/signIns/{signIn-id}` | scheduled | READ-05 |
 | `mg-axi entra directory-audit list` | `GET:/auditLogs/directoryAudits` | scheduled | READ-05 |
@@ -66,6 +74,50 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |
 | `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |
 
+## EXT-01 domain scope decisions
+
+Firstmate decision R1: approve narrowing this change to the eight v1.0 domain reads above.
+The operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.
+Federation stays out because it can carry signing-certificate material.
+Firstmate decision R2: keep the write-family status section as the coverage fix added to scope (resolved-kept).
+Both firstmate decisions must also be stated in the PR body by the delivery phase.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/domainDnsRecords` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/domainDnsRecords/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads. |
+| `beta:GET:/domainDnsRecords/{domainDnsRecord-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/domains` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/domains/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads. |
+| `beta:GET:/domains/{domain-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/domains/{domain-id}/domainNameReferences` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review. |
+| `beta:GET:/domains/{domain-id}/domainNameReferences/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review. |
+| `beta:GET:/domains/{domain-id}/domainNameReferences/{directoryObject-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review. |
+| `beta:GET:/domains/{domain-id}/federationConfiguration` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain federation subfamily: federation configuration can carry signing-certificate material and needs a separate output review. |
+| `beta:GET:/domains/{domain-id}/federationConfiguration/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain federation subfamily: federation configuration can carry signing-certificate material and needs a separate output review. |
+| `beta:GET:/domains/{domain-id}/federationConfiguration/{internalDomainFederation-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain federation subfamily: federation configuration can carry signing-certificate material and needs a separate output review. |
+| `beta:GET:/domains/{domain-id}/rootDomain` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review. |
+| `beta:GET:/domains/{domain-id}/serviceConfigurationRecords` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/domains/{domain-id}/serviceConfigurationRecords/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads. |
+| `beta:GET:/domains/{domain-id}/serviceConfigurationRecords/{domainDnsRecord-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/domains/{domain-id}/sharedEmailDomainInvitations` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 shared-email domains subfamily: beta invitation relationships need a separate access and output review. |
+| `beta:GET:/domains/{domain-id}/sharedEmailDomainInvitations/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 shared-email domains subfamily: beta invitation relationships need a separate access and output review. |
+| `beta:GET:/domains/{domain-id}/sharedEmailDomainInvitations/{sharedEmailDomainInvitation-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 shared-email domains subfamily: beta invitation relationships need a separate access and output review. |
+| `beta:GET:/domains/{domain-id}/verificationDnsRecords` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/domains/{domain-id}/verificationDnsRecords/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads. |
+| `beta:GET:/domains/{domain-id}/verificationDnsRecords/{domainDnsRecord-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review. |
+| `v1.0:GET:/domainDnsRecords/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads. |
+| `v1.0:GET:/domains/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads. |
+| `v1.0:GET:/domains/{domain-id}/domainNameReferences` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review. |
+| `v1.0:GET:/domains/{domain-id}/domainNameReferences/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review. |
+| `v1.0:GET:/domains/{domain-id}/domainNameReferences/{directoryObject-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review. |
+| `v1.0:GET:/domains/{domain-id}/federationConfiguration` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain federation subfamily: federation configuration can carry signing-certificate material and needs a separate output review. |
+| `v1.0:GET:/domains/{domain-id}/federationConfiguration/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain federation subfamily: federation configuration can carry signing-certificate material and needs a separate output review. |
+| `v1.0:GET:/domains/{domain-id}/federationConfiguration/{internalDomainFederation-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain federation subfamily: federation configuration can carry signing-certificate material and needs a separate output review. |
+| `v1.0:GET:/domains/{domain-id}/rootDomain` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review. |
+| `v1.0:GET:/domains/{domain-id}/serviceConfigurationRecords/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads. |
+| `v1.0:GET:/domains/{domain-id}/verificationDnsRecords/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads. |
+
 ## Named writes
 
 Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, immutable scope, preview, explicit `--execute`, typed target confirmation for disruptive effects, durable journal intent/outcome and no replay. Inventory dispositions stay discovery-time records until a metadata refresh reviews them; the implemented review lives beside each command.
@@ -77,6 +129,7 @@ Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, i
 | `mg-axi entra group member add` | `POST:/groups/{group-id}/members/$ref` | WRITE-01 |
 | `mg-axi entra risky-user dismiss` | `POST:/identityProtection/riskyUsers/dismiss` | WRITE-05 |
 
-Extended families (EXT-01 through EXT-04), later writes (WRITE-04 and
-beyond) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining
+Shipped initial writes: WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-05 (`mg-axi entra risky-user dismiss`).
+Pending initial writes: WRITE-04 (`PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}`).
+Extended families (EXT-01 through EXT-04) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining
 scheduled rows; see docs/build-plan.md for their dispatch.

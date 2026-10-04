@@ -26,7 +26,32 @@ type InventoryRow = {
   id: string;
   disposition: string;
   owningSlice: string | null;
+  reason: string;
 };
+
+// Initial write families resolve to shipped when the catalogue carries a
+// leaf for one of their v1.0 operations, and stay pending while every row
+// remains unimplemented. Family membership comes from the inventory
+// owningSlice and shipped status comes from the catalogue, so a merged
+// write slice flips its own row without touching this template. Blocked,
+// deprecated and unavailable variants never count as pending.
+function initialWriteStatus(rows: InventoryRow[]): { shipped: string[]; pending: string[] } {
+  const families = new Map<string, string[]>();
+  for (const row of rows) {
+    const operation = /^v1\.0:(.+)$/.exec(row.id)?.[1];
+    if (operation === undefined || row.owningSlice === null || !/^WRITE-0[1-9]$/.test(row.owningSlice)) continue;
+    if (row.disposition === "intentionally-blocked" || row.disposition === "deprecated" || row.disposition === "unavailable") continue;
+    families.set(row.owningSlice, [...(families.get(row.owningSlice) ?? []), operation]);
+  }
+  const shipped: string[] = [];
+  const pending: string[] = [];
+  for (const [slice, operations] of [...families.entries()].sort()) {
+    const leaf = LEAVES.find(candidate => candidate.operation !== undefined && operations.includes(candidate.operation));
+    if (leaf) shipped.push(`${slice} (\`mg-axi ${leaf.path}\`)`);
+    else pending.push(`${slice} (${operations.map(operation => `\`${operation}\``).join(", ")})`);
+  }
+  return { shipped, pending };
+}
 
 const DISPOSITIONS = ["named-command", "reviewed-raw-read", "scheduled", "intentionally-blocked", "deprecated", "unavailable", "excluded"] as const;
 
@@ -43,6 +68,7 @@ export function capabilityDocument(): string {
   };
   const rows = inventory.operations;
   const count = (disposition: string): number => rows.filter(row => row.disposition === disposition).length;
+  const writeStatus = initialWriteStatus(rows);
   const readLeaves = LEAVES.filter(leaf => leaf.operation !== undefined && leaf.operation.startsWith("GET:"));
   const writeLeaves = LEAVES.filter(leaf => leaf.operation !== undefined && !leaf.operation.startsWith("GET:"));
   const commandRows = readLeaves.map(leaf => {
@@ -53,6 +79,7 @@ export function capabilityDocument(): string {
     const row = rows.find(candidate => candidate.id === `v1.0:${leaf.operation}`);
     return `| \`mg-axi ${leaf.path}\` | \`${leaf.operation}\` | ${row?.owningSlice ?? "-"} |`;
   });
+  const deferredDomainRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate R1 "));
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
   return [
@@ -81,6 +108,18 @@ export function capabilityDocument(): string {
     "| `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |",
     "| `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |",
     "",
+    "## EXT-01 domain scope decisions",
+    "",
+    "Firstmate decision R1: approve narrowing this change to the eight v1.0 domain reads above.",
+    "The operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.",
+    "Federation stays out because it can carry signing-certificate material.",
+    "Firstmate decision R2: keep the write-family status section as the coverage fix added to scope (resolved-kept).",
+    "Both firstmate decisions must also be stated in the PR body by the delivery phase.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredDomainRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
     "## Named writes",
     "",
     "Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, immutable scope, preview, explicit `--execute`, typed target confirmation for disruptive effects, durable journal intent/outcome and no replay. Inventory dispositions stay discovery-time records until a metadata refresh reviews them; the implemented review lives beside each command.",
@@ -89,8 +128,9 @@ export function capabilityDocument(): string {
     "|---|---|---|",
     ...writeRows,
     "",
-    "Extended families (EXT-01 through EXT-04), later writes (WRITE-04 and",
-    "beyond) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining",
+    `Shipped initial writes: ${writeStatus.shipped.length ? writeStatus.shipped.join(", ") : "none"}.`,
+    `Pending initial writes: ${writeStatus.pending.length ? writeStatus.pending.join(", ") : "none"}.`,
+    "Extended families (EXT-01 through EXT-04) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining",
     "scheduled rows; see docs/build-plan.md for their dispatch.",
     "",
   ].join("\n");

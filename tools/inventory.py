@@ -199,6 +199,17 @@ def make_row(version, path, method, operation):
         disposition, reason = "intentionally-blocked", "Beta writes are denied by the approved plan."
     elif any(word in lower for word in ("b2c", "authenticationeventsflows", "trustframework/policies")):
         disposition, reason = "intentionally-blocked", "External-customer launch support requires separate authorization."
+    if owner == "EXT-01" and method == "GET" and disposition == "scheduled" and path.split("/")[1] in {"domains", "domainDnsRecords"}:
+        if "/federationConfiguration" in path:
+            reason = "Deferred by firstmate R1 to a later EXT-01 domain federation subfamily: federation configuration can carry signing-certificate material and needs a separate output review."
+        elif "/domainNameReferences" in path or path.endswith("/rootDomain"):
+            reason = "Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review."
+        elif "/sharedEmailDomainInvitations" in path:
+            reason = "Deferred by firstmate R1 to a later EXT-01 shared-email domains subfamily: beta invitation relationships need a separate access and output review."
+        elif path.endswith("/$count"):
+            reason = "Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads."
+        elif version == "beta":
+            reason = "Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review."
     if mutates and owner is not None:
         owner = "WRITE-N"
         if method == "PATCH" and path == "/users/{user-id}":

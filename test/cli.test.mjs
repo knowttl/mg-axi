@@ -43,6 +43,10 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra pim active list/);
   assert.match(result.stdout, /entra device list/);
   assert.match(result.stdout, /entra administrative-unit list/);
+  assert.match(result.stdout, /entra domain list/);
+  assert.match(result.stdout, /entra domain verification-dns-record list/);
+  assert.match(result.stdout, /entra domain service-configuration-record list/);
+  assert.match(result.stdout, /entra domain-dns-record list/);
   assert.match(result.stdout, /entra conditional-access policy list/);
   assert.match(result.stdout, /entra conditional-access named-location list/);
   assert.match(result.stdout, /entra group member add/);
@@ -74,6 +78,10 @@ for (const [name, args, error] of [
   ["unknown flag on member add", ["entra", "group", "member", "add", "--transitive"], /unknown flag/],
   ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
   ["missing required user", ["entra", "user", "authentication-method", "list"], /--user is required/],
+  ["missing required domain ID", ["entra", "domain", "show"], /--id is required/],
+  ["missing required domain for verification records", ["entra", "domain", "verification-dns-record", "list"], /--domain is required/],
+  ["missing required domain for service records", ["entra", "domain", "service-configuration-record", "list"], /--domain is required/],
+  ["domain list rejects filters", ["entra", "domain", "list", "--filter", "isVerified eq true"], /unknown flag --filter/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
   ["missing required grant client", ["entra", "service-principal", "oauth2-grant", "list"], /--service-principal is required/],
   ["missing required app-role client", ["entra", "service-principal", "app-role-assignment", "list"], /--service-principal is required/],

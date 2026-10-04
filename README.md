@@ -48,6 +48,12 @@ Delegated user reads default to `https://graph.microsoft.com/User.Read.All` with
 All delegated reads, including raw reads and cursor resumes, reject scopes outside `READ_SCOPES` in the [shared session](src/graph-session.ts) before credential acquisition; [Graph coverage](docs/graph-coverage.md) explains the operation-specific read permission choices.
 Write scopes are refused with `VALIDATION_ERROR` and a list of supported read scopes.
 User reads acquire credentials silently; a resume containing only buffered rows can finish without another Graph request.
+WRITE-02 adds the first named write: `mg-axi entra user update --user <user-id-or-upn> --account-enabled true|false` sets one user's `accountEnabled` through `PATCH /users/{id}` with only that property sent.
+Without `--execute` the command previews the desired-state diff read through the user show route and journals nothing; an already-desired value is a no-op with exit 0.
+Disabling is disruptive: `--execute` runs need `--confirm '<user-id-or-upn>'` repeating the target exactly, while enabling needs no confirmation.
+After a successful PATCH the command rereads the user and reports a `WRITE_CONFLICT` when the value is not what was sent; user-update answers 204 with an empty body, so the reread is the only proof.
+The least-privileged pair is `User.EnableDisableAccount.All` plus `User.Read.All` in both modes, requested as documented scopes that callers cannot override.
+Delegated callers need `Privileged Authentication Administrator` for admin targets and must generally outrank the target; app-only callers need the pair plus a higher-privileged admin role assignment, and denials surface both rules because a 403 never says which prerequisite is missing.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
 Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
 Data and structured errors use TOON on stdout; diagnostics belong on stderr.
@@ -294,6 +300,7 @@ Writes stay disabled unless a human hand-edits a `writes` object into the profil
 The object accepts only `allowWrites` (boolean) and `operations` (1 to 64 nonempty operation names, each at most 256 characters), including when `allowWrites` is false.
 No command writes that object, and `MG_AXI_READ_ONLY=1` overrides any opt-in.
 WRITE-00 enables no mutation family or command; the coordinator is exercised only through fixtures under the [named-write execution contract](docs/execution.md#named-writes).
+WRITE-02 binds the `entra.user.update` operation name: hand-enable account writes with `{ "allowWrites": true, "operations": ["entra.user.update"] }`.
 The journal defaults to `~/.mg-axi/writes.log`; a nonblank `MG_AXI_WRITE_LOG` overrides that path.
 
 Browser login uses Microsoft's [MSAL interactive API](https://learn.microsoft.com/en-us/entra/msal/javascript/node/acquire-token-requests) and PKCE.

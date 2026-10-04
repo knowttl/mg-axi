@@ -1,10 +1,12 @@
 import { encode } from "@toon-format/toon";
 import { AxiError, runAxiCli } from "axi-sdk-js";
-import { home, leafHelp, operationFor, resolveCommand, DESCRIPTION, TOP_LEVEL_HELP } from "./catalogue.js";
+import { LEAVES, home, leafHelp, operationFor, resolveCommand, DESCRIPTION, TOP_LEVEL_HELP } from "./catalogue.js";
 import { VERSION } from "./version.js";
 import { Profiles } from "./profiles.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
+import { fetchMutationTransport, updateUserAccount } from "./entra-user-update.js";
+import { createMutationCoordinator, type MutationTransport } from "./mutations.js";
 import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
 import { listDirectoryRoles, showDirectoryRole, listRoleAssignments, listPimEligible, listPimActive } from "./entra-roles.js";
 import { listAdministrativeUnitMembers, listAdministrativeUnits, listDevices, showAdministrativeUnit, showDevice } from "./entra-directory.js";
@@ -44,6 +46,8 @@ export interface DispatchOverrides {
   transport?: GraphTransport;
   delegated?: DelegatedAuth;
   application?: ApplicationAuth;
+  mutationTransport?: MutationTransport;
+  journalPath?: string;
 }
 
 async function readCursor(cursor: string | undefined): Promise<string | undefined> {
@@ -178,6 +182,43 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     return leaf.path === "entra user list"
       ? listUsers(session, flags, selected.profile, operation, leafHelp(leaf), selected.name)
       : showUser(session, flags, selected.profile, operation, leafHelp(leaf), selected.name);
+  }
+  if (leaf.path === "entra user update") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const readLeaf = LEAVES.find(item => item.path === "entra user show")!;
+    const readOperation = operationFor(readLeaf, "v1.0");
+    if (!readOperation || readOperation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${readLeaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const coordinator = createMutationCoordinator({
+      profile: selected.profile,
+      delegated,
+      application,
+      transport: overrides.mutationTransport ?? fetchMutationTransport,
+      ...(overrides.journalPath !== undefined ? { journalPath: overrides.journalPath } : {}),
+    });
+    return updateUserAccount({
+      session,
+      coordinator,
+      flags,
+      profile: selected.profile,
+      profileName: selected.name,
+      readOperation,
+      help: leafHelp(leaf),
+    });
   }
   if (leaf.path === "entra user authentication-method list" || leaf.path === "entra registration list") {
     const selected = profiles.resolve(flags.profile as string | undefined);

@@ -36,6 +36,7 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi doctor` | native | read |
 | `mg-axi entra user list` | native | read |
 | `mg-axi entra user show` | native | read |
+| `mg-axi entra user update` | native | write |
 | `mg-axi entra user authentication-method list` | native | read |
 | `mg-axi entra registration list` | native | read |
 | `mg-axi entra group list` | native | read |

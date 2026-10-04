@@ -170,6 +170,13 @@ export const LEAVES: Leaf[] = [
     full: userRead.full,
     scopes: userRead.scopes,
   }, examples: ["mg-axi entra user show --id <user-id-or-upn> --profile soc", "mg-axi entra user show --id <user-id-or-upn> --profile soc --full"] },
+  { path: "entra user update", description: "Set one user's accountEnabled (WRITE-02): desired-state preview, no-op when already set, conflict on reread mismatch; disabling is disruptive and needs typed confirmation", operation: "PATCH:/users/{user-id}", flags: {
+    ...common,
+    user: { value: "user-id-or-upn", required: true, description: "User object ID or UPN whose account is enabled or disabled" },
+    "account-enabled": { value: "true|false", required: true, description: "Desired account state; false disables the account and is disruptive" },
+    execute: { description: "Send the PATCH after preview; without it the command only previews the desired-state diff and journals nothing" },
+    confirm: { value: "user-id-or-upn", description: "Required when disabling: repeat the --user value exactly" },
+  }, examples: ["mg-axi entra user update --user <user-id-or-upn> --account-enabled false --profile soc", "mg-axi entra user update --user <user-id-or-upn> --account-enabled false --execute --confirm '<user-id-or-upn>' --profile soc", "mg-axi entra user update --user <user-id-or-upn> --account-enabled true --execute --profile soc"] },
   { path: "entra user authentication-method list", description: "List authentication methods for one named user (id, displayName, createdDateTime); targeted inspection only, never a tenant scan; phone numbers redacted", operation: "GET:/users/{user-id}/authentication/methods", flags: {
     ...common, user: { value: "user-id-or-upn", required: true, description: "User object ID or UPN whose methods are listed" },
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

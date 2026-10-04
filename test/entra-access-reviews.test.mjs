@@ -842,6 +842,34 @@ test("application access-review reads reject delegated scopes", async () => {
   }
 });
 
+for (const [noun, key, rows] of [
+  ["contacted-reviewer", "contactedReviewers", reviewers],
+  ["stage", "stages", stages],
+]) {
+  for (const cursorArgs of [["--cursor", "-"], ["--cursor=-"]]) {
+    test(`${noun} list resumes from stdin with ${cursorArgs.join(" ")}`, async () => {
+      const state = setupProfiles();
+      try {
+        const { overrides } = overridesFor("delegated", transport(() => json(200, { value: rows })));
+        const args = ["entra", "access-review", noun, "list", "--definition", definitionId,
+          "--instance", instanceId, "--profile", "soc", "--limit", "1", "--select", "id"];
+        const first = await executeArgv(args, overrides);
+        assert.deepEqual(first[key], [{ id: rows[0].id }]);
+        assert.equal(first.count.complete, false);
+        assert.ok(first.help.some(hint => hint.includes("--cursor -") && hint.includes("stdin")));
+        const resumed = runAccessReviewCli([...args, ...cursorArgs], state, "delegated", undefined, first.cursor);
+        assert.equal(resumed.error, undefined);
+        assert.equal(resumed.status, 0, resumed.stdout);
+        const output = decode(resumed.stdout);
+        assert.deepEqual(output[key], [{ id: rows[1].id }]);
+        assert.deepEqual(output.count, { returned: 1, complete: true });
+      } finally {
+        teardownProfiles(state);
+      }
+    });
+  }
+}
+
 for (const [noun, parents, key, field] of [
   ["definition", [], "definitions", "scope"],
   ["instance", ["--definition", definitionId], "instances", "scope"],

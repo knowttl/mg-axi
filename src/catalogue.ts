@@ -908,7 +908,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (flag!.value) {
       const value = match![2] ?? argv[++i];
       if (!value?.trim() || (value.startsWith("-") && !(name === "cursor" && value === "-"
-        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra access-review definition list" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review decision list")))) fail(`--${name} requires a non-empty value`);
+        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra access-review definition list" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review decision list" || leaf.path === "entra access-review contacted-reviewer list" || leaf.path === "entra access-review stage list")))) fail(`--${name} requires a non-empty value`);
       flags[name] = value!;
     } else {
       if (match![2] !== undefined) fail(`--${name} does not take a value`);

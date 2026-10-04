@@ -12,7 +12,7 @@ API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface t
 READ-01 executes Entra user list/show through that session in both delegated and application modes; current usage follows below.
 READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
 READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
-READ-03 adds Conditional Access policy and named-location list/show as separate grammar through the same session; Conditional Access usage follows the group usage below.
+READ-03 adds Conditional Access policy and named-location list/show as separate grammar through the same session; Conditional Access usage follows the device and administrative-unit usage below.
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the Conditional Access usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.

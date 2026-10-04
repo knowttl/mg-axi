@@ -67,11 +67,16 @@ export interface ExecuteArgs {
   scopes?: string[];
 }
 
+let operationsById: Map<string, SessionOperation> | undefined;
+
 function findOperation(id: string): SessionOperation | undefined {
-  const inventory = JSON.parse(readFileSync(new URL("../inventory/operations.json", import.meta.url), "utf8")) as {
-    operations: SessionOperation[];
-  };
-  return inventory.operations.find(row => row.id === id);
+  if (!operationsById) {
+    const inventory = JSON.parse(readFileSync(new URL("../inventory/operations.json", import.meta.url), "utf8")) as {
+      operations: SessionOperation[];
+    };
+    operationsById = new Map(inventory.operations.map(row => [row.id, row]));
+  }
+  return operationsById.get(id);
 }
 
 export function resolveSessionOperation(version: string, method: string, route: string): SessionOperation {
@@ -82,7 +87,7 @@ export function resolveSessionOperation(version: string, method: string, route: 
       "Use a route from inventory/operations.json; the session never builds uncatalogued URLs",
     ]);
   }
-  return operation;
+  return { ...operation };
 }
 
 const SECRET_KEY = /(password|passwd|secret|token|credential|sas|authorization|accountkey)/i;

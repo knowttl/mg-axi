@@ -83,6 +83,20 @@ test("a fabricated executable disposition cannot widen a blocked operation", asy
   assert.equal(f.requests.length, 0);
 });
 
+test("mutating a resolved operation cannot change the authoritative inventory", async () => {
+  const operation = resolveSessionOperation("v1.0", "GET", blockedDeviceCredentials.path);
+  operation.disposition = "scheduled";
+  operation.path = "/users";
+  const f = fixture(json(200, {}));
+  await assert.rejects(
+    f.session.execute({ profile: delegatedProfile, operation, params: { "deviceLocalCredentialInfo-id": "fixture-id" }, scopes }),
+    error => error.code === "POLICY_DENIED" && /intentionally-blocked/.test(error.message),
+  );
+  assert.deepEqual(resolveSessionOperation("v1.0", "GET", blockedDeviceCredentials.path), blockedDeviceCredentials);
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
+});
+
 for (const [name, operation, params] of [
   ["intentionally-blocked route", blockedDeviceCredentials, { "deviceLocalCredentialInfo-id": "fixture-id" }],
   ["excluded route", resolveSessionOperation("v1.0", "GET", "/me/messages"), {}],

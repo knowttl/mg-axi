@@ -17,8 +17,7 @@ import { setupView } from "../dist/setup.js";
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
 const userId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const upn = "AdeleV@contoso.com";
-const WRITE_SCOPES = ["https://graph.microsoft.com/User.EnableDisableAccount.All"];
+const WRITE_SCOPES = ["https://graph.microsoft.com/User.EnableDisableAccount.All", "https://graph.microsoft.com/User.Read.All"];
 const READ_SCOPES = ["https://graph.microsoft.com/User.Read.All"];
 const MUTATION_URL = `https://graph.microsoft.com/v1.0/users/${userId}`;
 
@@ -181,6 +180,7 @@ test("enable is an ordinary write needing no confirmation", async () => {
     assert.deepEqual(result.user, { id: userId, accountEnabled: true });
     assert.equal(f.mutRequests.length, 1);
     assert.equal(f.mutRequests[0].body, JSON.stringify({ accountEnabled: true }));
+    assert.ok(f.credCalls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(WRITE_SCOPES)));
     assert.equal(journal(f.journalPath)[0].effect, "write");
   } finally { teardown(state); }
 });
@@ -371,15 +371,34 @@ test("application mode uses the .default audience and succeeds", async () => {
   } finally { teardown(state); }
 });
 
-test("UPN targets address the user route directly", async () => {
+for (const upn of ["AdeleV@contoso.com", "alice_example.com#EXT#@tenant.onmicrosoft.com"]) test(`UPN ${upn} targets the same user in preview, PATCH and rereads`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
     const f = fixture({ reads: [true, true, true, false] });
+    const preview = await executeArgv(updateArgs(upn, "false"), fixture().overrides);
+    assert.equal(preview.preview.url, `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(upn)}`);
+    assert.equal(preview.preview.target, upn);
     const result = await executeArgv(updateArgs(upn, "false", ["--execute", "--confirm", upn]), f.overrides);
     assert.deepEqual(result.user, { id: upn, accountEnabled: false });
-    assert.equal(f.mutRequests[0].url, `https://graph.microsoft.com/v1.0/users/${upn}`);
+    assert.equal(f.mutRequests[0].url, `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(upn)}`);
     assert.equal(f.mutRequests[0].body, JSON.stringify({ accountEnabled: false }));
+    assert.equal(f.readRequests.length, 4);
+    for (const request of f.readRequests) {
+      assert.equal(new URL(request.url).pathname, `/v1.0/users/${encodeURIComponent(upn)}`);
+    }
+  } finally { teardown(state); }
+});
+
+for (const user of ["..", "a/b", "a\\b", "a?b", "a%23b", "a%2fb", "a b"]) test(`unsafe account target ${user} is refused before credentials`, async () => {
+  const state = setupProfiles();
+  try {
+    enableWrites(state.dir);
+    const f = fixture();
+    await assert.rejects(executeArgv(updateArgs(user, "false", ["--execute", "--confirm", user]), f.overrides), { code: "VALIDATION_ERROR" });
+    assert.equal(f.readRequests.length, 0);
+    assert.equal(f.mutRequests.length, 0);
+    assert.equal(f.credCalls.length, 0);
   } finally { teardown(state); }
 });
 

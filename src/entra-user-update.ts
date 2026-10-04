@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { GraphSession, SessionOperation } from "./graph-session.js";
+import { encodeGraphPathSegment } from "./graph-session.js";
 import type {
   MutationCoordinator,
   MutationTransport,
@@ -37,11 +38,10 @@ export const REVIEWED_ON = "2026-10-04";
 // Scope name a profile hand-enables in its writes.operations allowlist.
 export const USER_ACCOUNT_UPDATE_OPERATION = "entra.user.update";
 
-// The only scopes this slice ever requests: the documented write permission
-// through the coordinator path, the documented read permission through the
-// READ-01 preview route. Delegated callers cannot override them; application
-// profiles use the configured Graph .default audience.
-export const USER_ACCOUNT_WRITE_SCOPES = ["https://graph.microsoft.com/User.EnableDisableAccount.All"];
+export const USER_ACCOUNT_WRITE_SCOPES = [
+  "https://graph.microsoft.com/User.EnableDisableAccount.All",
+  "https://graph.microsoft.com/User.Read.All",
+];
 export const USER_ACCOUNT_READ_SCOPES = ["https://graph.microsoft.com/User.Read.All"];
 
 const PERMISSION_GUIDANCE =
@@ -64,7 +64,7 @@ export function userAccountDefinition(user: string, desired: boolean) {
     operation: USER_ACCOUNT_UPDATE_OPERATION,
     method: "PATCH" as const,
     version: "v1.0",
-    path: `/v1.0/users/${target}`,
+    path: `/v1.0/users/${encodeGraphPathSegment(target)}`,
     // Disabling is disruptive and needs typed confirmation; enabling is an
     // ordinary write. The coordinator enforces the distinction.
     effect: (desired ? "write" : "disruptive") as "write" | "disruptive",

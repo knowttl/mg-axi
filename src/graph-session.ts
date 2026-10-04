@@ -280,8 +280,17 @@ function checkOperation(operation: SessionOperation): void {
   }
 }
 
-const UNSAFE_PARAM = /[%/?#\\]/;
+const UNSAFE_PARAM = /[%/?\\{}]/;
 const CONTROL = /[\s\x00-\x1f\x7f]/;
+
+export function encodeGraphPathSegment(value: string): string {
+  if (typeof value !== "string" || !value.length || value === "." || value === ".." || UNSAFE_PARAM.test(value) || CONTROL.test(value)) {
+    throw new AxiError("Invalid path parameter", "VALIDATION_ERROR", [
+      "Bind one resource identifier per placeholder; encoded separators and traversal are rejected",
+    ]);
+  }
+  return encodeURIComponent(value);
+}
 
 function buildPath(route: string, params: Record<string, string>): string {
   const used = new Set<string>();
@@ -303,12 +312,7 @@ function buildPath(route: string, params: Record<string, string>): string {
       }
       used.add(name);
       const value = params[name]!;
-      if (typeof value !== "string" || !value.length || value === "." || value === ".." || UNSAFE_PARAM.test(value) || CONTROL.test(value)) {
-        throw new AxiError(`Invalid path parameter {${name}}`, "VALIDATION_ERROR", [
-          "Bind one resource identifier per placeholder; encoded separators and traversal are rejected",
-        ]);
-      }
-      return encodeURIComponent(value);
+      return encodeGraphPathSegment(value);
     })
     .join("/");
   const extra = Object.keys(params).find(name => !used.has(name) && splitPath(route).every(segment => bindingName(segment) !== name));

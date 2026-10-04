@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
-import { GRAPH_HOST, redactGraphValue } from "./graph-session.js";
+import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-session.js";
 import { validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
 
 // WRITE-00 mutation coordinator: fixture-only enablement for later named
@@ -423,10 +423,21 @@ export function createMutationCoordinator(args: {
     const segments = definition.path.split("/");
     if (!definition.path.startsWith(prefix) || segments[0] !== ""
       || segments.slice(1).some(segment => !segment || segment === "." || segment === "..")
-      || /[%\s\x00-\x1f\x7f\\?#{}]/.test(definition.path)) {
+      || /[\s\x00-\x1f\x7f\\?#{}]/.test(definition.path)) {
       throw new AxiError("Refusing mutation path outside the bound operation scope", "VALIDATION_ERROR", [
         `Mutation paths must stay under ${prefix} without traversal, query strings or fragments`,
       ]);
+    }
+    for (const segment of segments.slice(1)) {
+      let decoded: string;
+      try {
+        decoded = decodeURIComponent(segment);
+      } catch {
+        throw new AxiError("Invalid mutation path encoding", "VALIDATION_ERROR", [
+          "Bind one encoded resource identifier per path segment",
+        ]);
+      }
+      encodeGraphPathSegment(decoded);
     }
     return `https://${GRAPH_HOST}${definition.path}`;
   }

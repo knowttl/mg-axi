@@ -169,7 +169,7 @@ test("read-time scopes never widen the write scope", async () => {
   assert.equal(f.requests.length, 0);
 });
 
-for (const path of ["", "v1.0/fixture", "/beta/fixture/notes", "/v1.0/../tenants", "/v1.0/a b", "/v1.0/a?b=c", "/v1.0/a#b", "/v1.0/a\\b", "/v1.0/", "/v1.0//notes", "/v1.0/a/{b}", "/v1.0/%2e%2e/x"]) {
+for (const path of ["", "v1.0/fixture", "/beta/fixture/notes", "/v1.0/../tenants", "/v1.0/a b", "/v1.0/a?b=c", "/v1.0/a#b", "/v1.0/a\\b", "/v1.0/", "/v1.0//notes", "/v1.0/a/{b}", "/v1.0/%2e%2e/x", "/v1.0/a%2fb", "/v1.0/a%5cb", "/v1.0/a%252fb", "/v1.0/%20", "/v1.0/%00", "/v1.0/%7bb%7d", "/v1.0/%zz"]) {
   test(`hostile mutation path ${JSON.stringify(path)} is refused with zero sends`, async () => {
     const f = fixture();
     await assert.rejects(

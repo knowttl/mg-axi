@@ -1,7 +1,7 @@
 import { AxiError } from "axi-sdk-js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
-import { GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
+import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
 // API-01: the reviewed read-only raw Graph surface.
@@ -242,6 +242,7 @@ function matchTemplate(template: string, pathname: string): Record<string, strin
     const name = /^\{([^{}]+)\}$/.exec(slot)?.[1];
     if (name) {
       if (!segment.length) return null;
+      encodeGraphPathSegment(segment);
       params[name] = segment;
     } else if (slot.toLowerCase() !== segment.toLowerCase()) return null;
   }

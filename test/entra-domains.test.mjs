@@ -510,6 +510,30 @@ test("domain read flags validate before profiles or HTTP", async () => {
   await assert.rejects(executeArgv(["entra", "domain", "list", "--bogus"]), { code: "VALIDATION_ERROR" });
 });
 
+for (const [command, args] of [
+  [["domain", "show"], []],
+  [["domain", "verification-dns-record", "show"], ["--domain", dom1.id]],
+  [["domain", "service-configuration-record", "show"], ["--domain", dom1.id]],
+  [["domain-dns-record", "show"], []],
+]) {
+  for (const id of ["$count", "$value", "$ref"]) {
+    test(`${command.join(" ")} rejects reserved resource binding ${id} before credentials`, async () => {
+      const state = setupProfiles();
+      try {
+        const { calls, requests, overrides } = overridesFor("delegated");
+        await assert.rejects(
+          executeArgv(["entra", ...command, ...args, "--id", id, "--profile", "soc"], overrides),
+          { code: "VALIDATION_ERROR", message: "OData reserved segments cannot be resource identifiers" },
+        );
+        assert.equal(calls.length, 0);
+        assert.equal(requests.length, 0);
+      } finally {
+        teardownProfiles(state);
+      }
+    });
+  }
+}
+
 for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
   for (const preview of [false, true]) {
     for (const [command, args] of [

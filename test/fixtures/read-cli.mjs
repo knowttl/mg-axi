@@ -38,8 +38,8 @@ mock.module(new URL("../../dist/msal-app-provider.js", import.meta.url), {
     async acquire(profile, scopes) { return credential(profile, scopes, "application"); }
   } },
 });
-mock.module(new URL("../../dist/graph-transport.js", import.meta.url), {
-  [exportOption]: { fetchTransport: async request => {
+mock.module(new URL("../../dist/api.js", import.meta.url), {
+  [exportOption]: { ...await import("../../dist/api.js"), fetchTransport: async request => {
     assert.equal(request.headers.Authorization, `Bearer opaque-fixture-${mode}-token`);
     const url = new URL(request.url);
     assert.equal(url.origin, "https://graph.microsoft.com");

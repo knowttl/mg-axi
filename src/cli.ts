@@ -5,7 +5,7 @@ import { VERSION } from "./version.js";
 import { Profiles } from "./profiles.js";
 import { GraphSession, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
-import { fetchTransport } from "./graph-transport.js";
+import { fetchTransport } from "./api.js";
 import type { DelegatedAuth } from "./auth.js";
 import type { ApplicationAuth } from "./app-auth.js";
 
@@ -61,7 +61,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
   }
   if (leaf.path === "api get") {
     const selected = profiles.resolve(flags.profile as string | undefined);
-    const { runApiGet, fetchTransport } = await import("./api.js");
+    const { runApiGet } = await import("./api.js");
     const { DelegatedAuth } = await import("./auth.js");
     const { ApplicationAuth } = await import("./app-auth.js");
     const { MsalProvider } = await import("./msal-provider.js");

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { test } from "node:test";
-import { fetchTransport } from "../dist/graph-transport.js";
+import { fetchTransport } from "../dist/api.js";
 
 test("fetch transport returns redirects for session authorization without following them", async () => {
   const requests = [];

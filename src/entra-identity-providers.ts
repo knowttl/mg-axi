@@ -3,7 +3,7 @@ import type { CollectArgs, GraphSession, SessionOperation } from "./graph-sessio
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-03 workforce identity-providers subfamily: the read mapping behind
-// `mg-axi entra identity-provider list/show/count`. Operation construction
+// `mg-axi entra identity-provider list/show/count/available-types`. Operation construction
 // stays beside its command; the shared session owns URLs, credentials,
 // paging, retries and error translation, and the SDK owns TOON rendering.
 // This module only maps flags to session calls and projects rows for compact

@@ -37,6 +37,7 @@ const MAX_QUERY_VALUE = 1024;
 export const MAX_RETRY_AFTER_MS = 10_000;
 export const DEFAULT_MAX_REQUESTS = 20;
 export const DEFAULT_MAX_BYTES = 5_000_000;
+export const MAX_CURSOR_BYTES = 16_000_000;
 export const DEFAULT_DEADLINE_MS = 30_000;
 // Bounded digest of visited continuations carried in cursors so cycles
 // across resumes end as partial, never complete.
@@ -62,6 +63,7 @@ export interface TransportResponse {
   status: number;
   headers: Record<string, string>;
   body: string;
+  receivedBodyBytes?: number;
 }
 
 // True external seam: tests substitute fixture transports, later slices wire
@@ -462,6 +464,9 @@ function encodeCursor(operation: SessionOperation, state: CursorState): string {
 }
 
 function decodeCursor(operation: SessionOperation, cursor: string): CursorState {
+  if (Buffer.byteLength(cursor, "utf8") > MAX_CURSOR_BYTES) {
+    throw new AxiError(`Collection cursor exceeds ${MAX_CURSOR_BYTES} bytes`, "VALIDATION_ERROR", ["Use a cursor within the supported size ceiling"]);
+  }
   let payload: unknown;
   try {
     payload = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
@@ -662,7 +667,7 @@ export class GraphSession {
             "Transport failures carry no Graph diagnosis; do not retry blindly",
           ]);
         }
-        bytes += bodyBytes(response.body ?? "");
+        bytes += response.receivedBodyBytes ?? bodyBytes(response.body ?? "");
         const status = response.status;
         if (status === 301 || status === 302 || status === 303 || status === 307 || status === 308) {
           const location = header(response.headers, "location");

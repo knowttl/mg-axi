@@ -32,7 +32,7 @@ export async function main() {
     commands: {
       dispatch: async () => {
         if (process.argv.length === 3 && process.argv[2] === "--help") return TOP_LEVEL_HELP;
-        const { leaf, flags } = resolveCommand(process.argv.slice(2));
+        const { leaf, flags, positional } = resolveCommand(process.argv.slice(2));
         if (flags.help) return leafHelp(leaf);
         if (leaf.path === "home") return localHome(flags.profile as string | undefined);
         const profiles = new Profiles();
@@ -54,6 +54,41 @@ export async function main() {
           const { DelegatedAuth } = await import("./auth.js");
           const { MsalProvider } = await import("./msal-provider.js");
           return { profile: selected.name, ...await new DelegatedAuth(new MsalProvider()).login(selected.profile, String(flags.method ?? "browser"), String(flags.scopes).split(",")) };
+        }
+        if (leaf.path === "api get") {
+          const selected = profiles.resolve(flags.profile as string | undefined);
+          const { runApiGet, fetchTransport } = await import("./api.js");
+          const { DelegatedAuth } = await import("./auth.js");
+          const { ApplicationAuth } = await import("./app-auth.js");
+          const { MsalProvider } = await import("./msal-provider.js");
+          const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+          const { MAX_CURSOR_BYTES } = await import("./graph-session.js");
+          let cursor = flags.cursor === undefined ? undefined : String(flags.cursor);
+          if (cursor === "-") {
+            const chunks: Buffer[] = [];
+            let bytes = 0;
+            for await (const chunk of process.stdin) {
+              const buffer = Buffer.from(chunk);
+              bytes += buffer.length;
+              if (bytes > MAX_CURSOR_BYTES) throw new AxiError(`Collection cursor exceeds ${MAX_CURSOR_BYTES} bytes`, "VALIDATION_ERROR", ["Use a cursor within the supported size ceiling"]);
+              chunks.push(buffer);
+            }
+            cursor = Buffer.concat(chunks).toString("utf8");
+          }
+          return runApiGet({
+            path: positional!,
+            apiVersion: String(flags["api-version"] ?? "v1.0"),
+            odata: flags.odata === undefined ? undefined : String(flags.odata),
+            cursor,
+            scopes: flags.scopes === undefined ? undefined : String(flags.scopes),
+            limit: flags.all ? undefined : flags.limit === undefined ? 100 : Number(flags.limit),
+            full: !!flags.full,
+            profile: selected.profile,
+          }, {
+            delegated: new DelegatedAuth(new MsalProvider()),
+            application: new ApplicationAuth(new MsalApplicationProvider()),
+            transport: fetchTransport,
+          });
         }
         const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
         throw new AxiError(`Command is not executable: ${operation?.disposition ?? "unavailable"} (${operation?.owningSlice ?? "no inventory mapping"})`, "NOT_IMPLEMENTED", [leafHelp(leaf)]);

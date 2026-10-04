@@ -56,7 +56,7 @@ for (const [name, args, error] of [
   ["duplicate flag", ["entra", "user", "list", "--all", "--all"], /duplicate/],
   ["boolean value", ["entra", "user", "list", "--all=false"], /does not take a value/],
   ["literal help after delimiter", ["home", "--", "--help"], /unexpected/],
-  ["unpublished command", ["api", "GET", "/users"], /unknown/],
+  ["non-GET api verb", ["api", "delete", "/users"], /reviewed GET reads only/],
   ["prototype name", ["constructor"], /unknown/],
   ["trailing version", ["home", "--version"], /unknown flag/],
 ]) test(`${name} fails with usage output`, () => {

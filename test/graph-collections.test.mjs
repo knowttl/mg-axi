@@ -154,6 +154,21 @@ test("byte budget preserves unreturned rows in the cursor", async () => {
   assert.equal(second.complete, true);
 });
 
+for (const [name, response, buffered] of [
+  ["success", json(200, { value: [{ id: "a" }] }), [{ id: "a" }]],
+  ["empty success", { status: 204, body: "" }, []],
+  ["redirect", { status: 302, headers: { location: "/v1.0/users?$skiptoken=target" } }, []],
+  ["throttle", { status: 503, headers: { "retry-after": "3600" } }, []],
+]) test(`${name} counts original response bytes supplied by a transforming transport`, async () => {
+  const f = fixture({ ...response, receivedBodyBytes: 100 });
+  const result = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, budget: { maxBytes: 50 } });
+  assert.equal(result.complete, false);
+  assert.match(result.reason, /byte budget/);
+  assert.equal(result.bytes, 100);
+  assert.equal(f.requests.length, 1);
+  assert.deepEqual(decodeCursor(result.cursor).buffered, buffered);
+});
+
 test("deadline exceeded by a Retry-After wait ends as partial", async () => {
   const fake = fakeClock();
   const f = fixture(() => json(429, { error: { code: "TooManyRequests", message: "throttled" } }, { "retry-after": "5" }));

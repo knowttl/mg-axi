@@ -18,7 +18,8 @@ Unknown actions, raw writes, secret-returning endpoints, and unsupported beta wr
 [Paging](https://learn.microsoft.com/en-us/graph/paging) follows exact `@odata.nextLink` values and preserves required headers.
 Validate HTTPS origin and version on initial requests, redirects and every continuation before adding credentials.
 An output cap cannot discard the remainder of a fetched page; continuation state preserves query/context and buffered rows if necessary.
-CORE-02 exposes these mechanics through `GraphSession.collect`, with `limit`, `budget` and an opaque `cursor`; this is a session interface, not an executable CLI command.
+CORE-02 exposes these mechanics through `GraphSession.collect`, with `limit`, `budget` and an opaque `cursor`.
+API-01 uses that interface for raw collection reads; [README.md](../README.md) owns CLI options, output and resume usage.
 Results contain `value`, `complete`, `requests` and `bytes`; a row limit that leaves buffered rows or another page, request/byte/deadline exhaustion, oversized throttle waits and continuation cycles return `complete: false` with a `reason` and cursor.
 Resume with the same operation, resource bindings, authentication mode, tenant/client/cloud, credential reference and scope set.
 The cursor restores the original query and consistency level when omitted; conflicting explicit arguments fail validation.

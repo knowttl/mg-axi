@@ -11,9 +11,14 @@ const cases = [
   { name: "non-Windows oversized write errors fail closed", platform: "linux", large: true, failure: "token-write", error: "LOGIN_FAILED", persisted: [] },
   { name: "refresh read failure requires authentication", failure: "initial-read", refresh: true, error: "AUTH_REQUIRED", persisted: ["account-A"] },
   { name: "refresh write failure requires authentication", failure: "token-write", refresh: true, error: "AUTH_REQUIRED", persisted: ["account-A"] },
-  { name: "Windows oversized login fails without switching storage modes", large: true, error: "LOGIN_FAILED", persisted: [] },
-  { name: "Windows oversized refresh fails without switching storage modes", large: true, refresh: true, error: "AUTH_REQUIRED", persisted: ["account-A"] },
-  { name: "Windows cache limit measures UTF-8 bytes", unicode: true, error: "LOGIN_FAILED", persisted: [] },
+  { name: "Windows oversized login uses session storage", large: true, storage: "session-only", persisted: [] },
+  { name: "Windows oversized refresh uses session storage", large: true, refresh: true, storage: "session-only", persisted: [] },
+  { name: "Windows cache limit measures UTF-8 bytes", unicode: true, storage: "session-only", persisted: [] },
+  ...[false, true].flatMap(refresh => [
+    { name: `Windows oversized ${refresh ? "refresh" : "login"} wipe failure blocks transition`, large: true, refresh, transitionFailure: "delete", error: refresh ? "AUTH_REQUIRED" : "LOGIN_FAILED", persisted: refresh ? ["account-A"] : [] },
+    { name: `Windows oversized ${refresh ? "refresh" : "login"} wipe verification failure blocks transition`, large: true, refresh, transitionFailure: "initial-read", error: refresh ? "AUTH_REQUIRED" : "LOGIN_FAILED", persisted: [] },
+  ]),
+  { name: "Windows oversized refresh retained cache blocks transition", large: true, refresh: true, transitionFailure: "retained-cache", error: "AUTH_REQUIRED", persisted: ["account-A"] },
   { name: "Windows cache at the byte limit remains protected", limit: true, storage: "os-protected", persisted: ["account-B"] },
   { name: "ordinary replacement persists the new account", storage: "os-protected", persisted: ["account-B"] },
   { name: "replacement wipes every old account", multiple: true, storage: "os-protected", persisted: ["account-B"] },
@@ -86,6 +91,7 @@ for (const method of ["browser", "device-code"]) for (const scenario of cases) t
         await this.access(false);
         this.accounts = [{ tenantId: tenant, homeAccountId: accountId }];
         this.token = token;
+        if (scenario.transitionFailure && large) failure = scenario.transitionFailure;
         await this.access(true);
         return { account: this.accounts[0], tenantId: tenant, accessToken: token, expiresOn: new Date(Date.now() + 120000) };
       }

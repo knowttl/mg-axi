@@ -57,8 +57,9 @@ Ordinary credential acquisition uses silent refresh and returns actionable error
 MSAL caches use the OS credential store through optional `keytar`, with login reporting `storage: os-protected`.
 If `keytar` cannot load, caches remain in process memory and login reports `storage: session-only`; authentication then lasts only for that process.
 Installing with `--ignore-scripts` can leave the native module unavailable.
-Session-only mode uses an MSAL client without a persistence plugin and is available only when no protected store exists.
-On Windows, a serialized cache exceeding 2,560 UTF-8 bytes cannot be persisted and fails authentication rather than switching storage modes.
+Session-only mode uses an MSAL client without a persistence plugin and is available only when no usable protected store exists.
+On Windows, a serialized cache exceeding 2,560 UTF-8 bytes cannot be persisted; after verifying a full protected-cache wipe, login or silent refresh succeeds with the authenticated cache in session-only memory.
+If that wipe fails or cannot be verified, authentication fails without switching storage modes.
 Store read, write or invalidation failures fail authentication with `LOGIN_FAILED` during login or `AUTH_REQUIRED` during silent acquisition, rather than switching storage modes.
 Each profile holds one account.
 Every explicit login wipes that profile's entire in-memory and protected MSAL cache before acquiring credentials, and fails if the wipe cannot be verified.

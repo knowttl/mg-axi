@@ -37,7 +37,15 @@ export class MsalProvider implements CredentialProvider {
         afterCacheAccess: async context => {
           if (!context.cacheHasChanged) return;
           const saved = context.tokenCache.serialize();
-          if (process.platform === "win32" && Buffer.byteLength(saved, "utf8") > 2560) throw new Error("OS credential store cannot persist this cache");
+          if (process.platform === "win32" && Buffer.byteLength(saved, "utf8") > 2560) {
+            await store.deletePassword("mg-axi", key);
+            if (await store.getPassword("mg-axi", key) !== null) throw new Error("Unable to wipe profile cache");
+            const session = new PublicClientApplication(configuration);
+            session.getTokenCache().deserialize(saved);
+            this.sessions.set(key, { app: session });
+            this.storage = "session-only";
+            return;
+          }
           await store.setPassword("mg-axi", key, saved);
         },
       } } : undefined,

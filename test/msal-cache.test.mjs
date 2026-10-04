@@ -7,8 +7,9 @@ const scenarios = [
   { name: "session account replacement wipes the prior cache", replace: true, unavailable: true, storage: "session-only" },
   { name: "failed protected wipe prevents account replacement", replace: true, failWipe: true, error: "LOGIN_FAILED" },
   { name: "unavailable store retains session credentials", unavailable: true, storage: "session-only" },
-  { name: "Windows oversized login fails without session fallback", platform: "win32", large: true, error: "LOGIN_FAILED" },
-  { name: "Windows oversized refresh fails without session fallback", platform: "win32", large: true, refresh: true, error: "AUTH_REQUIRED" },
+  { name: "Windows oversized login retains session credentials", platform: "win32", large: true, storage: "session-only" },
+  { name: "Windows oversized replacement retains only the new account in memory", platform: "win32", large: true, replace: true, storage: "session-only" },
+  { name: "Windows oversized refresh retains session credentials", platform: "win32", large: true, refresh: true, storage: "session-only" },
 ];
 
 for (const method of ["browser", "device-code"]) for (const scenario of scenarios) test(`real MSAL: ${method} ${scenario.name}`, () => {
@@ -103,14 +104,25 @@ for (const method of ["browser", "device-code"]) for (const scenario of scenario
         assert.equal((await new MsalProvider().silent(profile, scopes)).accountId, firstAccount + "." + tenant);
       }
     } else {
-      assert.equal((await action()).storage, scenario.storage);
+      const result = await action();
+      if (!scenario.refresh) assert.equal(result.storage, scenario.storage);
+      assert.equal(provider.storage, scenario.storage);
       const requestsBeforeSilent = tokenRequests;
       const cached = await provider.silent(profile, scopes);
       assert.equal(cached.accountId, account + "." + tenant);
+      assert.equal(cached.token, large ? "large-fixture-token-" + "x".repeat(3000) : "small-fixture-token");
       assert.equal(tokenRequests, requestsBeforeSilent);
       assert.equal((await provider.silent(profile, scopes)).accountId, cached.accountId);
       assert.equal(tokenRequests, requestsBeforeSilent);
-      if (scenario.unavailable) await assert.rejects(new MsalProvider().silent(profile, scopes), /Explicit login required/);
+      if (scenario.storage === "session-only") {
+        assert.equal(saved.size, 0);
+        await assert.rejects(new MsalProvider().silent(profile, scopes), /Explicit login required/);
+        mock.timers.tick(3601000);
+        assert.equal((await provider.silent(profile, scopes)).accountId, cached.accountId);
+        assert.equal(tokenRequests, requestsBeforeSilent + 1);
+        assert.equal(provider.storage, "session-only");
+        assert.equal(saved.size, 0);
+      }
       else assert.equal((await new MsalProvider().silent(profile, scopes)).accountId, cached.accountId);
     }
   `], { encoding: "utf8", timeout: 10_000 });

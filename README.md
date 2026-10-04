@@ -12,7 +12,8 @@ API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface t
 READ-01 executes Entra user list/show through that session in both delegated and application modes; current usage follows below.
 READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
 READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
-READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the user usage below.
+READ-03 adds Conditional Access policy and named-location list/show as separate grammar through the same session; Conditional Access usage follows the device and administrative-unit usage below.
+READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the Conditional Access usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
@@ -140,6 +141,32 @@ Resume unit-member lists with the same `--administrative-unit`, profile, scopes 
 Delegated device reads default to `https://graph.microsoft.com/Device.Read.All` and unit reads to `https://graph.microsoft.com/AdministrativeUnit.Read.All`, while application profiles use the configured `.default` audience; hidden unit memberships need `Member.Read.Hidden`.
 Denied directory reads return operation-specific permission, delegated-role and licensing guidance rather than empty results; HTTP 403 alone does not identify which prerequisite is missing.
 `--filter` on these collections is sent with `$count=true` and `ConsistencyLevel: eventual`.
+
+Log in with `https://graph.microsoft.com/Policy.Read.All`, then read Conditional Access policies and named locations as separate grammar:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Policy.Read.All
+mg-axi entra conditional-access policy list --profile soc --limit 10
+mg-axi entra conditional-access policy list --profile soc --filter "state eq 'enabled'"
+mg-axi entra conditional-access policy show --profile soc --id <policy-id>
+mg-axi entra conditional-access named-location list --profile soc
+mg-axi entra conditional-access named-location show --profile soc --id <named-location-id>
+```
+
+`entra conditional-access policy list` defaults to compact properties (`id`, `displayName`, `state`); `policy show --id <policy-id>` defaults to the full reviewed condition and control property set.
+`entra conditional-access named-location list` defaults to `id` and `displayName`; `named-location show --id <named-location-id>` defaults to the full reviewed location set.
+Policy `--select` accepts the [reviewed policy property set](src/entra-conditional-access.ts) and location `--select` accepts the [reviewed location property set](src/entra-conditional-access.ts); `--fields` must be a subset of the fetched selection in each family.
+Returned `@odata.type` stays visible on named-location rows so IP and country locations stay distinguishable alongside any `--fields` projection.
+Policy lists return `policies`, location lists return `namedLocations`, single-policy reads return `policy` and single-location reads return `namedLocation`.
+Successful empty collections return an empty list with `count.returned: 0`, `count.complete: true` and absence guidance.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to Conditional Access reads, including nested condition values; every truncated value carries a `--full` hint.
+Resume either Conditional Access list with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra conditional-access policy list --profile soc --cursor - < cursor.txt`.
+Small cursors can also use `--cursor <token>`; both forms enforce a 16 MB size ceiling.
+Use `--full` when reasoning from complete condition or control text; `--select` and `--fields` still determine which properties are visible, and missing properties remain unknown.
+To replay a resumed result with `--full`, reuse the original input cursor; the returned cursor continues after that result.
+Delegated policy and location reads default to `https://graph.microsoft.com/Policy.Read.All`; application profiles require admin-consented `Policy.Read.All`, use the configured Graph `.default` audience and reject `--scopes`.
+HTTP 403 policy and location errors name the operation's supported directory roles (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access) and include guidance from the [licensing contract](docs/graph-coverage.md#licence-matrix-by-area); the response alone does not identify the missing prerequisite.
+No policy mutation lives here; policy updates belong to a later write slice.
 
 Log in with `https://graph.microsoft.com/AuditLog.Read.All`, then query sign-ins and directory audits in bounded time windows:
 

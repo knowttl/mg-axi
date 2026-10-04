@@ -11,6 +11,7 @@ import { listAdministrativeUnitMembers, listAdministrativeUnits, listDevices, sh
 import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from "./entra-audit-logs.js";
 import { listApplicationOwners, listApplications, listServicePrincipalOwners, listServicePrincipals, showApplication, showServicePrincipal } from "./entra-apps.js";
 import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection } from "./entra-risk.js";
+import { listPolicies, showPolicy, listNamedLocations, showNamedLocation } from "./entra-conditional-access.js";
 import { fetchTransport } from "./api.js";
 import type { DelegatedAuth } from "./auth.js";
 import type { ApplicationAuth } from "./app-auth.js";
@@ -77,6 +78,34 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     const { DelegatedAuth } = await import("./auth.js");
     const { MsalProvider } = await import("./msal-provider.js");
     return { profile: selected.name, ...await new DelegatedAuth(new MsalProvider()).login(selected.profile, String(flags.method ?? "browser"), String(flags.scopes).split(",")) };
+  }
+  if (leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access policy show" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra conditional-access named-location show") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra conditional-access policy list": return listPolicies(session, flags, selected.profile, operation, help, selected.name);
+      case "entra conditional-access policy show": return showPolicy(session, flags, selected.profile, operation, help, selected.name);
+      case "entra conditional-access named-location list": return listNamedLocations(session, flags, selected.profile, operation, help, selected.name);
+      default: return showNamedLocation(session, flags, selected.profile, operation, help, selected.name);
+    }
   }
   if (leaf.path === "api get") {
     const selected = profiles.resolve(flags.profile as string | undefined);

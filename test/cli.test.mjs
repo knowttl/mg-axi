@@ -39,6 +39,8 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra pim active list/);
   assert.match(result.stdout, /entra device list/);
   assert.match(result.stdout, /entra administrative-unit list/);
+  assert.match(result.stdout, /entra conditional-access policy list/);
+  assert.match(result.stdout, /entra conditional-access named-location list/);
   assert.match(result.stdout, /login/);
   assert.doesNotMatch(result.stdout, /Upgrade/);
 });
@@ -59,6 +61,8 @@ for (const [name, args, error] of [
   ["invalid version", ["entra", "user", "list", "--api-version", "v2"], /v1.0 or beta/],
   ["missing required ID", ["entra", "user", "show"], /--id is required/],
   ["missing required role ID", ["entra", "directory-role", "show"], /--id is required/],
+  ["missing required policy ID", ["entra", "conditional-access", "policy", "show"], /--id is required/],
+  ["missing required location ID", ["entra", "conditional-access", "named-location", "show"], /--id is required/],
   ["missing required group", ["entra", "group", "member", "list"], /--group is required/],
   ["missing required application", ["entra", "application", "owner", "list"], /--application is required/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
@@ -66,6 +70,7 @@ for (const [name, args, error] of [
   ["missing required administrative unit", ["entra", "administrative-unit", "member", "list"], /--administrative-unit is required/],
   ["transitive on group list", ["entra", "group", "list", "--transitive"], /unknown flag/],
   ["transitive on device list", ["entra", "device", "list", "--transitive"], /unknown flag/],
+  ["transitive on policy list", ["entra", "conditional-access", "policy", "list", "--transitive"], /unknown flag/],
   ["empty ID", ["entra", "user", "show", "--id="], /non-empty/],
   ["extra positional", ["entra", "user", "show", "--id", "fixture", "extra"], /unexpected/],
   ["duplicate flag", ["entra", "user", "list", "--all", "--all"], /duplicate/],

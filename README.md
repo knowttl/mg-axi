@@ -82,6 +82,7 @@ The revoke command rejects caller-supplied `--scopes`.
 A 403 denial surfaces the `User.RevokeSessions.All` requirement without inventing a role verdict; a timeout or 5xx after sending reports `OUTCOME_UNKNOWN`, and neither outcome is ever replayed.
 Unknown-outcome guidance includes a user read with `--select id`; that read checks target accessibility, not whether revocation took effect.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
+Resource identifiers in named commands and raw paths cannot begin with `$`; OData route segments such as `$count`, `$value` and `$ref` cannot be used as IDs and fail validation before credentials.
 Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
 Data and structured errors use TOON on stdout; diagnostics belong on stderr.
 Bare `-v`, `-V` and `--version` print only the package version without importing the catalogue.
@@ -222,9 +223,12 @@ mg-axi entra domain-dns-record show --profile soc --id <record-id>
 ```
 
 `entra domain list` defaults to compact properties (`id`, `authenticationType`, `isVerified`, `isDefault`); domain ids are fully qualified names, not object UUIDs.
+All eight domain and DNS record commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
 Domain lists offer no `--filter`: Graph documents a known issue with `$search`, `$top` and `$filter` on domain lists, so the flag is refused before credentials.
 `entra domain show --id <domain-name>` defaults to the full reviewed domain set; an unverified domain points at its verification DNS records.
 Verification and service-configuration record lists take `--domain <domain-name>` and default to `id`, `label`, `recordType` and `supportedService`.
+Their show commands also take `--domain <domain-name>` and require `--id <record-id>`; all DNS record show commands default to `id`, `isOptional`, `label`, `recordType`, `supportedService` and `ttl`.
+DNS record lists accept `--filter` as plain `$filter`, without adding `$count=true` or `ConsistencyLevel`.
 Record rows carry `@odata.type` naming the derived record kind; derived-type detail (`mailExchange`, `preference`, `canonicalName`, SRV fields, `text`) needs an explicit `--select` naming the derived property.
 Domain and record `--select` accept their [reviewed property sets](src/entra-domains.ts); `--fields` must be a subset of the fetched selection.
 Domain lists return `domains` and single-domain reads return `domain`; record lists return `verificationDnsRecords`, `serviceConfigurationRecords` and `domainDnsRecords`, with single-record reads returning the singular key.
@@ -233,7 +237,7 @@ Resume record lists with the same `--domain` where applicable, profile, scopes a
 Delegated domain and DNS record reads default to `https://graph.microsoft.com/Domain.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need a supported Entra role (Domain Name Administrator or Global Reader are least-privileged); personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for domain reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
-No domain mutation lives here; verification, promotion and federation belong to later pieces.
+No domain mutation lives here; see the [domain scope decisions](docs/coverage.md#ext-01-domain-scope-decisions) for deferred reads and later subfamilies.
 
 Log in with `https://graph.microsoft.com/Policy.Read.All`, then read Conditional Access policies and named locations as separate grammar:
 

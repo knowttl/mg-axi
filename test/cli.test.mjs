@@ -169,6 +169,24 @@ test("pim eligible list leaf help marks eligibility as not active", () => {
   assert.match(result.stdout, /RoleEligibilitySchedule\.Read\.Directory/);
 });
 
+test("access-review definition list leaf help marks schedules distinct from instances", () => {
+  const result = run(["entra", "access-review", "definition", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /review schedules.*never their occurrences/);
+  assert.match(result.stdout, /--cursor/);
+  assert.match(result.stdout, /AccessReview\.Read\.All/);
+});
+
+test("access-review decision list leaf help marks decisions read-only with parent flags", () => {
+  const result = run(["entra", "access-review", "decision", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /never approves, denies or applies anything/);
+  assert.match(result.stdout, /--definition.*required/);
+  assert.match(result.stdout, /--instance.*required/);
+});
+
 test("administrative-unit member list leaf help advertises the relationship flags", () => {
   const result = run(["entra", "administrative-unit", "member", "list", "--help"]);
   assert.equal(result.status, 0);

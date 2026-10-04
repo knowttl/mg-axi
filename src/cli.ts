@@ -20,6 +20,7 @@ import { listPolicies, showPolicy, listNamedLocations, showNamedLocation } from 
 import { listBrandingLocalizations, listOrganizations, showBranding, showBrandingLocalization, showOrganization } from "./entra-organization.js";
 import { updateCaPolicy } from "./entra-ca-policy-update.js";
 import { listDomains, showDomain, listVerificationDnsRecords, showVerificationDnsRecord, listServiceConfigurationRecords, showServiceConfigurationRecord, listDomainDnsRecords, showDomainDnsRecord } from "./entra-domains.js";
+import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions } from "./entra-access-reviews.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
 import { addGroupMember } from "./entra-group-member-add.js";
 import { fetchTransport } from "./api.js";
@@ -141,6 +142,35 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra conditional-access policy show": return showPolicy(session, flags, selected.profile, operation, help, selected.name);
       case "entra conditional-access named-location list": return listNamedLocations(session, flags, selected.profile, operation, help, selected.name);
       default: return showNamedLocation(session, flags, selected.profile, operation, help, selected.name);
+    }
+  }
+  if (leaf.path === "entra access-review definition list" || leaf.path === "entra access-review definition show" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review instance show" || leaf.path === "entra access-review decision list") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra access-review definition list": return listDefinitions(session, flags, selected.profile, operation, help, selected.name);
+      case "entra access-review definition show": return showDefinition(session, flags, selected.profile, operation, help, selected.name);
+      case "entra access-review instance list": return listInstances(session, flags, selected.profile, operation, help, selected.name);
+      case "entra access-review instance show": return showInstance(session, flags, selected.profile, operation, help, selected.name);
+      default: return listDecisions(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "api get") {

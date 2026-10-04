@@ -185,6 +185,35 @@ Denied reads name that role requirement instead of only the generic grant/role/l
 Built-in roles are base inventory and custom role assignments need P1; PIM reads need P2 or ID Governance.
 Role assignment, activation and every other PIM mutation belongs to later write slices, never to these reads.
 
+Read access reviews through five views; delegated profiles first need explicit login with the read scope:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/AccessReview.Read.All
+mg-axi entra access-review definition list --profile soc --limit 10
+mg-axi entra access-review definition list --profile soc --filter "status eq 'InProgress'"
+mg-axi entra access-review definition show --profile soc --id <definition-id>
+mg-axi entra access-review instance list --profile soc --definition <definition-id>
+mg-axi entra access-review instance show --profile soc --definition <definition-id> --id <instance-id>
+mg-axi entra access-review decision list --profile soc --definition <definition-id> --instance <instance-id>
+```
+
+Definitions are review schedules (a series) and never carry their occurrences: each recurrence creates one instance per reviewed resource, and a one-time review creates one instance per resource.
+Instances are occurrences of one definition schedule, and each reviewed principal or resource in an instance carries one decision item.
+`entra access-review definition list` defaults to `id`, `displayName` and `status`; `entra access-review definition show --id <definition-id>` defaults to the full reviewed schedule set.
+`entra access-review instance list --definition <definition-id>` defaults to `id`, `status`, `startDateTime` and `endDateTime`; `entra access-review instance show` takes both `--definition` and `--id` and defaults to the full reviewed occurrence set.
+`entra access-review decision list --definition <definition-id> --instance <instance-id>` defaults to `id`, `accessReviewId`, `decision` and `recommendation`, where `accessReviewId` names the parent instance.
+Decision reads are read-only: listing never approves, denies or applies anything, and submitting or stopping a review belongs to a later slice, never to these reads.
+`--select` requests properties from the [reviewed access-review property sets](src/entra-access-reviews.ts); `--fields` must be a subset of the fetched selection.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; on definitions only `contains()` over the scope query and `eq` on status are documented.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to access-review reads.
+Resume any access-review list with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra access-review definition list --profile soc --cursor - < cursor.txt`; small cursors can also use `--cursor <token>`.
+Resume instance and decision lists with the same `--definition` (and `--instance`), profile, scopes and API version; a cursor from another definition or instance fails validation instead of returning foreign rows.
+To replay a resumed result with `--full`, supply the original input cursor on stdin; the returned cursor continues after that result.
+Delegated reads default to `https://graph.microsoft.com/AccessReview.Read.All`, while application profiles use the configured `.default` audience.
+Delegated callers additionally need a supported Entra role per review scope: group or app reviews need the review creator, Global Reader, Security Reader, User Administrator, Identity Governance Administrator or Security Administrator, while Entra-role reviews need Security Reader, Identity Governance Administrator, Privileged Role Administrator or Security Administrator.
+Denied reads name that role requirement instead of only the generic grant/role/licence cause.
+Access reviews need P2 or ID Governance depending on capability, not one uniform licence, and delegated personal Microsoft accounts are not supported.
+
 Log in with `https://graph.microsoft.com/Device.Read.All` or `https://graph.microsoft.com/AdministrativeUnit.Read.All`, then inspect directory devices and administrative units:
 
 ```sh

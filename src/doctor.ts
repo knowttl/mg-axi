@@ -10,8 +10,9 @@ import { Profiles } from "./profiles.js";
 // authentication and access failures. Credential acquisition stays silent:
 // DelegatedAuth.credential and ApplicationAuth.credential never open a
 // browser or device-code flow, so doctor never signs in interactively.
-// Doctor writes nothing: no auto-install, no profile changes, no write
-// enablement. See README.md for usage.
+// Doctor never auto-installs, changes profiles or enables Graph writes;
+// silent token refresh may update the protected credential cache.
+// See README.md for usage.
 export const DOCTOR_OPERATION = "GET:/users";
 export const DOCTOR_VERSION = "v1.0";
 export const DOCTOR_CHECK = `entra user list --limit 1 (${DOCTOR_VERSION}:${DOCTOR_OPERATION})`;

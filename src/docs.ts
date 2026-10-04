@@ -7,8 +7,8 @@ import { LEAVES } from "./catalogue.js";
 // and coverage cannot drift apart. tools/generate-docs.mjs writes both
 // files; test/pack.test.mjs fails when they are stale.
 
-// One row per executable leaf in catalogue order, matching the home-view
-// help. Every leaf is implemented by an mg-axi handler (native). Graph
+// One row per executable leaf in catalogue order.
+// Every leaf is implemented by an mg-axi handler (native). Graph
 // leaves carry the read effect.
 export function skillCommandTable(): string {
   return [

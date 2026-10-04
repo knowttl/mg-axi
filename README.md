@@ -389,9 +389,11 @@ node dist/bin/mg-axi.js --version
 
 From the repository root, `node dist/bin/mg-axi.js setup` shows the build steps, the selected configuration path, the configured profiles and the capability summary.
 It writes nothing, signs in nowhere and installs no hooks; ordinary commands never gain installation side effects.
-Create profiles with `node dist/bin/mg-axi.js profile create`, sign delegated profiles in with `node dist/bin/mg-axi.js login`, and check every selected profile with `node dist/bin/mg-axi.js doctor`.
+Create profiles with `node dist/bin/mg-axi.js profile create`, sign delegated profiles in with `node dist/bin/mg-axi.js login`, and check access with `node dist/bin/mg-axi.js doctor`.
+Doctor checks `--profile <name>` when supplied, otherwise the configured default, or all configured profiles when no default exists.
 Doctor performs one bounded `entra user list --limit 1` read per profile with silent credential acquisition only: it never opens a browser, never shows a device-code challenge, never auto-installs and never enables writes.
-Configuration or access failures report per profile with rerun guidance and a nonzero exit.
+Missing profiles, an unknown selected profile or invalid configuration fail before Graph reads.
+Read failures report per profile with rerun guidance and a nonzero exit.
 
 The installable skill lives at [skills/mg-axi/SKILL.md](skills/mg-axi/SKILL.md).
 Install it explicitly through your agent's skill installation mechanism; the setup command only shows guidance and does not install skills.

@@ -13,9 +13,7 @@ No write leaf exists: every mutation is refused by the read-only session.
 From a built checkout, run commands from the repository root with `node dist/bin/mg-axi.js`.
 Throughout this skill and CLI output, substitute that invocation for `mg-axi` unless you have separately installed the executable on PATH.
 Run `node dist/bin/mg-axi.js doctor` first.
-It checks the explicitly selected profile, otherwise the configured default, or all configured profiles when no default exists, with one bounded user-list read per selected profile.
-It reports configuration, connectivity, authentication and access failures.
-It never signs in interactively, installs nothing or enables writes.
+See [README.md](../../README.md#release) for doctor profile selection, checks and failure behavior.
 
 ## Orientation
 
@@ -82,9 +80,7 @@ Unknown flags fail before any credential or HTTP work.
 
 ## Setup (explicit only)
 
-No ordinary command installs or changes configuration.
-Build a checkout with `corepack pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false` and `corepack pnpm build`.
-Install this skill explicitly through your agent's skill installation mechanism; setup only shows guidance and installs no skills or hooks.
+Follow [README.md](../../README.md#release) for checkout builds and explicit skill installation.
 Create profiles explicitly and keep secrets out of argv and config files:
 
 ```sh
@@ -103,8 +99,8 @@ Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a sep
 Read leaves accept `--profile <name>`.
 Selection uses `--profile` or the configured default.
 Without either, read leaves report `AUTH_REQUIRED`, even if only one profile exists.
-Doctor instead checks all configured profiles when neither `--profile` nor a default is selected.
-Without profiles, local views show unconfigured state; read leaves report `AUTH_REQUIRED` with setup guidance.
+Doctor selection is documented in [README.md](../../README.md#release).
+Without profiles, home, setup and profile list show unconfigured state; Graph read leaves report `AUTH_REQUIRED`.
 
 ## Safety
 

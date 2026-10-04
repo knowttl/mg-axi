@@ -95,7 +95,7 @@ Use the registration report for aggregate coverage and per-user calls for target
 The [registration report](https://learn.microsoft.com/en-us/graph/api/authenticationmethodsroot-list-userregistrationdetails?view=graph-rest-1.0) does not work for disabled users, so absence is not proof of no MFA.
 
 The v1.0 group-members route documents omitted service principals and suggests beta or expansion as workarounds.
-No silent beta fallback is proposed; a verified expansion contract or explicit incompleteness warning is needed.
+See [README.md](../README.md) for the current raw and named member-read warning and fallback behavior.
 Current group-list documentation places a write permission in its least-privileged column while listing read alternatives.
 The plan therefore selects a supported read permission for required fields rather than mechanically copying the first cell.
 

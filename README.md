@@ -10,6 +10,7 @@ CORE-01 adds the shared policy-enforced Graph read session, exercised through an
 CORE-02 adds session collections, query validation, bounded retries and cancellation under the [read execution contract](docs/execution.md#read-mechanics-and-source-contracts).
 API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface through that session.
 READ-01 executes Entra user list/show through that session in both delegated and application modes; current usage follows below.
+READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -32,7 +33,7 @@ Lists accept `--filter` for an OData filter and default to a 100-row cap; `--lim
 Partial lists report `count.complete: false`, a reason and an opaque `cursor` preserving unreturned rows.
 Resume with `--cursor <cursor-from-output>` using the same profile, authentication scopes and API version; original `--select` and `--filter` values may be repeated or omitted, and conflicting values fail validation.
 Repeat `--fields` and `--full` when the same local view is wanted; these are not saved in the cursor.
-Delegated reads default to `https://graph.microsoft.com/User.Read.All` with `--scopes` available for least-privilege basics; application profiles use the configured Graph `.default` audience and reject delegated scopes.
+Delegated user reads default to `https://graph.microsoft.com/User.Read.All` with `--scopes` available for least-privilege basics; application profiles use the configured Graph `.default` audience and reject delegated scopes.
 User reads acquire credentials silently; a resume containing only buffered rows can finish without another Graph request.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
 Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
@@ -45,7 +46,7 @@ Create a delegated profile with your organization-owned public client registrati
 mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
 mg-axi profile list
 mg-axi profile show --profile soc
-mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All
+mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All,https://graph.microsoft.com/GroupMember.Read.All,https://graph.microsoft.com/Group.Read.All
 ```
 
 After login, use:
@@ -54,7 +55,28 @@ After login, use:
 mg-axi entra user list --profile soc --limit 10
 mg-axi entra user list --profile soc --select id,displayName,department --fields id,department
 mg-axi entra user show --profile soc --id <user-id-or-upn> --full
+mg-axi entra group list --profile soc --limit 10
+mg-axi entra group show --profile soc --id <group-id> --scopes https://graph.microsoft.com/Group.Read.All
+mg-axi entra group member list --profile soc --group <group-id>
+mg-axi entra group member list --profile soc --group <group-id> --transitive
+mg-axi entra group member-of list --profile soc --group <group-id> --transitive
 ```
+
+`entra group list` defaults to compact properties (`id`, `displayName`, `mail`, `groupTypes`); `entra group show --id <group-id>` defaults to the richer reviewed group set including `isAssignableToRole`, which marks groups eligible for role assignment.
+Group `--select` accepts the [reviewed group property set](src/entra-groups.ts); `--fields` must be a subset of the fetched selection.
+Role-assignable membership changes need role-management permission and belong to a later write slice, never to these reads.
+`entra group member list --group <group-id>` lists direct members and `entra group member-of list --group <group-id>` lists direct memberships; `--transitive` selects the flat nested closure instead.
+Relationship rows default to `id` and `displayName`; `--select` accepts only `id`, `displayName` and `mail`, and `--fields` must be a subset of that selection.
+Returned `@odata.type` stays visible alongside any `--fields` projection.
+Group lists return `groups`, member lists return `members`, parent-membership lists return `memberOf`, and single-group reads return `group`.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to group and relationship reads.
+Resume relationships with the same `--group` and direct or `--transitive` command, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
+Help warns that hidden members are omitted without `Member.Read.Hidden`; completion describes pagination, not visibility.
+Rows without non-null selected descriptive properties are preserved and reported as possibly limited by consent or unset properties; null properties stay null.
+Direct member results always carry the [v1.0 service-principal limitation](docs/graph-coverage.md#licensing-and-completeness-findings) warning; there is no silent beta or expansion fallback.
+`--filter` on group collections is sent with `$count=true` and `ConsistencyLevel: eventual`, which the relationship endpoints require.
+Delegated group reads default to `https://graph.microsoft.com/GroupMember.Read.All`; hidden members need `Member.Read.Hidden` and richer group properties may need `Group.Read.All`, while application profiles use the configured `.default` audience.
+When richer group access is needed, pass `--scopes https://graph.microsoft.com/Group.Read.All`; for hidden-member access, explicitly log in and read with `--scopes https://graph.microsoft.com/GroupMember.Read.All,https://graph.microsoft.com/Member.Read.Hidden` and satisfy the operation's delegated role requirements.
 
 Configure the registration's Mobile and desktop applications redirect URI as `http://localhost` for browser login.
 The first created profile is the default; `--profile` selects another identity explicitly.

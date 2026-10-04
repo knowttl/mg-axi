@@ -32,6 +32,7 @@ test("top help lists only the shell catalogue", () => {
   const result = run(["--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /entra user list/);
+  assert.match(result.stdout, /entra group list/);
   assert.match(result.stdout, /login/);
   assert.doesNotMatch(result.stdout, /Upgrade/);
 });
@@ -51,6 +52,8 @@ for (const [name, args, error] of [
   ["invalid limit", ["entra", "user", "list", "--limit", "0"], /positive safe integer/],
   ["invalid version", ["entra", "user", "list", "--api-version", "v2"], /v1.0 or beta/],
   ["missing required ID", ["entra", "user", "show"], /--id is required/],
+  ["missing required group", ["entra", "group", "member", "list"], /--group is required/],
+  ["transitive on group list", ["entra", "group", "list", "--transitive"], /unknown flag/],
   ["empty ID", ["entra", "user", "show", "--id="], /non-empty/],
   ["extra positional", ["entra", "user", "show", "--id", "fixture", "extra"], /unexpected/],
   ["duplicate flag", ["entra", "user", "list", "--all", "--all"], /duplicate/],
@@ -86,6 +89,24 @@ test("user list leaf help advertises the read journey flags", () => {
   assert.match(result.stdout, /--cursor/);
   assert.match(result.stdout, /--full/);
   assert.match(result.stdout, /--filter/);
+});
+
+test("group member list leaf help advertises the relationship flags", () => {
+  const result = run(["entra", "group", "member", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /--group.*required/);
+  assert.match(result.stdout, /--transitive/);
+  assert.match(result.stdout, /--cursor/);
+});
+
+test("group member list without a profile fails operationally on stdout", () => {
+  const result = run(["entra", "group", "member", "list", "--group", "fixture"]);
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, "");
+  const output = decode(result.stdout);
+  assert.equal(output.code, "AUTH_REQUIRED");
+  assert.ok(output.help.length);
 });
 
 test("user list without a profile fails operationally on stdout", () => {

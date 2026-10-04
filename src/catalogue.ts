@@ -23,6 +23,14 @@ const userRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to User.Read.All" },
 };
+const groupRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph with ConsistencyLevel eventual; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties; richer group properties need Group.Read.All" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to GroupMember.Read.All, hidden members need Member.Read.Hidden" },
+};
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
   { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
@@ -62,6 +70,48 @@ export const LEAVES: Leaf[] = [
     full: userRead.full,
     scopes: userRead.scopes,
   }, examples: ["mg-axi entra user show --id <user-id-or-upn> --profile soc", "mg-axi entra user show --id <user-id-or-upn> --profile soc --full"] },
+  { path: "entra group list", description: "List groups with compact properties (id, displayName, mail, groupTypes)", operation: "GET:/groups", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: groupRead.filter,
+    select: groupRead.select,
+    fields: groupRead.fields,
+    full: groupRead.full,
+    cursor: groupRead.cursor,
+    scopes: groupRead.scopes,
+  }, examples: ["mg-axi entra group list --profile soc", "mg-axi entra group list --profile soc --limit 10", "mg-axi entra group list --profile soc --filter \"securityEnabled eq true\" --select id,displayName,isAssignableToRole"] },
+  { path: "entra group show", description: "Show one group with richer default properties including isAssignableToRole", operation: "GET:/groups/{group-id}", flags: {
+    ...common, id: { value: "group-id", required: true, description: "Group object ID" },
+    select: groupRead.select,
+    fields: groupRead.fields,
+    full: groupRead.full,
+    scopes: groupRead.scopes,
+  }, examples: ["mg-axi entra group show --id <group-id> --profile soc", "mg-axi entra group show --id <group-id> --profile soc --full"] },
+  { path: "entra group member list", description: "List direct group members; --transitive flattens nested membership. Hidden members are omitted without Member.Read.Hidden; v1.0 may omit service principals", operation: "GET:/groups/{group-id}/members", flags: {
+    ...common, group: { value: "group-id", required: true, description: "Group object ID whose members are listed" },
+    transitive: { description: "List the flat transitive closure instead of direct members" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: groupRead.filter,
+    select: { value: "comma-separated-properties", description: "Request server properties from id, displayName, mail; richer member fields need single-object reads" },
+    fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+    full: groupRead.full,
+    cursor: groupRead.cursor,
+    scopes: groupRead.scopes,
+  }, examples: ["mg-axi entra group member list --group <group-id> --profile soc", "mg-axi entra group member list --group <group-id> --transitive --profile soc"] },
+  { path: "entra group member-of list", description: "List groups the group is a member of; --transitive flattens nested membership. Hidden memberships are omitted without Member.Read.Hidden", operation: "GET:/groups/{group-id}/memberOf", flags: {
+    ...common, group: { value: "group-id", required: true, description: "Group object ID whose memberships are listed" },
+    transitive: { description: "List the flat transitive closure instead of direct memberships" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: groupRead.filter,
+    select: { value: "comma-separated-properties", description: "Request server properties from id, displayName, mail; richer member fields need single-object reads" },
+    fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+    full: groupRead.full,
+    cursor: groupRead.cursor,
+    scopes: groupRead.scopes,
+  }, examples: ["mg-axi entra group member-of list --group <group-id> --profile soc", "mg-axi entra group member-of list --group <group-id> --transitive --profile soc"] },
   { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices and administrative units; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
@@ -146,6 +196,6 @@ export function home() {
     profile: "unavailable: no profile configured",
     tenant: "unavailable: no tenant selected",
     domains: [{ name: "entra", status: "scheduled", summary: "Tenant summaries await Graph execution" }],
-    help: ["mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi api get --help"],
+    help: ["mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi api get --help"],
   };
 }

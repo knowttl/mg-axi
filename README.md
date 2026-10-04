@@ -182,6 +182,7 @@ mg-axi entra registration list --profile soc --filter "isMfaRegistered eq false"
 `entra user authentication-method list` targets one named user (`--user` takes the user object ID or UPN) and defaults to `id`, `displayName` and `createdDateTime`; rows carry `@odata.type` naming the method kind.
 There is no tenant scan through per-user methods: aggregate MFA coverage belongs to `entra registration list`, and the method output points there.
 `entra registration list` defaults to `id`, `userPrincipalName`, `userDisplayName` and `isMfaRegistered` and returns the tenant MFA/SSPR posture.
+Method lists return `authenticationMethods`; registration reports return `registrationDetails`.
 The report does not cover disabled users, so absence from it is never proof of no MFA; that gap rides in the leaf help and every report output.
 Phone numbers are protected values: the shared session replaces them with the redaction marker before output or cursor buffering (including resume cursors), so neither output nor cursors ever carry one; `--full` never lifts that redaction.
 Method registration and deletion belong to no read slice and are never constructed.
@@ -189,6 +190,7 @@ For methods, `--select` selects output properties locally from the [reviewed aut
 For the registration report, `--select` requests server properties; `--fields` must be a subset of the default or explicit selection for either command.
 Only the registration report supports `--filter`, passed through as plain `$filter` with no `$count` or `ConsistencyLevel` contract.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply.
+Resume method lists with the same `--user` ID or UPN, profile, scopes and API version; omit or repeat the original `--select`, and repeat local `--fields` and `--full` when wanted.
 Delegated method reads default to `https://graph.microsoft.com/UserAuthenticationMethod.Read.All` (delegated self-reads may use `UserAuthenticationMethod.Read`) and registration reads default to `https://graph.microsoft.com/AuditLog.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers acting on another user additionally need Global Reader, Authentication Administrator or Privileged Authentication Administrator for methods, and Reports Reader, Security Reader, Security Administrator or Global Reader for the report.
 Denied reads name that role requirement instead of only the generic grant/role/licence cause.

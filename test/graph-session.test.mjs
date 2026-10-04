@@ -56,6 +56,28 @@ test("delegated read returns parsed JSON through the authorized URL", async () =
   assert.equal(f.credentialCalls[0][0], "silent");
 });
 
+for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) {
+  for (const [name, body, expected] of [
+    ["root string", "AccountKey=fixture-secret", "***redacted***"],
+    ["root array", ["SharedAccessKey=fixture-secret", "ordinary", 42, null], ["***redacted***", "ordinary", 42, null]],
+    ["nested object", { value: [{ id: "a", displayName: "AccountKey=fixture-secret", details: { password: "fixture-secret", enabled: true } }] },
+      { value: [{ id: "a", displayName: "***redacted***", details: { password: "***redacted***", enabled: true } }] }],
+  ]) test(`${profile.mode} success redacts sentinels in a ${name}`, async () => {
+    const f = fixture(json(200, body));
+    assert.deepEqual(await f.session.execute({ profile, operation: users, ...scopeArgs }), expected);
+  });
+
+  test(`${profile.mode} redirected success redacts sentinels`, async () => {
+    const f = fixture((request, count) => count === 1
+      ? { status: 302, headers: { location: "/v1.0/users?$top=2" }, body: "" }
+      : json(200, { value: [{ id: "a", displayName: "AccountKey=fixture-secret" }] }));
+    assert.deepEqual(await f.session.execute({ profile, operation: users, ...scopeArgs }), {
+      value: [{ id: "a", displayName: "***redacted***" }],
+    });
+    assert.equal(f.requests.length, 2);
+  });
+}
+
 test("path parameters bind one encoded resource per placeholder", async () => {
   const f = fixture(json(200, { id: "a" }));
   await f.session.execute({ profile: delegatedProfile, operation: userById, params: { "user-id": "analyst@example.invalid" }, scopes });

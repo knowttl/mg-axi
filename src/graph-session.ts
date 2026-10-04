@@ -400,7 +400,7 @@ export class GraphSession {
     if (status >= 200 && status < 300) {
       if (!response.body) throw new AxiError(`Graph returned an empty success body for ${operation.id}`, "GRAPH_ERROR", ["Empty reads are malformed; treat the result as unknown, not empty"]);
       try {
-        return JSON.parse(response.body);
+        return redact(JSON.parse(response.body));
       } catch {
         throw new AxiError(`Graph returned a non-JSON success body for ${operation.id}`, "GRAPH_ERROR", ["Successful reads are JSON; anything else is malformed"]);
       }

@@ -106,6 +106,14 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra delegated-admin-customer show/);
   assert.match(result.stdout, /entra delegated-admin-relationship list/);
   assert.match(result.stdout, /entra delegated-admin-relationship show/);
+  assert.match(result.stdout, /entra delegated-admin-relationship list-access-assignments/);
+  assert.match(result.stdout, /entra delegated-admin-relationship show-access-assignment/);
+  assert.match(result.stdout, /entra delegated-admin-relationship list-operations/);
+  assert.match(result.stdout, /entra delegated-admin-relationship show-operation/);
+  assert.match(result.stdout, /entra delegated-admin-relationship list-requests/);
+  assert.match(result.stdout, /entra delegated-admin-relationship show-request/);
+  assert.match(result.stdout, /entra delegated-admin-customer list-service-management-details/);
+  assert.match(result.stdout, /entra delegated-admin-customer show-service-management-detail/);
   assert.match(result.stdout, /entra multi-tenant-organization show/);
   assert.match(result.stdout, /entra multi-tenant-organization join-request show/);
   assert.match(result.stdout, /entra multi-tenant-organization tenant list/);
@@ -159,6 +167,17 @@ for (const [name, args, error] of [
   ["contract count rejects limits", ["entra", "contract", "count", "--limit", "5"], /unknown flag --limit/],
   ["missing required delegated-admin customer ID", ["entra", "delegated-admin-customer", "show"], /--id is required/],
   ["missing required delegated-admin relationship ID", ["entra", "delegated-admin-relationship", "show"], /--id is required/],
+  ["missing required relationship for access assignments", ["entra", "delegated-admin-relationship", "list-access-assignments"], /--id is required/],
+  ["missing required assignment ID", ["entra", "delegated-admin-relationship", "show-access-assignment", "--id", "rel-1"], /--assignment-id is required/],
+  ["missing required relationship for operations", ["entra", "delegated-admin-relationship", "list-operations"], /--id is required/],
+  ["missing required operation ID", ["entra", "delegated-admin-relationship", "show-operation", "--id", "rel-1"], /--operation-id is required/],
+  ["missing required relationship for requests", ["entra", "delegated-admin-relationship", "list-requests"], /--id is required/],
+  ["missing required request ID", ["entra", "delegated-admin-relationship", "show-request", "--id", "rel-1"], /--request-id is required/],
+  ["missing required customer for service-management details", ["entra", "delegated-admin-customer", "list-service-management-details"], /--id is required/],
+  ["missing required detail ID", ["entra", "delegated-admin-customer", "show-service-management-detail", "--id", "cu-1"], /--detail-id is required/],
+  ["service-management-detail list rejects select", ["entra", "delegated-admin-customer", "list-service-management-details", "--id", "cu-1", "--select", "id"], /unknown flag --select/],
+  ["service-management-detail list rejects filters", ["entra", "delegated-admin-customer", "list-service-management-details", "--id", "cu-1", "--filter", "serviceName eq 'Teams'"], /unknown flag --filter/],
+  ["service-management-detail show rejects select", ["entra", "delegated-admin-customer", "show-service-management-detail", "--id", "cu-1", "--detail-id", "smd-1", "--select", "id"], /unknown flag --select/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
   ["missing required grant client", ["entra", "service-principal", "oauth2-grant", "list"], /--service-principal is required/],
   ["missing required app-role client", ["entra", "service-principal", "app-role-assignment", "list"], /--service-principal is required/],

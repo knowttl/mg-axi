@@ -28,7 +28,7 @@ import { listDirectoryObjects, showDirectoryObject, countDirectoryObjects } from
 import { listDeletedItems, showDeletedItem, countDeletedItems } from "./entra-deleted-items.js";
 import { listContacts, showContact, countContacts, showContactManager, listContactDirectReports, showContactDirectReport, countContactDirectReports, castDirectReports, listContactMemberOf, showContactMemberOf, countContactMemberOf, transitMembership, castMembership } from "./entra-contacts.js";
 import { countContracts, listContracts, showContract } from "./entra-contracts.js";
-import { listDelegatedAdminCustomers, showDelegatedAdminCustomer, listDelegatedAdminRelationships, showDelegatedAdminRelationship } from "./entra-delegated-admin.js";
+import { listDelegatedAdminCustomers, showDelegatedAdminCustomer, listDelegatedAdminRelationships, showDelegatedAdminRelationship, listDelegatedAdminAccessAssignments, showDelegatedAdminAccessAssignment, listDelegatedAdminOperations, showDelegatedAdminOperation, listDelegatedAdminRequests, showDelegatedAdminRequest, listDelegatedAdminServiceManagementDetails, showDelegatedAdminServiceManagementDetail } from "./entra-delegated-admin.js";
 import { listMultiTenantOrganizationTenants, showMultiTenantOrganization, showMultiTenantOrganizationJoinRequest, countMultiTenantOrganizationTenants } from "./entra-multi-tenant-organization.js";
 import { showTenantInformation } from "./entra-tenant-information.js";
 import { countLifecyclePolicies, listLifecyclePolicies, showLifecyclePolicy, countSettingTemplates, listSettingTemplates, showSettingTemplate } from "./entra-group-lifecycle.js";
@@ -1006,7 +1006,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       default: return countContracts(session, flags, selected.profile, operation, help, selected.name);
     }
   }
-  if (leaf.path === "entra delegated-admin-customer list" || leaf.path === "entra delegated-admin-customer show" || leaf.path === "entra delegated-admin-relationship list" || leaf.path === "entra delegated-admin-relationship show") {
+  if (leaf.path === "entra delegated-admin-customer list" || leaf.path === "entra delegated-admin-customer show" || leaf.path === "entra delegated-admin-relationship list" || leaf.path === "entra delegated-admin-relationship show" || leaf.path === "entra delegated-admin-relationship list-access-assignments" || leaf.path === "entra delegated-admin-relationship show-access-assignment" || leaf.path === "entra delegated-admin-relationship list-operations" || leaf.path === "entra delegated-admin-relationship show-operation" || leaf.path === "entra delegated-admin-relationship list-requests" || leaf.path === "entra delegated-admin-relationship show-request" || leaf.path === "entra delegated-admin-customer list-service-management-details" || leaf.path === "entra delegated-admin-customer show-service-management-detail") {
     if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
       throw new AxiError("Delegated-admin reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
     }
@@ -1033,7 +1033,15 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra delegated-admin-customer list": return listDelegatedAdminCustomers(session, flags, selected.profile, operation, help, selected.name);
       case "entra delegated-admin-customer show": return showDelegatedAdminCustomer(session, flags, selected.profile, operation, help, selected.name);
       case "entra delegated-admin-relationship list": return listDelegatedAdminRelationships(session, flags, selected.profile, operation, help, selected.name);
-      default: return showDelegatedAdminRelationship(session, flags, selected.profile, operation, help, selected.name);
+      case "entra delegated-admin-relationship show": return showDelegatedAdminRelationship(session, flags, selected.profile, operation, help, selected.name);
+      case "entra delegated-admin-relationship list-access-assignments": return listDelegatedAdminAccessAssignments(session, flags, selected.profile, operation, help, selected.name);
+      case "entra delegated-admin-relationship show-access-assignment": return showDelegatedAdminAccessAssignment(session, flags, selected.profile, operation, help, selected.name);
+      case "entra delegated-admin-relationship list-operations": return listDelegatedAdminOperations(session, flags, selected.profile, operation, help, selected.name);
+      case "entra delegated-admin-relationship show-operation": return showDelegatedAdminOperation(session, flags, selected.profile, operation, help, selected.name);
+      case "entra delegated-admin-relationship list-requests": return listDelegatedAdminRequests(session, flags, selected.profile, operation, help, selected.name);
+      case "entra delegated-admin-relationship show-request": return showDelegatedAdminRequest(session, flags, selected.profile, operation, help, selected.name);
+      case "entra delegated-admin-customer list-service-management-details": return listDelegatedAdminServiceManagementDetails(session, flags, selected.profile, operation, help, selected.name);
+      default: return showDelegatedAdminServiceManagementDetail(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "entra multi-tenant-organization show" || leaf.path === "entra multi-tenant-organization join-request show" || leaf.path === "entra multi-tenant-organization tenant list" || leaf.path === "entra multi-tenant-organization tenant count") {

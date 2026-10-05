@@ -3,33 +3,46 @@ import type { CollectArgs, GraphSession, SessionOperation } from "./graph-sessio
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-04 delegated-admin subfamily: the read mapping behind
-// `mg-axi entra delegated-admin-customer list/show` and
-// `mg-axi entra delegated-admin-relationship list/show`. Operation
+// `mg-axi entra delegated-admin-customer list/show`,
+// `mg-axi entra delegated-admin-relationship list/show` and the navigation
+// reads `mg-axi entra delegated-admin-relationship
+// list-access-assignments/show-access-assignment/list-operations/show-operation/list-requests/show-request`
+// and `mg-axi entra delegated-admin-customer
+// list-service-management-details/show-service-management-detail`. Operation
 // construction stays beside its command; the shared session owns URLs,
 // credentials, paging, retries and error translation, and the SDK owns TOON
 // rendering. This module only maps flags to session calls and projects rows
 // for compact output.
 //
 // Reviewed against the v1.0 delegatedAdminCustomer list/get, the
-// delegatedAdminRelationship list/get and both resource pages on
-// 2026-10-05. Every read takes D/A DelegatedAdminRelationship.Read.All as
-// least privilege; the scope is already in the shared READ_SCOPES allowlist,
-// so no new scope and no deferral is needed here. Delegated callers pass it
-// as --scopes; application callers need it admin-consented on the configured
-// .default audience. The list/get pages state no Entra role and no P1/P2
+// delegatedAdminRelationship list/get, the access-assignment, operation and
+// request list/get pages, the serviceManagementDetails list page, the
+// delegatedAdminCustomer and delegatedAdminRelationship resource pages and
+// the delegatedAdminAccessAssignment, delegatedAdminRelationshipOperation,
+// delegatedAdminRelationshipRequest and delegatedAdminServiceManagementDetail
+// resource pages on 2026-10-05. The serviceManagementDetail single has no
+// REST page; its route exists alongside the documented list (the PowerShell
+// Get cmdlet takes both the customer and the detail identifiers), so the
+// single runs queryless like the list. Every read takes D/A
+// DelegatedAdminRelationship.Read.All as least privilege; the scope is
+// already in the shared READ_SCOPES allowlist, so no new scope and no
+// deferral is needed here. Delegated callers pass it as --scopes;
+// application callers need it admin-consented on the configured .default
+// audience. None of the reviewed pages states an Entra role or a P1/P2
 // prerequisite for these reads, and personal Microsoft accounts are not
 // supported. Reads run in the partner tenant: delegatedAdminCustomer objects
 // are created by the system when a relationship exists and deleted when none
 // remain, so a non-partner tenant lists zero customers, which is an answer
-// rather than an error. Both lists document $select, $filter, $top,
-// $orderby, $count and $skipToken; $top supports up to 300 objects. --filter
-// passes through as plain $filter with no $count or ConsistencyLevel
-// contract. The $count scalars, the tenantRelationship container root, the
-// serviceManagementDetails navigation and the relationship accessAssignments,
-// operations and requests navigations stay scheduled for later EXT-04
-// subfamilies, as do the multi-tenant-organization reads (shipped) and the
-// tenant-lookup functions (shipped as tenant-information show). Beta stays out. No delegated-admin mutation exists in this
-// slice: relationship creation, approval and termination are writes.
+// rather than an error. The access-assignment, operation and request lists
+// document $select, $filter, $top and more; $top supports up to 300 objects.
+// --filter passes through as plain $filter with no $count or ConsistencyLevel
+// contract. serviceManagementDetails documents no query parameters, so both
+// service-management-detail reads run queryless and project locally. The
+// $count scalars and the tenantRelationship container root stay scheduled
+// for later EXT-04 subfamilies, as do the multi-tenant-organization reads
+// (shipped separately) and the tenant-lookup functions (shipped as
+// tenant-information show under mg-ext-04e). Beta stays out. No delegated-admin mutation exists in this slice:
+// relationship creation, approval and termination are writes.
 
 // Every customer property this slice may request or display, matching the
 // reviewed delegatedAdminCustomer resource. Anything else fails before
@@ -59,6 +72,50 @@ export const KNOWN_DELEGATED_ADMIN_RELATIONSHIP_FIELDS: readonly string[] = [
 ];
 const KNOWN_CUSTOMERS = new Set(KNOWN_DELEGATED_ADMIN_CUSTOMER_FIELDS);
 const KNOWN_RELATIONSHIPS = new Set(KNOWN_DELEGATED_ADMIN_RELATIONSHIP_FIELDS);
+// Every access-assignment property this slice may request or display,
+// matching the reviewed delegatedAdminAccessAssignment resource. Anything
+// else fails before credentials.
+export const KNOWN_DELEGATED_ADMIN_ACCESS_ASSIGNMENT_FIELDS: readonly string[] = [
+  "accessContainer",
+  "accessDetails",
+  "createdDateTime",
+  "id",
+  "lastModifiedDateTime",
+  "status",
+];
+// Every relationship-operation property this slice may request or display,
+// matching the reviewed delegatedAdminRelationshipOperation resource. The
+// data payload is a JSON-encoded string and truncates like any long text.
+export const KNOWN_DELEGATED_ADMIN_OPERATION_FIELDS: readonly string[] = [
+  "createdDateTime",
+  "data",
+  "id",
+  "lastModifiedDateTime",
+  "operationType",
+  "status",
+];
+// Every relationship-request property this slice may request or display,
+// matching the reviewed delegatedAdminRelationshipRequest resource.
+export const KNOWN_DELEGATED_ADMIN_REQUEST_FIELDS: readonly string[] = [
+  "action",
+  "createdDateTime",
+  "id",
+  "lastModifiedDateTime",
+  "status",
+];
+// Every service-management-detail property this slice may display, matching
+// the reviewed delegatedAdminServiceManagementDetail resource. Graph
+// documents no query parameters here, so rows always arrive whole and
+// --fields projects them locally.
+export const KNOWN_DELEGATED_ADMIN_SERVICE_MANAGEMENT_DETAIL_FIELDS: readonly string[] = [
+  "id",
+  "serviceManagementUrl",
+  "serviceName",
+];
+const KNOWN_ACCESS_ASSIGNMENTS = new Set(KNOWN_DELEGATED_ADMIN_ACCESS_ASSIGNMENT_FIELDS);
+const KNOWN_OPERATIONS = new Set(KNOWN_DELEGATED_ADMIN_OPERATION_FIELDS);
+const KNOWN_REQUESTS = new Set(KNOWN_DELEGATED_ADMIN_REQUEST_FIELDS);
+const KNOWN_SERVICE_MANAGEMENT_DETAILS = new Set(KNOWN_DELEGATED_ADMIN_SERVICE_MANAGEMENT_DETAIL_FIELDS);
 
 // Compact customer rows: the customer identifier, the tenant name and the
 // tenant id that names the same customer.
@@ -205,6 +262,14 @@ interface Resource {
   showSelect: string[];
   idFlag: string;
   idDescription: string;
+  showPlaceholder: string;
+  // Nested navigations bind the parent collection through its own flag;
+  // top-level customers and relationships leave this undefined.
+  parent?: { flag: string; placeholder: string; label: string };
+  // serviceManagementDetails documents no query parameters, so both reads
+  // run queryless and project rows locally; every other read requests
+  // --select and passes --filter through as plain $filter.
+  queryless?: boolean;
 }
 
 const CUSTOMER: Resource = {
@@ -216,6 +281,7 @@ const CUSTOMER: Resource = {
   showSelect: DEFAULT_CUSTOMER_SHOW_SELECT,
   idFlag: "id",
   idDescription: "Delegated-admin customer identifier",
+  showPlaceholder: "delegatedAdminCustomer-id",
 };
 
 const RELATIONSHIP: Resource = {
@@ -227,10 +293,83 @@ const RELATIONSHIP: Resource = {
   showSelect: DEFAULT_RELATIONSHIP_SHOW_SELECT,
   idFlag: "id",
   idDescription: "Delegated-admin relationship identifier",
+  showPlaceholder: "delegatedAdminRelationship-id",
+};
+
+const RELATIONSHIP_PARENT = { flag: "id", placeholder: "delegatedAdminRelationship-id", label: "relationship" };
+const CUSTOMER_PARENT = { flag: "id", placeholder: "delegatedAdminCustomer-id", label: "customer" };
+
+const ACCESS_ASSIGNMENT: Resource = {
+  noun: "access assignment",
+  command: "entra delegated-admin-relationship list-access-assignments",
+  known: KNOWN_ACCESS_ASSIGNMENTS,
+  knownList: KNOWN_DELEGATED_ADMIN_ACCESS_ASSIGNMENT_FIELDS,
+  listSelect: ["id", "status", "accessContainer", "accessDetails"],
+  showSelect: [...KNOWN_DELEGATED_ADMIN_ACCESS_ASSIGNMENT_FIELDS],
+  idFlag: "assignment-id",
+  idDescription: "Delegated-admin access-assignment identifier",
+  showPlaceholder: "delegatedAdminAccessAssignment-id",
+  parent: RELATIONSHIP_PARENT,
+};
+
+const OPERATION: Resource = {
+  noun: "relationship operation",
+  command: "entra delegated-admin-relationship list-operations",
+  known: KNOWN_OPERATIONS,
+  knownList: KNOWN_DELEGATED_ADMIN_OPERATION_FIELDS,
+  listSelect: ["id", "operationType", "status", "lastModifiedDateTime"],
+  showSelect: [...KNOWN_DELEGATED_ADMIN_OPERATION_FIELDS],
+  idFlag: "operation-id",
+  idDescription: "Delegated-admin relationship-operation identifier",
+  showPlaceholder: "delegatedAdminRelationshipOperation-id",
+  parent: RELATIONSHIP_PARENT,
+};
+
+const REQUEST: Resource = {
+  noun: "relationship request",
+  command: "entra delegated-admin-relationship list-requests",
+  known: KNOWN_REQUESTS,
+  knownList: KNOWN_DELEGATED_ADMIN_REQUEST_FIELDS,
+  listSelect: ["id", "action", "status", "lastModifiedDateTime"],
+  showSelect: [...KNOWN_DELEGATED_ADMIN_REQUEST_FIELDS],
+  idFlag: "request-id",
+  idDescription: "Delegated-admin relationship-request identifier",
+  showPlaceholder: "delegatedAdminRelationshipRequest-id",
+  parent: RELATIONSHIP_PARENT,
+};
+
+const SERVICE_MANAGEMENT_DETAIL: Resource = {
+  noun: "service-management detail",
+  command: "entra delegated-admin-customer list-service-management-details",
+  known: KNOWN_SERVICE_MANAGEMENT_DETAILS,
+  knownList: KNOWN_DELEGATED_ADMIN_SERVICE_MANAGEMENT_DETAIL_FIELDS,
+  listSelect: [...KNOWN_DELEGATED_ADMIN_SERVICE_MANAGEMENT_DETAIL_FIELDS],
+  showSelect: [...KNOWN_DELEGATED_ADMIN_SERVICE_MANAGEMENT_DETAIL_FIELDS],
+  idFlag: "detail-id",
+  idDescription: "Delegated-admin service-management-detail identifier",
+  showPlaceholder: "delegatedAdminServiceManagementDetail-id",
+  parent: CUSTOMER_PARENT,
+  queryless: true,
 };
 
 function partnerNote(resource: Resource): string {
   return `Delegated-admin reads run in the partner tenant; a non-partner tenant lists zero ${resource.noun}s, which is an answer rather than an error`;
+}
+
+function parentBinding(flags: DelegatedAdminFlags, resource: Resource, help: string): Record<string, string> {
+  if (!resource.parent) return {};
+  const id = String(flags[resource.parent.flag]);
+  if (!id.trim()) throw new AxiError(`--${resource.parent.flag} needs the delegated-admin ${resource.parent.label} identifier`, "VALIDATION_ERROR", [help]);
+  return { [resource.parent.placeholder]: id };
+}
+
+// Queryless navigations take no --select or --filter: Graph documents no
+// query parameters for them, so the catalogue declares no such flags and
+// this refusal is the backstop before credentials.
+function refuseQuery(flags: DelegatedAdminFlags, resource: Resource, command: string, help: string): void {
+  if (resource.queryless === true && (flags.select !== undefined || flags.filter !== undefined)) {
+    throw new AxiError(`${command} takes no --select or --filter; Graph documents no query parameters for this navigation`, "VALIDATION_ERROR", [help]);
+  }
 }
 
 interface CollectionCommon {
@@ -240,6 +379,8 @@ interface CollectionCommon {
   scopes: string[] | undefined;
   full: boolean;
   filter: string | undefined;
+  params: Record<string, string>;
+  bare: boolean;
 }
 
 // Restoring the saved select/filter keeps cursor resumes lossless when
@@ -256,11 +397,18 @@ function collectionCommon(
   const cursor = flags.cursor === undefined ? undefined : String(flags.cursor);
   if (cursor !== undefined && !cursor.trim()) throw new AxiError("--cursor needs the opaque cursor from a partial result", "VALIDATION_ERROR", [help]);
   const saved = cursor === undefined ? undefined : session.cursorQuery(operation, cursor);
+  const params = parentBinding(flags, resource, help);
+  if (resource.queryless === true) {
+    refuseQuery(flags, resource, resource.command, help);
+    // Rows arrive whole; --fields projects them locally from the full set.
+    const fields = flags.fields === undefined ? [...resource.listSelect] : fieldList(flags.fields, resource.known, resource.knownList, "fields", help);
+    return { cursor, select: [...resource.listSelect], fields, scopes: scopesFor(flags, DEFAULT_DELEGATED_ADMIN_SCOPES, profile, help), full: flags.full === true, filter: undefined, params, bare: true };
+  }
   const { select, fields } = selectedFields(flags,
     resource.known, resource.knownList,
     saved?.["$select"] === undefined ? resource.listSelect : fieldList(saved["$select"], resource.known, resource.knownList, "select", help), help);
   const filter = flags.filter === undefined ? saved?.["$filter"] : String(flags.filter);
-  return { cursor, select, fields, scopes: scopesFor(flags, DEFAULT_DELEGATED_ADMIN_SCOPES, profile, help), full: flags.full === true, filter };
+  return { cursor, select, fields, scopes: scopesFor(flags, DEFAULT_DELEGATED_ADMIN_SCOPES, profile, help), full: flags.full === true, filter, params, bare: false };
 }
 
 function collectArgs(
@@ -270,9 +418,11 @@ function collectArgs(
   flags: DelegatedAdminFlags,
   help: string,
 ): CollectArgs {
-  const query: Record<string, string> = { $select: common.select.join(",") };
-  if (common.filter !== undefined) query.$filter = common.filter;
-  const args: CollectArgs = { profile, operation, query, scopes: common.scopes };
+  // Queryless navigations send no query parameters at all: Graph documents
+  // none for them, so rows arrive whole and project locally.
+  const query: Record<string, string> = common.bare ? {} : { $select: common.select.join(",") };
+  if (!common.bare && common.filter !== undefined) query.$filter = common.filter;
+  const args: CollectArgs = { profile, operation, params: common.params, query, scopes: common.scopes };
   if (common.cursor !== undefined) args.cursor = common.cursor;
   if (flags.all === true) {
     if (flags.limit !== undefined) throw new AxiError("--limit and --all cannot be combined", "VALIDATION_ERROR", [help]);
@@ -305,8 +455,12 @@ async function listResource(
 ): Promise<Record<string, unknown>> {
   const common = collectionCommon(session, flags, resource, operation, help, profile);
   const result = await withGuidance(DELEGATED_ADMIN_DENIAL_HINTS, () => session.collect(collectArgs(profile, operation, common, flags, help)));
-  const effectiveFlags: DelegatedAdminFlags = { ...flags, select: result.query.$select ?? resource.listSelect.join(",") };
-  if (result.query.$filter !== undefined) effectiveFlags.filter = result.query.$filter;
+  // Queryless hints never echo --select/--filter: those flags are refused.
+  const effectiveFlags: DelegatedAdminFlags = { ...flags };
+  if (!common.bare) {
+    effectiveFlags.select = result.query.$select ?? resource.listSelect.join(",");
+    if (result.query.$filter !== undefined) effectiveFlags.filter = result.query.$filter;
+  }
   const rows: Record<string, unknown>[] = [];
   let truncated = false;
   for (const row of result.value) {
@@ -314,7 +468,10 @@ async function listResource(
     rows.push(projected.row);
     truncated = truncated || projected.truncated;
   }
-  const showHint = `mg-axi ${showCommand} --id <${resource.noun}-id> ${profileHint(profileName)}`;
+  const showArgs = resource.parent === undefined
+    ? `--id <${resource.noun}-id>`
+    : `--${resource.parent.flag} <${resource.parent.label}-id> --${resource.idFlag} <${resource.idFlag}>`;
+  const showHint = `mg-axi ${showCommand} ${showArgs} ${profileHint(profileName)}`;
   const truncationHints = truncated ? [fullHint(resource.command, effectiveFlags, profileName)] : [];
   if (!result.complete) {
     return {
@@ -345,16 +502,19 @@ async function showResource(
   resource: Resource,
   rowKey: string,
   showCommand: string,
-  paramName: string,
 ): Promise<Record<string, unknown>> {
-  const { select, fields } = selectedFields(flags, resource.known, resource.knownList, resource.showSelect, help);
+  const queryless = resource.queryless === true;
+  if (queryless) refuseQuery(flags, resource, showCommand, help);
+  const { select, fields } = queryless
+    ? { select: [...resource.showSelect], fields: flags.fields === undefined ? [...resource.showSelect] : fieldList(flags.fields, resource.known, resource.knownList, "fields", help) }
+    : selectedFields(flags, resource.known, resource.knownList, resource.showSelect, help);
   const scopes = scopesFor(flags, DEFAULT_DELEGATED_ADMIN_SCOPES, profile, help);
   const full = flags.full === true;
   const raw = await withGuidance(DELEGATED_ADMIN_DENIAL_HINTS, () => session.execute({
     profile,
     operation,
-    params: { [paramName]: resourceId(flags, resource, help) },
-    query: { $select: select.join(",") },
+    params: { ...parentBinding(flags, resource, help), [resource.showPlaceholder]: resourceId(flags, resource, help) },
+    ...(queryless ? {} : { query: { $select: select.join(",") } }),
     scopes,
   }));
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
@@ -388,7 +548,7 @@ export async function showDelegatedAdminCustomer(
   profileName: string,
 ): Promise<Record<string, unknown>> {
   return showResource(session, flags, profile, operation, help, profileName,
-    CUSTOMER, "delegatedAdminCustomer", "entra delegated-admin-customer show", "delegatedAdminCustomer-id");
+    CUSTOMER, "delegatedAdminCustomer", "entra delegated-admin-customer show");
 }
 
 export async function listDelegatedAdminRelationships(
@@ -412,5 +572,101 @@ export async function showDelegatedAdminRelationship(
   profileName: string,
 ): Promise<Record<string, unknown>> {
   return showResource(session, flags, profile, operation, help, profileName,
-    RELATIONSHIP, "delegatedAdminRelationship", "entra delegated-admin-relationship show", "delegatedAdminRelationship-id");
+    RELATIONSHIP, "delegatedAdminRelationship", "entra delegated-admin-relationship show");
+}
+
+export async function listDelegatedAdminAccessAssignments(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listResource(session, flags, profile, operation, help, profileName,
+    ACCESS_ASSIGNMENT, "delegatedAdminAccessAssignments", "entra delegated-admin-relationship show-access-assignment");
+}
+
+export async function showDelegatedAdminAccessAssignment(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showResource(session, flags, profile, operation, help, profileName,
+    ACCESS_ASSIGNMENT, "delegatedAdminAccessAssignment", "entra delegated-admin-relationship show-access-assignment");
+}
+
+export async function listDelegatedAdminOperations(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listResource(session, flags, profile, operation, help, profileName,
+    OPERATION, "delegatedAdminRelationshipOperations", "entra delegated-admin-relationship show-operation");
+}
+
+export async function showDelegatedAdminOperation(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showResource(session, flags, profile, operation, help, profileName,
+    OPERATION, "delegatedAdminRelationshipOperation", "entra delegated-admin-relationship show-operation");
+}
+
+export async function listDelegatedAdminRequests(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listResource(session, flags, profile, operation, help, profileName,
+    REQUEST, "delegatedAdminRelationshipRequests", "entra delegated-admin-relationship show-request");
+}
+
+export async function showDelegatedAdminRequest(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showResource(session, flags, profile, operation, help, profileName,
+    REQUEST, "delegatedAdminRelationshipRequest", "entra delegated-admin-relationship show-request");
+}
+
+export async function listDelegatedAdminServiceManagementDetails(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listResource(session, flags, profile, operation, help, profileName,
+    SERVICE_MANAGEMENT_DETAIL, "delegatedAdminServiceManagementDetails", "entra delegated-admin-customer show-service-management-detail");
+}
+
+export async function showDelegatedAdminServiceManagementDetail(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showResource(session, flags, profile, operation, help, profileName,
+    SERVICE_MANAGEMENT_DETAIL, "delegatedAdminServiceManagementDetail", "entra delegated-admin-customer show-service-management-detail");
 }

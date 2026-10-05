@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 142 (140 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 150 (148 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -108,6 +108,14 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra delegated-admin-customer show` | `GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}` | scheduled | EXT-04 |
 | `mg-axi entra delegated-admin-relationship list` | `GET:/tenantRelationships/delegatedAdminRelationships` | scheduled | EXT-04 |
 | `mg-axi entra delegated-admin-relationship show` | `GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-relationship list-access-assignments` | `GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-relationship show-access-assignment` | `GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/{delegatedAdminAccessAssignment-id}` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-relationship list-operations` | `GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-relationship show-operation` | `GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/{delegatedAdminRelationshipOperation-id}` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-relationship list-requests` | `GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-relationship show-request` | `GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/{delegatedAdminRelationshipRequest-id}` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-customer list-service-management-details` | `GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-customer show-service-management-detail` | `GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/{delegatedAdminServiceManagementDetail-id}` | scheduled | EXT-04 |
 | `mg-axi entra multi-tenant-organization show` | `GET:/tenantRelationships/multiTenantOrganization` | scheduled | EXT-04 |
 | `mg-axi entra multi-tenant-organization join-request show` | `GET:/tenantRelationships/multiTenantOrganization/joinRequest` | scheduled | EXT-04 |
 | `mg-axi entra multi-tenant-organization tenant list` | `GET:/tenantRelationships/multiTenantOrganization/tenants` | scheduled | EXT-04 |
@@ -657,27 +665,19 @@ Beta contracts need their own review; delta-token sync needs its own change-trac
 
 ## EXT-04 delegated-admin scope decisions
 
-Firstmate scope: approve narrowing this change to the four v1.0 delegated-admin reads above (customer list/show, relationship list/show).
+Firstmate scope: approve narrowing this change to the twelve v1.0 delegated-admin reads above (customer list/show, relationship list/show, access-assignment list/show, operation list/show, request list/show and service-management-detail list/show).
 The operations below remain scheduled with an explicit deferred disposition to a later EXT-04 subfamily; no new commands or raw access are approved.
-Scalar counts need a separate query and response contract from the approved list/show reads; service-management details and relationship access-assignment, operation and request navigations need their own review; the multi-tenant-organization reads shipped in the section below, and the tenant-lookup functions ship as tenant-information show under the mg-ext-04e function-argument contract.
+Scalar counts need a separate query and response contract from the approved list/show reads; the tenantRelationship container root needs its own projection review; multi-tenant-organization reads shipped in the section below, and tenant-lookup functions ship as tenant-information show under the mg-ext-04e function-argument contract.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|
 | `v1.0:GET:/tenantRelationships` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin root subfamily: the tenantRelationship container singleton needs its own projection review beyond the approved customer and relationship list/show reads. |
 | `v1.0:GET:/tenantRelationships/delegatedAdminCustomers/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin customer-details subfamily: service-management detail reads need their own query, access and projection review beyond the approved customer list/show reads. |
 | `v1.0:GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/{delegatedAdminServiceManagementDetail-id}` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin customer-details subfamily: service-management detail reads need their own query, access and projection review beyond the approved customer list/show reads. |
 | `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin relationship-details subfamily: access-assignment, operation and request navigation reads need their own query, access and projection review beyond the approved relationship list/show reads. |
 | `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/{delegatedAdminAccessAssignment-id}` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin relationship-details subfamily: access-assignment, operation and request navigation reads need their own query, access and projection review beyond the approved relationship list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin relationship-details subfamily: access-assignment, operation and request navigation reads need their own query, access and projection review beyond the approved relationship list/show reads. |
 | `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/{delegatedAdminRelationshipOperation-id}` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin relationship-details subfamily: access-assignment, operation and request navigation reads need their own query, access and projection review beyond the approved relationship list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin relationship-details subfamily: access-assignment, operation and request navigation reads need their own query, access and projection review beyond the approved relationship list/show reads. |
 | `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/{delegatedAdminRelationshipRequest-id}` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin relationship-details subfamily: access-assignment, operation and request navigation reads need their own query, access and projection review beyond the approved relationship list/show reads. |
 
 ## EXT-04 multi-tenant-organization scope decisions
 

@@ -238,9 +238,26 @@ for (const profile of [delegatedProfile, appProfile]) {
 }
 
 for (const profile of [delegatedProfile, appProfile]) {
+  test(`${profile.mode} raw delegated-admin operation list reviews $filter but not $orderby`, async () => {
+    const ok = fixture(json(200, { value: [] }));
+    await runApiGet({ path: "/tenantRelationships/delegatedAdminRelationships/relationship-1/operations", odata: "$select=id,status&$filter=status eq 'succeeded'",
+      apiVersion: "v1.0", profile,
+      ...(profile.mode === "delegated" ? { scopes: "https://graph.microsoft.com/DelegatedAdminRelationship.Read.All" } : {}) }, ok.deps);
+    assert.equal(new URL(ok.requests[0].url).searchParams.get("$filter"), "status eq 'succeeded'");
+    const bad = fixture(json(200, {}));
+    await assert.rejects(runApiGet({ path: "/tenantRelationships/delegatedAdminRelationships/relationship-1/operations", odata: "$orderby=status",
+      apiVersion: "v1.0", profile,
+      ...(profile.mode === "delegated" ? { scopes: "https://graph.microsoft.com/DelegatedAdminRelationship.Read.All" } : {}) }, bad.deps),
+      error => error.code === "VALIDATION_ERROR" && /Unsupported query key \$orderby/.test(error.message));
+    assert.equal(bad.credentialCalls.length, 0);
+    assert.equal(bad.requests.length, 0);
+  });
+}
+for (const profile of [delegatedProfile, appProfile]) {
   for (const path of [
+    "/tenantRelationships",
     "/tenantRelationships/delegatedAdminCustomers/customer-1/serviceManagementDetails",
-    "/tenantRelationships/delegatedAdminRelationships/relationship-1/requests",
+    "/tenantRelationships/delegatedAdminCustomers/customer-1/serviceManagementDetails/detail-1",
   ]) {
     test(`${profile.mode} raw ${path} rejects deferred delegated-admin navigation before credentials or HTTP`, async () => {
       const f = fixture(json(200, {}));

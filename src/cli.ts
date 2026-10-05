@@ -22,7 +22,7 @@ import { updateCaPolicy } from "./entra-ca-policy-update.js";
 import { listDomains, showDomain, listVerificationDnsRecords, showVerificationDnsRecord, listServiceConfigurationRecords, showServiceConfigurationRecord, listDomainDnsRecords, showDomainDnsRecord } from "./entra-domains.js";
 import { countContracts, listContracts, showContract } from "./entra-contracts.js";
 import { listIdentityProviders, showIdentityProvider, countIdentityProviders, availableIdentityProviderTypes } from "./entra-identity-providers.js";
-import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions } from "./entra-access-reviews.js";
+import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions, showDecision, listContactedReviewers, showContactedReviewer, listStages, showStage } from "./entra-access-reviews.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
 import { addGroupMember } from "./entra-group-member-add.js";
 import { fetchTransport } from "./api.js";
@@ -146,7 +146,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       default: return showNamedLocation(session, flags, selected.profile, operation, help, selected.name);
     }
   }
-  if (leaf.path === "entra access-review definition list" || leaf.path === "entra access-review definition show" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review instance show" || leaf.path === "entra access-review decision list") {
+  if (leaf.path === "entra access-review definition list" || leaf.path === "entra access-review definition show" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review instance show" || leaf.path === "entra access-review decision list" || leaf.path === "entra access-review decision show" || leaf.path === "entra access-review contacted-reviewer list" || leaf.path === "entra access-review contacted-reviewer show" || leaf.path === "entra access-review stage list" || leaf.path === "entra access-review stage show") {
     const selected = profiles.resolve(flags.profile as string | undefined);
     const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
     if (!operation || operation.method !== "GET") {
@@ -172,6 +172,11 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra access-review definition show": return showDefinition(session, flags, selected.profile, operation, help, selected.name);
       case "entra access-review instance list": return listInstances(session, flags, selected.profile, operation, help, selected.name);
       case "entra access-review instance show": return showInstance(session, flags, selected.profile, operation, help, selected.name);
+      case "entra access-review decision show": return showDecision(session, flags, selected.profile, operation, help, selected.name);
+      case "entra access-review contacted-reviewer list": return listContactedReviewers(session, flags, selected.profile, operation, help, selected.name);
+      case "entra access-review contacted-reviewer show": return showContactedReviewer(session, flags, selected.profile, operation, help, selected.name);
+      case "entra access-review stage list": return listStages(session, flags, selected.profile, operation, help, selected.name);
+      case "entra access-review stage show": return showStage(session, flags, selected.profile, operation, help, selected.name);
       default: return listDecisions(session, flags, selected.profile, operation, help, selected.name);
     }
   }

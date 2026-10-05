@@ -89,6 +89,36 @@ const dec2 = {
 };
 const decisions = [dec1, dec2];
 
+const r1 = {
+  id: "4a2499b9-88e7-48ff-92f6-1c8b0f8d6b1a",
+  displayName: "Adele Vance",
+  userPrincipalName: "AdeleV@contoso.com",
+  createdDateTime: "2021-03-09T23:10:28.83Z",
+};
+const r2 = {
+  id: "7c3b2e1a-5d6f-4a8b-9c0d-2e3f4a5b6c7d",
+  displayName: "Diego Siciliani",
+  userPrincipalName: "DiegoS@contoso.com",
+  createdDateTime: "2021-03-10T10:00:00Z",
+};
+const reviewers = [r1, r2];
+
+const s1 = {
+  id: "9ac05ca6-396a-469c-8a8b-bcb98fceb2dd",
+  startDateTime: "2021-03-11T16:44:59.337Z",
+  endDateTime: "2021-04-09T23:10:28.83Z",
+  status: "InProgress",
+  reviewers: [{ query: "./manager", queryType: "MicrosoftGraph", queryRoot: "decisions" }],
+  fallbackReviewers: [],
+};
+const s2 = {
+  id: "03266a48-8731-4cfc-8a60-b2fa6648a14c",
+  startDateTime: "2021-04-10T00:00:00Z",
+  endDateTime: "2021-05-10T00:00:00Z",
+  status: "NotStarted",
+};
+const stages = [s1, s2];
+
 const base = "/v1.0/identityGovernance/accessReviews/definitions";
 
 function setupProfiles() {
@@ -162,6 +192,23 @@ function accessReviewTransport(denied = false) {
       assert.ok(!url.searchParams.get("$select")?.split(",").includes("justification"));
       return json(200, { value: decisions });
     }
+    const singleDecision = new RegExp(`^${base}/([^/]+)/instances/([^/]+)/decisions/([^/]+)$`).exec(path);
+    if (singleDecision) {
+      const found = decisions.find(row => row.id === decodeURIComponent(singleDecision[3]));
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such decision" } });
+    }
+    if (path === `${base}/${definitionId}/instances/${instanceId}/contactedReviewers`) return json(200, { value: reviewers });
+    const singleReviewer = new RegExp(`^${base}/([^/]+)/instances/([^/]+)/contactedReviewers/([^/]+)$`).exec(path);
+    if (singleReviewer) {
+      const found = reviewers.find(row => row.id === decodeURIComponent(singleReviewer[3]));
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such reviewer" } });
+    }
+    if (path === `${base}/${definitionId}/instances/${instanceId}/stages`) return json(200, { value: stages });
+    const singleStage = new RegExp(`^${base}/([^/]+)/instances/([^/]+)/stages/([^/]+)$`).exec(path);
+    if (singleStage) {
+      const found = stages.find(row => row.id === decodeURIComponent(singleStage[3]));
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such stage" } });
+    }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
@@ -189,7 +236,7 @@ function runAccessReviewCli(args, state, mode, scopes, input) {
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
-      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, scopes, definitions, instances, decisions }),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, scopes, definitions, instances, decisions, reviewers, stages }),
     },
   });
 }
@@ -284,6 +331,90 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
+  test(`${mode} shows an access-review decision without approving anything`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "access-review", "decision", "show",
+        "--definition", definitionId, "--instance", instanceId, "--id", dec1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.decision, dec1);
+      assert.equal(result.help, undefined);
+      assert.ok(new URL(requests[0].url).pathname.endsWith(`/decisions/${dec1.id}`));
+      assert.equal(new URL(requests[0].url).searchParams.get("$select"),
+        "id,accessReviewId,decision,recommendation,reviewedDateTime,reviewedBy,appliedDateTime,applyResult,principal,resourceLink,target");
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists contacted reviewers as recorded identities, not outcomes`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "access-review", "contacted-reviewer", "list",
+        "--definition", definitionId, "--instance", instanceId, "--profile", profile], overrides);
+      assert.deepEqual(result.contactedReviewers, [
+        { id: r1.id, displayName: "Adele Vance", userPrincipalName: "AdeleV@contoso.com" },
+        { id: r2.id, displayName: "Diego Siciliani", userPrincipalName: "DiegoS@contoso.com" },
+      ]);
+      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("whether or not they were notified")));
+      assert.ok(result.help.some(hint => hint.includes("entra access-review contacted-reviewer show --definition <definition-id>")));
+      assert.ok(new URL(requests[0].url).pathname.endsWith(`/instances/${instanceId}/contactedReviewers`));
+      assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,displayName,userPrincipalName");
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows a contacted reviewer with the identity set`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "access-review", "contacted-reviewer", "show",
+        "--definition", definitionId, "--instance", instanceId, "--id", r1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.contactedReviewer, r1);
+      assert.equal(result.help, undefined);
+      assert.ok(new URL(requests[0].url).pathname.endsWith(`/contactedReviewers/${r1.id}`));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists stages as sequential phases of one instance`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "access-review", "stage", "list",
+        "--definition", definitionId, "--instance", instanceId, "--profile", profile], overrides);
+      assert.deepEqual(result.stages, [
+        { id: s1.id, status: "InProgress", startDateTime: s1.startDateTime, endDateTime: s1.endDateTime },
+        { id: s2.id, status: "NotStarted", startDateTime: s2.startDateTime, endDateTime: s2.endDateTime },
+      ]);
+      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("sequential phases")));
+      assert.ok(result.help.some(hint => hint.includes("entra access-review stage show --definition <definition-id>")));
+      assert.ok(new URL(requests[0].url).pathname.endsWith(`/instances/${instanceId}/stages`));
+      assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,status,startDateTime,endDateTime");
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows a stage with reviewer scopes and no decisions`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "access-review", "stage", "show",
+        "--definition", definitionId, "--instance", instanceId, "--id", s1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.stage, s1);
+      assert.equal(result.help, undefined);
+      assert.ok(new URL(requests[0].url).pathname.endsWith(`/stages/${s1.id}`));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
   test(`${mode} denied access-review reads name the scope, role and P2/Governance requirement`, async () => {
     const state = setupProfiles();
     try {
@@ -341,11 +472,51 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
+  test(`${mode} executable lists contacted reviewers end to end on the fake transport`, async () => {
+    const state = setupProfiles();
+    try {
+      const result = runAccessReviewCli(
+        ["entra", "access-review", "contacted-reviewer", "list", "--definition", definitionId, "--instance", instanceId, "--profile", profile],
+        state, mode, "https://graph.microsoft.com/AccessReview.Read.All");
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, 0, result.stdout);
+      assert.equal(result.stderr, "");
+      const output = decode(result.stdout);
+      assert.deepEqual(output.contactedReviewers, [
+        { id: r1.id, displayName: "Adele Vance", userPrincipalName: "AdeleV@contoso.com" },
+        { id: r2.id, displayName: "Diego Siciliani", userPrincipalName: "DiegoS@contoso.com" },
+      ]);
+      assert.deepEqual(output.count, { returned: 2, complete: true });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} executable shows a stage end to end on the fake transport`, async () => {
+    const state = setupProfiles();
+    try {
+      const result = runAccessReviewCli(
+        ["entra", "access-review", "stage", "show", "--definition", definitionId, "--instance", instanceId, "--id", s1.id, "--profile", profile],
+        state, mode, "https://graph.microsoft.com/AccessReview.Read.All");
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, 0, result.stdout);
+      assert.equal(result.stderr, "");
+      assert.deepEqual(decode(result.stdout).stage, s1);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
   for (const [command, property] of [
     [["entra", "access-review", "definition", "list"], "createdBy"],
     [["entra", "access-review", "definition", "list"], "stageSettings"],
     [["entra", "access-review", "instance", "list"], "errors"],
     [["entra", "access-review", "decision", "list"], "justification"],
+    [["entra", "access-review", "decision", "show"], "justification"],
+    [["entra", "access-review", "contacted-reviewer", "list"], "justification"],
+    [["entra", "access-review", "contacted-reviewer", "show"], "displayname"],
+    [["entra", "access-review", "stage", "list"], "durationInDays"],
+    [["entra", "access-review", "stage", "show"], "decisions"],
   ]) {
     for (const flag of ["select", "fields"]) {
       test(`${mode} ${command.join(" ")} rejects ${property} in --${flag} before credentials`, async () => {
@@ -353,7 +524,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         try {
           const args = [...command, "--profile", profile, `--${flag}`, `id,${property}`];
           if (command[2] === "instance") args.push("--definition", definitionId);
-          if (command[2] === "decision") args.push("--definition", definitionId, "--instance", instanceId);
+          if (["decision", "contacted-reviewer", "stage"].includes(command[2])) args.push("--definition", definitionId, "--instance", instanceId);
+          if (command[3] === "show") args.push("--id", "00000000-0000-0000-0000-000000000000");
           const { requests, calls, overrides } = overridesFor(mode);
           await assert.rejects(
             executeArgv(args, overrides),
@@ -491,6 +663,155 @@ test("delegated decision list without its instance fails before credentials", as
   }
 });
 
+test("delegated contacted-reviewer filters pass through as plain $filter", async () => {
+  const state = setupProfiles();
+  try {
+    const { requests, overrides } = overridesFor("delegated", transport(request => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/contactedReviewers")) return json(200, { value: reviewers });
+      return json(404, { error: { code: "Unknown", message: "unexpected route" } });
+    }));
+    const result = await executeArgv(["entra", "access-review", "contacted-reviewer", "list",
+      "--definition", definitionId, "--instance", instanceId, "--profile", "soc",
+      "--filter", "displayName eq 'Adele Vance'"], overrides);
+    assert.equal(result.contactedReviewers.length, 2);
+    const url = new URL(requests[0].url);
+    assert.equal(url.searchParams.get("$filter"), "displayName eq 'Adele Vance'");
+    assert.equal(url.searchParams.has("$count"), false);
+    assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
+test("delegated stage filters pass through as plain $filter", async () => {
+  const state = setupProfiles();
+  try {
+    const { requests, overrides } = overridesFor("delegated", transport(request => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/stages")) return json(200, { value: stages });
+      return json(404, { error: { code: "Unknown", message: "unexpected route" } });
+    }));
+    const result = await executeArgv(["entra", "access-review", "stage", "list",
+      "--definition", definitionId, "--instance", instanceId, "--profile", "soc",
+      "--filter", "status eq 'InProgress'"], overrides);
+    assert.equal(result.stages.length, 2);
+    const url = new URL(requests[0].url);
+    assert.equal(url.searchParams.get("$filter"), "status eq 'InProgress'");
+    assert.equal(url.searchParams.has("$count"), false);
+    assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
+test("delegated contacted-reviewer reads resume under the same instance binding", async () => {
+  const state = setupProfiles();
+  try {
+    const { overrides } = overridesFor("delegated", transport(request => {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith("/contactedReviewers")) {
+        if (url.searchParams.has("$skiptoken")) return json(200, { value: [r2] });
+        return json(200, {
+          value: [r1],
+          "@odata.nextLink": `https://graph.microsoft.com${base}/${definitionId}/instances/${instanceId}/contactedReviewers?%24skiptoken=page2`,
+        });
+      }
+      return json(404, { error: { code: "Unknown", message: "unexpected route" } });
+    }));
+    const first = await executeArgv(["entra", "access-review", "contacted-reviewer", "list",
+      "--definition", definitionId, "--instance", instanceId, "--profile", "soc", "--limit", "1"], overrides);
+    assert.deepEqual(first.count, { returned: 1, complete: false, reason: first.count.reason });
+    const second = await executeArgv(["entra", "access-review", "contacted-reviewer", "list",
+      "--definition", definitionId, "--instance", instanceId, "--profile", "soc", "--cursor", first.cursor], overrides);
+    assert.deepEqual(second.contactedReviewers, [
+      { id: r2.id, displayName: "Diego Siciliani", userPrincipalName: "DiegoS@contoso.com" },
+    ]);
+    await assert.rejects(
+      executeArgv(["entra", "access-review", "contacted-reviewer", "list",
+        "--definition", definitionId, "--instance", otherInstanceId, "--profile", "soc", "--cursor", first.cursor], overrides),
+      /resource or authentication context does not match/,
+    );
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
+test("delegated contacted-reviewer list without its instance fails before credentials", async () => {
+  const state = setupProfiles();
+  try {
+    const { requests, calls, overrides } = overridesFor("delegated");
+    await assert.rejects(
+      executeArgv(["entra", "access-review", "contacted-reviewer", "list", "--definition", definitionId, "--profile", "soc"], overrides),
+      /--instance is required/,
+    );
+    assert.equal(calls.length, 0);
+    assert.equal(requests.length, 0);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
+test("delegated stage show without its parents fails before credentials", async () => {
+  const state = setupProfiles();
+  try {
+    const { requests, calls, overrides } = overridesFor("delegated");
+    await assert.rejects(
+      executeArgv(["entra", "access-review", "stage", "show", "--id", s1.id, "--profile", "soc"], overrides),
+      /--definition is required/,
+    );
+    assert.equal(calls.length, 0);
+    assert.equal(requests.length, 0);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
+test("delegated decision show without its instance fails before credentials", async () => {
+  const state = setupProfiles();
+  try {
+    const { requests, calls, overrides } = overridesFor("delegated");
+    await assert.rejects(
+      executeArgv(["entra", "access-review", "decision", "show", "--definition", definitionId, "--id", dec1.id, "--profile", "soc"], overrides),
+      /--instance is required/,
+    );
+    assert.equal(calls.length, 0);
+    assert.equal(requests.length, 0);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
+test("delegated stage reads reject --fields outside the fetched selection", async () => {
+  const state = setupProfiles();
+  try {
+    const { requests, overrides } = overridesFor("delegated");
+    await assert.rejects(
+      executeArgv(["entra", "access-review", "stage", "list", "--definition", definitionId, "--instance", instanceId,
+        "--profile", "soc", "--select", "id,status", "--fields", "id,reviewers"], overrides),
+      /--fields reviewers was not fetched/,
+    );
+    assert.equal(requests.length, 0);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
+test("application stage reads reject delegated scopes", async () => {
+  const state = setupProfiles();
+  try {
+    const { requests, overrides } = overridesFor("application");
+    await assert.rejects(
+      executeArgv(["entra", "access-review", "stage", "list", "--definition", definitionId, "--instance", instanceId, "--profile", "batch",
+        "--scopes", "https://graph.microsoft.com/AccessReview.Read.All"], overrides),
+      /configured Graph .default audience/,
+    );
+    assert.equal(requests.length, 0);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
 test("delegated decision reads reject --fields outside the fetched selection", async () => {
   const state = setupProfiles();
   try {
@@ -520,6 +841,34 @@ test("application access-review reads reject delegated scopes", async () => {
     teardownProfiles(state);
   }
 });
+
+for (const [noun, key, rows] of [
+  ["contacted-reviewer", "contactedReviewers", reviewers],
+  ["stage", "stages", stages],
+]) {
+  for (const cursorArgs of [["--cursor", "-"], ["--cursor=-"]]) {
+    test(`${noun} list resumes from stdin with ${cursorArgs.join(" ")}`, async () => {
+      const state = setupProfiles();
+      try {
+        const { overrides } = overridesFor("delegated", transport(() => json(200, { value: rows })));
+        const args = ["entra", "access-review", noun, "list", "--definition", definitionId,
+          "--instance", instanceId, "--profile", "soc", "--limit", "1", "--select", "id"];
+        const first = await executeArgv(args, overrides);
+        assert.deepEqual(first[key], [{ id: rows[0].id }]);
+        assert.equal(first.count.complete, false);
+        assert.ok(first.help.some(hint => hint.includes("--cursor -") && hint.includes("stdin")));
+        const resumed = runAccessReviewCli([...args, ...cursorArgs], state, "delegated", undefined, first.cursor);
+        assert.equal(resumed.error, undefined);
+        assert.equal(resumed.status, 0, resumed.stdout);
+        const output = decode(resumed.stdout);
+        assert.deepEqual(output[key], [{ id: rows[1].id }]);
+        assert.deepEqual(output.count, { returned: 1, complete: true });
+      } finally {
+        teardownProfiles(state);
+      }
+    });
+  }
+}
 
 for (const [noun, parents, key, field] of [
   ["definition", [], "definitions", "scope"],

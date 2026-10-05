@@ -84,6 +84,7 @@ export function capabilityDocument(): string {
   const unavailableInvitationRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Marked unavailable by firstmate EXT-03b decision: "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
+  const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
   return [
@@ -148,7 +149,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-01 organization scope decisions",
     "",
-    "Firstmate scope decision (mg-ext-01b inbox 001): approve narrowing this change to the five organization/branding/localization reads above.",
+    "The organization scope covers the five organization/branding/localization reads above; the remaining subfamilies need the separate contracts described below.",
     "The operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.",
     "Stream image and CSS bytes stay out because they need a separate binary-output contract; beta-only settings, partner and theme contracts need separate review.",
     "",
@@ -164,7 +165,16 @@ export function capabilityDocument(): string {
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
-    ...deferredContractRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    ...deferredContractRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),    "## EXT-02 access-review scope decisions",
+    "",
+    "The access-review scope covers the ten reads above (definition, instance, decision, contacted-reviewer and stage list/show reads).",
+    "The legacy accessReviews and unified alias reads below are split into the EXT-02c follow-up to limit this piece's size; beta-only operations stay deferred (\"beta needs its own review\").",
+    "The history reads below are blocked: their documented least privilege is the write scope AccessReview.ReadWrite.All (no read scope), and history instances return SAS download URLs in downloadUri.",
+    "No new commands or raw access are approved for any row below.",
+    "",
+    "| Inventory operation | Disposition | Deferral reason |",
+    "|---|---|---|",
+    ...deferredAccessReviewRows.map(row => `| \`${row.id}\` | ${row.disposition}: ${row.owningSlice} | ${row.reason} |`),
     "",
     "## Named writes",
     "",

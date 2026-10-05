@@ -192,6 +192,60 @@ test("access-review decision list leaf help marks decisions read-only with paren
   assert.match(result.stdout, /--instance.*required/);
 });
 
+test("organization list leaf help names the singular organization route", () => {
+  const result = run(["entra", "organization", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /--filter is unsupported on \/organization /);
+  assert.ok(!result.stdout.includes("/organizations"));
+});
+
+test("access-review decision show leaf help marks the single read-only with parent flags", () => {
+  const result = run(["entra", "access-review", "decision", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /never approves, denies or applies anything/);
+  assert.match(result.stdout, /--definition.*required/);
+  assert.match(result.stdout, /--instance.*required/);
+  assert.match(result.stdout, /--id.*required/);
+});
+
+test("access-review contacted-reviewer list leaf help marks recorded identities with parent flags", () => {
+  const result = run(["entra", "access-review", "contacted-reviewer", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /whether or not notified, never review outcomes/);
+  assert.match(result.stdout, /--definition.*required/);
+  assert.match(result.stdout, /--instance.*required/);
+  assert.match(result.stdout, /--cursor/);
+});
+
+test("access-review contacted-reviewer show leaf help marks the identity set", () => {
+  const result = run(["entra", "access-review", "contacted-reviewer", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /full reviewed identity set/);
+  assert.match(result.stdout, /--id.*required/);
+});
+
+test("access-review stage list leaf help marks sequential phases and eq-only filters", () => {
+  const result = run(["entra", "access-review", "stage", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /sequential phases/);
+  assert.match(result.stdout, /eq only/);
+  assert.match(result.stdout, /--definition.*required/);
+  assert.match(result.stdout, /--instance.*required/);
+});
+
+test("access-review stage show leaf help marks reviewer scopes with later-slice decisions", () => {
+  const result = run(["entra", "access-review", "stage", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /reviewer scopes/);
+  assert.match(result.stdout, /per-stage decisions belong to a later slice/);
+});
+
 test("administrative-unit member list leaf help advertises the relationship flags", () => {
   const result = run(["entra", "administrative-unit", "member", "list", "--help"]);
   assert.equal(result.status, 0);

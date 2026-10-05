@@ -1,7 +1,7 @@
 import { AxiError } from "axi-sdk-js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
-import { KNOWN_DECISION_FIELDS, KNOWN_DEFINITION_FIELDS, KNOWN_INSTANCE_FIELDS } from "./entra-access-reviews.js";
+import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITION_FIELDS, KNOWN_INSTANCE_FIELDS, KNOWN_STAGE_FIELDS } from "./entra-access-reviews.js";
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
@@ -279,6 +279,26 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A AccessReview.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (group/app reviews: review creator, Global Reader, Security Reader, User Administrator, Identity Governance Administrator or Security Administrator; Entra-role reviews: Security Reader, Identity Governance Administrator, Privileged Role Administrator or Security Administrator); personal Microsoft accounts are not supported.",
     note: "Decisions are read-only here: listing never approves, denies or applies anything; access reviews need P2 or ID Governance depending on capability.",
     sources: ["https://learn.microsoft.com/graph/api/accessreviewinstance-list-decisions?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/decisions/{accessReviewInstanceDecisionItem-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_DECISION_FIELDS,
+    access: "D/A AccessReview.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (group/app reviews: review creator, Global Reader, Security Reader, User Administrator, Identity Governance Administrator or Security Administrator; Entra-role reviews: Security Reader, Identity Governance Administrator, Privileged Role Administrator or Security Administrator); personal Microsoft accounts are not supported.",
+    note: "Showing a decision never approves, denies or applies anything; access reviews need P2 or ID Governance depending on capability.",
+    sources: ["https://learn.microsoft.com/graph/api/accessreviewinstancedecisionitem-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/contactedReviewers", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_CONTACTED_REVIEWER_FIELDS,
+    access: "D/A AccessReview.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (group/app reviews: review creator, Global Reader, Security Reader, User Administrator, Identity Governance Administrator or Security Administrator; Entra-role reviews: Security Reader, Identity Governance Administrator, Privileged Role Administrator or Security Administrator); personal Microsoft accounts are not supported.",
+    note: "Contacted reviewers are reviewer identities recorded on one instance, whether or not notified; access reviews need P2 or ID Governance depending on capability.",
+    sources: ["https://learn.microsoft.com/graph/api/accessreviewinstance-list-contactedreviewers?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/contactedReviewers/{accessReviewReviewer-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CONTACTED_REVIEWER_FIELDS,
+    access: "D/A AccessReview.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (group/app reviews: review creator, Global Reader, Security Reader, User Administrator, Identity Governance Administrator or Security Administrator; Entra-role reviews: Security Reader, Identity Governance Administrator, Privileged Role Administrator or Security Administrator); personal Microsoft accounts are not supported.",
+    note: "The single shares its list's reviewed resource contract: accessReviewReviewer carries no relationships; access reviews need P2 or ID Governance depending on capability.",
+    sources: ["https://learn.microsoft.com/graph/api/accessreviewinstance-list-contactedreviewers?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/accessreviewreviewer?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/stages", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_STAGE_FIELDS,
+    access: "D/A AccessReview.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (group/app reviews: review creator, Global Reader, Security Reader, User Administrator, Identity Governance Administrator or Security Administrator; Entra-role reviews: Security Reader, Identity Governance Administrator, Privileged Role Administrator or Security Administrator); personal Microsoft accounts are not supported.",
+    note: "Stages are sequential phases of one instance, present only when stageSettings is defined; filters document eq only; access reviews need P2 or ID Governance depending on capability.",
+    sources: ["https://learn.microsoft.com/graph/api/accessreviewinstance-list-stages?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/stages/{accessReviewStage-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_STAGE_FIELDS,
+    access: "D/A AccessReview.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (group/app reviews: review creator, Global Reader, Security Reader, User Administrator, Identity Governance Administrator or Security Administrator; Entra-role reviews: Security Reader, Identity Governance Administrator, Privileged Role Administrator or Security Administrator); personal Microsoft accounts are not supported.",
+    note: "durationInDays is not a stage property (it folds into endDateTime); per-stage decisions belong to a later slice; access reviews need P2 or ID Governance depending on capability.",
+    sources: ["https://learn.microsoft.com/graph/api/accessreviewstage-get?view=graph-rest-1.0"] },
 ];
 
 function splitPath(path: string): string[] {

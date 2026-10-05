@@ -31,6 +31,7 @@ const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["entra on-premises-synchronization", "on-premises synchronization"],
   ["entra agreement", "terms-of-use agreements and acceptances"],
   ["entra agreement-acceptance", "terms-of-use agreements and acceptances"],
+  ["entra directory-object", "directory objects"],
   ["entra group-lifecycle-policy", "group lifecycle policies"],
   ["entra group-setting-template", "group setting templates"],
   ["entra attribute-set", "attribute sets and custom security attributes"],

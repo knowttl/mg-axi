@@ -63,6 +63,9 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra agreement acceptance show/);
   assert.match(result.stdout, /entra agreement-acceptance list/);
   assert.match(result.stdout, /entra agreement-acceptance show/);
+  assert.match(result.stdout, /entra directory-object list/);
+  assert.match(result.stdout, /entra directory-object show/);
+  assert.match(result.stdout, /entra directory-object count/);
   assert.match(result.stdout, /entra group-lifecycle-policy list/);
   assert.match(result.stdout, /entra group-lifecycle-policy show/);
   assert.match(result.stdout, /entra group-lifecycle-policy count/);

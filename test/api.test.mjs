@@ -144,6 +144,7 @@ for (const profile of [delegatedProfile, appProfile]) {
     "/groupSettingTemplates/$count",
     "/directory/subscriptions/$count",
     "/directory/onPremisesSynchronization/$count",
+    "/agreements/agreement-1/acceptances/$count",
     "/directory/attributeSets/$count",
     "/directory/customSecurityAttributeDefinitions/$count",
     "/directory/customSecurityAttributeDefinitions/Engineering_Project/allowedValues/$count",

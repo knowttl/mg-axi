@@ -27,6 +27,9 @@ export const SAFE_CREDENTIAL_FIELDS: readonly string[] = ["keyId", "displayName"
 // buffering, execute output and cursor decode.
 export const GRAPH_HOST = "graph.microsoft.com";
 const READ_SCOPES = new Set([
+  "Agreement.Read.All",
+  "AgreementAcceptance.Read",
+  "AgreementAcceptance.Read.All",
   "AccessReview.Read.All",
   "AdministrativeUnit.Read.All",
   "Application.Read.All",

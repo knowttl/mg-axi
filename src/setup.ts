@@ -60,6 +60,10 @@ const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["entra federation-configuration", "federation configurations"],
   ["entra data-policy-operation", "data policy operations"],
   ["entra access-review", "access-review"],
+  ["entra entitlement catalog", "entitlement catalogs and access packages"],
+  ["entra entitlement access-package", "entitlement catalogs and access packages"],
+  ["entra entitlement assignment-policy", "entitlement catalogs and access packages"],
+  ["entra entitlement resource-role-scope", "entitlement catalogs and access packages"],
 ];
 
 function shippedReadFamilies(): string[] {

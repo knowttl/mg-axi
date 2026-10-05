@@ -81,6 +81,10 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra federation-configuration ", "federation configurations"],
   ["entra data-policy-operation ", "data policy operations"],
   ["entra access-review ", "access reviews"],
+  ["entra entitlement catalog ", "entitlement catalogs and access packages"],
+  ["entra entitlement access-package ", "entitlement catalogs and access packages"],
+  ["entra entitlement assignment-policy ", "entitlement catalogs and access packages"],
+  ["entra entitlement resource-role-scope ", "entitlement catalogs and access packages"],
   ["api get", "reviewed raw reads"],
 ];
 
@@ -293,6 +297,7 @@ export function capabilityDocument(): string {
   const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
   const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate custom-security-attributes scope "));
   const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
+  const deferredEntitlementRows = rows.filter(row => row.owningSlice === "EXT-02" && row.reason.startsWith("Deferred by firstmate entitlement-management scope "));
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
   return [
@@ -530,6 +535,15 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Deferral reason |",
     "|---|---|---|",
     ...deferredAccessReviewRows.map(row => `| \`${row.id}\` | ${row.disposition}: ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-02 entitlement-management scope decisions",
+    "",
+    "The entitlement-management scope covers the twelve reads above (catalog, access-package, assignment-policy and resource-role-scope list/show/count reads).",
+    "Assignment, request, approval and subject reads carry personal data and stay scheduled for a later part with no new commands or raw access approved; so do the top-level assignment-policy and resource-role-scope lists, catalog navigation reads (accessPackages, resources, resourceScopes, resourceRoles, customWorkflowExtensions), package navigation reads (catalog, incompatible sets), policy navigation reads (questions, custom-extension stages), role/scope link expansion, filterByCurrentUser and additionalAccess functions, and every beta operation below.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredEntitlementRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## Named writes",
     "",

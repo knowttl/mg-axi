@@ -330,6 +330,39 @@ test("access-review stage show leaf help marks reviewer scopes with later-slice 
   assert.match(result.stdout, /per-stage decisions belong to a later slice/);
 });
 
+test("entitlement catalog list leaf help marks containers distinct from packages", () => {
+  const result = run(["entra", "entitlement", "catalog", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /package containers.*never carry their access packages/);
+  assert.match(result.stdout, /--cursor/);
+  assert.match(result.stdout, /EntitlementManagement\.Read\.All/);
+});
+
+test("entitlement access-package show leaf help marks the bundle set", () => {
+  const result = run(["entra", "entitlement", "access-package", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /full reviewed bundle set/);
+  assert.match(result.stdout, /--id.*required/);
+});
+
+test("entitlement assignment-policy list leaf help marks parent package with approval scope", () => {
+  const result = run(["entra", "entitlement", "assignment-policy", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /--access-package.*required/);
+  assert.match(result.stdout, /who may request and how approval and review run/);
+});
+
+test("entitlement resource-role-scope list leaf help marks pairing scope with later-slice links", () => {
+  const result = run(["entra", "entitlement", "resource-role-scope", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /linked role and scope detail.*belongs to a later slice/);
+  assert.match(result.stdout, /--access-package.*required/);
+});
+
 test("administrative-unit member list leaf help advertises the relationship flags", () => {
   const result = run(["entra", "administrative-unit", "member", "list", "--help"]);
   assert.equal(result.status, 0);

@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 150 (148 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 162 (160 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -173,6 +173,18 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra access-review contacted-reviewer show` | `GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/contactedReviewers/{accessReviewReviewer-id}` | scheduled | EXT-02 |
 | `mg-axi entra access-review stage list` | `GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/stages` | scheduled | EXT-02 |
 | `mg-axi entra access-review stage show` | `GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/stages/{accessReviewStage-id}` | scheduled | EXT-02 |
+| `mg-axi entra entitlement catalog list` | `GET:/identityGovernance/entitlementManagement/catalogs` | scheduled | EXT-02 |
+| `mg-axi entra entitlement catalog show` | `GET:/identityGovernance/entitlementManagement/catalogs/{accessPackageCatalog-id}` | scheduled | EXT-02 |
+| `mg-axi entra entitlement catalog count` | `GET:/identityGovernance/entitlementManagement/catalogs/$count` | scheduled | EXT-02 |
+| `mg-axi entra entitlement access-package list` | `GET:/identityGovernance/entitlementManagement/accessPackages` | scheduled | EXT-02 |
+| `mg-axi entra entitlement access-package show` | `GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}` | scheduled | EXT-02 |
+| `mg-axi entra entitlement access-package count` | `GET:/identityGovernance/entitlementManagement/accessPackages/$count` | scheduled | EXT-02 |
+| `mg-axi entra entitlement assignment-policy list` | `GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/assignmentPolicies` | scheduled | EXT-02 |
+| `mg-axi entra entitlement assignment-policy show` | `GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/assignmentPolicies/{accessPackageAssignmentPolicy-id}` | scheduled | EXT-02 |
+| `mg-axi entra entitlement assignment-policy count` | `GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/assignmentPolicies/$count` | scheduled | EXT-02 |
+| `mg-axi entra entitlement resource-role-scope list` | `GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes` | scheduled | EXT-02 |
+| `mg-axi entra entitlement resource-role-scope show` | `GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes/{accessPackageResourceRoleScope-id}` | scheduled | EXT-02 |
+| `mg-axi entra entitlement resource-role-scope count` | `GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes/$count` | scheduled | EXT-02 |
 | `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |
 | `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |
 
@@ -947,6 +959,20 @@ No new commands or raw access are approved for any row below.
 | `v1.0:GET:/identityGovernance/accessReviews/unified/instances/{accessReviewInstance-id}/stages/{accessReviewStage-id}/decisions/{accessReviewInstanceDecisionItem-id}/insights` | scheduled: EXT-02c | Split into EXT-02c to limit this piece's size: legacy accessReviews and unified alias reads need their own query, access and projection review; beta contracts need separate review. |
 | `v1.0:GET:/identityGovernance/accessReviews/unified/instances/{accessReviewInstance-id}/stages/{accessReviewStage-id}/decisions/{accessReviewInstanceDecisionItem-id}/insights/$count` | scheduled: EXT-02c | Split into EXT-02c to limit this piece's size: legacy accessReviews and unified alias reads need their own query, access and projection review; beta contracts need separate review. |
 | `v1.0:GET:/identityGovernance/accessReviews/unified/instances/{accessReviewInstance-id}/stages/{accessReviewStage-id}/decisions/{accessReviewInstanceDecisionItem-id}/insights/{governanceInsight-id}` | scheduled: EXT-02c | Split into EXT-02c to limit this piece's size: legacy accessReviews and unified alias reads need their own query, access and projection review; beta contracts need separate review. |
+
+## EXT-02 entitlement-management scope decisions
+
+The entitlement-management scope covers the twelve reads above (catalog, access-package, assignment-policy and resource-role-scope list/show/count reads).
+Assignment, request, approval and subject reads carry personal data and stay scheduled for a later part with no new commands or raw access approved; so do the top-level assignment-policy and resource-role-scope lists, catalog navigation reads (accessPackages, resources, resourceScopes, resourceRoles, customWorkflowExtensions), package navigation reads (catalog, incompatible sets), policy navigation reads (questions, custom-extension stages), role/scope link expansion, filterByCurrentUser and additionalAccess functions, and every beta operation below.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/$count` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes/$count` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes/{accessPackageResourceRoleScope-id}` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
 
 ## Named writes
 

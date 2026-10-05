@@ -251,6 +251,40 @@ Delegated callers additionally need a supported Entra role per review scope: gro
 Denied reads name that role requirement instead of only the generic grant/role/licence cause.
 Access reviews need P2 or ID Governance depending on capability, not one uniform licence, and delegated personal Microsoft accounts are not supported.
 
+Read entitlement catalogs and access packages through twelve views; delegated profiles first need explicit login with the read scope:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/EntitlementManagement.Read.All
+mg-axi entra entitlement catalog list --profile soc --limit 10
+mg-axi entra entitlement catalog list --profile soc --filter "state eq 'Published'"
+mg-axi entra entitlement catalog show --profile soc --id <catalog-id>
+mg-axi entra entitlement catalog count --profile soc
+mg-axi entra entitlement access-package list --profile soc --limit 10
+mg-axi entra entitlement access-package show --profile soc --id <access-package-id>
+mg-axi entra entitlement access-package count --profile soc
+mg-axi entra entitlement assignment-policy list --profile soc --access-package <access-package-id>
+mg-axi entra entitlement assignment-policy show --profile soc --access-package <access-package-id> --id <policy-id>
+mg-axi entra entitlement assignment-policy count --profile soc --access-package <access-package-id>
+mg-axi entra entitlement resource-role-scope list --profile soc --access-package <access-package-id>
+mg-axi entra entitlement resource-role-scope show --profile soc --access-package <access-package-id> --id <scope-id>
+mg-axi entra entitlement resource-role-scope count --profile soc --access-package <access-package-id>
+```
+
+Catalogs are package containers and never carry their access packages: `entra entitlement catalog list` defaults to `id`, `displayName`, `state` and `catalogType`, and `entra entitlement catalog show --id <catalog-id>` defaults to the full reviewed container set.
+Access packages are the assignable bundles: `entra entitlement access-package list` defaults to `id`, `displayName` and `isHidden`, and `entra entitlement access-package show --id <access-package-id>` defaults to the full reviewed bundle set.
+`entra entitlement assignment-policy list --access-package <access-package-id>` defaults to `id`, `displayName` and `allowedTargetScope`: policies name who may request and how approval and review run, and `entra entitlement assignment-policy show` takes `--access-package` and `--id` and defaults to the full reviewed request, approval and review set.
+`entra entitlement resource-role-scope list --access-package <access-package-id>` defaults to `id` and `createdDateTime`: role-plus-scope pairs a package grants, and `entra entitlement resource-role-scope show` takes `--access-package` and `--id`.
+Assignment, request, approval and subject reads carry personal data and belong to a later part, never to these reads; questions, custom-extension stages and the linked role/scope detail need `$expand` and belong to later slices.
+`--select` requests properties from the [reviewed entitlement property sets](src/entra-entitlement-management.ts); `--fields` must be a subset of the fetched selection.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to entitlement reads.
+Resume any entitlement list with `--cursor -` and supply the returned cursor on stdin; resume policy and role-scope lists with the same `--access-package`, profile, scopes and API version.
+Delegated reads default to `https://graph.microsoft.com/EntitlementManagement.Read.All`, while application profiles use the configured `.default` audience.
+See the [entitlement-management scope decisions](docs/coverage.md#ext-02-entitlement-management-scope-decisions) for the scheduled personal-data part and deferred beta reads.
+Delegated callers additionally need a supported Entra role with catalog visibility (Global Reader and Identity Governance Administrator are among the supported roles).
+Denied reads name that role requirement instead of only the generic grant/role/licence cause.
+Entitlement management needs P2 or ID Governance depending on capability, not one uniform licence, and delegated personal Microsoft accounts are not supported.
+
 Log in with `https://graph.microsoft.com/Device.Read.All` or `https://graph.microsoft.com/AdministrativeUnit.Read.All`, then inspect directory devices and administrative units:
 
 ```sh

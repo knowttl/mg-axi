@@ -81,6 +81,7 @@ export function capabilityDocument(): string {
   });
   const deferredDomainRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate R1 "));
   const deferredProviderRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred to a later EXT-03 "));
+  const unavailableInvitationRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Marked unavailable by firstmate EXT-03b decision: "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const readCount = readLeaves.length + 2;
@@ -133,6 +134,17 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredProviderRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-03 invitations scope decisions",
+    "",
+    "Firstmate decision (mg-ext-03b inbox 001): do not implement these reads and add no scope.",
+    "The eight v1.0 invitation reads below carry an explicit reviewed unavailable disposition; no new commands or raw access are approved.",
+    "The [v1.0 invitation resource documentation](https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md) lists Create only in its Methods table and provides no documented GET contract for these invitation reads.",
+    "Workforce B2B context only; no invitation creation or any mutation is claimed here.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...unavailableInvitationRows.map(row => `| \`${row.id}\` | ${row.disposition} | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-01 organization scope decisions",
     "",

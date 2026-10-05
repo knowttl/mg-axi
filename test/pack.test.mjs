@@ -520,7 +520,7 @@ test("skill next steps match the no-args home view hints", async () => {
     assert.deepEqual(output.help, hints);
     assert.deepEqual(skillHomeHints(), hints);
     assert.equal(skillDocument(), skill);
-    for (const hint of hints) assert.ok(skill.includes(`npx -y @knowttl/mg-axi ${hint.replace(/^mg-axi ?/, "")}`), `skill prints home hint: ${hint}`);
+    for (const hint of hints) assert.ok(skill.includes(hint), `skill prints home hint: ${hint}`);
   } finally {
     process.env.MG_AXI_CONFIG = previous;
     rmSync(home, { recursive: true, force: true });

@@ -878,7 +878,7 @@ export function operationFor(leaf: Leaf, version: string) {
 
 // Next-step hints shared by the no-args home view and the installable
 // skill, so the two cannot drift apart. home() prints them alongside live
-// profile status; skillDocument() in docs.ts reprints them in npx form.
+// profile status; skillDocument() in docs.ts reprints them.
 export const HOME_HELP = ["mg-axi setup", "mg-axi doctor", "mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi entra application list --help", "mg-axi entra service-principal list --help", "mg-axi entra conditional-access policy list --help", "mg-axi api get --help"];
 
 // A useful local status, without treating unavailable tenant summaries as zeros.

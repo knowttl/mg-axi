@@ -96,22 +96,18 @@ export function skillDescription(): string {
   return `Inspect Microsoft Entra ${areas.join(", ")} and run ${writes.length} gated writes (${writes.join(", ")}) through token-efficient TOON output.`;
 }
 
-// Next-step hints printed by the no-args home view, rewritten by the skill
-// to the non-interactive npx form. The two leading entries mirror the
+// Next-step hints printed by the no-args home view. The two leading entries mirror the
 // profile/login hints localHome() in cli.ts prepends to HOME_HELP; the
 // rest is HOME_HELP verbatim, so skill and home view cannot drift apart.
 export function skillHomeHints(): string[] {
   return ["mg-axi profile list", "mg-axi login --help", ...HOME_HELP];
 }
 
-const SKILL_NPX = "npx -y @knowttl/mg-axi";
-
 // The full installable skill. Durable guidance only: read-only by default,
 // writes need preview plus typed confirmation, no secrets in output, the
 // profile/auth model, offline tests. Long walkthroughs live in leaf --help
 // and docs/ instead.
 export function skillDocument(): string {
-  const hints = skillHomeHints().map(hint => `${SKILL_NPX} ${hint.replace(/^mg-axi ?/, "")}`.trimEnd());
   return [
     "---",
     "name: mg-axi",
@@ -129,8 +125,9 @@ export function skillDocument(): string {
     "The generated [command table](#orientation) lists supported named writes through the gated mutation coordinator; raw API remains read-only and every other mutation is refused.",
     "See [README.md](../../README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.",
     "",
-    `Run commands non-interactively with \`${SKILL_NPX} ...\`; from a source checkout \`node dist/bin/mg-axi.js ...\` substitutes.`,
-    `Run \`${SKILL_NPX} doctor\` first.`,
+    "Build and link the local checkout as documented in [README.md](../../README.md#mg-axi), then run commands non-interactively with `mg-axi <command>`.",
+    "Once the package is published, `npx -y @knowttl/mg-axi <command>` also applies.",
+    "Run `mg-axi doctor` first.",
     "See [README.md](../../README.md#release) for doctor profile selection, checks and failure behavior.",
     "",
     "## Orientation",
@@ -147,7 +144,7 @@ export function skillDocument(): string {
     skillCommandTable(),
     "<!-- command-registry:end -->",
     "",
-    `Run \`${SKILL_NPX} <leaf-path> --help\` for that leaf's accepted flags and reference.`,
+    "Run `mg-axi <leaf-path> --help` for that leaf's accepted flags and reference.",
     "Unknown flags fail before any credential or HTTP work.",
     "",
     "## Next steps",
@@ -155,24 +152,24 @@ export function skillDocument(): string {
     "The no-args home view prints these hints alongside live profile status:",
     "",
     "```sh",
-    ...hints,
+    ...skillHomeHints(),
     "```",
     "",
     "## Setup (explicit only)",
     "",
-    "Follow [README.md](../../README.md#release) for checkout builds and explicit skill installation.",
+    "Follow [README.md](../../README.md#mg-axi) for checkout builds and binary linking, and [release guidance](../../README.md#release) for explicit skill installation.",
     "Create profiles explicitly and keep secrets out of argv and config files:",
     "",
     "```sh",
-    `${SKILL_NPX} setup                    # build steps, config path and capabilities; writes nothing`,
-    `${SKILL_NPX} profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial`,
-    `${SKILL_NPX} login --profile soc --scopes https://graph.microsoft.com/User.Read.All`,
-    `${SKILL_NPX} doctor                   # one bounded read per selected profile`,
-    `${SKILL_NPX} entra user list --profile soc --limit 10`,
+    "mg-axi setup                    # build steps, config path and capabilities; writes nothing",
+    "mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial",
+    "mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
+    "mg-axi doctor                   # one bounded read per selected profile",
+    "mg-axi entra user list --profile soc --limit 10",
     "```",
     "",
     "Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate file.",
-    `\`${SKILL_NPX} setup\` shows the selected path and writes nothing.`,
+    "`mg-axi setup` shows the selected path and writes nothing.",
     "",
     "## Selecting a profile",
     "",

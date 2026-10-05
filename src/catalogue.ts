@@ -172,6 +172,13 @@ const subscriptionRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Organization.Read.All" },
 };
+const onPremSyncRead = {
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed on-premises-synchronization set; reads need delegated OnPremDirectorySynchronization.Read.All, and application profiles are refused before credentials" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to OnPremDirectorySynchronization.Read.All" },
+};
 const lifecycleRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties; lifecycle-policy reads need Directory.Read.All" },
@@ -655,6 +662,23 @@ export const LEAVES: Leaf[] = [
     ...common,
     scopes: subscriptionRead.scopes,
   }, examples: ["mg-axi entra subscription count --profile soc"] },
+  { path: "entra on-premises-synchronization list", description: "List on-premises directory synchronization configurations with the reviewed property set (id, configuration, features); Graph documents $select only, so no --filter", operation: "GET:/directory/onPremisesSynchronization", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    select: onPremSyncRead.select,
+    fields: onPremSyncRead.fields,
+    full: onPremSyncRead.full,
+    cursor: onPremSyncRead.cursor,
+    scopes: onPremSyncRead.scopes,
+  }, examples: ["mg-axi entra on-premises-synchronization list --profile soc", "mg-axi entra on-premises-synchronization list --profile soc --limit 10"] },
+  { path: "entra on-premises-synchronization show", description: "Show one on-premises directory synchronization configuration with the reviewed property set", operation: "GET:/directory/onPremisesSynchronization/{onPremisesDirectorySynchronization-id}", flags: {
+    ...common, id: { value: "synchronization-id", required: true, description: "On-premises-synchronization object ID (the Entra tenant ID)" },
+    select: onPremSyncRead.select,
+    fields: onPremSyncRead.fields,
+    full: onPremSyncRead.full,
+    scopes: onPremSyncRead.scopes,
+  }, examples: ["mg-axi entra on-premises-synchronization show --id <synchronization-id> --profile soc", "mg-axi entra on-premises-synchronization show --id <synchronization-id> --profile soc --full"] },
   { path: "entra group-lifecycle-policy list", description: "List group lifecycle (expiry) policies with compact properties (id, groupLifetimeInDays, managedGroupTypes); --filter passes through as plain $filter", operation: "GET:/groupLifecyclePolicies", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

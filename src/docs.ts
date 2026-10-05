@@ -47,6 +47,7 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra certificate-auth-pki ", "certificate authentication"],
   ["entra certificate-authority ", "certificate authentication"],
   ["entra subscription ", "commercial subscriptions"],
+  ["entra on-premises-synchronization ", "on-premises synchronization"],
   ["entra domain ", "domains and DNS records"],
   ["entra domain-dns-record ", "domains and DNS records"],
   ["entra group-lifecycle-policy ", "group lifecycle policies"],
@@ -263,6 +264,7 @@ export function capabilityDocument(): string {
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
   const unavailableCertAuthRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01d decision: "));
   const deferredSubscriptionRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate directory-subscriptions scope "));
+  const deferredOnPremSyncRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate on-premises-synchronization scope "));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
   const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate custom-security-attributes scope "));
@@ -379,6 +381,17 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredCustomSecurityRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-01 on-premises-synchronization scope decisions",
+    "",
+    "This change covers the two v1.0 on-premises-synchronization reads above (on-premises-synchronization list and show).",
+    "The $count scalar and the three beta operations below remain scheduled with an explicit deferred disposition to later EXT-01 subfamilies; no new commands or raw access are approved.",
+    "On-premises-synchronization reads support v1.0 only; beta needs its own review.",
+    "Scalar counts need a separate query and response contract from the approved list/show reads.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredOnPremSyncRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-04 partner contracts scope decisions",
     "",

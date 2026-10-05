@@ -28,6 +28,7 @@ const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["entra certificate-auth-pki", "certificate authentication"],
   ["entra certificate-authority", "certificate authentication"],
   ["entra subscription", "commercial subscriptions"],
+  ["entra on-premises-synchronization", "on-premises synchronization"],
   ["entra group-lifecycle-policy", "group lifecycle policies"],
   ["entra group-setting-template", "group setting templates"],
   ["entra attribute-set", "attribute sets and custom security attributes"],

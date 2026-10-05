@@ -55,6 +55,8 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra subscription list/);
   assert.match(result.stdout, /entra subscription show/);
   assert.match(result.stdout, /entra subscription count/);
+  assert.match(result.stdout, /entra on-premises-synchronization list/);
+  assert.match(result.stdout, /entra on-premises-synchronization show/);
   assert.match(result.stdout, /entra group-lifecycle-policy list/);
   assert.match(result.stdout, /entra group-lifecycle-policy show/);
   assert.match(result.stdout, /entra group-lifecycle-policy count/);

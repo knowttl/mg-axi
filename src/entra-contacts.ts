@@ -2,8 +2,9 @@ import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
-// EXT-01 contacts subfamily (first part): the read mapping behind
-// `mg-axi entra contact list/show/count`. Operation construction stays
+// EXT-01 contacts subfamily plus EXT-01m navigation: the read mapping behind
+// `mg-axi entra contact list/show/count` and the manager/directReports
+// navigation reads (`show-manager`, `list/show/count-direct-reports`). Operation construction stays
 // beside its command; the shared session owns URLs, credentials, paging,
 // retries and error translation, and the SDK owns TOON rendering. This
 // module only maps flags to session calls and projects rows for compact
@@ -20,18 +21,19 @@ import type { AnyProfile } from "./profiles.js";
 // prerequisite is stated for these reads. The $count scalar carries no
 // operation-level documentation page and follows the same OrgContact.Read.All
 // contract; the list page's $count example sends ConsistencyLevel eventual,
-// so the scalar does too. The delta() sync, every per-contact navigation
-// read (manager, directReports, memberOf, transitiveMemberOf,
-// serviceProvisioningErrors, onPremisesSyncBehavior), every POST lookup
-// action, beta and every mutation stay out. No mutation lives here.
+// so the scalar does too. The delta() sync, the memberOf/transitiveMemberOf
+// navigation reads (split into EXT-01n), the serviceProvisioningErrors and
+// onPremisesSyncBehavior reads (unavailable with no documented permission
+// contract), every POST lookup action, beta and every mutation stay out. No mutation lives here.
 //
 // Secrecy by construction: contacts are personal data, so default rows carry
 // only id, displayName, mail and companyName; identifying fields beyond that
-// need an explicit --select. Only flat scalar properties are ever requested
-// or projected; $expand is not offered, so navigation objects can never
-// appear, and the nested phones/addresses/error collections need their own
-// projection review (the error collections have dedicated sub-reads deferred
-// to the navigation part).
+// need an explicit --select. Top-level list and show request and project
+// only flat scalar properties; $expand is not offered, so navigation objects
+// can never appear there, and the nested phones/addresses collections need
+// their own projection review. Navigation rows are directory objects with
+// the @odata.type discriminator plus minimal fields (see the EXT-01m block
+// below).
 
 // Every contact property this slice may request or display, matching the
 // reviewed resource. Anything else fails before credentials.

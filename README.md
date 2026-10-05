@@ -566,10 +566,11 @@ mg-axi entra contact count-direct-reports --profile soc --id <contact-id>
 
 Contacts are personal data: `entra contact list` and `show` default to minimal rows (`id`, `displayName`, `mail`, `companyName`), and identifying fields beyond that need an explicit `--select`.
 Navigation results are directory objects: `show-manager`, `list-direct-reports` and `show-direct-report` default to the `@odata.type` discriminator plus `id` and `displayName` only, with `mail` one explicit `--select` away; `--as user|orgContact` selects the typed cast route on direct-report reads, and application callers with narrow consent receive limited-information rows carrying only type and id.
-All three commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
-`list` offers `--filter`, passed through as plain `$filter` with `$count=true` and `ConsistencyLevel eventual`; `$search` and `$orderby` stay unreviewed.
-Lists return `contacts`, single reads return `contact`, and counts return `count` with the scalar total; the count sends `ConsistencyLevel eventual` like the documented `$count` example.
-Only flat scalar properties are ever requested or projected (`$expand` is not offered, so navigation objects can never appear), and the nested phones/addresses/error collections need their own projection review.
+All seven contact commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+`entra contact list` offers `--filter`, passed through as plain `$filter` with `$count=true` and `ConsistencyLevel eventual`; `$search` and `$orderby` stay unreviewed.
+Direct-report reads take `$select` only; `$filter`, `$search` and `$top` stay unreviewed there.
+Top-level `list` returns `contacts` and `show` returns `contact`; `show-manager` returns `manager`, `list-direct-reports` returns `directReports` and `show-direct-report` returns `directReport`, and counts return `count` with the scalar total; each count sends `ConsistencyLevel eventual` like the documented `$count` example.
+Top-level list and show request and project only flat scalar properties (`$expand` is not offered, so navigation objects never appear there); navigation reads return directory objects through their own routes, and the nested phones/addresses collections need their own projection review.
 The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to contact reads.
 Reads default to `https://graph.microsoft.com/OrgContact.Read.All` for delegated access, while application profiles use the configured `.default` audience.
 Delegated callers additionally need a supported Entra role (Directory Readers reads basic properties; Global Reader, Directory Writers, Intune Administrator or User Administrator also work); personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.

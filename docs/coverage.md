@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 82 (80 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 91 (89 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -68,6 +68,15 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra group-setting-template list` | `GET:/groupSettingTemplates` | scheduled | EXT-01 |
 | `mg-axi entra group-setting-template show` | `GET:/groupSettingTemplates/{groupSettingTemplate-id}` | scheduled | EXT-01 |
 | `mg-axi entra group-setting-template count` | `GET:/groupSettingTemplates/$count` | scheduled | EXT-01 |
+| `mg-axi entra attribute-set list` | `GET:/directory/attributeSets` | scheduled | EXT-01 |
+| `mg-axi entra attribute-set show` | `GET:/directory/attributeSets/{attributeSet-id}` | scheduled | EXT-01 |
+| `mg-axi entra attribute-set count` | `GET:/directory/attributeSets/$count` | scheduled | EXT-01 |
+| `mg-axi entra custom-security-attribute-definition list` | `GET:/directory/customSecurityAttributeDefinitions` | scheduled | EXT-01 |
+| `mg-axi entra custom-security-attribute-definition show` | `GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}` | scheduled | EXT-01 |
+| `mg-axi entra custom-security-attribute-definition count` | `GET:/directory/customSecurityAttributeDefinitions/$count` | scheduled | EXT-01 |
+| `mg-axi entra allowed-value list` | `GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues` | scheduled | EXT-01 |
+| `mg-axi entra allowed-value show` | `GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues/{allowedValue-id}` | scheduled | EXT-01 |
+| `mg-axi entra allowed-value count` | `GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues/$count` | scheduled | EXT-01 |
 | `mg-axi entra contract list` | `GET:/contracts` | scheduled | EXT-04 |
 | `mg-axi entra contract show` | `GET:/contracts/{contract-id}` | scheduled | EXT-04 |
 | `mg-axi entra contract count` | `GET:/contracts/$count` | scheduled | EXT-04 |
@@ -300,6 +309,24 @@ Beta policies and templates need their own review; delta-token sync needs its ow
 | `v1.0:POST:/groupSettingTemplates/{groupSettingTemplate-id}/checkMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
 | `v1.0:POST:/groupSettingTemplates/{groupSettingTemplate-id}/getMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
 | `v1.0:POST:/groupSettingTemplates/{groupSettingTemplate-id}/getMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+
+## EXT-01 custom-security-attributes scope decisions
+
+This change covers the nine v1.0 attribute-set, custom-security-attribute-definition and allowed-value reads above (list, show, count per family).
+The nine beta operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.
+Beta attribute sets, definitions and allowed values need their own review; definition $expand (inline allowedValues) is not reviewed here and stays on the dedicated allowed-value list/show reads.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/directory/attributeSets` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
+| `beta:GET:/directory/attributeSets/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
+| `beta:GET:/directory/attributeSets/{attributeSet-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
+| `beta:GET:/directory/customSecurityAttributeDefinitions` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
+| `beta:GET:/directory/customSecurityAttributeDefinitions/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
+| `beta:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
+| `beta:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
+| `beta:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
+| `beta:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues/{allowedValue-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
 
 ## EXT-04 partner contracts scope decisions
 

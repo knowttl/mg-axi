@@ -125,7 +125,7 @@ function overridesFor(mode, handler, calls = []) {
   };
 }
 
-function runContactCli(args, state, mode, denied = false) {
+function runContactCli(args, state, mode, denied = false, nav = undefined) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-contacts-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -134,7 +134,7 @@ function runContactCli(args, state, mode, denied = false) {
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
-      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, contacts: [c1, c2], denied }),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, contacts: [c1, c2], denied, ...nav }),
     },
   });
 }
@@ -453,4 +453,314 @@ test("raw contact show projects the minimal set without navigation", async () =>
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "55555555-5555-4555-8555-555555555555" } };
   const shown = await runApiGet({ path: `/contacts/${c1.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0] }, deps);
   assert.deepEqual(shown, { id: c1.id, displayName: c1.displayName, mail: c1.mail, companyName: c1.companyName });
+});
+
+// Navigation fixtures follow the documented v1.0 shapes: directory-object
+// rows of mixed user/contact type with the @odata.type discriminator. r3 is
+// a limited-information row carrying only type and id.
+const mgr = {
+  "@odata.type": "#microsoft.graph.user",
+  id: "11111111-1111-4111-8111-111111111111",
+  displayName: "Megan Manager",
+  mail: "MeganM@adatum.com",
+};
+const r1 = {
+  "@odata.type": "#microsoft.graph.user",
+  id: "22222222-2222-4222-8222-222222222222",
+  displayName: "Rene Report",
+  mail: "ReneR@adatum.com",
+};
+const r2 = {
+  "@odata.type": "#microsoft.graph.orgContact",
+  id: "9b2c9d4e-1f5a-4b6c-8d7e-8f9a0b1c2d3e",
+  displayName: "Robin Report",
+  mail: "RobinR@adatum.com",
+};
+const r3 = { "@odata.type": "#microsoft.graph.user", id: "limited-report-1" };
+const navReports = [r1, r2, r3];
+
+function navTransport() {
+  return transport(request => {
+    const url = new URL(request.url);
+    const match = /^\/v1\.0\/contacts\/([^/]+)\/(manager|directReports(?:\/.*)?)$/.exec(url.pathname);
+    if (!match || match[1] !== c1.id) {
+      return json(404, { error: { code: "Request_ResourceNotFound", message: "no such contact" } });
+    }
+    const [, , nav] = match;
+    const castOf = segment => segment === "graph.user" ? "#microsoft.graph.user"
+      : segment === "graph.orgContact" ? "#microsoft.graph.orgContact" : undefined;
+    if (nav === "manager") return json(200, mgr);
+    const tail = nav.split("/").slice(1);
+    if (tail.length === 0) {
+      if (url.searchParams.has("$skiptoken")) return json(200, { value: [r2, r3] });
+      return json(200, {
+        value: [r1],
+        "@odata.nextLink": `https://graph.microsoft.com/v1.0/contacts/${c1.id}/directReports?%24skiptoken=page2`,
+      });
+    }
+    if (tail.length === 1 && tail[0] === "$count") {
+      assert.equal(request.headers.ConsistencyLevel, "eventual");
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(navReports.length) };
+    }
+    if (tail.length === 1 && tail[0].startsWith("graph.")) {
+      const type = castOf(tail[0]);
+      if (!type) return json(404, { error: { code: "Unknown", message: "unexpected cast" } });
+      return json(200, { value: navReports.filter(row => row["@odata.type"] === type) });
+    }
+    if (tail.length === 2 && tail[1] === "$count" && tail[0].startsWith("graph.")) {
+      const type = castOf(tail[0]);
+      if (!type) return json(404, { error: { code: "Unknown", message: "unexpected cast" } });
+      assert.equal(request.headers.ConsistencyLevel, "eventual");
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(navReports.filter(row => row["@odata.type"] === type).length) };
+    }
+    if (tail.length === 1 || (tail.length === 2 && tail[1].startsWith("graph."))) {
+      const [reportId, cast] = tail;
+      const type = cast === undefined ? undefined : castOf(cast);
+      if (cast !== undefined && !type) return json(404, { error: { code: "Unknown", message: "unexpected cast" } });
+      const found = navReports.find(row => row.id === reportId && (type === undefined || row["@odata.type"] === type));
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such report" } });
+    }
+    return json(404, { error: { code: "Unknown", message: "unexpected route" } });
+  });
+}
+
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+  test(`${mode} shows a contact manager with type plus minimal rows`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode, navTransport());
+      const result = await executeArgv(["entra", "contact", "show-manager", "--id", c1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.manager, { "@odata.type": "#microsoft.graph.user", id: mgr.id, displayName: mgr.displayName });
+      assert.equal(requests.length, 1);
+      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/contacts/${c1.id}/manager?`));
+      const wide = await executeArgv(["entra", "contact", "show-manager", "--id", c1.id, "--profile", profile,
+        "--select", "id,displayName,mail"], overrides);
+      assert.deepEqual(wide.manager, { "@odata.type": "#microsoft.graph.user", id: mgr.id, displayName: mgr.displayName, mail: mgr.mail });
+      await assert.rejects(executeArgv(["entra", "contact", "show-manager", "--id", "contact-missing", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists direct reports with type discriminators and limited-info preservation`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode, navTransport());
+      const result = await executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.directReports, [
+        { "@odata.type": "#microsoft.graph.user", id: r1.id, displayName: r1.displayName },
+        { "@odata.type": "#microsoft.graph.orgContact", id: r2.id, displayName: r2.displayName },
+        { "@odata.type": "#microsoft.graph.user", id: r3.id },
+      ]);
+      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("show-direct-report --id <contact-id> --report-id <report-id>")));
+      assert.ok(result.help.some(hint => hint.includes("only type and id")), "limited-information rows are flagged");
+      assert.ok(!JSON.stringify(result).includes("ReneR@adatum.com"), "mail stays behind --select");
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} direct-report casts select the typed route`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode, navTransport());
+      const users = await executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile, "--as", "user"], overrides);
+      assert.ok(requests[0].url.includes("/directReports/graph.user?"));
+      assert.deepEqual(users.directReports.map(row => row.id), [r1.id, r3.id]);
+      assert.ok(users.directReports.every(row => row["@odata.type"] === "#microsoft.graph.user"));
+      const contacts = await executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile, "--as", "orgContact"], overrides);
+      assert.ok(requests[1].url.includes("/directReports/graph.orgContact?"));
+      assert.deepEqual(contacts.directReports.map(row => row.id), [r2.id]);
+      const shown = await executeArgv(["entra", "contact", "show-direct-report", "--id", c1.id, "--report-id", r1.id, "--profile", profile, "--as", "user"], overrides);
+      assert.ok(requests[2].url.includes(`/directReports/${r1.id}/graph.user?`));
+      assert.equal(shown.directReport.displayName, r1.displayName);
+      const counted = await executeArgv(["entra", "contact", "count-direct-reports", "--id", c1.id, "--profile", profile, "--as", "orgContact"], overrides);
+      assert.ok(requests[3].url.endsWith("/directReports/graph.orgContact/$count"));
+      assert.deepEqual(counted, { count: { returned: 1, complete: true } });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} resumes a capped direct-report list through its opaque cursor`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode, navTransport());
+      const first = await executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile, "--limit", "1"], overrides);
+      assert.deepEqual(first.directReports.map(row => row.id), [r1.id]);
+      assert.equal(first.count.complete, false);
+      const second = await executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile, "--cursor", first.cursor], overrides);
+      assert.deepEqual(second.directReports.map(row => row.id), [r2.id, r3.id]);
+      assert.deepEqual(second.count, { returned: 2, complete: true });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one direct report and validates report identity before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode, navTransport());
+      const result = await executeArgv(["entra", "contact", "show-direct-report", "--id", c1.id, "--report-id", r2.id, "--profile", profile], overrides);
+      assert.deepEqual(result.directReport, { "@odata.type": "#microsoft.graph.orgContact", id: r2.id, displayName: r2.displayName });
+      const sent = requests.length;
+      await assert.rejects(
+        executeArgv(["entra", "contact", "show-direct-report", "--id", c1.id, "--profile", profile], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      assert.equal(requests.length, sent, "missing --report-id fails before HTTP");
+      await assert.rejects(
+        executeArgv(["entra", "contact", "show-direct-report", "--id", c1.id, "--report-id", "report-missing", "--profile", profile], overrides),
+        error => error.code === "GRAPH_ERROR" && /not found or inaccessible \(404\)/.test(error.message),
+      );
+      assert.equal(requests.length, sent + 1);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} counts direct reports as one scalar with the documented header`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode, navTransport());
+      const result = await executeArgv(["entra", "contact", "count-direct-reports", "--id", c1.id, "--profile", profile], overrides);
+      assert.deepEqual(result, { count: { returned: 3, complete: true } });
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0].url, `https://graph.microsoft.com/v1.0/contacts/${c1.id}/directReports/$count`);
+      assert.equal(requests[0].headers.ConsistencyLevel, "eventual");
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} direct-report reads refuse misuse before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode, navTransport());
+      await assert.rejects(
+        executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile, "--as", "group"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /--as group is not a direct-report cast/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "contact", "show-manager", "--id", c1.id, "--profile", profile, "--as", "user"], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      await assert.rejects(
+        executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile, "--filter", "id eq 'x'"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /unknown flag --filter/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "contact", "count-direct-reports", "--id", c1.id, "--profile", profile, "--select", "id"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /unknown flag --select/.test(error.message),
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} denied navigation reads surface scope, role and account guidance`, async () => {
+    const state = setupProfiles();
+    try {
+      const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
+      const { overrides } = overridesFor(mode, denied);
+      await assert.rejects(executeArgv(["entra", "contact", "show-manager", "--id", c1.id, "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        assert.ok(error.suggestions.some(hint => hint.includes("OrgContact.Read.All")));
+        assert.ok(error.suggestions.some(hint => hint.includes("Directory Readers")));
+        return /grant, role, licence/.test(error.message);
+      });
+      await assert.rejects(executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
+        return /grant, role, licence/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} executable shows, lists and counts direct-report reads`, () => {
+    const state = setupProfiles();
+    const nav = { manager: mgr, reports: [r1, r2] };
+    try {
+      const shown = runContactCli(["entra", "contact", "show-manager", "--id", c1.id, "--profile", profile], state, mode, false, nav);
+      assert.equal(shown.status, 0, shown.stdout);
+      assert.deepEqual(decode(shown.stdout).manager, { "@odata.type": "#microsoft.graph.user", id: mgr.id, displayName: mgr.displayName });
+
+      const listed = runContactCli(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile, "--as", "user"], state, mode, false, nav);
+      assert.equal(listed.status, 0, listed.stdout);
+      assert.deepEqual(decode(listed.stdout).directReports.map(row => row.id), [r1.id]);
+
+      const single = runContactCli(["entra", "contact", "show-direct-report", "--id", c1.id, "--report-id", r2.id, "--profile", profile], state, mode, false, nav);
+      assert.equal(single.status, 0, single.stdout);
+      assert.deepEqual(decode(single.stdout).directReport, { "@odata.type": "#microsoft.graph.orgContact", id: r2.id, displayName: r2.displayName });
+
+      const counted = runContactCli(["entra", "contact", "count-direct-reports", "--id", c1.id, "--profile", profile], state, mode, false, nav);
+      assert.equal(counted.status, 0, counted.stdout);
+      assert.deepEqual(decode(counted.stdout).count, { returned: 2, complete: true });
+      assert.ok(!counted.stdout.includes(`opaque-fixture-${mode}-token`));
+    } finally { teardownProfiles(state); }
+  });
+
+  for (const [command, args] of [
+    [["contact", "show-manager"], ["--id", c1.id]],
+    [["contact", "list-direct-reports"], ["--id", c1.id]],
+    [["contact", "show-direct-report"], ["--id", c1.id, "--report-id", r1.id]],
+    [["contact", "count-direct-reports"], ["--id", c1.id]],
+  ]) {
+    for (const preview of [false, true]) {
+      test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
+        const state = setupProfiles();
+        try {
+          const path = join(state.dir, "config.json");
+          const config = JSON.parse(readFileSync(path, "utf8"));
+          config.profiles[profile].preview = preview;
+          writeFileSync(path, JSON.stringify(config));
+          const { calls, requests, overrides } = overridesFor(mode, navTransport());
+          await assert.rejects(
+            executeArgv(["entra", ...command, ...args, "--profile", profile, "--api-version", "beta"], overrides),
+            { code: "VALIDATION_ERROR", message: "Contact reads support v1.0 only; beta needs its own review" },
+          );
+          assert.equal(calls.length, 0);
+          assert.equal(requests.length, 0);
+        } finally {
+          teardownProfiles(state);
+        }
+      });
+    }
+  }
+}
+
+test("raw navigation reads project reviewed fields and refuse unreviewed ones", async () => {
+  const { runApiGet } = await import("../dist/api.js");
+  const { DelegatedAuth } = await import("../dist/auth.js");
+  const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
+  const row = { "@odata.type": "#microsoft.graph.user", id: r1.id, displayName: r1.displayName, mail: r1.mail, jobTitle: "unused" };
+  const deps = {
+    delegated: new DelegatedAuth({ storage: "session-only", login: async () => credential, silent: async () => credential }),
+    application: new (await import("../dist/app-auth.js")).ApplicationAuth({ storage: "session-only", acquire: async () => credential }),
+    transport: async () => ({ status: 200, headers: {}, body: JSON.stringify({ value: [row] }) }),
+  };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "55555555-5555-4555-8555-555555555555" } };
+  const listed = await runApiGet({ path: `/contacts/${c1.id}/directReports`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0] }, deps);
+  assert.deepEqual(listed.value, [{ "@odata.type": "#microsoft.graph.user", id: r1.id, displayName: r1.displayName }]);
+  const cast = await runApiGet({ path: `/contacts/${c1.id}/directReports/graph.user`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0] }, deps);
+  assert.deepEqual(cast.value, [{ "@odata.type": "#microsoft.graph.user", id: r1.id, displayName: r1.displayName }]);
+  await assert.rejects(
+    runApiGet({ path: `/contacts/${c1.id}/directReports`, apiVersion: "v1.0", profile: delegatedProfile, odata: "$select=id,jobTitle", scopes: contactScopes[0] }, deps),
+    error => {
+      assert.equal(error.code, "VALIDATION_ERROR");
+      return /Unreviewed \$select field jobTitle/.test(error.message);
+    },
+  );
+  await assert.rejects(
+    runApiGet({ path: `/contacts/${c1.id}/directReports/$count`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0] }, deps),
+    error => error.code === "VALIDATION_ERROR",
+  );
 });

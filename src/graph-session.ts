@@ -59,6 +59,7 @@ const READ_SCOPES = new Set([
   "RoleManagement.Read.Directory",
   "Synchronization.Read.All",
   "User.Read",
+  "User.Export.All",
   "User.Read.All",
   "User.ReadBasic.All",
   "UserAuthenticationMethod.Read",

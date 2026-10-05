@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 96 (94 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 99 (97 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -109,6 +109,9 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra identity-provider show` | `GET:/identity/identityProviders/{identityProviderBase-id}` | scheduled | EXT-03 |
 | `mg-axi entra identity-provider count` | `GET:/identity/identityProviders/$count` | scheduled | EXT-03 |
 | `mg-axi entra identity-provider available-types` | `GET:/identity/identityProviders/availableProviderTypes()` | scheduled | EXT-03 |
+| `mg-axi entra data-policy-operation list` | `GET:/dataPolicyOperations` | scheduled | EXT-03 |
+| `mg-axi entra data-policy-operation show` | `GET:/dataPolicyOperations/{dataPolicyOperation-id}` | scheduled | EXT-03 |
+| `mg-axi entra data-policy-operation count` | `GET:/dataPolicyOperations/$count` | scheduled | EXT-03 |
 | `mg-axi entra access-review definition list` | `GET:/identityGovernance/accessReviews/definitions` | scheduled | EXT-02 |
 | `mg-axi entra access-review definition show` | `GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}` | scheduled | EXT-02 |
 | `mg-axi entra access-review instance list` | `GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances` | scheduled | EXT-02 |
@@ -179,6 +182,20 @@ Workforce context only; no external-customer (B2C/External ID tenant) support is
 | `beta:GET:/identity/identityProviders/$count` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review. |
 | `beta:GET:/identity/identityProviders/availableProviderTypes()` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review. |
 | `beta:GET:/identity/identityProviders/{identityProviderBase-id}` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review. |
+
+## EXT-03 data-policy-operations scope decisions
+
+This change covers the three v1.0 workforce data-policy-operation reads above (data-policy-operation list, show and count).
+The three beta operations below remain scheduled with an explicit deferred disposition to a later EXT-03 subfamily; no new commands or raw access are approved.
+Data-policy-operation reads support v1.0 only; beta needs its own review.
+storageLocation always renders as the redaction marker; export submission (POST /users/{id}/exportPersonalData) belongs to no read slice.
+Workforce context only; no external-customer support is claimed.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/dataPolicyOperations` | scheduled (deferred) | EXT-03 | Deferred by firstmate data-policy-operations scope to a later EXT-03 data-policy-operations beta subfamily: the three approved reads cover v1.0 only; beta data-policy operations need separate review. |
+| `beta:GET:/dataPolicyOperations/$count` | scheduled (deferred) | EXT-03 | Deferred by firstmate data-policy-operations scope to a later EXT-03 data-policy-operations beta subfamily: the three approved reads cover v1.0 only; beta data-policy operations need separate review. |
+| `beta:GET:/dataPolicyOperations/{dataPolicyOperation-id}` | scheduled (deferred) | EXT-03 | Deferred by firstmate data-policy-operations scope to a later EXT-03 data-policy-operations beta subfamily: the three approved reads cover v1.0 only; beta data-policy operations need separate review. |
 
 ## EXT-03 invitations scope decisions
 

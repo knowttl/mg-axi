@@ -22,7 +22,7 @@ EXT-01 (domains) adds tenant-domain list/show, per-domain verification and servi
 EXT-01 (certificate auth) adds PKI configuration and certificate-authority list/show/count reads with default certificate-blob omission through the same session.
 EXT-01 (directory subscriptions) adds commercial-subscription list/show/count reads with compact licence rows through the same session.
 EXT-01 (on-premises synchronization) adds on-premises directory-synchronization list/show reads with Global Administrator role guidance through the same session.
-EXT-01 (terms of use) adds terms-of-use agreement list/show and agreement-acceptance list/show reads with Security Reader role and Entra ID P1 guidance through the same session.
+EXT-01 (terms of use) adds terms-of-use agreement list/show, per-agreement acceptance list/show and tenant-wide agreement-acceptance list/show reads with Security Reader role and Entra ID P1 guidance through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.

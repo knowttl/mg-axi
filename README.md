@@ -22,6 +22,7 @@ EXT-01 (domains) adds tenant-domain list/show, per-domain verification and servi
 EXT-01 (certificate auth) adds PKI configuration and certificate-authority list/show/count reads with default certificate-blob omission through the same session.
 EXT-01 (directory subscriptions) adds commercial-subscription list/show/count reads with compact licence rows through the same session.
 EXT-01 (on-premises synchronization) adds on-premises directory-synchronization list/show reads with Global Administrator role guidance through the same session.
+EXT-01 (terms of use) adds terms-of-use agreement list/show, per-agreement acceptance list/show and tenant-wide agreement-acceptance list/show reads with Security Reader role and Entra ID P1 guidance through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
@@ -472,6 +473,35 @@ Delegated reads default to `https://graph.microsoft.com/OnPremDirectorySynchroni
 Delegated callers additionally need Global Administrator, the only supported Entra role for this operation; personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for on-premises-synchronization reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
 No on-premises-synchronization mutation lives here; the `$count` scalar and beta operations stay scheduled; see the [on-premises-synchronization scope decisions](docs/coverage.md#ext-01-on-premises-synchronization-scope-decisions).
+
+Log in with `https://graph.microsoft.com/Agreement.Read.All`, then inspect terms-of-use agreements (delegated profiles only):
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Agreement.Read.All
+mg-axi entra agreement list --profile soc
+mg-axi entra agreement show --profile soc --id <agreement-id>
+```
+
+`entra agreement list` defaults to compact rows (`id`, `displayName`) and `show` defaults to the full reviewed metadata set; an empty list means no terms-of-use agreements are configured for the tenant.
+Agreement lists pass `--filter` through as plain `$filter`; agreement shows support `$select` only, so strict input validation refuses `--filter` before credentials.
+Log in with `https://graph.microsoft.com/AgreementAcceptance.Read`, then inspect acceptance records (delegated profiles only):
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/AgreementAcceptance.Read
+mg-axi entra agreement acceptance list --agreement <agreement-id> --profile soc
+mg-axi entra agreement acceptance show --agreement <agreement-id> --id <acceptance-id> --profile soc
+mg-axi entra agreement-acceptance list --profile soc
+mg-axi entra agreement-acceptance show --id <acceptance-id> --profile soc
+```
+
+Acceptance lists return `agreementAcceptances` and single reads return `agreementAcceptance`; default rows stay minimal (`id`, `agreementId`, `state`, `recordedDateTime`) because acceptance records are personal data, and identifying fields need an explicit `--select` naming them.
+All six commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to terms-of-use reads.
+Delegated agreement reads default to `https://graph.microsoft.com/Agreement.Read.All` and delegated acceptance reads default to `https://graph.microsoft.com/AgreementAcceptance.Read` (`AgreementAcceptance.Read.All` is the documented higher-privileged alternative); application profiles are refused before credentials because Graph documents no supported application permission for these operations.
+Delegated callers additionally need Security Reader, the least-privileged supported Entra role for these operations; personal Microsoft accounts are not supported.
+Terms of use needs Microsoft Entra ID P1; denied reads name the scope, role and licensing guidance instead of only the generic cause.
+Agreement file contents are never downloaded or printed; only agreement metadata is projected.
+No terms-of-use mutation lives here; the acceptances `$count` scalar, the agreement file/localization sub-reads and beta operations stay scheduled; see the [terms-of-use scope decisions](docs/coverage.md#ext-01-terms-of-use-scope-decisions).
 
 Log in with `https://graph.microsoft.com/IdentityProvider.Read.All`, then read workforce identity providers:
 

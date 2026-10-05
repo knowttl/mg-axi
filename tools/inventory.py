@@ -282,6 +282,13 @@ def make_row(version, path, method, operation):
         reason = "Deferred by firstmate on-premises-synchronization scope to a later EXT-01 on-premises-synchronization counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
     if owner == "EXT-01" and method == "GET" and version == "beta" and disposition == "scheduled" and path.split("/")[1] == "directory" and "/onPremisesSynchronization" in path:
         reason = "Deferred by firstmate on-premises-synchronization scope to a later EXT-01 on-premises-synchronization beta subfamily: the two approved reads cover v1.0 only; beta on-premises synchronization needs separate review."
+    if owner == "EXT-01" and method == "GET" and disposition == "scheduled" and path.split("/")[1] in {"agreements", "agreementAcceptances"}:
+        if path.endswith("/$count"):
+            reason = "Deferred by firstmate terms-of-use scope to a later EXT-01 terms-of-use counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
+        elif "/file" in path or "/files" in path or "/localizations" in path or "/versions" in path:
+            reason = "Deferred by firstmate terms-of-use scope to a later EXT-01 terms-of-use file-content subfamily: agreement file contents and localizations need a separate binary-output and projection contract, and file bytes are never downloaded or printed."
+        elif version == "beta":
+            reason = "Deferred by firstmate terms-of-use scope to a later EXT-01 terms-of-use beta subfamily: the six approved reads cover v1.0 only; beta agreements and acceptances need separate review."
     if mutates and owner is not None:
         owner = "WRITE-N"
         if method == "PATCH" and path == "/users/{user-id}":

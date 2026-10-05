@@ -876,6 +876,11 @@ export function operationFor(leaf: Leaf, version: string) {
   return inventory.operations.find((row: { id: string }) => row.id === `${version}:${leaf.operation}`);
 }
 
+// Next-step hints shared by the no-args home view and the installable
+// skill, so the two cannot drift apart. home() prints them alongside live
+// profile status; skillDocument() in docs.ts reprints them in npx form.
+export const HOME_HELP = ["mg-axi setup", "mg-axi doctor", "mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi entra application list --help", "mg-axi entra service-principal list --help", "mg-axi entra conditional-access policy list --help", "mg-axi api get --help"];
+
 // A useful local status, without treating unavailable tenant summaries as zeros.
 export function home() {
   const bin = resolve(process.argv[1]!);
@@ -885,6 +890,6 @@ export function home() {
     profile: "unavailable: no profile configured",
     tenant: "unavailable: no tenant selected",
     domains: [{ name: "entra", status: "scheduled", summary: "Tenant summaries await Graph execution" }],
-    help: ["mg-axi setup", "mg-axi doctor", "mg-axi entra user list --help", "mg-axi entra user show --help", "mg-axi entra group list --help", "mg-axi entra group member list --help", "mg-axi entra application list --help", "mg-axi entra service-principal list --help", "mg-axi entra conditional-access policy list --help", "mg-axi api get --help"],
+    help: HOME_HELP,
   };
 }

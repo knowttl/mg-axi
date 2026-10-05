@@ -316,7 +316,8 @@ Lifecycle-policy lists accept `--filter` as plain `$filter` without adding `$cou
 Each `count` returns one scalar (`groupLifecyclePolicyCount`, `groupSettingTemplateCount`) from its text/plain `$count` route and takes no `--filter`, `--select`, `--limit` or `--cursor`.
 Raw `api get` supports `/groupLifecyclePolicies`, `/groupLifecyclePolicies/<policy-id>`, `/groupSettingTemplates` and `/groupSettingTemplates/<template-id>`; the `$count` routes are available only through the named count commands.
 Lifecycle-policy lists return `groupLifecyclePolicies`, single-policy reads return `groupLifecyclePolicy`, template lists return `groupSettingTemplates` and single-template reads return `groupSettingTemplate`.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to these reads.
+The named-list caps, `count`, cursors and null/missing preservation described above also apply to these reads.
+Named reads truncate top-level strings and strings in string arrays at 500 characters with a `--full` recovery hint; nested objects in template `values` pass through without text truncation.
 All six named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
 Delegated lifecycle-policy reads default to `https://graph.microsoft.com/Directory.Read.All` and delegated template reads default to `https://graph.microsoft.com/GroupSettings.Read.All`, while application profiles use the configured `.default` audience.
 Delegated template callers additionally need a supported Entra role (Directory Readers or Global Reader are the least-privileged roles); no delegated role prerequisite is stated for lifecycle-policy reads; personal Microsoft accounts are not supported on either family.

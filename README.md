@@ -409,9 +409,9 @@ mg-axi entra delegated-admin-customer show-service-management-detail --profile s
 ```
 
 Delegated-admin reads run in the partner tenant; customer objects are created by the system when a relationship exists and deleted when none remain, so a non-partner tenant lists zero customers, which is an answer rather than an error.
-`entra delegated-admin-customer list` defaults to compact properties (`id`, `displayName`, `tenantId`); `entra delegated-admin-relationship list` defaults to (`id`, `displayName`, `status`, `customer`, `endDateTime`); both show commands default to the full reviewed property set.
+`entra delegated-admin-customer list` defaults to compact properties (`id`, `displayName`, `tenantId`); `entra delegated-admin-relationship list` defaults to (`id`, `displayName`, `status`, `customer`, `endDateTime`); both top-level show commands default to the full reviewed property set.
 `--select` requests properties from the reviewed delegated-admin field sets; `--fields` projects locally and must be a subset of the fetched selection.
-Both lists accept `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`.
+Both top-level lists accept `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to delegated-admin reads.
 The access-assignment, operation and request navigation lists bind their parent relationship through `--id` and take `--assignment-id`, `--operation-id` and `--request-id` on their shows; the service-management-detail reads bind their parent customer through `--id` and take `--detail-id` on the show.
 The navigation lists default to compact properties (`id`, `status`, `accessContainer`, `accessDetails` for assignments; `id`, `operationType`, `status`, `lastModifiedDateTime` for operations; `id`, `action`, `status`, `lastModifiedDateTime` for requests) while the service-management-detail reads always carry (`id`, `serviceName`, `serviceManagementUrl`); every show defaults to its full reviewed property set.

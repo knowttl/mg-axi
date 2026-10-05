@@ -4,6 +4,7 @@ import { DelegatedAuth } from "./auth.js";
 import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITION_FIELDS, KNOWN_INSTANCE_FIELDS, KNOWN_STAGE_FIELDS } from "./entra-access-reviews.js";
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
+import { KNOWN_DATA_POLICY_FIELDS } from "./entra-data-policy-operations.js";
 import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
 import { KNOWN_SUBSCRIPTION_FIELDS } from "./entra-subscriptions.js";
 import { KNOWN_SYNC_FIELDS } from "./entra-on-premises-synchronization.js";
@@ -383,6 +384,14 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A IdentityProvider.Read.All. Delegated callers pass it as --scopes; delegated reads additionally need a directory role that can read federation configuration (Global Reader is the least-privileged read-only directory role). Personal Microsoft accounts are not supported; no per-operation licence prerequisite is stated.",
     note: "Workforce context only. clientSecret and certificateData are never projected: the former is write-only and the latter is key material.",
     sources: ["https://learn.microsoft.com/graph/api/identityproviderbase-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/dataPolicyOperations", kind: "collection", query: ["$select"], fields: KNOWN_DATA_POLICY_FIELDS,
+    access: "D/A User.Export.All plus User.Read.All. Delegated callers pass both as --scopes; delegated access additionally needs Company Administrator, the privileged role documented for export reads; personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for these reads.",
+    note: "No list operation documentation page exists; the list shares the single-get permission contract and resource shape. Graph documents $select only here, so $filter is not reviewed. storageLocation always renders as the redaction marker: export blob URLs and signed links never reach output. Workforce context only; export submission belongs to no read slice.",
+    sources: ["https://learn.microsoft.com/graph/api/datapolicyoperation-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/datapolicyoperation?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/dataPolicyOperations/{dataPolicyOperation-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_DATA_POLICY_FIELDS,
+    access: "D/A User.Export.All plus User.Read.All. Delegated callers pass both as --scopes; delegated access additionally needs Company Administrator, the privileged role documented for export reads; personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for this read.",
+    note: "storageLocation always renders as the redaction marker: export blob URLs and signed links never reach output. Workforce context only; export submission belongs to no read slice.",
+    sources: ["https://learn.microsoft.com/graph/api/datapolicyoperation-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/datapolicyoperation?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/identityGovernance/accessReviews/definitions", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_DEFINITION_FIELDS,
     access: "D/A AccessReview.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (group/app reviews: review creator, Global Reader, Security Reader, User Administrator, Identity Governance Administrator or Security Administrator; Entra-role reviews: Security Reader, Identity Governance Administrator, Privileged Role Administrator or Security Administrator); personal Microsoft accounts are not supported.",
     note: "Definitions are review schedules (a series), never their occurrences; access reviews need P2 or ID Governance depending on capability.",

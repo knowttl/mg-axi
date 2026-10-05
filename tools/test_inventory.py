@@ -20,6 +20,22 @@ class InventoryTests(unittest.TestCase):
                     row = make_row(version, f"/identity/identityProviders{suffix}", "GET", {"operationId": "fixture"})
                     self.assertEqual((row["disposition"], row["owningSlice"], row["reason"]), ("scheduled", "EXT-03", reason))
 
+    def test_invitation_reads_are_unavailable_without_a_documented_get_contract(self):
+        for suffix in ("", "/$count", "/invitedUser", "/invitedUser/serviceProvisioningErrors", "/invitedUser/serviceProvisioningErrors/$count", "/invitedUserSponsors", "/invitedUserSponsors/$count", "/invitedUserSponsors/{directoryObject-id}"):
+            with self.subTest(suffix=suffix):
+                row = make_row("v1.0", f"/invitations{suffix}", "GET", {"operationId": "fixture"})
+                self.assertEqual((row["disposition"], row["owningSlice"]), ("unavailable", "EXT-03"))
+                self.assertTrue(row["reason"].startswith("Marked unavailable by firstmate EXT-03b decision: "))
+        with self.subTest(suffix="beta stays scheduled"):
+            row = make_row("beta", "/invitations", "GET", {"operationId": "fixture"})
+            self.assertEqual((row["disposition"], row["owningSlice"], row["reason"]), ("scheduled", "EXT-03", "No implemented command or reviewed raw contract yet."))
+        with self.subTest(suffix="mailboxSettings stays excluded"):
+            row = make_row("v1.0", "/invitations/invitedUser/mailboxSettings", "GET", {"operationId": "fixture"})
+            self.assertEqual((row["disposition"], row["owningSlice"]), ("excluded", None))
+        with self.subTest(suffix="create stays a write"):
+            row = make_row("v1.0", "/invitations", "POST", {"operationId": "fixture"})
+            self.assertEqual((row["disposition"], row["owningSlice"]), ("scheduled", "WRITE-N"))
+
     def test_workflow_task_validation_is_a_read_across_resources_and_names(self):
         for version in ("v1.0", "beta"):
             for resource in ("workflows", "deletedItems/workflows"):

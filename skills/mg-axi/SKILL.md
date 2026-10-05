@@ -1,7 +1,7 @@
 ---
 name: mg-axi
 description: >
-  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, group lifecycle policies, group setting templates, partner contracts, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, access reviews, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
+  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, access reviews, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
 user-invocable: false
 ---
 
@@ -88,6 +88,15 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra group-setting-template list` | native | read |
 | `mg-axi entra group-setting-template show` | native | read |
 | `mg-axi entra group-setting-template count` | native | read |
+| `mg-axi entra attribute-set list` | native | read |
+| `mg-axi entra attribute-set show` | native | read |
+| `mg-axi entra attribute-set count` | native | read |
+| `mg-axi entra custom-security-attribute-definition list` | native | read |
+| `mg-axi entra custom-security-attribute-definition show` | native | read |
+| `mg-axi entra custom-security-attribute-definition count` | native | read |
+| `mg-axi entra allowed-value list` | native | read |
+| `mg-axi entra allowed-value show` | native | read |
+| `mg-axi entra allowed-value count` | native | read |
 | `mg-axi entra contract list` | native | read |
 | `mg-axi entra contract show` | native | read |
 | `mg-axi entra contract count` | native | read |

@@ -7,6 +7,7 @@ import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
 import { KNOWN_SUBSCRIPTION_FIELDS } from "./entra-subscriptions.js";
 import { KNOWN_LIFECYCLE_FIELDS, KNOWN_TEMPLATE_FIELDS } from "./entra-group-lifecycle.js";
+import { KNOWN_ALLOWED_VALUE_FIELDS, KNOWN_ATTRIBUTE_SET_FIELDS, KNOWN_CUSTOM_SECURITY_DEFINITION_FIELDS } from "./entra-custom-security-attributes.js";
 import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
@@ -287,6 +288,30 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A GroupSettings.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers or Global Reader are the least-privileged roles). Personal Microsoft accounts are not supported.",
     note: "No P1/P2 prerequisite is stated for setting-template reads.",
     sources: ["https://learn.microsoft.com/graph/api/groupsettingtemplate-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/groupsettingtemplate?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/attributeSets", kind: "collection", query: ["$select", "$top", "$orderby"], fields: KNOWN_ATTRIBUTE_SET_FIELDS,
+    access: "D/A CustomSecAttributeDefinition.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a custom-security-attribute role (Attribute Assignment Reader, Attribute Definition Reader, Attribute Assignment Administrator or Attribute Definition Administrator); by default Global Administrator and other administrator roles have no custom-security-attribute access. Personal Microsoft accounts are not supported.",
+    note: "Graph documents $select, $top and $orderby only for attribute-set lists; $filter is not supported. No P1/P2 prerequisite is stated for attribute-set reads.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/directory-list-attributesets?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/attributeset?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/attributeSets/{attributeSet-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_ATTRIBUTE_SET_FIELDS,
+    access: "D/A CustomSecAttributeDefinition.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a custom-security-attribute role (Attribute Assignment Reader, Attribute Definition Reader, Attribute Assignment Administrator or Attribute Definition Administrator); by default Global Administrator and other administrator roles have no custom-security-attribute access. Personal Microsoft accounts are not supported.",
+    note: "No P1/P2 prerequisite is stated for attribute-set reads.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/attributeset-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/attributeset?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/customSecurityAttributeDefinitions", kind: "collection", query: ["$select", "$filter", "$top"], fields: KNOWN_CUSTOM_SECURITY_DEFINITION_FIELDS,
+    access: "D/A CustomSecAttributeDefinition.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a custom-security-attribute role (Attribute Definition Reader, Attribute Assignment Administrator or Attribute Definition Administrator); by default Global Administrator and other administrator roles have no custom-security-attribute access. Personal Microsoft accounts are not supported.",
+    note: "Filtering uses plain $filter (eq) with no $count or ConsistencyLevel contract; the allowedValues navigation property is not returned by default and needs its own list/show reads ($expand is not reviewed here). No P1/P2 prerequisite is stated for definition reads.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/directory-list-customsecurityattributedefinitions?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/customsecurityattributedefinition?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CUSTOM_SECURITY_DEFINITION_FIELDS,
+    access: "D/A CustomSecAttributeDefinition.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a custom-security-attribute role (Attribute Assignment Reader, Attribute Definition Reader, Attribute Assignment Administrator or Attribute Definition Administrator); by default Global Administrator and other administrator roles have no custom-security-attribute access. Personal Microsoft accounts are not supported.",
+    note: "No P1/P2 prerequisite is stated for definition reads.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/customsecurityattributedefinition-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/customsecurityattributedefinition?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues", kind: "collection", query: ["$select"], fields: KNOWN_ALLOWED_VALUE_FIELDS,
+    access: "D/A CustomSecAttributeDefinition.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a custom-security-attribute role (Attribute Assignment Reader, Attribute Definition Reader, Attribute Assignment Administrator or Attribute Definition Administrator); by default Global Administrator and other administrator roles have no custom-security-attribute access. Personal Microsoft accounts are not supported.",
+    note: "Graph documents $select only for allowed-value lists; $filter is not supported. Definitions that allow free-form values carry no predefined values. No P1/P2 prerequisite is stated for allowed-value reads.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/customsecurityattributedefinition-list-allowedvalues?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/allowedvalue?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues/{allowedValue-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_ALLOWED_VALUE_FIELDS,
+    access: "D/A CustomSecAttributeDefinition.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Attribute Definition Reader or Attribute Definition Administrator; by default Global Administrator and other administrator roles have no custom-security-attribute access. Personal Microsoft accounts are not supported.",
+    note: "No P1/P2 prerequisite is stated for allowed-value reads.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/allowedvalue-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/allowedvalue?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/contracts", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_CONTRACT_FIELDS,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
     note: "Filtering is documented for customerId, defaultDomainName and displayName; no P1/P2 prerequisite is stated for contract reads.",

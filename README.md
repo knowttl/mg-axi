@@ -26,6 +26,7 @@ READ-06 executes Entra risky-user and risk-detection list/show through that sess
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
 EXT-04 (contracts) adds partner-tenant customer-contract list/show/count through the same session.
 EXT-01 (group lifecycle) adds group lifecycle-policy and group setting-template list/show/count reads through the same session.
+EXT-01 (custom security attributes) adds attribute-set, custom-security-attribute-definition and allowed-value list/show/count reads with attribute-role denial guidance through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -325,6 +326,35 @@ Delegated lifecycle-policy reads default to `https://graph.microsoft.com/Directo
 Delegated template callers additionally need a supported Entra role (Directory Readers or Global Reader are the least-privileged roles); no delegated role prerequisite is stated for lifecycle-policy reads; personal Microsoft accounts are not supported on either family.
 No P1/P2 prerequisite is stated for these reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
 No lifecycle or template mutation lives here; `groupSettingTemplates/delta()`, beta policies and templates and the POST lookup actions belong to later pieces; see the [group lifecycle scope decisions](docs/coverage.md#ext-01-group-lifecycle-scope-decisions) for deferred reads and later subfamilies.
+
+Log in with `https://graph.microsoft.com/CustomSecAttributeDefinition.Read.All`, then inspect attribute sets, custom security attribute definitions and their allowed values:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/CustomSecAttributeDefinition.Read.All
+mg-axi entra attribute-set list --profile soc
+mg-axi entra attribute-set show --profile soc --id <set-id>
+mg-axi entra attribute-set count --profile soc
+mg-axi entra custom-security-attribute-definition list --profile soc
+mg-axi entra custom-security-attribute-definition show --profile soc --id <definition-id>
+mg-axi entra custom-security-attribute-definition count --profile soc
+mg-axi entra allowed-value list --profile soc --definition <definition-id>
+mg-axi entra allowed-value show --profile soc --definition <definition-id> --id <value-id>
+mg-axi entra allowed-value count --profile soc --definition <definition-id>
+```
+
+`entra attribute-set list` defaults to the reviewed set (`id`, `description`, `maxAttributesPerSet`); `entra custom-security-attribute-definition list` defaults to compact properties (`id`, `attributeSet`, `name`, `status`, `type`) while show defaults to the full reviewed definition set; `entra allowed-value list` defaults to the reviewed set (`id`, `isActive`).
+`--select` requests properties from the [reviewed custom-security field sets](src/entra-custom-security-attributes.ts); `--fields` projects locally and must be a subset of the fetched selection.
+Definition lists accept `--filter` as plain `$filter` (eq) without adding `$count=true` or `ConsistencyLevel`; attribute-set and allowed-value lists offer no `--filter` because Graph documents no `$filter` for those routes.
+Allowed-value lists and shows take `--definition <definition-id>`; definition lists never inline `allowedValues` (`$expand` is not reviewed here) and show points at the allowed-value list instead.
+Each `count` returns `count: { returned: <total>, complete: true }` from its text/plain `$count` route; only the definition count accepts `--filter` to narrow the total server-side, and no count takes `--select`, `--limit` or `--cursor`.
+Raw `api get` supports `/directory/attributeSets`, `/directory/attributeSets/<set-id>`, `/directory/customSecurityAttributeDefinitions`, `/directory/customSecurityAttributeDefinitions/<definition-id>`, `/directory/customSecurityAttributeDefinitions/<definition-id>/allowedValues` and the single allowed-value route; the `$count` routes are available only through the named count commands.
+Attribute-set lists return `attributeSets` and single-set reads return `attributeSet`; definition lists return `customSecurityAttributeDefinitions` and single-definition reads return `customSecurityAttributeDefinition`; allowed-value lists return `allowedValues` and single-value reads return `allowedValue`.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to these reads.
+All nine named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+Delegated reads default to `https://graph.microsoft.com/CustomSecAttributeDefinition.Read.All`, while application profiles use the configured `.default` audience.
+Delegated callers additionally need a custom-security-attribute role even for Global Administrators (Attribute Definition Reader or Attribute Definition Administrator work for every read; some reads also accept Attribute Assignment Reader or Attribute Assignment Administrator); personal Microsoft accounts are not supported.
+No P1/P2 prerequisite is stated for these reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
+No custom-security-attribute mutation lives here; beta attribute sets, definitions and allowed values belong to a later piece; see the [custom-security-attributes scope decisions](docs/coverage.md#ext-01-custom-security-attributes-scope-decisions) for deferred reads and later subfamilies.
 
 Log in with `https://graph.microsoft.com/Directory.Read.All`, then inspect partner-tenant customer contracts:
 

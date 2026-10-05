@@ -24,6 +24,7 @@ import { listCertificateAuthPkis, showCertificateAuthPki, countCertificateAuthPk
 import { listSubscriptions, showSubscription, countSubscriptions } from "./entra-subscriptions.js";
 import { countContracts, listContracts, showContract } from "./entra-contracts.js";
 import { countLifecyclePolicies, listLifecyclePolicies, showLifecyclePolicy, countSettingTemplates, listSettingTemplates, showSettingTemplate } from "./entra-group-lifecycle.js";
+import { listAttributeSets, showAttributeSet, countAttributeSets, listCustomSecurityAttributeDefinitions, showCustomSecurityAttributeDefinition, countCustomSecurityAttributeDefinitions, listAllowedValues, showAllowedValue, countAllowedValues } from "./entra-custom-security-attributes.js";
 import { listIdentityProviders, showIdentityProvider, countIdentityProviders, availableIdentityProviderTypes } from "./entra-identity-providers.js";
 import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions, showDecision, listContactedReviewers, showContactedReviewer, listStages, showStage } from "./entra-access-reviews.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
@@ -750,6 +751,43 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra group-setting-template list": return listSettingTemplates(session, flags, selected.profile, operation, help, selected.name);
       case "entra group-setting-template show": return showSettingTemplate(session, flags, selected.profile, operation, help, selected.name);
       default: return countSettingTemplates(session, flags, selected.profile, operation, help, selected.name);
+    }
+  }
+  if (leaf.path === "entra attribute-set list" || leaf.path === "entra attribute-set show" || leaf.path === "entra attribute-set count"
+    || leaf.path === "entra custom-security-attribute-definition list" || leaf.path === "entra custom-security-attribute-definition show" || leaf.path === "entra custom-security-attribute-definition count"
+    || leaf.path === "entra allowed-value list" || leaf.path === "entra allowed-value show" || leaf.path === "entra allowed-value count") {
+    if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
+      throw new AxiError("Custom-security-attribute reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, "v1.0");
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra attribute-set list": return listAttributeSets(session, flags, selected.profile, operation, help, selected.name);
+      case "entra attribute-set show": return showAttributeSet(session, flags, selected.profile, operation, help, selected.name);
+      case "entra attribute-set count": return countAttributeSets(session, flags, selected.profile, operation, help, selected.name);
+      case "entra custom-security-attribute-definition list": return listCustomSecurityAttributeDefinitions(session, flags, selected.profile, operation, help, selected.name);
+      case "entra custom-security-attribute-definition show": return showCustomSecurityAttributeDefinition(session, flags, selected.profile, operation, help, selected.name);
+      case "entra custom-security-attribute-definition count": return countCustomSecurityAttributeDefinitions(session, flags, selected.profile, operation, help, selected.name);
+      case "entra allowed-value list": return listAllowedValues(session, flags, selected.profile, operation, help, selected.name);
+      case "entra allowed-value show": return showAllowedValue(session, flags, selected.profile, operation, help, selected.name);
+      default: return countAllowedValues(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "entra contract list" || leaf.path === "entra contract show" || leaf.path === "entra contract count") {

@@ -48,6 +48,8 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra certificate-authority ", "certificate authentication"],
   ["entra subscription ", "commercial subscriptions"],
   ["entra on-premises-synchronization ", "on-premises synchronization"],
+  ["entra agreement ", "terms-of-use agreements and acceptances"],
+  ["entra agreement-acceptance ", "terms-of-use agreements and acceptances"],
   ["entra domain ", "domains and DNS records"],
   ["entra domain-dns-record ", "domains and DNS records"],
   ["entra group-lifecycle-policy ", "group lifecycle policies"],
@@ -267,6 +269,7 @@ export function capabilityDocument(): string {
   const unavailableCertAuthRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01d decision: "));
   const deferredSubscriptionRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate directory-subscriptions scope "));
   const deferredOnPremSyncRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate on-premises-synchronization scope "));
+  const deferredTermsOfUseRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate terms-of-use scope "));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
   const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate custom-security-attributes scope "));
@@ -406,6 +409,17 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredOnPremSyncRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-01 terms-of-use scope decisions",
+    "",
+    "This change covers the six v1.0 agreement and agreement-acceptance reads above (agreement list/show, one agreement's acceptance list/show, and tenant-wide acceptance list/show).",
+    "The acceptances $count scalar, the agreement file/localization/files/versions sub-reads and the beta operations below remain scheduled with an explicit deferred disposition to later EXT-01 subfamilies; no new commands or raw access are approved.",
+    "Terms-of-use reads support v1.0 only; beta needs its own review.",
+    "Scalar counts need a separate query and response contract from the approved list/show reads; agreement file contents and localizations need a separate binary-output and projection contract, and file bytes are never downloaded or printed.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredTermsOfUseRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-04 partner contracts scope decisions",
     "",

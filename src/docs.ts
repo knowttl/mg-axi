@@ -87,6 +87,7 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra entitlement assignment-request ", "entitlement assignments and requests"],
   ["entra entitlement assignment-policy ", "entitlement catalogs and access packages"],
   ["entra entitlement resource-role-scope ", "entitlement catalogs and access packages"],
+  ["entra lifecycle ", "lifecycle workflows, templates, task definitions and settings"],
   ["api get", "reviewed raw reads"],
 ];
 
@@ -546,6 +547,12 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredEntitlementRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-02 lifecycle-workflows scope decisions",
+    "",
+    "This change covers the ten v1.0 lifecycle-workflows first-part reads above (workflow, workflow-template and task-definition list/show/count reads plus the tenant settings show).",
+    "Run, user/subject/task processing-result and user-processing reads stay scheduled for a later part with no new commands or raw access approved; so do workflow tasks, template tasks, versions, insights, deleted items, custom task extensions, every beta operation and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore).",
+    "No new commands or raw access are approved for any lifecycle-workflows row outside the ten above.",
     "",
     "## Named writes",
     "",

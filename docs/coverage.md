@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 168 (166 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 178 (176 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -191,6 +191,16 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra entitlement assignment-request list` | `GET:/identityGovernance/entitlementManagement/assignmentRequests` | scheduled | EXT-02 |
 | `mg-axi entra entitlement assignment-request show` | `GET:/identityGovernance/entitlementManagement/assignmentRequests/{accessPackageAssignmentRequest-id}` | scheduled | EXT-02 |
 | `mg-axi entra entitlement assignment-request count` | `GET:/identityGovernance/entitlementManagement/assignmentRequests/$count` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle workflow list` | `GET:/identityGovernance/lifecycleWorkflows/workflows` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle workflow show` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle workflow count` | `GET:/identityGovernance/lifecycleWorkflows/workflows/$count` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle workflow-template list` | `GET:/identityGovernance/lifecycleWorkflows/workflowTemplates` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle workflow-template show` | `GET:/identityGovernance/lifecycleWorkflows/workflowTemplates/{workflowTemplate-id}` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle workflow-template count` | `GET:/identityGovernance/lifecycleWorkflows/workflowTemplates/$count` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle task-definition list` | `GET:/identityGovernance/lifecycleWorkflows/taskDefinitions` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle task-definition show` | `GET:/identityGovernance/lifecycleWorkflows/taskDefinitions/{taskDefinition-id}` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle task-definition count` | `GET:/identityGovernance/lifecycleWorkflows/taskDefinitions/$count` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle settings show` | `GET:/identityGovernance/lifecycleWorkflows/settings` | scheduled | EXT-02 |
 | `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |
 | `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |
 
@@ -973,12 +983,18 @@ Approval and subject reads carry personal data and stay scheduled for later part
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|
-| `beta:GET:/identityGovernance/entitlementManagement/accessPackages` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
-| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/$count` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
-| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
-| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
-| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes/$count` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
-| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes/{accessPackageResourceRoleScope-id}` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the approved v1.0 reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/$count` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the approved v1.0 reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the approved v1.0 reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the approved v1.0 reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes/$count` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the approved v1.0 reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+| `beta:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes/{accessPackageResourceRoleScope-id}` | scheduled (deferred) | EXT-02 | Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the approved v1.0 reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review. |
+
+## EXT-02 lifecycle-workflows scope decisions
+
+This change covers the ten v1.0 lifecycle-workflows first-part reads above (workflow, workflow-template and task-definition list/show/count reads plus the tenant settings show).
+Run, user/subject/task processing-result and user-processing reads stay scheduled for a later part with no new commands or raw access approved; so do workflow tasks, template tasks, versions, insights, deleted items, custom task extensions, every beta operation and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore).
+No new commands or raw access are approved for any lifecycle-workflows row outside the ten above.
 
 ## Named writes
 

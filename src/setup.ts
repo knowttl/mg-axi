@@ -66,6 +66,7 @@ const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["entra entitlement assignment-request", "entitlement assignments and requests"],
   ["entra entitlement assignment-policy", "entitlement catalogs and access packages"],
   ["entra entitlement resource-role-scope", "entitlement catalogs and access packages"],
+  ["entra lifecycle", "lifecycle workflows"],
 ];
 
 function shippedReadFamilies(): string[] {

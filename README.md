@@ -304,6 +304,39 @@ Callers with only catalog-scoped roles must filter to one access package, for ex
 Assignment and request reads never mutate: no request creation, cancellation, approval or reprocessing, and no beta.
 Denied assignment and request reads name the Catalog reader least-privileged role and the supported Entra roles instead of only the generic grant/role/licence cause.
 
+Read lifecycle workflows, workflow templates, task definitions and tenant settings through ten views; workflow reads default to the ReadBasic scope while template, task-definition and settings reads default to the broader read scope:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/LifecycleWorkflows-Workflow.ReadBasic.All
+mg-axi entra lifecycle workflow list --profile soc --limit 10
+mg-axi entra lifecycle workflow list --profile soc --filter "category eq 'leaver'"
+mg-axi entra lifecycle workflow show --profile soc --id <workflow-id>
+mg-axi entra lifecycle workflow count --profile soc
+mg-axi login --profile soc --scopes https://graph.microsoft.com/LifecycleWorkflows.Read.All
+mg-axi entra lifecycle workflow-template list --profile soc --limit 10
+mg-axi entra lifecycle workflow-template show --profile soc --id <template-id>
+mg-axi entra lifecycle workflow-template count --profile soc
+mg-axi entra lifecycle task-definition list --profile soc --limit 10
+mg-axi entra lifecycle task-definition show --profile soc --id <task-definition-id>
+mg-axi entra lifecycle task-definition count --profile soc
+mg-axi entra lifecycle settings show --profile soc
+```
+
+`entra lifecycle workflow list` defaults to `id`, `displayName`, `category`, `isEnabled` and `isSchedulingEnabled`, and `entra lifecycle workflow show --id <workflow-id>` defaults to the full reviewed scalar set.
+Workflow rows never carry tasks, runs or processing results: tasks ride expanded by default on the get and are dropped in local projection, and runs with user, subject and task processing results belong to a later part, never to these reads.
+`entra lifecycle workflow-template list` defaults to `id`, `displayName` and `category`; the template get documents no query parameters, so `entra lifecycle workflow-template show --id <template-id>` takes no `--select` and always returns whole rows.
+`entra lifecycle task-definition list` defaults to `id`, `displayName`, `category` and `version`, and `entra lifecycle task-definition show --id <task-definition-id>` defaults to the full reviewed parameter set.
+`entra lifecycle settings show` returns the tenant schedule interval with the email and quarantine configuration; updating settings belongs to no read slice.
+`--select` requests properties from the [reviewed lifecycle property sets](src/entra-lifecycle-workflows.ts); `--fields` must be a subset of the fetched selection, and navigation names (`tasks`, `createdBy`, `lastModifiedBy`, `previewScope`) fail as unknown properties.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; `$search`, `$orderby` and `$expand` stay unreviewed.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to lifecycle reads.
+Resume any lifecycle list with `--cursor -` and supply the returned cursor on stdin.
+Delegated workflow reads default to `https://graph.microsoft.com/LifecycleWorkflows-Workflow.ReadBasic.All` (richer detail may need `LifecycleWorkflows-Workflow.Read.All` or `LifecycleWorkflows.Read.All`) and template, task-definition and settings reads to `https://graph.microsoft.com/LifecycleWorkflows.Read.All`, while application profiles use the configured `.default` audience.
+See the [lifecycle-workflows scope decisions](docs/coverage.md#ext-02-lifecycle-workflows-scope-decisions) for the scheduled run and processing-result part.
+Delegated callers additionally need Global Reader or Lifecycle Workflows Administrator.
+Denied reads name that scope, role and licensing requirement instead of only the generic grant/role/licence cause.
+Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite (every governed user, not only administrators), and delegated personal Microsoft accounts are not supported.
+
 Log in with `https://graph.microsoft.com/Device.Read.All` or `https://graph.microsoft.com/AdministrativeUnit.Read.All`, then inspect directory devices and administrative units:
 
 ```sh

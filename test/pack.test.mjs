@@ -91,7 +91,7 @@ test("setup reports unconfigured state without writing configuration", () => {
     assert.equal(output.profiles, "0 profiles configured");
     assert.ok(output.capabilities.implemented.includes("mg-axi setup") || output.capabilities.implemented.includes("setup"));
     assert.ok(output.capabilities.implemented.includes("entra user list"));
-    assert.equal(output.capabilities.reads, 133);
+    assert.equal(output.capabilities.reads, 137);
     assert.equal(output.capabilities.writes, 5);    assert.equal(output.capabilities.local, 6);
     assert.ok(!existsSync(config), "setup writes nothing");
   } finally { rmSync(home, { recursive: true, force: true }); }
@@ -102,7 +102,7 @@ test("setup capability prose lists the shipped read families from the catalogue"
   try {
     const output = decode(runPlain(["setup"], home).stdout);
     assert.equal(output.capabilities.api,
-      "Entra user, registration, group, directory-role/PIM, device, administrative-unit, organization and branding, domain and domain DNS, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, sign-in/directory-audit, application/service-principal and consent grants, risk, Conditional Access, identity-provider, federation configurations, deleted directory items, data policy operations and access-review reads plus reviewed raw api get, one gated group-membership write, one gated account enable/disable write, one gated session-revocation write and one gated risky-user dismissal write; every other operation is scheduled, blocked, deprecated or excluded");
+      "Entra user, registration, group, directory-role/PIM, device, administrative-unit, organization and branding, domain and domain DNS, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, sign-in/directory-audit, application/service-principal and consent grants, risk, Conditional Access, identity-provider, federation configurations, deleted directory items, data policy operations and access-review reads plus reviewed raw api get, one gated group-membership write, one gated account enable/disable write, one gated session-revocation write and one gated risky-user dismissal write; every other operation is scheduled, blocked, deprecated or excluded");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 

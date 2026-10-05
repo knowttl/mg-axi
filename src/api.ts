@@ -4,6 +4,7 @@ import { DelegatedAuth } from "./auth.js";
 import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITION_FIELDS, KNOWN_INSTANCE_FIELDS, KNOWN_STAGE_FIELDS } from "./entra-access-reviews.js";
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
+import { KNOWN_DELEGATED_ADMIN_CUSTOMER_FIELDS, KNOWN_DELEGATED_ADMIN_RELATIONSHIP_FIELDS } from "./entra-delegated-admin.js";
 import { KNOWN_DATA_POLICY_FIELDS } from "./entra-data-policy-operations.js";
 import { KNOWN_FEDERATION_FIELDS } from "./entra-federation-configurations.js";
 import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
@@ -483,6 +484,22 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
     note: "Filtering is documented for customerId, defaultDomainName and displayName; no P1/P2 prerequisite is stated for contract reads.",
     sources: ["https://learn.microsoft.com/graph/api/contract-list?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/contract?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/tenantRelationships/delegatedAdminCustomers", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_DELEGATED_ADMIN_CUSTOMER_FIELDS,
+    access: "D/A DelegatedAdminRelationship.Read.All. Delegated callers pass it as --scopes; application callers need it admin-consented; personal Microsoft accounts are not supported. Delegated-admin reads run in the partner tenant.",
+    note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract. Customer objects are created by the system when a relationship exists and deleted when none remain, so a non-partner tenant lists zero customers. No P1/P2 prerequisite is stated for delegated-admin reads.",
+    sources: ["https://learn.microsoft.com/graph/api/tenantrelationship-list-delegatedadmincustomers?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/delegatedadmincustomer?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_DELEGATED_ADMIN_CUSTOMER_FIELDS,
+    access: "D/A DelegatedAdminRelationship.Read.All. Delegated callers pass it as --scopes; application callers need it admin-consented; personal Microsoft accounts are not supported. Delegated-admin reads run in the partner tenant.",
+    note: "No P1/P2 prerequisite is stated for delegated-admin reads.",
+    sources: ["https://learn.microsoft.com/graph/api/delegatedadmincustomer-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/delegatedadmincustomer?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/tenantRelationships/delegatedAdminRelationships", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_DELEGATED_ADMIN_RELATIONSHIP_FIELDS,
+    access: "D/A DelegatedAdminRelationship.Read.All. Delegated callers pass it as --scopes; application callers need it admin-consented; personal Microsoft accounts are not supported. Delegated-admin reads run in the partner tenant.",
+    note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract. Rows may carry the resellerDelegatedAdminRelationship subtype; its unreviewed extras are never projected. No P1/P2 prerequisite is stated for delegated-admin reads.",
+    sources: ["https://learn.microsoft.com/graph/api/tenantrelationship-list-delegatedadminrelationships?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/delegatedadminrelationship?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_DELEGATED_ADMIN_RELATIONSHIP_FIELDS,
+    access: "D/A DelegatedAdminRelationship.Read.All. Delegated callers pass it as --scopes; application callers need it admin-consented; personal Microsoft accounts are not supported. Delegated-admin reads run in the partner tenant.",
+    note: "Single reads may return the resellerDelegatedAdminRelationship subtype; its unreviewed extras are never projected. No P1/P2 prerequisite is stated for delegated-admin reads.",
+    sources: ["https://learn.microsoft.com/graph/api/delegatedadminrelationship-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/delegatedadminrelationship?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/contracts/{contract-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CONTRACT_FIELDS,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
     note: "No P1/P2 prerequisite is stated for contract reads.",

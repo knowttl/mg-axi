@@ -138,6 +138,8 @@ for (const profile of [delegatedProfile, appProfile]) {
     "/domains/contoso.com/verificationDnsRecords/$count",
     "/domains/contoso.com/serviceConfigurationRecords/$count",
     "/contracts/$count",
+    "/tenantRelationships/delegatedAdminCustomers/$count",
+    "/tenantRelationships/delegatedAdminRelationships/$count",
     "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/$count",
     "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/pki-1/certificateAuthorities/$count",
     "/groupLifecyclePolicies/$count",
@@ -226,6 +228,25 @@ for (const profile of [delegatedProfile, appProfile]) {
       await assert.rejects(
         runApiGet({ path, apiVersion: "v1.0", profile,
           ...(profile.mode === "delegated" ? { scopes: "https://graph.microsoft.com/Directory.Read.All" } : {}) }, f.deps),
+        error => error.code === "VALIDATION_ERROR" && /not in the reviewed raw inventory/.test(error.message),
+      );
+      assert.equal(f.credentialCalls.length, 0);
+      assert.equal(f.requests.length, 0);
+    });
+  }
+}
+
+for (const profile of [delegatedProfile, appProfile]) {
+  for (const path of [
+    "/tenantRelationships/delegatedAdminCustomers/customer-1/serviceManagementDetails",
+    "/tenantRelationships/delegatedAdminRelationships/relationship-1/requests",
+    "/tenantRelationships/multiTenantOrganization/tenants",
+  ]) {
+    test(`${profile.mode} raw ${path} rejects deferred delegated-admin navigation before credentials or HTTP`, async () => {
+      const f = fixture(json(200, {}));
+      await assert.rejects(
+        runApiGet({ path, apiVersion: "v1.0", profile,
+          ...(profile.mode === "delegated" ? { scopes: "https://graph.microsoft.com/DelegatedAdminRelationship.Read.All" } : {}) }, f.deps),
         error => error.code === "VALIDATION_ERROR" && /not in the reviewed raw inventory/.test(error.message),
       );
       assert.equal(f.credentialCalls.length, 0);

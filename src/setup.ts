@@ -45,6 +45,8 @@ const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["entra custom-security-attribute-definition", "attribute sets and custom security attributes"],
   ["entra allowed-value", "attribute sets and custom security attributes"],
   ["entra contract", "partner contracts"],
+  ["entra delegated-admin-customer", "delegated administration"],
+  ["entra delegated-admin-relationship", "delegated administration"],
   ["entra sign-in", "sign-in/directory-audit"],
   ["entra directory-audit", "sign-in/directory-audit"],
   ["entra application", "application/service-principal and consent grants"],

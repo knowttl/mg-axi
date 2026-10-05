@@ -89,6 +89,16 @@ APPROVED_CONTRACT_READS = {
     "/contracts/{contract-id}",
     "/contracts/$count",
 }
+# The four approved EXT-04b v1.0 delegated-admin reads: customer and
+# relationship list/show. Counts, the container root, navigation
+# sub-resources and the multi-tenant-organization/lookup functions stay
+# scheduled for later EXT-04 subfamilies.
+APPROVED_DELEGATED_ADMIN_READS = {
+    "/tenantRelationships/delegatedAdminCustomers",
+    "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}",
+    "/tenantRelationships/delegatedAdminRelationships",
+    "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}",
+}
 # The ten approved EXT-01m v1.0 contact manager/directReports navigation
 # reads: the manager single, the directReports collection and scalar plus
 # their user/contact typed casts, and the per-report singles plus casts.
@@ -267,6 +277,19 @@ def make_row(version, path, method, operation):
             reason = "Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle beta subfamily: the six approved reads cover v1.0 only; beta policies and templates need separate review."
     if owner == "EXT-01" and not mutates and disposition == "scheduled" and path.split("/")[1] == "directory" and ("/attributeSets" in path or "/customSecurityAttributeDefinitions" in path) and version == "beta":
         reason = "Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review."
+    if owner == "EXT-04" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.split("/")[1] == "tenantRelationships" and path not in APPROVED_DELEGATED_ADMIN_READS:
+        if path.startswith("/tenantRelationships/multiTenantOrganization"):
+            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 multi-tenant-organization subfamily: multi-tenant-organization reads need their own MultiTenantOrganization access, Entra P1 licensing and projection review beyond the approved delegated-admin list/show reads."
+        elif "findTenantInformation" in path:
+            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 tenant-lookup subfamily: tenant-information lookup functions need their own CrossTenantInformation access and explicit domain/tenant-argument review beyond the approved delegated-admin list/show reads."
+        elif path.endswith("/$count"):
+            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
+        elif path == "/tenantRelationships":
+            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin root subfamily: the tenantRelationship container singleton needs its own projection review beyond the approved customer and relationship list/show reads."
+        elif "/serviceManagementDetails" in path:
+            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin customer-details subfamily: service-management detail reads need their own query, access and projection review beyond the approved customer list/show reads."
+        elif "/accessAssignments" in path or "/operations" in path or "/requests" in path:
+            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin relationship-details subfamily: access-assignment, operation and request navigation reads need their own query, access and projection review beyond the approved relationship list/show reads."
     if owner == "EXT-02" and method == "GET" and disposition == "scheduled" and "/accessReviews/historyDefinitions" in path:
         disposition, reason = "intentionally-blocked", "Blocked: documented least privilege is the write scope AccessReview.ReadWrite.All (no read scope), and history instances return SAS download URLs in downloadUri; recording or emitting that URL needs its own redaction and output review."
         owner = "EXT-02c"

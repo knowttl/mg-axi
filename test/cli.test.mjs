@@ -102,6 +102,10 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra contract list/);
   assert.match(result.stdout, /entra contract show/);
   assert.match(result.stdout, /entra contract count/);
+  assert.match(result.stdout, /entra delegated-admin-customer list/);
+  assert.match(result.stdout, /entra delegated-admin-customer show/);
+  assert.match(result.stdout, /entra delegated-admin-relationship list/);
+  assert.match(result.stdout, /entra delegated-admin-relationship show/);
   assert.match(result.stdout, /entra conditional-access policy list/);
   assert.match(result.stdout, /entra conditional-access named-location list/);
   assert.match(result.stdout, /entra group member add/);
@@ -148,6 +152,8 @@ for (const [name, args, error] of [
   ["setting template count rejects limits", ["entra", "group-setting-template", "count", "--limit", "5"], /unknown flag --limit/],
   ["missing required contract ID", ["entra", "contract", "show"], /--id is required/],
   ["contract count rejects limits", ["entra", "contract", "count", "--limit", "5"], /unknown flag --limit/],
+  ["missing required delegated-admin customer ID", ["entra", "delegated-admin-customer", "show"], /--id is required/],
+  ["missing required delegated-admin relationship ID", ["entra", "delegated-admin-relationship", "show"], /--id is required/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],
   ["missing required grant client", ["entra", "service-principal", "oauth2-grant", "list"], /--service-principal is required/],
   ["missing required app-role client", ["entra", "service-principal", "app-role-assignment", "list"], /--service-principal is required/],

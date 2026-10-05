@@ -233,7 +233,7 @@ function redact(value: unknown): unknown {
               .filter(field => Object.hasOwn(entry, field))
               .map(field => [field, entry[field]]))))];
         }
-        return [key, typeof child === "string" && (secretKey(key) || key === "phoneNumber") ? REDACTED : redact(child)];
+        return [key, typeof child === "string" && (secretKey(key) || key === "phoneNumber" || key === "storageLocation") ? REDACTED : redact(child)];
       }),
   );
 }

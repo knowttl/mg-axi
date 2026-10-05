@@ -36,7 +36,16 @@ node dist/bin/mg-axi.js entra user show --help
 ```
 
 Run checkout commands from the repository root with `node dist/bin/mg-axi.js`.
-Where examples or CLI output use `mg-axi`, substitute `node dist/bin/mg-axi.js` unless you have separately installed the executable on PATH.
+To install the built checkout binary on PATH, run this explicitly from the repository root:
+
+```sh
+npm link --ignore-scripts
+mg-axi --version
+mg-axi --help
+```
+
+Run commands non-interactively with `mg-axi <command>` after linking.
+Without linking, substitute `node dist/bin/mg-axi.js` from the repository root wherever examples or CLI output use `mg-axi`.
 
 The home view reports unavailable tenant summaries explicitly.
 `entra user list` defaults to basic properties (`id`, `displayName`, `userPrincipalName`, `mail`); `entra user show --id <user-id-or-upn>` defaults to the richer server property set.
@@ -591,18 +600,19 @@ This is the supported Entra read and gated write surface, not full Entra coverag
 See the generated [capability report](docs/coverage.md) for implemented reads, writes and discovery dispositions, and the [skill command table](skills/mg-axi/SKILL.md#orientation) for all executable leaves, including local commands.
 The package is marked private and ships no publish workflow: preparing this release never publishes it.
 The packed files are `dist`, the discovery inventory, `skills/mg-axi`, `docs/coverage.md` and this README.
-Follow the [checkout instructions](#mg-axi) to install dependencies, build and run the version probe.
+Follow the [checkout instructions](#mg-axi) to install dependencies, build, link the binary and run the version probe.
 
-From the repository root, `node dist/bin/mg-axi.js setup` shows the build steps, the selected configuration path, the configured profiles and the capability summary.
+After linking the checkout binary, `mg-axi setup` shows the build steps, the selected configuration path, the configured profiles and the capability summary.
 It writes nothing, signs in nowhere and installs no hooks; ordinary commands never gain installation side effects.
-Create profiles with `node dist/bin/mg-axi.js profile create`, sign delegated profiles in with `node dist/bin/mg-axi.js login`, and check access with `node dist/bin/mg-axi.js doctor`.
+Create profiles with `mg-axi profile create`, sign delegated profiles in with `mg-axi login`, and check access with `mg-axi doctor`.
 Doctor checks `--profile <name>` when supplied, otherwise the configured default, or all configured profiles when no default exists.
 Doctor performs one bounded `entra user list --limit 1` read per profile with silent credential acquisition only: it never opens a browser, never shows a device-code challenge, never auto-installs and never enables writes.
 Missing profiles, an unknown selected profile or invalid configuration fail before Graph reads.
 Read failures report per profile with rerun guidance and a nonzero exit.
 
 The installable skill lives at [skills/mg-axi/SKILL.md](skills/mg-axi/SKILL.md).
-Install it explicitly through your agent's skill installation mechanism; the setup command only shows guidance and does not install skills.
-Its command table is generated from the command catalogue; [docs/coverage.md](docs/coverage.md) also uses the discovery inventory.
+Install it explicitly with `npx skills add knowttl/mg-axi --skill mg-axi`; the setup command only shows guidance and does not install skills.
+mg-axi ships no session hook, so the skill is the integration path.
+The skill file is generated in full from the template in [src/docs.ts](src/docs.ts) and the command catalogue; [docs/coverage.md](docs/coverage.md) also uses the discovery inventory.
 After building, regenerate both with `corepack pnpm run docs:generate` and verify freshness with `corepack pnpm run docs:check`; CI runs the freshness check.
 Critical journeys stay packaged offline: `test/pack.test.mjs` drives setup, doctor and the user, group, Conditional Access and sign-in reads through the packaged executable with fixture credentials and blocked networking.

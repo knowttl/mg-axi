@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 import { decode } from "@toon-format/toon";
 import { executeArgv } from "../dist/cli.js";
 import { doctorTargets, runDoctor } from "../dist/doctor.js";
-import { capabilityDocument, skillCommandTable } from "../dist/docs.js";
+import { capabilityDocument, skillCommandTable, skillDescription, skillDocument, skillHomeHints } from "../dist/docs.js";
 import { GraphSession, systemClock } from "../dist/graph-session.js";
 import { Profiles } from "../dist/profiles.js";
 
@@ -491,10 +491,49 @@ test("doctor with no profiles throws before credentials", async () => {
   }
 });
 
+test("keeps the committed skill file generated from the catalogue", () => {
+  const skill = readFileSync(new URL("../skills/mg-axi/SKILL.md", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  assert.equal(skill, skillDocument());
+});
+
 test("keeps the committed skill command table generated from the catalogue", () => {
   const skill = readFileSync(new URL("../skills/mg-axi/SKILL.md", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   const block = skill.split("<!-- command-registry:start -->\n")[1]?.split("\n<!-- command-registry:end -->")[0];
   assert.equal(block, skillCommandTable());
+});
+
+test("skill trigger description names the shipped writes and EXT reads", () => {
+  const description = skillDescription();
+  for (const write of ["account enable/disable", "session revocation", "group-membership add", "risky-user dismissal", "CA policy update"]) {
+    assert.ok(description.includes(write), `description names write: ${write}`);
+  }
+  for (const area of ["domains and DNS records", "identity providers", "organization and branding", "access reviews"]) {
+    assert.ok(description.includes(area), `description names area: ${area}`);
+  }
+});
+
+test("skill next steps match the no-args home view hints", async () => {
+  const home = mkdtempSync(join(tmpdir(), "mg-axi-skill-home-"));
+  const previous = process.env.MG_AXI_CONFIG;
+  process.env.MG_AXI_CONFIG = join(home, "config.json");
+  try {
+    const hints = skillHomeHints();
+    const skill = skillDocument();
+    const output = await executeArgv([]);
+    assert.ok(output && typeof output === "object" && Array.isArray(output.help));
+    assert.deepEqual(hints.slice(0, 2), ["mg-axi profile list", "mg-axi login --help"]);
+    assert.equal(new Set(hints).size, hints.length);
+    assert.deepEqual(output.help, hints);
+    const repeated = await executeArgv([]);
+    assert.deepEqual(repeated.help, hints);
+    assert.deepEqual(output.help, hints);
+    assert.deepEqual(skillHomeHints(), hints);
+    assert.equal(skillDocument(), skill);
+    for (const hint of hints) assert.ok(skill.includes(hint), `skill prints home hint: ${hint}`);
+  } finally {
+    process.env.MG_AXI_CONFIG = previous;
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test("lists every executable leaf in the skill table exactly once", () => {

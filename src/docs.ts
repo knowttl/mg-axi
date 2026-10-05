@@ -1,11 +1,17 @@
 import { readFileSync } from "node:fs";
-import { LEAVES } from "./catalogue.js";
+import { DESCRIPTION, HOME_HELP, LEAVES } from "./catalogue.js";
 
 // PACK-01: single source for generated release records. The committed
-// skills/mg-axi/SKILL.md command table and docs/coverage.md are projections
-// of the executable catalogue and the discovery inventory, so help, skill
+// skills/mg-axi/SKILL.md and docs/coverage.md are generated from the templates
+// below, the executable catalogue and the discovery inventory, so help, skill
 // and coverage cannot drift apart. tools/generate-docs.mjs writes both
 // files; test/pack.test.mjs fails when they are stale.
+//
+// The skill file is generated in full by skillDocument() below: its trigger
+// description, its next-step hints (the same hints the no-args home view
+// prints) and its command table all come from the catalogue, so a new leaf
+// without an area label, or a hand-edit to the committed file, fails the
+// --check step instead of drifting silently.
 
 // One row per executable leaf in catalogue order.
 // Every leaf is implemented by an mg-axi handler (native). Graph
@@ -19,6 +25,169 @@ export function skillCommandTable(): string {
     "| Command | Capability | Effect |",
     "|---|---|---|",
     ...LEAVES.map(leaf => `| \`mg-axi ${leaf.path}\` | native | ${leafEffect(leaf)} |`),
+  ].join("\n");
+}
+
+// SKILL-01: the installable skill is generated in full from the catalogue.
+// Area labels for the trigger description, keyed by leaf-path prefix with
+// specific prefixes before general ones. The first matching prefix owns each
+// read leaf: a new read leaf without coverage here throws, so the
+// committed description can never silently omit shipped coverage.
+const READ_AREA_LABELS: Array<[string, string]> = [
+  ["entra user authentication-method ", "authentication methods"],
+  ["entra registration ", "authentication methods"],
+  ["entra user ", "users"],
+  ["entra group ", "groups"],
+  ["entra directory-role ", "roles"],
+  ["entra role-assignment ", "roles"],
+  ["entra pim ", "roles"],
+  ["entra device ", "devices"],
+  ["entra administrative-unit ", "administrative units"],
+  ["entra organization ", "organization and branding"],
+  ["entra domain ", "domains and DNS records"],
+  ["entra domain-dns-record ", "domains and DNS records"],
+  ["entra sign-in ", "sign-ins and audit logs"],
+  ["entra directory-audit ", "sign-ins and audit logs"],
+  ["entra application ", "applications and consent grants"],
+  ["entra service-principal ", "applications and consent grants"],
+  ["entra risky-user ", "risk"],
+  ["entra risk-detection ", "risk"],
+  ["entra conditional-access ", "Conditional Access"],
+  ["entra identity-provider ", "identity providers"],
+  ["entra access-review ", "access reviews"],
+  ["api get", "reviewed raw reads"],
+];
+
+// Short outcome labels for the shipped gated writes, keyed by leaf path.
+// A new write leaf without an entry here throws for the same reason.
+const WRITE_LABELS: Record<string, string> = {
+  "entra user update": "account enable/disable",
+  "entra user revoke-sessions": "session revocation",
+  "entra group member add": "group-membership add",
+  "entra risky-user dismiss": "risky-user dismissal",
+  "entra conditional-access policy update": "CA policy update",
+};
+
+function skillReadAreas(): string[] {
+  const areas: string[] = [];
+  for (const leaf of LEAVES) {
+    if (leafEffect(leaf) !== "read" || leaf.path === "doctor") continue;
+    const match = READ_AREA_LABELS.find(([prefix]) => leaf.path.startsWith(prefix) || leaf.path === prefix.trim());
+    if (!match) throw new Error(`SKILL.md has no area label for read leaf: ${leaf.path}`);
+    if (!areas.includes(match[1])) areas.push(match[1]);
+  }
+  return areas;
+}
+
+function skillWriteLabels(): string[] {
+  return LEAVES.filter(leaf => leafEffect(leaf) === "write").map(leaf => {
+    const label = WRITE_LABELS[leaf.path];
+    if (!label) throw new Error(`SKILL.md has no write label for write leaf: ${leaf.path}`);
+    return label;
+  });
+}
+
+// Terse, outcome-focused trigger description: current read coverage plus
+// the shipped gated writes. Generated so EXT reads and new writes land in
+// the frontmatter with the slice that ships them.
+export function skillDescription(): string {
+  const areas = skillReadAreas();
+  const writes = skillWriteLabels();
+  return `Inspect Microsoft Entra ${areas.join(", ")} and run ${writes.length} gated writes (${writes.join(", ")}) through token-efficient TOON output.`;
+}
+
+// Next-step hints printed by the no-args home view. The two leading entries mirror the
+// profile/login hints localHome() in cli.ts prepends to HOME_HELP; the
+// rest is HOME_HELP verbatim, so skill and home view cannot drift apart.
+export function skillHomeHints(): string[] {
+  return ["mg-axi profile list", "mg-axi login --help", ...HOME_HELP];
+}
+
+// The full installable skill. Durable guidance only: read-only by default,
+// writes need preview plus typed confirmation, no secrets in output, the
+// profile/auth model, offline tests. Long walkthroughs live in leaf --help
+// and docs/ instead.
+export function skillDocument(): string {
+  return [
+    "---",
+    "name: mg-axi",
+    "description: >",
+    `  ${skillDescription()}`,
+    "user-invocable: false",
+    "---",
+    "",
+    "<!-- Generated by tools/generate-docs.mjs from src/catalogue.ts. Do not hand-edit. -->",
+    "",
+    "# mg-axi",
+    "",
+    `Agent-ergonomic CLI for Microsoft Graph. ${DESCRIPTION}.`,
+    "Entra SOC reads through token-efficient TOON output.",
+    "The generated [command table](#orientation) lists supported named writes through the gated mutation coordinator; raw API remains read-only and every other mutation is refused.",
+    "See [README.md](../../README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.",
+    "",
+    "Build and link the local checkout as documented in [README.md](../../README.md#mg-axi), then run commands non-interactively with `mg-axi <command>`.",
+    "Once the package is published, `npx -y @knowttl/mg-axi <command>` also applies.",
+    "Run `mg-axi doctor` first.",
+    "See [README.md](../../README.md#release) for doctor profile selection, checks and failure behavior.",
+    "",
+    "## Orientation",
+    "",
+    "The exact current leaf registry is `src/catalogue.ts`.",
+    "Its capability label is `native` (implemented by an mg-axi handler).",
+    "Its effect is `read` for Graph read leaves and the doctor health check, `write` for the gated named writes, or `local` for home, profile, login and setup views.",
+    "Doctor acquires credentials silently and contacts Graph; only its help view stays offline.",
+    "The list below records current executable leaves; it makes no coverage claim for other Graph operations.",
+    "See `docs/coverage.md` for the per-operation disposition records.",
+    "`docs/coverage.md` and this file are generated from the same catalogue and inventory sources; `node tools/generate-docs.mjs --check` fails when they are stale.",
+    "",
+    "<!-- command-registry:start -->",
+    skillCommandTable(),
+    "<!-- command-registry:end -->",
+    "",
+    "Run `mg-axi <leaf-path> --help` for that leaf's accepted flags and reference.",
+    "Unknown flags fail before any credential or HTTP work.",
+    "",
+    "## Next steps",
+    "",
+    "The no-args home view prints these hints alongside live profile status:",
+    "",
+    "```sh",
+    ...skillHomeHints(),
+    "```",
+    "",
+    "## Setup (explicit only)",
+    "",
+    "Follow [README.md](../../README.md#mg-axi) for checkout builds and binary linking, and [release guidance](../../README.md#release) for explicit skill installation.",
+    "Create profiles explicitly and keep secrets out of argv and config files:",
+    "",
+    "```sh",
+    "mg-axi setup                    # build steps, config path and capabilities; writes nothing",
+    "mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial",
+    "mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
+    "mg-axi doctor                   # one bounded read per selected profile",
+    "mg-axi entra user list --profile soc --limit 10",
+    "```",
+    "",
+    "Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate file.",
+    "`mg-axi setup` shows the selected path and writes nothing.",
+    "",
+    "## Selecting a profile",
+    "",
+    "Read leaves accept `--profile <name>`.",
+    "Selection uses `--profile` or the configured default.",
+    "Without either, read leaves report `AUTH_REQUIRED`, even if only one profile exists.",
+    "Doctor selection is documented in [README.md](../../README.md#release).",
+    "Without profiles, home, setup and profile list show unconfigured state; Graph read leaves report `AUTH_REQUIRED`.",
+    "",
+    "## Safety",
+    "",
+    "Reads run through a session that authorizes only catalogued operations before silent credential acquisition; only explicit `login` opens a browser or prints a device-code challenge.",
+    "Writes preview before sending and need `--execute` plus a typed `--confirm` repeating the target; an already-desired value is a no-op with exit 0, never an error.",
+    "Output is TOON on stdout; diagnostics use stderr.",
+    "Text truncates at 500 characters (`--full` restores text, never redaction); row caps resume through opaque cursors.",
+    "Secrets stay in protected storage references, never in argv, config files or output; credential fields carry expiry metadata only.",
+    "Tests run offline with fixture credentials; never point tests at a real tenant.",
+    "",
   ].join("\n");
 }
 

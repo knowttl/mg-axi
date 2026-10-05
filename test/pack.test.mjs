@@ -508,12 +508,18 @@ test("skill next steps match the no-args home view hints", async () => {
   const previous = process.env.MG_AXI_CONFIG;
   process.env.MG_AXI_CONFIG = join(home, "config.json");
   try {
+    const hints = skillHomeHints();
+    const skill = skillDocument();
     const output = await executeArgv([]);
     assert.ok(output && typeof output === "object" && Array.isArray(output.help));
-    const hints = skillHomeHints();
     assert.deepEqual(hints.slice(0, 2), ["mg-axi profile list", "mg-axi login --help"]);
-    for (const hint of output.help) assert.ok(hints.includes(hint), `skill carries home hint: ${hint}`);
-    const skill = skillDocument();
+    assert.equal(new Set(hints).size, hints.length);
+    assert.deepEqual(output.help, hints);
+    const repeated = await executeArgv([]);
+    assert.deepEqual(repeated.help, hints);
+    assert.deepEqual(output.help, hints);
+    assert.deepEqual(skillHomeHints(), hints);
+    assert.equal(skillDocument(), skill);
     for (const hint of hints) assert.ok(skill.includes(`npx -y @knowttl/mg-axi ${hint.replace(/^mg-axi ?/, "")}`), `skill prints home hint: ${hint}`);
   } finally {
     process.env.MG_AXI_CONFIG = previous;

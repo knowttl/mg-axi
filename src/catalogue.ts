@@ -890,6 +890,6 @@ export function home() {
     profile: "unavailable: no profile configured",
     tenant: "unavailable: no tenant selected",
     domains: [{ name: "entra", status: "scheduled", summary: "Tenant summaries await Graph execution" }],
-    help: HOME_HELP,
+    help: [...HOME_HELP],
   };
 }

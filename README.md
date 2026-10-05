@@ -602,7 +602,7 @@ Read failures report per profile with rerun guidance and a nonzero exit.
 
 The installable skill lives at [skills/mg-axi/SKILL.md](skills/mg-axi/SKILL.md).
 Install it explicitly with `npx skills add knowttl/mg-axi --skill mg-axi`; the setup command only shows guidance and does not install skills.
-mg-axi ships no session hook - setup writes nothing, signs in nowhere and installs no hooks - so the skill is the integration path.
-The skill file is generated in full from the command catalogue; [docs/coverage.md](docs/coverage.md) also uses the discovery inventory.
+mg-axi ships no session hook, so the skill is the integration path.
+The skill file is generated in full from the template in [src/docs.ts](src/docs.ts) and the command catalogue; [docs/coverage.md](docs/coverage.md) also uses the discovery inventory.
 After building, regenerate both with `corepack pnpm run docs:generate` and verify freshness with `corepack pnpm run docs:check`; CI runs the freshness check.
 Critical journeys stay packaged offline: `test/pack.test.mjs` drives setup, doctor and the user, group, Conditional Access and sign-in reads through the packaged executable with fixture credentials and blocked networking.

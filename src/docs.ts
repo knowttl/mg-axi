@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { DESCRIPTION, HOME_HELP, LEAVES } from "./catalogue.js";
 
 // PACK-01: single source for generated release records. The committed
-// skills/mg-axi/SKILL.md command table and docs/coverage.md are projections
-// of the executable catalogue and the discovery inventory, so help, skill
+// skills/mg-axi/SKILL.md and docs/coverage.md are generated from the templates
+// below, the executable catalogue and the discovery inventory, so help, skill
 // and coverage cannot drift apart. tools/generate-docs.mjs writes both
 // files; test/pack.test.mjs fails when they are stale.
 //
@@ -30,8 +30,8 @@ export function skillCommandTable(): string {
 
 // SKILL-01: the installable skill is generated in full from the catalogue.
 // Area labels for the trigger description, keyed by leaf-path prefix with
-// specific prefixes before general ones. Every read leaf must match exactly
-// one prefix: a new read leaf without coverage here throws, so the
+// specific prefixes before general ones. The first matching prefix owns each
+// read leaf: a new read leaf without coverage here throws, so the
 // committed description can never silently omit shipped coverage.
 const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra user authentication-method ", "authentication methods"],

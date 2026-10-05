@@ -119,9 +119,9 @@ const DECISION_KNOWN = new Set(KNOWN_DECISION_FIELDS);
 const CONTACTED_REVIEWER_KNOWN = new Set(KNOWN_CONTACTED_REVIEWER_FIELDS);
 const STAGE_KNOWN = new Set(KNOWN_STAGE_FIELDS);
 
-// Compact rows: identifiers plus schedule state, occurrence window or the
-// review outcome. The definition id is the schedule; accessReviewId on a
-// decision names its parent instance.
+// Compact rows: identifiers plus schedule state, occurrence or stage window,
+// reviewer identity or review outcome. The definition id is the schedule;
+// accessReviewId on a decision names its parent instance.
 const DEFAULT_DEFINITION_LIST_SELECT = ["id", "displayName", "status"];
 const DEFAULT_DEFINITION_SHOW_SELECT = [...KNOWN_DEFINITION_FIELDS];
 const DEFAULT_INSTANCE_LIST_SELECT = ["id", "status", "startDateTime", "endDateTime"];

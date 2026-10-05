@@ -24,6 +24,7 @@ EXT-01 (directory subscriptions) adds commercial-subscription list/show/count re
 EXT-01 (on-premises synchronization) adds on-premises directory-synchronization list/show reads with Global Administrator role guidance through the same session.
 EXT-01 (terms of use) adds terms-of-use agreement list/show, per-agreement acceptance list/show and tenant-wide agreement-acceptance list/show reads with Security Reader role and Entra ID P1 guidance through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
+EXT-03 (data policy operations) adds workforce data-policy-operation list/show/count reads with storage-location redaction through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
 EXT-04 (contracts) adds partner-tenant customer-contract list/show/count through the same session.
@@ -529,6 +530,28 @@ Delegated provider reads default to `https://graph.microsoft.com/IdentityProvide
 Delegated callers additionally need a directory role that can read federation configuration (Global Reader is the least-privileged read-only directory role); personal Microsoft accounts are not supported.
 No per-operation licence prerequisite is stated for these reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
 Workforce tenants only; external-customer (B2C/External ID) user flows, cross-tenant access and provisioning are separate later pieces (see the [identity-provider scope decisions](docs/coverage.md#ext-03-identity-provider-scope-decisions)).
+
+Log in with `https://graph.microsoft.com/User.Export.All,https://graph.microsoft.com/User.Read.All`, then read workforce data-policy operations:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Export.All,https://graph.microsoft.com/User.Read.All
+mg-axi entra data-policy-operation list --profile soc
+mg-axi entra data-policy-operation show --profile soc --id <operation-id>
+mg-axi entra data-policy-operation count --profile soc
+```
+
+`entra data-policy-operation list` defaults to compact properties (`id`, `status`, `userId`, `submittedDateTime`); `show --id <operation-id>` defaults to the full reviewed operation set.
+All three data-policy-operation commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+List and show accept `--select` from the [reviewed operation property set](src/entra-data-policy-operations.ts); `--fields` must be a subset of the fetched selection.
+The list documents `$select` only, so no `--filter`; the `$count` route takes no `--filter`, `--select`, `--limit` or `--cursor`.
+Operation lists return `dataPolicyOperations`, single-operation reads return `dataPolicyOperation`, and counts return `count` with the scalar total.
+`storageLocation` always renders as `***redacted***`: export blob URLs and signed links never reach output, errors or logs.
+Operation lists use the named-list caps, `count` aggregate and cursors described above.
+List and show preserve null/missing properties and truncate text longer than 500 characters; `--full` restores complete text without lifting redaction or row caps.
+Delegated operation reads default to `https://graph.microsoft.com/User.Export.All,https://graph.microsoft.com/User.Read.All`, while application profiles use the configured `.default` audience.
+Delegated callers additionally need Company Administrator, the privileged role documented for export reads; personal Microsoft accounts are not supported.
+No P1/P2 prerequisite is stated for these reads; denied reads name the scopes, role and licensing guidance instead of only the generic cause.
+No export submission lives here; the `$count` scalar aside, beta operations stay scheduled (see the [data-policy-operations scope decisions](docs/coverage.md#ext-03-data-policy-operations-scope-decisions)).
 
 Log in with `https://graph.microsoft.com/Policy.Read.All`, then read Conditional Access policies and named locations as separate grammar:
 

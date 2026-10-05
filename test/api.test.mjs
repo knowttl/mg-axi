@@ -150,6 +150,7 @@ for (const profile of [delegatedProfile, appProfile]) {
     "/directory/customSecurityAttributeDefinitions/Engineering_Project/allowedValues/$count",
     "/domains/$count/verificationDnsRecords",
     "/identity/identityProviders/$count",
+    "/dataPolicyOperations/$count",
     "/users/$value",
     "/groups/$ref",
     "/users/$custom",

@@ -66,6 +66,7 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra risk-detection ", "risk"],
   ["entra conditional-access ", "Conditional Access"],
   ["entra identity-provider ", "identity providers"],
+  ["entra data-policy-operation ", "data policy operations"],
   ["entra access-review ", "access reviews"],
   ["api get", "reviewed raw reads"],
 ];
@@ -262,6 +263,7 @@ export function capabilityDocument(): string {
   });
   const deferredDomainRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate R1 "));
   const deferredProviderRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred to a later EXT-03 "));
+  const deferredDataPolicyRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred by firstmate data-policy-operations scope "));
   const unavailableInvitationRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Marked unavailable by firstmate EXT-03b decision: "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
   const unavailableCertAuthRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01d decision: "));
@@ -322,6 +324,18 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredProviderRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-03 data-policy-operations scope decisions",
+    "",
+    "This change covers the three v1.0 workforce data-policy-operation reads above (data-policy-operation list, show and count).",
+    "The three beta operations below remain scheduled with an explicit deferred disposition to a later EXT-03 subfamily; no new commands or raw access are approved.",
+    "Data-policy-operation reads support v1.0 only; beta needs its own review.",
+    "storageLocation always renders as the redaction marker; export submission (POST /users/{id}/exportPersonalData) belongs to no read slice.",
+    "Workforce context only; no external-customer support is claimed.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredDataPolicyRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-03 invitations scope decisions",
     "",

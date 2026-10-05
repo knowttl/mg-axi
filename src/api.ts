@@ -5,7 +5,7 @@ import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITIO
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { KNOWN_DELEGATED_ADMIN_CUSTOMER_FIELDS, KNOWN_DELEGATED_ADMIN_RELATIONSHIP_FIELDS } from "./entra-delegated-admin.js";
-import { KNOWN_MTO_FIELDS, KNOWN_MTO_JOIN_REQUEST_FIELDS, KNOWN_MTO_TENANT_FIELDS } from "./entra-multi-tenant-organization.js";
+import { KNOWN_MTO_FIELDS, KNOWN_MTO_JOIN_REQUEST_FIELDS, KNOWN_MTO_TENANT_FIELDS, KNOWN_TENANT_INFORMATION_FIELDS } from "./entra-multi-tenant-organization.js";
 import { KNOWN_DATA_POLICY_FIELDS } from "./entra-data-policy-operations.js";
 import { KNOWN_FEDERATION_FIELDS } from "./entra-federation-configurations.js";
 import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
@@ -17,7 +17,7 @@ import { KNOWN_DELETED_ADMINISTRATIVE_UNIT_FIELDS, KNOWN_DELETED_APPLICATION_FIE
 import { KNOWN_CONTACT_FIELDS, KNOWN_NAV_FIELDS } from "./entra-contacts.js";
 import { KNOWN_LIFECYCLE_FIELDS, KNOWN_TEMPLATE_FIELDS } from "./entra-group-lifecycle.js";
 import { KNOWN_ALLOWED_VALUE_FIELDS, KNOWN_ATTRIBUTE_SET_FIELDS, KNOWN_CUSTOM_SECURITY_DEFINITION_FIELDS } from "./entra-custom-security-attributes.js";
-import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
+import { encodeGraphPathSegment, encodeODataFunctionString, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
 // API-01: the reviewed read-only raw Graph surface.
@@ -513,6 +513,14 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A MultiTenantOrganization.Read.All. Delegated callers pass it as --scopes (the lower-privileged delegated MultiTenantOrganization.ReadBasic.All returns displayName and tenantId of active tenants only); delegated access additionally needs Security Reader or Global Reader, the least-privileged supported Entra roles; personal Microsoft accounts are not supported. Multi-tenant-organization reads run in the commercial Global service.",
     note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract. Multi-tenant-organization participation needs Entra ID P1.",
     sources: ["https://learn.microsoft.com/graph/api/multitenantorganization-list-tenants?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/multitenantorganizationmember?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')", kind: "single", query: SINGLE_QUERY, fields: KNOWN_TENANT_INFORMATION_FIELDS,
+    access: "D/A CrossTenantInformation.ReadBasic.All. Delegated callers pass it as --scopes; application callers need it admin-consented; personal Microsoft accounts are not supported. No Entra role prerequisite is stated for tenant-information lookups.",
+    note: "Given a domain name, search for a tenant and read its tenantInformation; use the tenantId to configure cross-tenant access settings.",
+    sources: ["https://learn.microsoft.com/graph/api/tenantrelationship-findtenantinformationbydomainname?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/tenantinformation?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')", kind: "single", query: SINGLE_QUERY, fields: KNOWN_TENANT_INFORMATION_FIELDS,
+    access: "D/A CrossTenantInformation.ReadBasic.All. Delegated callers pass it as --scopes; application callers need it admin-consented; personal Microsoft accounts are not supported. No Entra role prerequisite is stated for tenant-information lookups.",
+    note: "Given a tenant ID, search for a tenant and read its tenantInformation; use the tenantId to configure cross-tenant access settings.",
+    sources: ["https://learn.microsoft.com/graph/api/tenantrelationship-findtenantinformationbytenantid?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/tenantinformation?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/contracts/{contract-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CONTRACT_FIELDS,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
     note: "No P1/P2 prerequisite is stated for contract reads.",
@@ -588,8 +596,37 @@ function splitPath(path: string): string[] {
 
 // Structural match of a server-relative path against a reviewed template:
 // literals compare case-insensitively like Graph routing; whole-segment
-// placeholders capture one non-empty segment each for the session to bind and
-// validate. Returns the bindings, or null when the route is not this one.
+// placeholders capture one non-empty segment each, and function segments
+// with embedded quoted placeholders capture each OData string value with
+// '' unescaped to '. Returns the bindings, or null when the route is not
+// this one.
+function matchFunctionTemplate(slot: string, segment: string): Record<string, string> | null {
+  const names = [...slot.matchAll(/\{([^{}]+)\}/g)].map(match => match[1]!);
+  if (!names.length) return null;
+  const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let pattern = "";
+  let last = 0;
+  const ordered: string[] = [];
+  const placeholder = /\{([^{}]+)\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = placeholder.exec(slot)) !== null) {
+    pattern += escapeRegExp(slot.slice(last, match.index));
+    pattern += "((?:''|[^'])*)";
+    ordered.push(match[1]!);
+    last = match.index + match[0].length;
+  }
+  pattern += escapeRegExp(slot.slice(last));
+  const found = new RegExp(`^${pattern}$`, "i").exec(segment);
+  if (!found) return null;
+  const params: Record<string, string> = Object.create(null);
+  ordered.forEach((name, index) => {
+    const decoded = (found[index + 1] ?? "").replaceAll("''", "'");
+    encodeODataFunctionString(decoded);
+    params[name] = decoded;
+  });
+  return params;
+}
+
 function matchTemplate(template: string, pathname: string): Record<string, string> | null {
   const expected = splitPath(template);
   const actual = splitPath(pathname);
@@ -603,7 +640,18 @@ function matchTemplate(template: string, pathname: string): Record<string, strin
       if (!segment.length || /[()]/.test(segment)) return null;
       encodeGraphPathSegment(segment);
       params[name] = segment;
-    } else if (slot.toLowerCase() !== segment.toLowerCase()) return null;
+      continue;
+    }
+    if (slot.includes("{")) {
+      const bindings = matchFunctionTemplate(slot, segment);
+      if (!bindings) return null;
+      for (const [key, value] of Object.entries(bindings)) {
+        if (Object.hasOwn(params, key)) return null;
+        params[key] = value;
+      }
+      continue;
+    }
+    if (slot.toLowerCase() !== segment.toLowerCase()) return null;
   }
   return params;
 }

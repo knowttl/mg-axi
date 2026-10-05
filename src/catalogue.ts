@@ -273,6 +273,12 @@ const multiTenantOrganizationTenantRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: multiTenantOrganizationRead.scopes,
 };
+const tenantInformationRead = {
+  select: { value: "comma-separated-properties", description: "Request server properties; tenant-information lookups need CrossTenantInformation.ReadBasic.All" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to CrossTenantInformation.ReadBasic.All" },
+};
 const attributeSetRead = {
   select: { value: "comma-separated-properties", description: "Request server properties; attribute-set reads need CustomSecAttributeDefinition.Read.All" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
@@ -1130,6 +1136,22 @@ export const LEAVES: Leaf[] = [
     ...common,
     scopes: multiTenantOrganizationRead.scopes,
   }, examples: ["mg-axi entra multi-tenant-organization tenant count --profile soc"] },
+  { path: "entra multi-tenant-organization tenant-information show-by-domain", description: "Look up tenant information by domain name and get the tenant record (tenantId, displayName, defaultDomainName, federationBrandName)", operation: "GET:/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')", flags: {
+    ...common,
+    domain: { value: "domain-name", required: true, description: "Tenant domain name to look up, such as contoso.com" },
+    select: tenantInformationRead.select,
+    fields: tenantInformationRead.fields,
+    full: tenantInformationRead.full,
+    scopes: tenantInformationRead.scopes,
+  }, examples: ["mg-axi entra multi-tenant-organization tenant-information show-by-domain --domain contoso.com --profile soc", "mg-axi entra multi-tenant-organization tenant-information show-by-domain --domain contoso.com --profile soc --full"] },
+  { path: "entra multi-tenant-organization tenant-information show-by-tenant-id", description: "Look up tenant information by tenant ID and get the tenant record (tenantId, displayName, defaultDomainName, federationBrandName)", operation: "GET:/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')", flags: {
+    ...common,
+    "tenant-id": { value: "tenant-id", required: true, description: "Tenant ID to look up" },
+    select: tenantInformationRead.select,
+    fields: tenantInformationRead.fields,
+    full: tenantInformationRead.full,
+    scopes: tenantInformationRead.scopes,
+  }, examples: ["mg-axi entra multi-tenant-organization tenant-information show-by-tenant-id --tenant-id <tenant-id> --profile soc", "mg-axi entra multi-tenant-organization tenant-information show-by-tenant-id --tenant-id <tenant-id> --profile soc --full"] },
   { path: "entra sign-in list", description: "List sign-ins in a bounded time window (AuditLog.Read.All; delegated callers also need Global Reader, Reports Reader, Security Administrator, Security Operator or Security Reader; conservative P1/P2 deployment prerequisite)", operation: "GET:/auditLogs/signIns", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

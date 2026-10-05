@@ -129,6 +129,8 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra multi-tenant-organization join-request show` | native | read |
 | `mg-axi entra multi-tenant-organization tenant list` | native | read |
 | `mg-axi entra multi-tenant-organization tenant count` | native | read |
+| `mg-axi entra multi-tenant-organization tenant-information show-by-domain` | native | read |
+| `mg-axi entra multi-tenant-organization tenant-information show-by-tenant-id` | native | read |
 | `mg-axi entra sign-in list` | native | read |
 | `mg-axi entra sign-in show` | native | read |
 | `mg-axi entra directory-audit list` | native | read |

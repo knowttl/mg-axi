@@ -49,6 +49,7 @@ const READ_SCOPES = new Set([
   "IdentityRiskyUser.Read.All",
   "LicenseAssignment.Read.All",
   "Member.Read.Hidden",
+  "CrossTenantInformation.ReadBasic.All",
   "MultiTenantOrganization.Read.All",
   "MultiTenantOrganization.ReadBasic.All",
   "OnPremDirectorySynchronization.Read.All",
@@ -252,7 +253,49 @@ function bindingName(segment: string): string | null {
   return /^\{([^{}]+)\}$/.exec(segment)?.[1] ?? null;
 }
 
+function placeholdersInSegment(segment: string): string[] {
+  return [...segment.matchAll(/\{([^{}]+)\}/g)].map(match => match[1]!);
+}
+
+function placeholdersInRoute(route: string): string[] {
+  return splitPath(route).flatMap(placeholdersInSegment);
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Match a function segment with embedded quoted placeholders such as
+// findTenantInformationByDomainName(domainName='{domainName}'). Literals
+// compare case-insensitively like Graph routing; each '{name}' captures the
+// OData string value with '' unescaped to '. Returns the decoded bindings,
+// or null when the segment is not this template.
+function matchFunctionSegment(templateSeg: string, actualSeg: string): Record<string, string> | null {
+  const names = placeholdersInSegment(templateSeg);
+  if (!names.length) return null;
+  let pattern = "";
+  let last = 0;
+  const ordered: string[] = [];
+  const placeholder = /\{([^{}]+)\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = placeholder.exec(templateSeg)) !== null) {
+    pattern += escapeRegExp(templateSeg.slice(last, match.index));
+    pattern += "((?:''|[^'])*)";
+    ordered.push(match[1]!);
+    last = match.index + match[0].length;
+  }
+  pattern += escapeRegExp(templateSeg.slice(last));
+  const found = new RegExp(`^${pattern}$`, "i").exec(actualSeg);
+  if (!found) return null;
+  const params: Record<string, string> = Object.create(null);
+  ordered.forEach((name, index) => {
+    params[name] = (found[index + 1] ?? "").replaceAll("''", "'");
+  });
+  return params;
+}
+
 // Match an authorized path against the operation route template, extracting
+// the encoded binding for each placeholder. Literals compare
 // the encoded binding for each placeholder. Literals compare
 // case-insensitively, matching Graph routing; bindings stay exact.
 function matchRoute(route: string, pathname: string): Record<string, string> | null {
@@ -264,9 +307,21 @@ function matchRoute(route: string, pathname: string): Record<string, string> | n
     const slot = template[i]!;
     const segment = actual[i]!;
     const name = bindingName(slot);
-    if (!name && /[{}]/.test(slot)) return null;
-    if (name) params[name] = segment;
-    else if (slot.toLowerCase() !== segment.toLowerCase()) return null;
+    if (name) {
+      params[name] = segment;
+      continue;
+    }
+    if (slot.includes("{")) {
+      const bindings = matchFunctionSegment(slot, segment);
+      if (!bindings) return null;
+      for (const [key, value] of Object.entries(bindings)) {
+        if (Object.hasOwn(params, key)) return null;
+        params[key] = value;
+      }
+      continue;
+    }
+    if (/[{}]/.test(slot)) return null;
+    if (slot.toLowerCase() !== segment.toLowerCase()) return null;
   }
   return params;
 }
@@ -299,6 +354,7 @@ function checkOperation(operation: SessionOperation): void {
 }
 
 const UNSAFE_PARAM = /[%/?\\{}()]/;
+const FUNCTION_UNSAFE = /[?#\/\\%{}()]/;
 const CONTROL = /[\s\x00-\x1f\x7f]/;
 
 export function encodeGraphPathSegment(value: string): string {
@@ -315,30 +371,65 @@ export function encodeGraphPathSegment(value: string): string {
   return encodeURIComponent(value);
 }
 
+// Encode one OData function string argument such as domainName or tenantId.
+// The caller keeps the surrounding single quotes from the route template;
+// embedded quotes escape as '' per OData. Separators, traversal and query
+// fragments are rejected before credentials.
+export function encodeODataFunctionString(value: string): string {
+  if (typeof value !== "string" || !value.length || value === "." || value === ".." || FUNCTION_UNSAFE.test(value) || CONTROL.test(value)) {
+    throw new AxiError("Invalid function argument", "VALIDATION_ERROR", [
+      "Bind one function argument per placeholder without path separators, query fragments or traversal",
+    ]);
+  }
+  if (value.startsWith("$")) {
+    throw new AxiError("OData reserved segments cannot be function arguments", "VALIDATION_ERROR", [
+      "Bind a function argument that does not start with $; $count, $value and $ref are reserved",
+    ]);
+  }
+  return value.replaceAll("'", "''");
+}
+
+function buildFunctionSegment(templateSeg: string, params: Record<string, string>, used: Set<string>, route: string): string {
+  const names = placeholdersInSegment(templateSeg);
+  let built = templateSeg;
+  for (const name of names) {
+    if (!Object.hasOwn(params, name)) {
+      throw new AxiError(`Missing path parameter {${name}} for ${route}`, "VALIDATION_ERROR", [
+        "Bind one resource identifier per placeholder from the catalogued route",
+      ]);
+    }
+    used.add(name);
+    built = built.replaceAll(`{${name}}`, encodeODataFunctionString(params[name]!));
+  }
+  if (/[{}]/.test(built)) {
+    throw new AxiError(`Unsupported path template ${route}`, "VALIDATION_ERROR", [
+      "Use a catalogued route with whole-segment placeholders",
+    ]);
+  }
+  return built;
+}
+
 function buildPath(route: string, params: Record<string, string>): string {
   const used = new Set<string>();
   const path = splitPath(route)
     .map(segment => {
       const name = bindingName(segment);
-      if (!name) {
-        if (/[{}]/.test(segment)) {
-          throw new AxiError(`Unsupported path template ${route}`, "VALIDATION_ERROR", [
-            "Use a catalogued route with whole-segment placeholders",
+      if (name) {
+        if (!Object.hasOwn(params, name)) {
+          throw new AxiError(`Missing path parameter {${name}} for ${route}`, "VALIDATION_ERROR", [
+            "Bind one resource identifier per placeholder from the catalogued route",
           ]);
         }
-        return segment;
+        used.add(name);
+        const value = params[name]!;
+        return encodeGraphPathSegment(value);
       }
-      if (!Object.hasOwn(params, name)) {
-        throw new AxiError(`Missing path parameter {${name}} for ${route}`, "VALIDATION_ERROR", [
-          "Bind one resource identifier per placeholder from the catalogued route",
-        ]);
-      }
-      used.add(name);
-      const value = params[name]!;
-      return encodeGraphPathSegment(value);
+      if (segment.includes("{")) return buildFunctionSegment(segment, params, used, route);
+      return segment;
     })
     .join("/");
-  const extra = Object.keys(params).find(name => !used.has(name) && splitPath(route).every(segment => bindingName(segment) !== name));
+  const expected = new Set(placeholdersInRoute(route));
+  const extra = Object.keys(params).find(name => !used.has(name) && !expected.has(name));
   if (extra) throw new AxiError(`Unknown path parameter {${extra}} for ${route}`, "VALIDATION_ERROR", ["Bind only the placeholders in the catalogued route"]);
   return path;
 }
@@ -388,9 +479,17 @@ export function authorizeUrl(operation: SessionOperation, params: Record<string,
   if (!url.pathname.startsWith(prefix)) throw denied(operation, `the target leaves version ${operation.version}`);
   const bindings = matchRoute(operation.path, url.pathname.slice(prefix.length));
   if (!bindings) throw denied(operation, `the target leaves the catalogued route ${operation.path}`);
+  const placeholders = new Set(placeholdersInRoute(operation.path));
+  const whole = new Set(splitPath(operation.path).map(bindingName).filter((name): name is string => name !== null));
   for (const [name, actual] of Object.entries(bindings)) {
     const expected = params[name];
-    if (typeof expected !== "string" || actual.toLowerCase() !== encodeGraphPathSegment(expected).toLowerCase()) {
+    if (typeof expected !== "string" || !placeholders.has(name)) {
+      throw denied(operation, `the target changes the bound resource {${name}}`);
+    }
+    const same = whole.has(name)
+      ? actual.toLowerCase() === encodeGraphPathSegment(expected).toLowerCase()
+      : actual.toLowerCase() === expected.toLowerCase();
+    if (!same) {
       throw denied(operation, `the target changes the bound resource {${name}}`);
     }
   }

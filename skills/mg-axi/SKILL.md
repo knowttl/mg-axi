@@ -1,7 +1,7 @@
 ---
 name: mg-axi
 description: >
-  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, federation configurations, deleted directory items, data policy operations, access reviews, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
+  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, federation configurations, deleted directory items, data policy operations, access reviews, entitlement catalogs and access packages, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
 user-invocable: false
 ---
 
@@ -192,6 +192,18 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra access-review contacted-reviewer show` | native | read |
 | `mg-axi entra access-review stage list` | native | read |
 | `mg-axi entra access-review stage show` | native | read |
+| `mg-axi entra entitlement catalog list` | native | read |
+| `mg-axi entra entitlement catalog show` | native | read |
+| `mg-axi entra entitlement catalog count` | native | read |
+| `mg-axi entra entitlement access-package list` | native | read |
+| `mg-axi entra entitlement access-package show` | native | read |
+| `mg-axi entra entitlement access-package count` | native | read |
+| `mg-axi entra entitlement assignment-policy list` | native | read |
+| `mg-axi entra entitlement assignment-policy show` | native | read |
+| `mg-axi entra entitlement assignment-policy count` | native | read |
+| `mg-axi entra entitlement resource-role-scope list` | native | read |
+| `mg-axi entra entitlement resource-role-scope show` | native | read |
+| `mg-axi entra entitlement resource-role-scope count` | native | read |
 | `mg-axi api get` | native | read |
 <!-- command-registry:end -->
 

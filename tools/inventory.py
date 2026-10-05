@@ -150,6 +150,26 @@ APPROVED_GROUP_LIFECYCLE_READS = {
     "/groupSettingTemplates/{groupSettingTemplate-id}",
     "/groupSettingTemplates/$count",
 }
+# Beta mirrors of the twelve approved EXT-02d v1.0 entitlement-management
+# reads (catalog, access-package, assignment-policy and resource-role-scope
+# list/show/count; beta names catalogs and assignment policies
+# accessPackageCatalogs/accessPackageAssignmentPolicies). The v1.0 reads
+# themselves need no rule: they keep their scheduled discovery rows while
+# the reviewed command and raw contracts live beside each command.
+BETA_ENTITLEMENT_MIRROR_READS = {
+    "/identityGovernance/entitlementManagement/accessPackageCatalogs",
+    "/identityGovernance/entitlementManagement/accessPackageCatalogs/{accessPackageCatalog-id}",
+    "/identityGovernance/entitlementManagement/accessPackageCatalogs/$count",
+    "/identityGovernance/entitlementManagement/accessPackages",
+    "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}",
+    "/identityGovernance/entitlementManagement/accessPackages/$count",
+    "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageAssignmentPolicies",
+    "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageAssignmentPolicies/{accessPackageAssignmentPolicy-id}",
+    "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageAssignmentPolicies/$count",
+    "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes",
+    "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes/{accessPackageResourceRoleScope-id}",
+    "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/accessPackageResourceRoleScopes/$count",
+}
 MANAGED_TENANT_NAV = set("auditEvents conditionalAccessPolicyCoverages credentialUserRegistrationsSummaries myRoles tenantGroups tenantTags tenants tenantsCustomizedInformation tenantsDetailedInformation".split())
 EXCLUDED_NAV = {
     "Mail": set("mailboxSettings messages mailFolders calendars calendar contactFolders outlook".split()),
@@ -303,6 +323,8 @@ def make_row(version, path, method, operation):
             reason = "Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle beta subfamily: the six approved reads cover v1.0 only; beta policies and templates need separate review."
     if owner == "EXT-01" and not mutates and disposition == "scheduled" and path.split("/")[1] == "directory" and ("/attributeSets" in path or "/customSecurityAttributeDefinitions" in path) and version == "beta":
         reason = "Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review."
+    if owner == "EXT-02" and method == "GET" and version == "beta" and disposition == "scheduled" and path in BETA_ENTITLEMENT_MIRROR_READS:
+        reason = "Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the twelve approved reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review."
     if owner == "EXT-04" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.split("/")[1] == "tenantRelationships" and path not in APPROVED_DELEGATED_ADMIN_READS and path not in APPROVED_MTO_READS and path not in APPROVED_TENANT_LOOKUP_READS:
         if path == "/tenantRelationships/multiTenantOrganization/tenants/{multiTenantOrganizationMember-id}":
             reason = "Deferred by firstmate multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for the single-member read."

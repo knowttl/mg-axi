@@ -37,6 +37,7 @@ import { listIdentityProviders, showIdentityProvider, countIdentityProviders, av
 import { listFederationConfigurations, showFederationConfiguration, countFederationConfigurations, availableFederationProviderTypes } from "./entra-federation-configurations.js";
 import { listDataPolicyOperations, showDataPolicyOperation, countDataPolicyOperations } from "./entra-data-policy-operations.js";
 import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions, showDecision, listContactedReviewers, showContactedReviewer, listStages, showStage } from "./entra-access-reviews.js";
+import { listCatalogs, showCatalog, countCatalogs, listAccessPackages, showAccessPackage, countAccessPackages, listAssignmentPolicies, showAssignmentPolicy, countAssignmentPolicies, listResourceRoleScopes, showResourceRoleScope, countResourceRoleScopes } from "./entra-entitlement-management.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
 import { addGroupMember } from "./entra-group-member-add.js";
 import { fetchTransport } from "./api.js";
@@ -192,6 +193,45 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra access-review stage list": return listStages(session, flags, selected.profile, operation, help, selected.name);
       case "entra access-review stage show": return showStage(session, flags, selected.profile, operation, help, selected.name);
       default: return listDecisions(session, flags, selected.profile, operation, help, selected.name);
+    }
+  }
+  if (leaf.path === "entra entitlement catalog list" || leaf.path === "entra entitlement catalog show" || leaf.path === "entra entitlement catalog count" || leaf.path === "entra entitlement access-package list" || leaf.path === "entra entitlement access-package show" || leaf.path === "entra entitlement access-package count" || leaf.path === "entra entitlement assignment-policy list" || leaf.path === "entra entitlement assignment-policy show" || leaf.path === "entra entitlement assignment-policy count" || leaf.path === "entra entitlement resource-role-scope list" || leaf.path === "entra entitlement resource-role-scope show" || leaf.path === "entra entitlement resource-role-scope count") {
+    if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
+      throw new AxiError("Entitlement-management reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, "v1.0");
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra entitlement catalog list": return listCatalogs(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement catalog show": return showCatalog(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement catalog count": return countCatalogs(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement access-package list": return listAccessPackages(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement access-package show": return showAccessPackage(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement access-package count": return countAccessPackages(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement assignment-policy list": return listAssignmentPolicies(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement assignment-policy show": return showAssignmentPolicy(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement assignment-policy count": return countAssignmentPolicies(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement resource-role-scope list": return listResourceRoleScopes(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement resource-role-scope show": return showResourceRoleScope(session, flags, selected.profile, operation, help, selected.name);
+      default: return countResourceRoleScopes(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "api get") {

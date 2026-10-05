@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 105 (103 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 109 (107 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -115,6 +115,10 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra identity-provider show` | `GET:/identity/identityProviders/{identityProviderBase-id}` | scheduled | EXT-03 |
 | `mg-axi entra identity-provider count` | `GET:/identity/identityProviders/$count` | scheduled | EXT-03 |
 | `mg-axi entra identity-provider available-types` | `GET:/identity/identityProviders/availableProviderTypes()` | scheduled | EXT-03 |
+| `mg-axi entra federation-configuration list` | `GET:/directory/federationConfigurations` | scheduled | EXT-01 |
+| `mg-axi entra federation-configuration show` | `GET:/directory/federationConfigurations/{identityProviderBase-id}` | scheduled | EXT-01 |
+| `mg-axi entra federation-configuration count` | `GET:/directory/federationConfigurations/$count` | scheduled | EXT-01 |
+| `mg-axi entra federation-configuration available-types` | `GET:/directory/federationConfigurations/availableProviderTypes()` | scheduled | EXT-01 |
 | `mg-axi entra data-policy-operation list` | `GET:/dataPolicyOperations` | scheduled | EXT-03 |
 | `mg-axi entra data-policy-operation show` | `GET:/dataPolicyOperations/{dataPolicyOperation-id}` | scheduled | EXT-03 |
 | `mg-axi entra data-policy-operation count` | `GET:/dataPolicyOperations/$count` | scheduled | EXT-03 |
@@ -188,6 +192,21 @@ Workforce context only; no external-customer (B2C/External ID tenant) support is
 | `beta:GET:/identity/identityProviders/$count` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review. |
 | `beta:GET:/identity/identityProviders/availableProviderTypes()` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review. |
 | `beta:GET:/identity/identityProviders/{identityProviderBase-id}` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review. |
+
+## EXT-01 federation-configuration scope decisions
+
+This change covers the four v1.0 workforce directory federation-configuration reads above (federation-configuration list, show, count and available-types).
+The four beta operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.
+Federation-configuration reads support v1.0 only; beta needs its own review.
+signingCertificate carries the public token-signing key only and is omitted from default selects; no private key material exists on these resources and the domains navigation property needs its own review.
+Workforce context only; domain federationConfiguration sub-reads (/domains/{domain-id}/federationConfiguration) stay scheduled in the later domain federation subfamily.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/directory/federationConfigurations` | scheduled (deferred) | EXT-01 | Deferred by firstmate federation-configuration scope to a later EXT-01 federation-configuration beta subfamily: the four approved reads cover v1.0 only; beta federation configurations need separate review. |
+| `beta:GET:/directory/federationConfigurations/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate federation-configuration scope to a later EXT-01 federation-configuration beta subfamily: the four approved reads cover v1.0 only; beta federation configurations need separate review. |
+| `beta:GET:/directory/federationConfigurations/availableProviderTypes()` | scheduled (deferred) | EXT-01 | Deferred by firstmate federation-configuration scope to a later EXT-01 federation-configuration beta subfamily: the four approved reads cover v1.0 only; beta federation configurations need separate review. |
+| `beta:GET:/directory/federationConfigurations/{identityProviderBase-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate federation-configuration scope to a later EXT-01 federation-configuration beta subfamily: the four approved reads cover v1.0 only; beta federation configurations need separate review. |
 
 ## EXT-03 data-policy-operations scope decisions
 

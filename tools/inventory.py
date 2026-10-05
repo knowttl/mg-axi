@@ -272,6 +272,8 @@ def make_row(version, path, method, operation):
     if owner == "EXT-03" and method == "GET" and disposition == "scheduled" and (path == "/identity/identityProviders" or path.startswith("/identity/identityProviders/")):
         if version == "beta":
             reason = "Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review."
+    if owner == "EXT-01" and method == "GET" and version == "beta" and disposition == "scheduled" and (path == "/directory/federationConfigurations" or path.startswith("/directory/federationConfigurations")):
+        reason = "Deferred by firstmate federation-configuration scope to a later EXT-01 federation-configuration beta subfamily: the four approved reads cover v1.0 only; beta federation configurations need separate review."
     if owner == "EXT-03" and method == "GET" and version == "beta" and disposition == "scheduled" and (path == "/dataPolicyOperations" or path.startswith("/dataPolicyOperations")):
         reason = "Deferred by firstmate data-policy-operations scope to a later EXT-03 data-policy-operations beta subfamily: the three approved reads cover v1.0 only; beta data-policy operations need separate review."
     if owner == "EXT-03" and method == "GET" and version == "v1.0" and disposition == "scheduled" and (path == "/invitations" or path.startswith("/invitations/")):

@@ -411,7 +411,7 @@ const ACCESS_PACKAGE_LIST: CollectionShape = {
   defaultSelect: DEFAULT_ACCESS_PACKAGE_LIST_SELECT,
   emptyNote: "0 access packages matched; the absence of results is the answer, not an error",
   standing: profileName => [
-    "Access packages are the assignable bundles; assignments and requests belong to a later part, never to these reads",
+    "Access packages are the assignable bundles; assignment and request detail lives on the assignment reads, never on these reads",
     `Show one access package: mg-axi entra entitlement access-package show --id <access-package-id> ${profileHint(profileName)}`,
   ],
 };

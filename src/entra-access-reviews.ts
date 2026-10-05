@@ -2,11 +2,9 @@ import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
-// EXT-02 access-reviews subfamily: the read-only access-review mapping
-// behind `mg-axi entra access-review definition list/show`,
-// `mg-axi entra access-review instance list/show` and
-// `mg-axi entra access-review decision list`. Operation construction stays
-// beside its command; the shared session owns URLs, credentials, paging,
+// EXT-02 access-reviews subfamily: the read-only access-review mapping.
+// See README.md for the supported commands and usage. Operation construction
+// stays beside its command; the shared session owns URLs, credentials, paging,
 // retries and error translation, and the SDK owns TOON rendering. This
 // module only maps flags to session calls and projects rows for compact
 // output.

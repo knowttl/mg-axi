@@ -196,8 +196,6 @@ const DELEGATED_ADMIN_DENIAL_HINTS = [
   "No P1/P2 prerequisite is stated for delegated-admin reads; never diagnose licence solely from HTTP 403",
 ];
 
-const PARTNER_NOTE = "Delegated-admin reads run in the partner tenant; a non-partner tenant lists zero customers, which is an answer rather than an error";
-
 interface Resource {
   noun: string;
   command: string;
@@ -230,6 +228,10 @@ const RELATIONSHIP: Resource = {
   idFlag: "id",
   idDescription: "Delegated-admin relationship identifier",
 };
+
+function partnerNote(resource: Resource): string {
+  return `Delegated-admin reads run in the partner tenant; a non-partner tenant lists zero ${resource.noun}s, which is an answer rather than an error`;
+}
 
 interface CollectionCommon {
   cursor: string | undefined;
@@ -319,7 +321,7 @@ async function listResource(
       [collectionKey]: rows,
       count: { returned: rows.length, complete: false, reason: result.reason },
       cursor: result.cursor,
-      help: [...truncationHints, resumeHint(profileName), showHint, PARTNER_NOTE],
+      help: [...truncationHints, resumeHint(profileName), showHint, partnerNote(resource)],
     };
   }
   const count = { returned: rows.length, complete: true };
@@ -327,10 +329,10 @@ async function listResource(
     return {
       [collectionKey]: rows,
       count,
-      help: [`0 ${resource.noun}s matched; the absence of results is the answer, not an error`, PARTNER_NOTE],
+      help: [`0 ${resource.noun}s matched; the absence of results is the answer, not an error`, partnerNote(resource)],
     };
   }
-  return { [collectionKey]: rows, count, help: [...truncationHints, showHint, PARTNER_NOTE] };
+  return { [collectionKey]: rows, count, help: [...truncationHints, showHint, partnerNote(resource)] };
 }
 
 async function showResource(

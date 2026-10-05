@@ -288,7 +288,7 @@ function checkOperation(operation: SessionOperation): void {
   }
 }
 
-const UNSAFE_PARAM = /[%/?\\{}]/;
+const UNSAFE_PARAM = /[%/?\\{}()]/;
 const CONTROL = /[\s\x00-\x1f\x7f]/;
 
 export function encodeGraphPathSegment(value: string): string {

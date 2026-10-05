@@ -197,6 +197,24 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
+  for (const id of ["delta()", "DELTA()", "delta(", "delta)", "delta%28%29"]) {
+    test(`${mode} contract show rejects function-style identifier ${id} before credentials`, async () => {
+      const state = setupProfiles();
+      try {
+        const delta = transport(() => json(200, { value: [ct1], "@odata.deltaLink": "https://graph.microsoft.com/v1.0/contracts/delta()" }));
+        const { requests, calls, overrides } = overridesFor(mode, delta);
+        await assert.rejects(
+          executeArgv(["entra", "contract", "show", "--id", id, "--profile", profile], overrides),
+          { code: "VALIDATION_ERROR" },
+        );
+        assert.equal(calls.length, 0);
+        assert.equal(requests.length, 0);
+      } finally {
+        teardownProfiles(state);
+      }
+    });
+  }
+
   test(`${mode} counts contracts as one scalar without a collection query`, async () => {
     const state = setupProfiles();
     try {

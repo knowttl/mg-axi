@@ -8,6 +8,7 @@ import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
 import { KNOWN_SUBSCRIPTION_FIELDS } from "./entra-subscriptions.js";
 import { KNOWN_SYNC_FIELDS } from "./entra-on-premises-synchronization.js";
 import { KNOWN_ACCEPTANCE_FIELDS, KNOWN_AGREEMENT_FIELDS } from "./entra-terms-of-use.js";
+import { KNOWN_DIRECTORY_OBJECT_FIELDS } from "./entra-directory-objects.js";
 import { KNOWN_LIFECYCLE_FIELDS, KNOWN_TEMPLATE_FIELDS } from "./entra-group-lifecycle.js";
 import { KNOWN_ALLOWED_VALUE_FIELDS, KNOWN_ATTRIBUTE_SET_FIELDS, KNOWN_CUSTOM_SECURITY_DEFINITION_FIELDS } from "./entra-custom-security-attributes.js";
 import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
@@ -53,6 +54,8 @@ export interface ReviewedRawRoute {
   readonly delegatedOnly?: boolean;
   readonly note?: string;
   readonly warning?: string;
+  /** When true, the @odata.type subtype discriminator rides along in output without being a selectable field. */
+  readonly keepODataType?: boolean;
   /** Primary-source operation documentation, rechecked on REVIEWED_ON. */
   readonly sources: readonly string[];
 }
@@ -316,6 +319,14 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     delegatedOnly: true,
     note: "No single-acceptance operation page; access follows the parent acceptance-list contract and the agreementAcceptance resource reference. Acceptance records are personal data: default rows carry id, agreementId, state and recordedDateTime only.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/agreement-list-acceptances?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/agreementacceptance?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directoryObjects", kind: "collection", query: ["$select"], fields: KNOWN_DIRECTORY_OBJECT_FIELDS, defaultFields: ["id"], keepODataType: true,
+    access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for directory-object reads. Personal Microsoft accounts are not supported.",
+    note: "No List operation page exists; access follows the sibling directoryobject-get contract and the directoryObject resource reference. Graph documents no collection filter contract here, so only $select is reviewed. Rows are polymorphic: the @odata.type discriminator rides along automatically and subtype properties need the subtype's named reads, never raw $select of unreviewed fields.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/directoryobject-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/directoryobject?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directoryObjects/{directoryObject-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_DIRECTORY_OBJECT_FIELDS, defaultFields: ["id", "deletedDateTime"], keepODataType: true,
+    access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for this read. Personal Microsoft accounts are not supported.",
+    note: "Single reads return the base-type properties plus the @odata.type discriminator; subtype detail needs the subtype's named reads. Only base properties are projected, so subtype secrets or credentials can never appear.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/directoryobject-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/directoryobject?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/groupLifecyclePolicies", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_LIFECYCLE_FIELDS,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for lifecycle-policy reads. Personal Microsoft accounts are not supported.",
     note: "Filtering uses plain $filter with no $count or ConsistencyLevel contract; no P1/P2 prerequisite is stated for lifecycle-policy reads.",
@@ -496,7 +507,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function reviewedFields(route: ReviewedRawRoute, value: unknown): unknown {
   if (!isRecord(value)) return null;
-  return Object.fromEntries(Object.entries(value).filter(([key]) => route.fields.includes(key)));
+  const kept = Object.fromEntries(Object.entries(value).filter(([key]) => route.fields.includes(key)));
+  if (route.keepODataType === true && typeof value["@odata.type"] === "string") kept["@odata.type"] = value["@odata.type"];
+  return kept;
 }
 
 // String truncation at the output boundary, mirroring az-axi's 4000-char

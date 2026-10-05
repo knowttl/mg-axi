@@ -195,6 +195,13 @@ const acceptanceRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to AgreementAcceptance.Read, the documented least privilege (AgreementAcceptance.Read.All is the higher-privileged alternative)" },
 };
+const directoryObjectRead = {
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed base set (id, deletedDateTime); the @odata.type subtype discriminator rides along automatically and subtype properties need the subtype's named reads" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Directory.Read.All" },
+};
 const lifecycleRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties; lifecycle-policy reads need Directory.Read.All" },
@@ -750,6 +757,27 @@ export const LEAVES: Leaf[] = [
     full: acceptanceRead.full,
     scopes: acceptanceRead.scopes,
   }, examples: ["mg-axi entra agreement-acceptance show --id <acceptance-id> --profile soc"] },
+  { path: "entra directory-object list", description: "List directory objects with compact rows (id plus the @odata.type subtype discriminator); Graph documents no List operation page, so no --filter", operation: "GET:/directoryObjects", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    select: directoryObjectRead.select,
+    fields: directoryObjectRead.fields,
+    full: directoryObjectRead.full,
+    cursor: directoryObjectRead.cursor,
+    scopes: directoryObjectRead.scopes,
+  }, examples: ["mg-axi entra directory-object list --profile soc", "mg-axi entra directory-object list --profile soc --limit 10"] },
+  { path: "entra directory-object show", description: "Show one directory object with the reviewed base properties (id, deletedDateTime) plus the @odata.type subtype discriminator; subtype detail needs the subtype's named reads", operation: "GET:/directoryObjects/{directoryObject-id}", flags: {
+    ...common, id: { value: "object-id", required: true, description: "Directory-object object ID" },
+    select: directoryObjectRead.select,
+    fields: directoryObjectRead.fields,
+    full: directoryObjectRead.full,
+    scopes: directoryObjectRead.scopes,
+  }, examples: ["mg-axi entra directory-object show --id <object-id> --profile soc", "mg-axi entra directory-object show --id <object-id> --profile soc --full"] },
+  { path: "entra directory-object count", description: "Count directory objects as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/directoryObjects/$count", flags: {
+    ...common,
+    scopes: directoryObjectRead.scopes,
+  }, examples: ["mg-axi entra directory-object count --profile soc"] },
   { path: "entra group-lifecycle-policy list", description: "List group lifecycle (expiry) policies with compact properties (id, groupLifetimeInDays, managedGroupTypes); --filter passes through as plain $filter", operation: "GET:/groupLifecyclePolicies", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

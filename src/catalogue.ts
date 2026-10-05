@@ -148,6 +148,14 @@ const dnsRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Domain.Read.All" },
 };
+const contractRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; filtering is documented for customerId, defaultDomainName and displayName; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties; contract reads need Directory.Read.All" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Directory.Read.All" },
+};
 const caRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties; policy and location detail needs Policy.Read.All in both modes plus a supported Conditional Access role for delegated access" },
@@ -514,6 +522,28 @@ export const LEAVES: Leaf[] = [
     full: dnsRead.full,
     scopes: dnsRead.scopes,
   }, examples: ["mg-axi entra domain-dns-record show --id <record-id> --profile soc"] },
+  { path: "entra contract list", description: "List partner-tenant customer contracts with compact properties (id, displayName, contractType, defaultDomainName); contracts exist in partner tenants only; --filter passes through as plain $filter", operation: "GET:/contracts", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: contractRead.filter,
+    select: contractRead.select,
+    fields: contractRead.fields,
+    full: contractRead.full,
+    cursor: contractRead.cursor,
+    scopes: contractRead.scopes,
+  }, examples: ["mg-axi entra contract list --profile soc", "mg-axi entra contract list --profile soc --limit 10", "mg-axi entra contract list --profile soc --filter \"contractType eq 'ResellerPartner'\""] },
+  { path: "entra contract show", description: "Show one partner contract with the full reviewed property set (contractType, customerId, defaultDomainName, displayName, id)", operation: "GET:/contracts/{contract-id}", flags: {
+    ...common, id: { value: "contract-id", required: true, description: "Contract partnership identifier" },
+    select: contractRead.select,
+    fields: contractRead.fields,
+    full: contractRead.full,
+    scopes: contractRead.scopes,
+  }, examples: ["mg-axi entra contract show --id <contract-id> --profile soc", "mg-axi entra contract show --id <contract-id> --profile soc --full"] },
+  { path: "entra contract count", description: "Count partner-tenant customer contracts as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/contracts/$count", flags: {
+    ...common,
+    scopes: contractRead.scopes,
+  }, examples: ["mg-axi entra contract count --profile soc"] },
   { path: "entra sign-in list", description: "List sign-ins in a bounded time window (AuditLog.Read.All; delegated callers also need Global Reader, Reports Reader, Security Administrator, Security Operator or Security Reader; conservative P1/P2 deployment prerequisite)", operation: "GET:/auditLogs/signIns", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
@@ -853,7 +883,7 @@ export const LEAVES: Leaf[] = [
     full: accessReviewRead.full,
     scopes: accessReviewRead.scopes,
   }, examples: ["mg-axi entra access-review stage show --definition <definition-id> --instance <instance-id> --id <stage-id> --profile soc"] },
-  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations and branding, access reviews; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations, branding, access reviews and partner contracts; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
     cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --odata to reuse its query" },

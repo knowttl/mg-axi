@@ -83,6 +83,12 @@ APPROVED_ORGANIZATION_READS = {
     "/organization/{organization-id}/branding/localizations",
     "/organization/{organization-id}/branding/localizations/{organizationalBrandingLocalization-id}",
 }
+# The three approved EXT-04a v1.0 partner-contract reads: list, show and count.
+APPROVED_CONTRACT_READS = {
+    "/contracts",
+    "/contracts/{contract-id}",
+    "/contracts/$count",
+}
 MANAGED_TENANT_NAV = set("auditEvents conditionalAccessPolicyCoverages credentialUserRegistrationsSummaries myRoles tenantGroups tenantTags tenants tenantsCustomizedInformation tenantsDetailedInformation".split())
 EXCLUDED_NAV = {
     "Mail": set("mailboxSettings messages mailFolders calendars calendar contactFolders outlook".split()),
@@ -220,6 +226,13 @@ def make_row(version, path, method, operation):
             reason = "Deferred by firstmate organization scope to a later EXT-01 organization lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review."
         elif version == "beta":
             reason = "Deferred by firstmate organization scope to a later EXT-01 beta organization subfamily: the approved reads cover the shared routes on both versions; beta-only settings, partner and theme contracts need separate review."
+    if owner == "EXT-04" and not mutates and disposition == "scheduled" and path.split("/")[1] == "contracts" and (path not in APPROVED_CONTRACT_READS or version == "beta"):
+        if path.endswith("/delta()"):
+            reason = "Deferred by firstmate contracts scope to a later EXT-04 contracts delta subfamily: delta-token sync needs its own paging and change-tracking contract beyond the approved list/show/count reads."
+        elif method == "POST":
+            reason = "Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review."
+        elif version == "beta":
+            reason = "Deferred by firstmate contracts scope to a later EXT-04 beta contracts subfamily: the three approved reads cover v1.0 only; beta contracts need separate review."
     if owner == "EXT-02" and method == "GET" and disposition == "scheduled" and "/accessReviews/historyDefinitions" in path:
         disposition, reason = "intentionally-blocked", "Blocked: documented least privilege is the write scope AccessReview.ReadWrite.All (no read scope), and history instances return SAS download URLs in downloadUri; recording or emitting that URL needs its own redaction and output review."
         owner = "EXT-02c"

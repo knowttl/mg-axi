@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 67 (65 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 70 (68 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -56,6 +56,9 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra domain service-configuration-record show` | `GET:/domains/{domain-id}/serviceConfigurationRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
 | `mg-axi entra domain-dns-record list` | `GET:/domainDnsRecords` | scheduled | EXT-01 |
 | `mg-axi entra domain-dns-record show` | `GET:/domainDnsRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
+| `mg-axi entra contract list` | `GET:/contracts` | scheduled | EXT-04 |
+| `mg-axi entra contract show` | `GET:/contracts/{contract-id}` | scheduled | EXT-04 |
+| `mg-axi entra contract count` | `GET:/contracts/$count` | scheduled | EXT-04 |
 | `mg-axi entra sign-in list` | `GET:/auditLogs/signIns` | scheduled | READ-05 |
 | `mg-axi entra sign-in show` | `GET:/auditLogs/signIns/{signIn-id}` | scheduled | READ-05 |
 | `mg-axi entra directory-audit list` | `GET:/auditLogs/directoryAudits` | scheduled | READ-05 |
@@ -253,6 +256,33 @@ Stream image and CSS bytes stay out because they need a separate binary-output c
 | `v1.0:POST:/organization/{organization-id}/getMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate organization scope to a later EXT-01 organization lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
 | `v1.0:POST:/organization/{organization-id}/getMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate organization scope to a later EXT-01 organization lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
 
+## EXT-04 partner contracts scope decisions
+
+Firstmate scope: approve narrowing this change to the three v1.0 partner-contract reads above (list, show, count).
+The operations below remain scheduled with an explicit deferred disposition to a later EXT-04 subfamily; no new commands or raw access are approved.
+Beta contracts need their own review; delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/contracts` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 beta contracts subfamily: the three approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/contracts/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 beta contracts subfamily: the three approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:GET:/contracts/delta()` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts delta subfamily: delta-token sync needs its own paging and change-tracking contract beyond the approved list/show/count reads. |
+| `beta:GET:/contracts/{contract-id}` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 beta contracts subfamily: the three approved reads cover v1.0 only; beta contracts need separate review. |
+| `beta:POST:/contracts/getByIds` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `beta:POST:/contracts/getUserOwnedObjects` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `beta:POST:/contracts/validateProperties` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `beta:POST:/contracts/{contract-id}/checkMemberGroups` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `beta:POST:/contracts/{contract-id}/checkMemberObjects` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `beta:POST:/contracts/{contract-id}/getMemberGroups` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `beta:POST:/contracts/{contract-id}/getMemberObjects` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:GET:/contracts/delta()` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts delta subfamily: delta-token sync needs its own paging and change-tracking contract beyond the approved list/show/count reads. |
+| `v1.0:POST:/contracts/getAvailableExtensionProperties` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/contracts/getByIds` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/contracts/validateProperties` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/contracts/{contract-id}/checkMemberGroups` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/contracts/{contract-id}/checkMemberObjects` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/contracts/{contract-id}/getMemberGroups` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/contracts/{contract-id}/getMemberObjects` | scheduled (deferred) | EXT-04 | Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
 ## EXT-02 access-review scope decisions
 
 The access-review scope covers the ten reads above (definition, instance, decision, contacted-reviewer and stage list/show reads).

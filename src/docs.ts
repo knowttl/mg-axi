@@ -252,6 +252,7 @@ export function capabilityDocument(): string {
   const deferredProviderRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred to a later EXT-03 "));
   const unavailableInvitationRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Marked unavailable by firstmate EXT-03b decision: "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
+  const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
@@ -325,7 +326,15 @@ export function capabilityDocument(): string {
     "|---|---|---|---|",
     ...deferredOrganizationRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
-    "## EXT-02 access-review scope decisions",
+    "## EXT-04 partner contracts scope decisions",
+    "",
+    "Firstmate scope: approve narrowing this change to the three v1.0 partner-contract reads above (list, show, count).",
+    "The operations below remain scheduled with an explicit deferred disposition to a later EXT-04 subfamily; no new commands or raw access are approved.",
+    "Beta contracts need their own review; delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredContractRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),    "## EXT-02 access-review scope decisions",
     "",
     "The access-review scope covers the ten reads above (definition, instance, decision, contacted-reviewer and stage list/show reads).",
     "The legacy accessReviews and unified alias reads below are split into the EXT-02c follow-up to limit this piece's size; beta-only operations stay deferred (\"beta needs its own review\").",

@@ -3,6 +3,7 @@ import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITION_FIELDS, KNOWN_INSTANCE_FIELDS, KNOWN_STAGE_FIELDS } from "./entra-access-reviews.js";
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
+import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
@@ -243,6 +244,14 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
     note: "No operation-level documentation page; access follows the documented domain/DNS-read contract and the domainDnsRecord resource reference.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/domaindnsrecord?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/contracts", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_CONTRACT_FIELDS,
+    access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
+    note: "Filtering is documented for customerId, defaultDomainName and displayName; no P1/P2 prerequisite is stated for contract reads.",
+    sources: ["https://learn.microsoft.com/graph/api/contract-list?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/contract?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/contracts/{contract-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CONTRACT_FIELDS,
+    access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
+    note: "No P1/P2 prerequisite is stated for contract reads.",
+    sources: ["https://learn.microsoft.com/graph/api/contract-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/contract?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/identity/identityProviders", kind: "collection", query: COLLECTION_QUERY, fields: PROVIDER_FIELDS,
     access: "D/A IdentityProvider.Read.All. Delegated callers pass it as --scopes; delegated reads additionally need a directory role that can read federation configuration (Global Reader is the least-privileged read-only directory role). Personal Microsoft accounts are not supported; no per-operation licence prerequisite is stated.",
     note: "Workforce context only; external-customer user-flow provider bindings are separate scheduled operations. clientSecret and certificateData are never projected: the former is write-only and the latter is key material.",
@@ -310,7 +319,7 @@ function matchTemplate(template: string, pathname: string): Record<string, strin
     const segment = actual[i]!;
     const name = /^\{([^{}]+)\}$/.exec(slot)?.[1];
     if (name) {
-      if (!segment.length) return null;
+      if (!segment.length || /[()]/.test(segment)) return null;
       encodeGraphPathSegment(segment);
       params[name] = segment;
     } else if (slot.toLowerCase() !== segment.toLowerCase()) return null;

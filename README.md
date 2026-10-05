@@ -22,6 +22,7 @@ EXT-01 (domains) adds tenant-domain list/show, per-domain verification and servi
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
+EXT-04 (contracts) adds partner-tenant customer-contract list/show/count through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -93,7 +94,7 @@ The revoke command rejects caller-supplied `--scopes`.
 A 403 denial surfaces the `User.RevokeSessions.All` requirement without inventing a role verdict; a timeout or 5xx after sending reports `OUTCOME_UNKNOWN`, and neither outcome is ever replayed.
 Unknown-outcome guidance includes a user read with `--select id`; that read checks target accessibility, not whether revocation took effect.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
-Resource identifiers in named commands and raw paths cannot begin with `$`; OData route segments such as `$count`, `$value` and `$ref` cannot be used as IDs and fail validation before credentials.
+Resource identifiers in named commands and raw paths cannot begin with `$` or contain parentheses; OData route segments such as `$count`, `$value` and `$ref`, and function-style segments such as `delta()`, cannot be used as IDs and fail validation before credentials.
 Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
 Data and structured errors use TOON on stdout; diagnostics belong on stderr.
 Bare `-v`, `-V` and `--version` print only the package version without importing the catalogue.
@@ -288,6 +289,29 @@ All five named reads default to `--api-version v1.0`; explicit `--api-version be
 Organization and localization lists offer no `--filter`: Graph documents `$select` only on these routes, so the flag is refused before credentials.
 Denied organization and branding reads name the scope, role and licensing guidance instead of only the generic cause.
 No organization mutation lives here; certificate-based-auth configuration, extensions, beta-only settings and the POST lookup actions belong to later pieces; see the [organization scope decisions](docs/coverage.md#ext-01-organization-scope-decisions) for deferred reads and later subfamilies.
+
+Log in with `https://graph.microsoft.com/Directory.Read.All`, then inspect partner-tenant customer contracts:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Directory.Read.All
+mg-axi entra contract list --profile soc
+mg-axi entra contract show --profile soc --id <contract-id>
+mg-axi entra contract count --profile soc
+```
+
+Contracts exist in partner tenants only (Cloud Solution Provider, Office 365 Syndication or Advisor programs); a non-partner tenant lists zero contracts, which is an answer rather than an error.
+`entra contract list` defaults to compact properties (`id`, `displayName`, `contractType`, `defaultDomainName`); `entra contract show --id <contract-id>` defaults to the full reviewed contract set (`contractType`, `customerId`, `defaultDomainName`, `displayName`, `id`).
+`--select` requests properties from the [reviewed contract field set](src/entra-contracts.ts); `--fields` projects locally and must be a subset of the fetched selection.
+Contract lists accept `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`; filtering is documented for `customerId`, `defaultDomainName` and `displayName`.
+`entra contract count` returns one scalar (`contractCount`) from the text/plain `$count` route and takes no `--filter`, `--select`, `--limit` or `--cursor`.
+Raw `api get` supports `/contracts` and `/contracts/<contract-id>`; `/contracts/$count` is available only through the named count command.
+Contract lists return `contracts` and single-contract reads return `contract`.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to contract reads.
+All three named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+Delegated contract reads default to `https://graph.microsoft.com/Directory.Read.All`, while application profiles use the configured `.default` audience.
+Delegated callers additionally need a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported.
+No P1/P2 prerequisite is stated for contract reads; denied reads name the scope, role, partner-tenant and licensing guidance instead of only the generic cause.
+No contract mutation lives here; `contracts/delta()`, beta contracts and the POST lookup actions belong to later pieces; see the [partner contracts scope decisions](docs/coverage.md#ext-04-partner-contracts-scope-decisions) for deferred reads and later subfamilies.
 
 Log in with `https://graph.microsoft.com/Domain.Read.All`, then inspect tenant domains and their DNS records:
 

@@ -73,6 +73,9 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra domain service-configuration-record show` | native | read |
 | `mg-axi entra domain-dns-record list` | native | read |
 | `mg-axi entra domain-dns-record show` | native | read |
+| `mg-axi entra contract list` | native | read |
+| `mg-axi entra contract show` | native | read |
+| `mg-axi entra contract count` | native | read |
 | `mg-axi entra sign-in list` | native | read |
 | `mg-axi entra sign-in show` | native | read |
 | `mg-axi entra directory-audit list` | native | read |

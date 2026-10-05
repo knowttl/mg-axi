@@ -481,9 +481,8 @@ test("setup counts the dismissal write beside reads and local leaves", async () 
   const state = setupProfiles();
   try {
     const output = setupView(new Profiles());
-    assert.equal(output.capabilities.reads, 67);
-    assert.equal(output.capabilities.writes, 5);
-    assert.equal(output.capabilities.local, 6);
+    assert.equal(output.capabilities.reads, 70);
+    assert.equal(output.capabilities.writes, 5);    assert.equal(output.capabilities.local, 6);
     assert.ok(output.capabilities.implemented.includes("entra risky-user dismiss"));
   } finally { teardown(state); }
 });

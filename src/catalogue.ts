@@ -166,6 +166,8 @@ const providerRead = {
 };
 const accessReviewRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; on definitions only contains() over the scope query and eq on status are documented; unsupported combinations fail before credentials" },
+  filterReviewer: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter with no $count or ConsistencyLevel; unsupported combinations fail before credentials" },
+  filterStage: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter (eq only); unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties from the reviewed access-review set; reads need AccessReview.Read.All in both modes plus a supported Entra role for delegated access" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
   full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
@@ -397,7 +399,7 @@ export const LEAVES: Leaf[] = [
     cursor: auRead.cursor,
     scopes: auRead.scopes,
   }, examples: ["mg-axi entra administrative-unit member list --administrative-unit <administrative-unit-id> --profile soc", "mg-axi entra administrative-unit member list --administrative-unit <administrative-unit-id> --profile soc --limit 10"] },
-  { path: "entra organization list", description: "List tenant organizations with compact properties (id, displayName, tenantType, verifiedDomains); exactly one row exists per tenant; --filter is unsupported on /organizations (Graph documents $select only)", operation: "GET:/organization", flags: {
+  { path: "entra organization list", description: "List tenant organizations with compact properties (id, displayName, tenantType, verifiedDomains); exactly one row exists per tenant; --filter is unsupported on /organization (Graph documents $select only)", operation: "GET:/organization", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
     all: { description: "Follow pages within request, byte and deadline budgets" },
@@ -800,7 +802,58 @@ export const LEAVES: Leaf[] = [
     cursor: accessReviewRead.cursor,
     scopes: accessReviewRead.scopes,
   }, examples: ["mg-axi entra access-review decision list --definition <definition-id> --instance <instance-id> --profile soc", "mg-axi entra access-review decision list --definition <definition-id> --instance <instance-id> --profile soc --filter \"decision eq 'NotReviewed'\""] },
-  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations and branding; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+  { path: "entra access-review decision show", description: "Show one access-review decision item with the full reviewed outcome set; showing never approves, denies or applies anything", operation: "GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/decisions/{accessReviewInstanceDecisionItem-id}", flags: {
+    ...common, definition: { value: "definition-id", required: true, description: "Parent access-review definition ID" },
+    instance: { value: "instance-id", required: true, description: "Parent access-review instance ID" },
+    id: { value: "decision-id", required: true, description: "Access-review decision item ID" },
+    select: accessReviewRead.select,
+    fields: accessReviewRead.fields,
+    full: accessReviewRead.full,
+    scopes: accessReviewRead.scopes,
+  }, examples: ["mg-axi entra access-review decision show --definition <definition-id> --instance <instance-id> --id <decision-id> --profile soc"] },
+  { path: "entra access-review contacted-reviewer list", description: "List contacted reviewers of one access-review instance (id, displayName, userPrincipalName); reviewers recorded on the instance, whether or not notified, never review outcomes", operation: "GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/contactedReviewers", flags: {
+    ...common, definition: { value: "definition-id", required: true, description: "Parent access-review definition ID" },
+    instance: { value: "instance-id", required: true, description: "Parent access-review instance ID whose contacted reviewers are listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: accessReviewRead.filterReviewer,
+    select: accessReviewRead.select,
+    fields: accessReviewRead.fields,
+    full: accessReviewRead.full,
+    cursor: accessReviewRead.cursor,
+    scopes: accessReviewRead.scopes,
+  }, examples: ["mg-axi entra access-review contacted-reviewer list --definition <definition-id> --instance <instance-id> --profile soc"] },
+  { path: "entra access-review contacted-reviewer show", description: "Show one contacted reviewer with the full reviewed identity set", operation: "GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/contactedReviewers/{accessReviewReviewer-id}", flags: {
+    ...common, definition: { value: "definition-id", required: true, description: "Parent access-review definition ID" },
+    instance: { value: "instance-id", required: true, description: "Parent access-review instance ID" },
+    id: { value: "reviewer-id", required: true, description: "Contacted reviewer ID" },
+    select: accessReviewRead.select,
+    fields: accessReviewRead.fields,
+    full: accessReviewRead.full,
+    scopes: accessReviewRead.scopes,
+  }, examples: ["mg-axi entra access-review contacted-reviewer show --definition <definition-id> --instance <instance-id> --id <reviewer-id> --profile soc"] },
+  { path: "entra access-review stage list", description: "List stages of one access-review instance (id, status, startDateTime, endDateTime); stages are sequential phases, present only when the definition sets stageSettings", operation: "GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/stages", flags: {
+    ...common, definition: { value: "definition-id", required: true, description: "Parent access-review definition ID" },
+    instance: { value: "instance-id", required: true, description: "Parent access-review instance ID whose stages are listed" },
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: accessReviewRead.filterStage,
+    select: accessReviewRead.select,
+    fields: accessReviewRead.fields,
+    full: accessReviewRead.full,
+    cursor: accessReviewRead.cursor,
+    scopes: accessReviewRead.scopes,
+  }, examples: ["mg-axi entra access-review stage list --definition <definition-id> --instance <instance-id> --profile soc", "mg-axi entra access-review stage list --definition <definition-id> --instance <instance-id> --profile soc --filter \"status eq 'InProgress'\""] },
+  { path: "entra access-review stage show", description: "Show one access-review stage with the full reviewed phase set including reviewer scopes; per-stage decisions belong to a later slice", operation: "GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/stages/{accessReviewStage-id}", flags: {
+    ...common, definition: { value: "definition-id", required: true, description: "Parent access-review definition ID" },
+    instance: { value: "instance-id", required: true, description: "Parent access-review instance ID" },
+    id: { value: "stage-id", required: true, description: "Access-review stage ID" },
+    select: accessReviewRead.select,
+    fields: accessReviewRead.fields,
+    full: accessReviewRead.full,
+    scopes: accessReviewRead.scopes,
+  }, examples: ["mg-axi entra access-review stage show --definition <definition-id> --instance <instance-id> --id <stage-id> --profile soc"] },
+  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations and branding, access reviews; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
     cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --odata to reuse its query" },
@@ -855,7 +908,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (flag!.value) {
       const value = match![2] ?? argv[++i];
       if (!value?.trim() || (value.startsWith("-") && !(name === "cursor" && value === "-"
-        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra access-review definition list" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review decision list")))) fail(`--${name} requires a non-empty value`);
+        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra access-review definition list" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review decision list" || leaf.path === "entra access-review contacted-reviewer list" || leaf.path === "entra access-review stage list")))) fail(`--${name} requires a non-empty value`);
       flags[name] = value!;
     } else {
       if (match![2] !== undefined) fail(`--${name} does not take a value`);

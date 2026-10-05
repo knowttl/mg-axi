@@ -24,6 +24,7 @@ EXT-01 (directory subscriptions) adds commercial-subscription list/show/count re
 EXT-01 (on-premises synchronization) adds on-premises directory-synchronization list/show reads with Global Administrator role guidance through the same session.
 EXT-01 (terms of use) adds terms-of-use agreement list/show, per-agreement acceptance list/show and tenant-wide agreement-acceptance list/show reads with Security Reader role and Entra ID P1 guidance through the same session.
 EXT-01 (directory objects) adds directory-object list/show/count reads with @odata.type subtype rows and Directory.Read.All guidance through the same session.
+EXT-01 (contacts) adds organizational-contact list/show/count reads with minimal personal-data rows and OrgContact.Read.All guidance through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 EXT-03 (data policy operations) adds workforce data-policy-operation list/show/count reads with storage-location redaction through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
@@ -523,6 +524,25 @@ The named-list caps, cursors, null/missing preservation and 500-character text t
 Reads default to `https://graph.microsoft.com/Directory.Read.All` for delegated access, while application profiles use the configured `.default` audience.
 No delegated role or P1/P2 prerequisite is stated for directory-object reads; personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
 No directory-object mutation lives here; the delta sync, the POST lookup/validation actions and beta operations stay scheduled; see the [directory-objects scope decisions](docs/coverage.md#ext-01-directory-objects-scope-decisions).
+
+Log in with `https://graph.microsoft.com/OrgContact.Read.All`, then inspect organizational contacts:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/OrgContact.Read.All
+mg-axi entra contact list --profile soc
+mg-axi entra contact show --profile soc --id <contact-id>
+mg-axi entra contact count --profile soc
+```
+
+Contacts are personal data: `entra contact list` and `show` default to minimal rows (`id`, `displayName`, `mail`, `companyName`), and identifying fields beyond that need an explicit `--select`.
+All three commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+`list` offers `--filter`, passed through as plain `$filter` with `$count=true` and `ConsistencyLevel eventual`; `$search` and `$orderby` stay unreviewed.
+Lists return `contacts`, single reads return `contact`, and counts return `count` with the scalar total; the count sends `ConsistencyLevel eventual` like the documented `$count` example.
+Only flat scalar properties are ever requested or projected (`$expand` is not offered, so navigation objects can never appear), and the nested phones/addresses/error collections need their own projection review.
+The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to contact reads.
+Reads default to `https://graph.microsoft.com/OrgContact.Read.All` for delegated access, while application profiles use the configured `.default` audience.
+Delegated callers additionally need a supported Entra role (Directory Readers reads basic properties; Global Reader, Directory Writers, Intune Administrator or User Administrator also work); personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
+No contact mutation lives here; the delta sync, the per-contact navigation reads, the POST lookup actions and beta operations stay scheduled; see the [contacts scope decisions](docs/coverage.md#ext-01-contacts-scope-decisions).
 
 Log in with `https://graph.microsoft.com/IdentityProvider.Read.All`, then read workforce identity providers:
 

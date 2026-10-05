@@ -5,20 +5,16 @@ import type { AnyProfile } from "./profiles.js";
 // EXT-04 multi-tenant-organization subfamily: the read mapping behind
 // `mg-axi entra multi-tenant-organization show`,
 // `mg-axi entra multi-tenant-organization join-request show`,
-// `mg-axi entra multi-tenant-organization tenant list`,
-// `mg-axi entra multi-tenant-organization tenant count` and the two
-// tenant-information lookups
-// (`tenant-information show-by-domain` and `show-by-tenant-id`). Operation
+// `mg-axi entra multi-tenant-organization tenant list` and
+// `mg-axi entra multi-tenant-organization tenant count`. Operation
 // construction stays beside its command; the shared session owns URLs,
 // credentials, paging, retries and error translation, and the SDK owns TOON
 // rendering. This module only maps flags to session calls and projects rows
 // for compact output.
 //
 // Reviewed against the v1.0 multiTenantOrganization get, the
-// joinRequestRecord get, the tenant list, the tenant-information lookups and
-// the multiTenantOrganization, joinRequestRecord, member and
-// tenantInformation resource pages on 2026-10-05. Every multi-tenant-
-// organization read
+// joinRequestRecord get, the tenant list and the multiTenantOrganization,
+// joinRequestRecord and member resource pages on 2026-10-05. Every read
 // takes D/A MultiTenantOrganization.Read.All as the full-property scope;
 // delegated callers pass it as --scopes while the lower-privileged delegated
 // MultiTenantOrganization.ReadBasic.All returns displayName and tenantId
@@ -35,9 +31,8 @@ import type { AnyProfile } from "./profiles.js";
 // rather than an error; at most one multitenant organization exists per
 // tenant. The single-member read stays scheduled: its documented least
 // privilege is the write scope MultiTenantOrganization.ReadWrite.All in
-// both modes. Tenant-information lookups take D/A
-// CrossTenantInformation.ReadBasic.All with no Entra role prerequisite;
-// personal Microsoft accounts are not supported. Beta stays out. No multi-tenant-organization mutation exists
+// both modes. The tenant-lookup functions belong to the mg-ext-04e
+// follow-up. Beta stays out. No multi-tenant-organization mutation exists
 // in this slice: creation, update, member add/remove and join acceptance
 // are writes.
 
@@ -75,16 +70,6 @@ export const KNOWN_MTO_TENANT_FIELDS: readonly string[] = [
 const KNOWN_MTO = new Set(KNOWN_MTO_FIELDS);
 const KNOWN_JOIN_REQUEST = new Set(KNOWN_MTO_JOIN_REQUEST_FIELDS);
 const KNOWN_TENANTS = new Set(KNOWN_MTO_TENANT_FIELDS);
-// Every tenant-information property this slice may request or display,
-// matching the reviewed tenantInformation resource. Anything else fails
-// before credentials.
-export const KNOWN_TENANT_INFORMATION_FIELDS: readonly string[] = [
-  "defaultDomainName",
-  "displayName",
-  "federationBrandName",
-  "tenantId",
-];
-const KNOWN_TENANT_INFORMATION = new Set(KNOWN_TENANT_INFORMATION_FIELDS);
 
 // Singleton rows: the full reviewed set; the container carries only five
 // scalar properties and the join request five.
@@ -96,7 +81,6 @@ const DEFAULT_TENANT_LIST_SELECT = ["tenantId", "displayName", "role", "state"];
 // Delegated defaults are operation-specific; application profiles use their
 // configured .default audience and reject --scopes.
 export const DEFAULT_MTO_SCOPES = ["https://graph.microsoft.com/MultiTenantOrganization.Read.All"];
-export const DEFAULT_TENANT_LOOKUP_SCOPES = ["https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All"];
 const TRUNCATE_AT = 500;
 
 export type MultiTenantOrganizationFlags = Record<string, string | boolean>;
@@ -420,93 +404,4 @@ export async function countMultiTenantOrganizationTenants(
     ]);
   }
   return { multiTenantOrganizationTenantCount: raw };
-}
-
-const TENANT_LOOKUP_DENIAL_HINTS = [
-  "Tenant-information lookups need CrossTenantInformation.ReadBasic.All, passed as --scopes for delegated access or admin-consented for application access",
-  "No Entra role prerequisite is stated for tenant-information lookups; consent to the scope is sufficient",
-  "Personal Microsoft accounts are not supported for tenant-information lookups",
-  "Use the returned tenantId to configure cross-tenant access; never diagnose licence solely from HTTP 403",
-];
-
-const DEFAULT_TENANT_INFORMATION_SHOW_SELECT = [...KNOWN_TENANT_INFORMATION_FIELDS];
-
-function lookupDomain(flags: MultiTenantOrganizationFlags, help: string): string {
-  const domain = String(flags.domain ?? "").trim();
-  if (!domain) throw new AxiError("--domain needs the tenant domain name to look up", "VALIDATION_ERROR", [help]);
-  if (domain.length > 253 || !/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(domain) || !domain.includes(".")) {
-    throw new AxiError(`Invalid domain name ${domain} in --domain`, "VALIDATION_ERROR", [
-      help,
-      "Pass one fully qualified domain name such as contoso.com",
-    ]);
-  }
-  return domain;
-}
-
-function lookupTenantId(flags: MultiTenantOrganizationFlags, help: string): string {
-  const tenantId = String(flags["tenant-id"] ?? "").trim();
-  if (!tenantId) throw new AxiError("--tenant-id needs the tenant ID to look up", "VALIDATION_ERROR", [help]);
-  if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(tenantId)) {
-    throw new AxiError(`Invalid tenant ID ${tenantId} in --tenant-id`, "VALIDATION_ERROR", [
-      help,
-      "Pass one tenant UUID such as 11111111-1111-4111-8111-111111111111",
-    ]);
-  }
-  return tenantId;
-}
-
-async function showTenantInformation(
-  session: GraphSession,
-  flags: MultiTenantOrganizationFlags,
-  profile: AnyProfile,
-  operation: SessionOperation,
-  help: string,
-  profileName: string,
-  command: string,
-  params: Record<string, string>,
-): Promise<Record<string, unknown>> {
-  const { select, fields } = selectedFields(flags, KNOWN_TENANT_INFORMATION, KNOWN_TENANT_INFORMATION_FIELDS, DEFAULT_TENANT_INFORMATION_SHOW_SELECT, help);
-  const scopes = scopesFor(flags, DEFAULT_TENANT_LOOKUP_SCOPES, profile, help);
-  const full = flags.full === true;
-  const raw = await withGuidance(TENANT_LOOKUP_DENIAL_HINTS, () => session.execute({
-    profile,
-    operation,
-    params,
-    query: { $select: select.join(",") },
-    scopes,
-  }));
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new AxiError("Graph returned a malformed tenant-information body", "GRAPH_ERROR", [
-      "Tenant-information lookups carry one tenantInformation object; treat anything else as unknown, not empty",
-    ]);
-  }
-  const { row, truncated } = project(raw, fields, full);
-  if (truncated) return { tenantInformation: row, help: [fullHint(command, flags, profileName)] };
-  return { tenantInformation: row };
-}
-
-export async function findTenantInformationByDomainName(
-  session: GraphSession,
-  flags: MultiTenantOrganizationFlags,
-  profile: AnyProfile,
-  operation: SessionOperation,
-  help: string,
-  profileName: string,
-): Promise<Record<string, unknown>> {
-  return showTenantInformation(session, flags, profile, operation, help, profileName,
-    "entra multi-tenant-organization tenant-information show-by-domain",
-    { domainName: lookupDomain(flags, help) });
-}
-
-export async function findTenantInformationByTenantId(
-  session: GraphSession,
-  flags: MultiTenantOrganizationFlags,
-  profile: AnyProfile,
-  operation: SessionOperation,
-  help: string,
-  profileName: string,
-): Promise<Record<string, unknown>> {
-  return showTenantInformation(session, flags, profile, operation, help, profileName,
-    "entra multi-tenant-organization tenant-information show-by-tenant-id",
-    { tenantId: lookupTenantId(flags, help) });
 }

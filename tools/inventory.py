@@ -99,18 +99,15 @@ APPROVED_DELEGATED_ADMIN_READS = {
     "/tenantRelationships/delegatedAdminRelationships",
     "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}",
 }
-# The six approved EXT-04c v1.0 multi-tenant-organization and tenant-lookup
-# reads: organization show, join-request show, tenant list and tenant count,
-# plus the two tenant-information lookups by domain name and tenant ID. The
+# The four approved EXT-04c v1.0 multi-tenant-organization reads:
+# organization show, join-request show, tenant list and tenant count. The
 # single-member read stays scheduled: its documented least privilege is the
-# write scope.
+# write scope. The tenant-lookup functions stay scheduled for mg-ext-04e.
 APPROVED_MTO_READS = {
     "/tenantRelationships/multiTenantOrganization",
     "/tenantRelationships/multiTenantOrganization/joinRequest",
     "/tenantRelationships/multiTenantOrganization/tenants",
     "/tenantRelationships/multiTenantOrganization/tenants/$count",
-    "/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')",
-    "/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')",
 }
 # The ten approved EXT-01m v1.0 contact manager/directReports navigation
 # reads: the manager single, the directReports collection and scalar plus

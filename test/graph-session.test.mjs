@@ -153,32 +153,19 @@ test("guest UPN remains bound across a same-resource redirect", async () => {
 });
 
 for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) {
-  test(`${profile.mode} embedded path templates without bindings fail before credentials`, async () => {
+  for (const params of [{}, { appId: client }]) test(`${profile.mode} embedded path templates with ${Object.keys(params).length} bindings fail before credentials`, async () => {
     const operation = resolveSessionOperation("v1.0", "GET", "/applications(appId='{appId}')");
     const f = fixture(json(200, {}));
     await assert.rejects(
-      f.session.execute({ profile, operation, params: {}, ...scopeArgs }),
-      error => error.code === "VALIDATION_ERROR" && /Missing path parameter/.test(error.message),
+      f.session.execute({ profile, operation, params, ...scopeArgs }),
+      error => error.code === "VALIDATION_ERROR" && /Unsupported path template/.test(error.message),
     );
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
   });
-  test(`${profile.mode} embedded path templates bind one function argument`, async () => {
-    const operation = resolveSessionOperation("v1.0", "GET", "/applications(appId='{appId}')");
-    const f = fixture(json(200, { id: "a" }));
-    const result = await f.session.execute({ profile, operation, params: { appId: client }, ...scopeArgs });
-    assert.deepEqual(result, { id: "a" });
-    assert.equal(f.requests[0].url, `https://graph.microsoft.com/v1.0/applications(appId='${client}')`);
-    assert.equal(f.credentialCalls.length, 1);
-  });
 }
 
-test("embedded-template continuation with the bound resource passes", () => {
-  const operation = resolveSessionOperation("v1.0", "GET", "/applications(appId='{appId}')");
-  assert.equal(authorizeUrl(operation, { appId: client }, `/v1.0/applications(appId='${client}')`), `https://graph.microsoft.com/v1.0/applications(appId='${client}')`);
-});
-
-for (const target of ["/v1.0/applications(appId='{appId}')", "/v1.0/applications(appId='other-id')"]) test(`embedded-template continuation ${target} is denied`, () => {
+for (const target of ["/v1.0/applications(appId='{appId}')", `/v1.0/applications(appId='${client}')`]) test(`embedded-template continuation ${target} is denied`, () => {
   const operation = resolveSessionOperation("v1.0", "GET", "/applications(appId='{appId}')");
   assert.throws(() => authorizeUrl(operation, { appId: client }, target), { code: "POLICY_DENIED" });
 });

@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 91 (89 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 94 (92 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -62,6 +62,9 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra certificate-authority list` | `GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities` | scheduled | EXT-01 |
 | `mg-axi entra certificate-authority show` | `GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities/{certificateAuthorityDetail-id}` | scheduled | EXT-01 |
 | `mg-axi entra certificate-authority count` | `GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities/$count` | scheduled | EXT-01 |
+| `mg-axi entra subscription list` | `GET:/directory/subscriptions` | scheduled | EXT-01 |
+| `mg-axi entra subscription show` | `GET:/directory/subscriptions/{companySubscription-id}` | scheduled | EXT-01 |
+| `mg-axi entra subscription count` | `GET:/directory/subscriptions/$count` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy list` | `GET:/groupLifecyclePolicies` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy show` | `GET:/groupLifecyclePolicies/{groupLifecyclePolicy-id}` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy count` | `GET:/groupLifecyclePolicies/$count` | scheduled | EXT-01 |
@@ -290,6 +293,16 @@ Certificate-auth reads support v1.0 only; beta needs its own review.
 | `v1.0:GET:/certificateBasedAuthConfiguration` | unavailable | EXT-01 | Marked unavailable by firstmate mg-ext-01d decision: the v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped /organization/{organization-id}/certificateBasedAuthConfiguration routes, with no documented GET contract for these root reads (https://learn.microsoft.com/en-us/graph/api/resources/certificatebasedauthconfiguration?view=graph-rest-1.0). |
 | `v1.0:GET:/certificateBasedAuthConfiguration/$count` | unavailable | EXT-01 | Marked unavailable by firstmate mg-ext-01d decision: the v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped /organization/{organization-id}/certificateBasedAuthConfiguration routes, with no documented GET contract for these root reads (https://learn.microsoft.com/en-us/graph/api/resources/certificatebasedauthconfiguration?view=graph-rest-1.0). |
 | `v1.0:GET:/certificateBasedAuthConfiguration/{certificateBasedAuthConfiguration-id}` | unavailable | EXT-01 | Marked unavailable by firstmate mg-ext-01d decision: the v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped /organization/{organization-id}/certificateBasedAuthConfiguration routes, with no documented GET contract for these root reads (https://learn.microsoft.com/en-us/graph/api/resources/certificatebasedauthconfiguration?view=graph-rest-1.0). |
+## EXT-01 directory-subscriptions scope decisions
+
+This change covers the three v1.0 commercial-subscription reads above (subscription list, show and count).
+The commerceSubscriptionId alternate-key lookup below remains scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new command or raw access is approved for it.
+Alternate-key function segments (key='value') are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review.
+Subscription reads support v1.0 only; beta needs its own review.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `v1.0:GET:/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-subscriptions scope to a later EXT-01 subscriptions lookup subfamily: alternate-key function segments (key='value') are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review. |
 ## EXT-01 group lifecycle scope decisions
 
 This change covers the six v1.0 group lifecycle policy and group setting template reads above (list, show, count per family).

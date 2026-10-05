@@ -164,6 +164,14 @@ const certAuthorityRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to PublicKeyInfrastructure.Read.All" },
 };
+const subscriptionRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed subscription set; subscription reads need Organization.Read.All" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Organization.Read.All" },
+};
 const lifecycleRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties; lifecycle-policy reads need Directory.Read.All" },
@@ -625,6 +633,28 @@ export const LEAVES: Leaf[] = [
     filter: certAuthorityRead.filter,
     scopes: certAuthorityRead.scopes,
   }, examples: ["mg-axi entra certificate-authority count --pki <pki-id> --profile soc"] },
+  { path: "entra subscription list", description: "List commercial subscriptions with compact properties (id, skuPartNumber, status, totalLicenses); --filter passes through as plain $filter", operation: "GET:/directory/subscriptions", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: subscriptionRead.filter,
+    select: subscriptionRead.select,
+    fields: subscriptionRead.fields,
+    full: subscriptionRead.full,
+    cursor: subscriptionRead.cursor,
+    scopes: subscriptionRead.scopes,
+  }, examples: ["mg-axi entra subscription list --profile soc", "mg-axi entra subscription list --profile soc --limit 10", "mg-axi entra subscription list --profile soc --filter \"status eq 'Enabled'\""] },
+  { path: "entra subscription show", description: "Show one commercial subscription with the full reviewed property set", operation: "GET:/directory/subscriptions/{companySubscription-id}", flags: {
+    ...common, id: { value: "subscription-id", required: true, description: "Commercial-subscription object ID" },
+    select: subscriptionRead.select,
+    fields: subscriptionRead.fields,
+    full: subscriptionRead.full,
+    scopes: subscriptionRead.scopes,
+  }, examples: ["mg-axi entra subscription show --id <subscription-id> --profile soc", "mg-axi entra subscription show --id <subscription-id> --profile soc --full"] },
+  { path: "entra subscription count", description: "Count commercial subscriptions as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/directory/subscriptions/$count", flags: {
+    ...common,
+    scopes: subscriptionRead.scopes,
+  }, examples: ["mg-axi entra subscription count --profile soc"] },
   { path: "entra group-lifecycle-policy list", description: "List group lifecycle (expiry) policies with compact properties (id, groupLifetimeInDays, managedGroupTypes); --filter passes through as plain $filter", operation: "GET:/groupLifecyclePolicies", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

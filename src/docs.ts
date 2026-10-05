@@ -46,6 +46,7 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra organization ", "organization and branding"],
   ["entra certificate-auth-pki ", "certificate authentication"],
   ["entra certificate-authority ", "certificate authentication"],
+  ["entra subscription ", "commercial subscriptions"],
   ["entra domain ", "domains and DNS records"],
   ["entra domain-dns-record ", "domains and DNS records"],
   ["entra group-lifecycle-policy ", "group lifecycle policies"],
@@ -261,6 +262,7 @@ export function capabilityDocument(): string {
   const unavailableInvitationRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Marked unavailable by firstmate EXT-03b decision: "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
   const unavailableCertAuthRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01d decision: "));
+  const deferredSubscriptionRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate directory-subscriptions scope "));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
   const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate custom-security-attributes scope "));
@@ -348,6 +350,16 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...unavailableCertAuthRows.map(row => `| \`${row.id}\` | ${row.disposition} | ${row.owningSlice} | ${row.reason} |`),
+    "## EXT-01 directory-subscriptions scope decisions",
+    "",
+    "This change covers the three v1.0 commercial-subscription reads above (subscription list, show and count).",
+    "The commerceSubscriptionId alternate-key lookup below remains scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new command or raw access is approved for it.",
+    "Alternate-key function segments (key='value') are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review.",
+    "Subscription reads support v1.0 only; beta needs its own review.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredSubscriptionRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "## EXT-01 group lifecycle scope decisions",
     "",
     "This change covers the six v1.0 group lifecycle policy and group setting template reads above (list, show, count per family).",

@@ -142,6 +142,7 @@ for (const profile of [delegatedProfile, appProfile]) {
     "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/pki-1/certificateAuthorities/$count",
     "/groupLifecyclePolicies/$count",
     "/groupSettingTemplates/$count",
+    "/directory/subscriptions/$count",
     "/directory/attributeSets/$count",
     "/directory/customSecurityAttributeDefinitions/$count",
     "/directory/customSecurityAttributeDefinitions/Engineering_Project/allowedValues/$count",

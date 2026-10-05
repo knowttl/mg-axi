@@ -5,6 +5,7 @@ import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITIO
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
+import { KNOWN_SUBSCRIPTION_FIELDS } from "./entra-subscriptions.js";
 import { KNOWN_LIFECYCLE_FIELDS, KNOWN_TEMPLATE_FIELDS } from "./entra-group-lifecycle.js";
 import { KNOWN_ALLOWED_VALUE_FIELDS, KNOWN_ATTRIBUTE_SET_FIELDS, KNOWN_CUSTOM_SECURITY_DEFINITION_FIELDS } from "./entra-custom-security-attributes.js";
 import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
@@ -263,6 +264,14 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A PublicKeyInfrastructure.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for this read.",
     note: "No operation-level query documentation beyond $select; access follows the parent authority-list contract and the certificateAuthorityDetail resource reference. The certificate field carries the public CA key only.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/certificatebasedauthpki-list-certificateauthorities?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/certificateauthoritydetail-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/certificateauthoritydetail?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/subscriptions", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_SUBSCRIPTION_FIELDS,
+    access: "D/A Organization.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Global Reader, Directory Readers, or Dynamics 365 Business Central Administrator for read-only standard properties); personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for subscription reads.",
+    note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/directory-list-subscriptions?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/companysubscription?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/subscriptions/{companySubscription-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_SUBSCRIPTION_FIELDS,
+    access: "D/A Organization.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Global Reader, Directory Readers, or Dynamics 365 Business Central Administrator for read-only standard properties); personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for this read.",
+    note: "The commerceSubscriptionId alternate-key route stays out: alternate-key function segments are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/companysubscription-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/companysubscription?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/groupLifecyclePolicies", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_LIFECYCLE_FIELDS,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for lifecycle-policy reads. Personal Microsoft accounts are not supported.",
     note: "Filtering uses plain $filter with no $count or ConsistencyLevel contract; no P1/P2 prerequisite is stated for lifecycle-policy reads.",

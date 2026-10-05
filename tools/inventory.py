@@ -276,6 +276,8 @@ def make_row(version, path, method, operation):
         disposition, reason = "unavailable", "Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md)."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and (path == "/certificateBasedAuthConfiguration" or path.startswith("/certificateBasedAuthConfiguration/")):
         disposition, reason = "unavailable", "Marked unavailable by firstmate mg-ext-01d decision: the v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped /organization/{organization-id}/certificateBasedAuthConfiguration routes, with no documented GET contract for these root reads (https://learn.microsoft.com/en-us/graph/api/resources/certificatebasedauthconfiguration?view=graph-rest-1.0)."
+    if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')":
+        reason = "Deferred by firstmate directory-subscriptions scope to a later EXT-01 subscriptions lookup subfamily: alternate-key function segments (key='value') are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review."
     if mutates and owner is not None:
         owner = "WRITE-N"
         if method == "PATCH" and path == "/users/{user-id}":

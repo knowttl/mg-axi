@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 149 (147 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 150 (148 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -120,6 +120,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra multi-tenant-organization join-request show` | `GET:/tenantRelationships/multiTenantOrganization/joinRequest` | scheduled | EXT-04 |
 | `mg-axi entra multi-tenant-organization tenant list` | `GET:/tenantRelationships/multiTenantOrganization/tenants` | scheduled | EXT-04 |
 | `mg-axi entra multi-tenant-organization tenant count` | `GET:/tenantRelationships/multiTenantOrganization/tenants/$count` | scheduled | EXT-04 |
+| `mg-axi entra tenant-information show` | `GET:/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')` | scheduled | EXT-04 |
 | `mg-axi entra sign-in list` | `GET:/auditLogs/signIns` | scheduled | READ-05 |
 | `mg-axi entra sign-in show` | `GET:/auditLogs/signIns/{signIn-id}` | scheduled | READ-05 |
 | `mg-axi entra directory-audit list` | `GET:/auditLogs/directoryAudits` | scheduled | READ-05 |
@@ -380,13 +381,9 @@ Certificate-auth reads support v1.0 only; beta needs its own review.
 ## EXT-01 directory-subscriptions scope decisions
 
 This change covers the three v1.0 commercial-subscription reads above (subscription list, show and count).
-The commerceSubscriptionId alternate-key lookup below remains scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new command or raw access is approved for it.
-Alternate-key function segments (key='value') are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review.
+The show leaf additionally serves the commerceSubscriptionId alternate-key lookup via --commerce-subscription-id, and the reviewed raw surface carries the matching function route; both bind the key only through the allowlisted session function-argument contract (validated, OData-quoted and encoded).
 Subscription reads support v1.0 only; beta needs its own review.
 
-| Inventory operation | Disposition | Owning slice | Deferral reason |
-|---|---|---|---|
-| `v1.0:GET:/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-subscriptions scope to a later EXT-01 subscriptions lookup subfamily: alternate-key function segments (key='value') are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review. |
 ## EXT-01 group lifecycle scope decisions
 
 This change covers the six v1.0 group lifecycle policy and group setting template reads above (list, show, count per family).
@@ -670,7 +667,7 @@ Beta contracts need their own review; delta-token sync needs its own change-trac
 
 Firstmate scope: approve narrowing this change to the twelve v1.0 delegated-admin reads above (customer list/show, relationship list/show, access-assignment list/show, operation list/show, request list/show and service-management-detail list/show).
 The operations below remain scheduled with an explicit deferred disposition to a later EXT-04 subfamily; no new commands or raw access are approved.
-Scalar counts need a separate query and response contract from the approved list/show reads; the tenantRelationship container root needs its own projection review; multi-tenant-organization reads shipped in the section below, and tenant-lookup functions belong to the mg-ext-04e follow-up.
+Scalar counts need a separate query and response contract from the approved list/show reads; the tenantRelationship container root needs its own projection review; multi-tenant-organization reads shipped in the section below, and tenant-lookup functions ship as tenant-information show under the mg-ext-04e function-argument contract.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|
@@ -681,8 +678,6 @@ Scalar counts need a separate query and response contract from the approved list
 | `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
 | `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
 | `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 tenant-lookup subfamily: tenant-information lookup functions need their own CrossTenantInformation access and explicit domain/tenant-argument review beyond the approved delegated-admin list/show reads. |
-| `v1.0:GET:/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 tenant-lookup subfamily: tenant-information lookup functions need their own CrossTenantInformation access and explicit domain/tenant-argument review beyond the approved delegated-admin list/show reads. |
 
 ## EXT-04 multi-tenant-organization scope decisions
 
@@ -692,6 +687,12 @@ The single-member read below remains scheduled with an explicit deferred disposi
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|
 | `v1.0:GET:/tenantRelationships/multiTenantOrganization/tenants/{multiTenantOrganizationMember-id}` | scheduled (deferred) | EXT-04 | Deferred by firstmate multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for the single-member read. |
+
+## EXT-04 tenant-lookup scope decisions
+
+Firstmate scope: approve the mg-ext-04e function-argument contract with the three v1.0 reads it unblocks (tenant-information show by domain name or tenant ID, subscription show by commerce subscription ID).
+The shared session binds parenthesised function arguments only for these three allowlisted catalogue operations, each with its exact function/key name and parameter name; every other path keeps the refusal. Values arrive only as explicit CLI flags, are validated per type (DNS name, tenant GUID, commerce identifier), OData-quoted with single quotes doubled, then percent-encoded past the RFC3986 unreserved set; control characters, separators, reserved characters and overlong values fail before credentials. The reviewed raw surface carries the same three routes with the same binding.
+Tenant-information lookups need CrossTenantInformation.ReadBasic.All with no Entra role; the commerce lookup needs Organization.Read.All plus a supported subscription role. Personal Microsoft accounts are not supported for any of the three. Tenant-information reads support v1.0 only; beta needs its own review.
 
 ## EXT-02 access-review scope decisions
 

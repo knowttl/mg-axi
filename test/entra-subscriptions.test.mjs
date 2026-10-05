@@ -117,6 +117,11 @@ function subscriptionTransport() {
       const found = subscriptions.find(row => row.id === decodeURIComponent(single[1]));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such subscription" } });
     }
+    const commerce = /^\/v1\.0\/directory\/subscriptions\(commerceSubscriptionId=(.+)\)$/.exec(path);
+    if (commerce) {
+      const found = subscriptions.find(row => typeof row.commerceSubscriptionId === "string" && `%27${row.commerceSubscriptionId}%27` === commerce[1]);
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such subscription" } });
+    }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
@@ -233,6 +238,68 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       }
     });
   }
+
+  test(`${mode} shows one subscription by commerce subscription ID with the full reviewed set`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "subscription", "show", "--commerce-subscription-id", sub1.commerceSubscriptionId, "--profile", profile], overrides);
+      assert.deepEqual(result.subscription, sub1);
+      assert.equal(requests[0].url, `https://graph.microsoft.com/v1.0/directory/subscriptions(commerceSubscriptionId=%27${sub1.commerceSubscriptionId}%27)?%24select=${encodeURIComponent("id,commerceSubscriptionId,createdDateTime,isTrial,nextLifecycleDateTime,ownerId,ownerTenantId,ownerType,serviceStatus,skuId,skuPartNumber,status,totalLicenses")}`);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} subscription show needs exactly one subscription key`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "subscription", "show", "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /exactly one of --id or --commerce-subscription-id/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "subscription", "show", "--id", sub1.id, "--commerce-subscription-id", sub1.commerceSubscriptionId, "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /cannot be combined/.test(error.message),
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  for (const commerceId of ["x') OR '1'='1", "a/b", "a%2Fb", "$batch", "..", "a b", "x".repeat(65)]) {
+    test(`${mode} subscription show refuses commerce-key injection before credentials`, async () => {
+      const state = setupProfiles();
+      try {
+        const { requests, calls, overrides } = overridesFor(mode);
+        await assert.rejects(
+          executeArgv(["entra", "subscription", "show", "--commerce-subscription-id", commerceId, "--profile", profile], overrides),
+          { code: "VALIDATION_ERROR" },
+        );
+        assert.equal(calls.length, 0);
+        assert.equal(requests.length, 0);
+      } finally {
+        teardownProfiles(state);
+      }
+    });
+  }
+
+  test(`${mode} unknown commerce subscription IDs report absence, not emptiness`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      await assert.rejects(executeArgv(["entra", "subscription", "show", "--commerce-subscription-id", "00000000-0000-4000-8000-000000000000", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
 
   test(`${mode} counts subscriptions as one scalar without a collection query`, async () => {
     const state = setupProfiles();

@@ -5,6 +5,7 @@ import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITIO
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { KNOWN_DELEGATED_ADMIN_CUSTOMER_FIELDS, KNOWN_DELEGATED_ADMIN_RELATIONSHIP_FIELDS, KNOWN_DELEGATED_ADMIN_ACCESS_ASSIGNMENT_FIELDS, KNOWN_DELEGATED_ADMIN_OPERATION_FIELDS, KNOWN_DELEGATED_ADMIN_REQUEST_FIELDS } from "./entra-delegated-admin.js";
+import { KNOWN_TENANT_INFORMATION_FIELDS } from "./entra-tenant-information.js";
 import { KNOWN_MTO_FIELDS, KNOWN_MTO_JOIN_REQUEST_FIELDS, KNOWN_MTO_TENANT_FIELDS } from "./entra-multi-tenant-organization.js";
 import { KNOWN_DATA_POLICY_FIELDS } from "./entra-data-policy-operations.js";
 import { KNOWN_FEDERATION_FIELDS } from "./entra-federation-configurations.js";
@@ -17,7 +18,7 @@ import { KNOWN_DELETED_ADMINISTRATIVE_UNIT_FIELDS, KNOWN_DELETED_APPLICATION_FIE
 import { KNOWN_CONTACT_FIELDS, KNOWN_NAV_FIELDS } from "./entra-contacts.js";
 import { KNOWN_LIFECYCLE_FIELDS, KNOWN_TEMPLATE_FIELDS } from "./entra-group-lifecycle.js";
 import { KNOWN_ALLOWED_VALUE_FIELDS, KNOWN_ATTRIBUTE_SET_FIELDS, KNOWN_CUSTOM_SECURITY_DEFINITION_FIELDS } from "./entra-custom-security-attributes.js";
-import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
+import { encodeGraphPathSegment, functionBindingFor, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
 // API-01: the reviewed read-only raw Graph surface.
@@ -283,7 +284,11 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     sources: ["https://learn.microsoft.com/en-us/graph/api/directory-list-subscriptions?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/companysubscription?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/directory/subscriptions/{companySubscription-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_SUBSCRIPTION_FIELDS,
     access: "D/A Organization.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Global Reader, Directory Readers, or Dynamics 365 Business Central Administrator for read-only standard properties); personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for this read.",
-    note: "The commerceSubscriptionId alternate-key route stays out: alternate-key function segments are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review.",
+    note: "The commerceSubscriptionId alternate-key lookup ships as its own reviewed route below; object-ID shows never accept function-style identifiers.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/companysubscription-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/companysubscription?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')", kind: "single", query: SINGLE_QUERY, fields: KNOWN_SUBSCRIPTION_FIELDS,
+    access: "D/A Organization.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Global Reader, Directory Readers, or Dynamics 365 Business Central Administrator for read-only standard properties); personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for this read.",
+    note: "Alternate-key lookup by commerceSubscriptionId: the raw path carries the key as an OData-quoted function argument and the shared session re-validates, re-quotes and encodes it; only this allowlisted shape binds.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/companysubscription-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/companysubscription?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/directory/onPremisesSynchronization", kind: "collection", query: ["$select"], fields: KNOWN_SYNC_FIELDS,
     access: "D OnPremDirectorySynchronization.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Global Administrator, the only supported Entra role for this operation; personal Microsoft accounts are not supported and Graph documents no supported application permission, so application profiles are refused before credentials. No P1/P2 prerequisite is stated for on-premises-synchronization reads.",
@@ -537,6 +542,14 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A MultiTenantOrganization.Read.All. Delegated callers pass it as --scopes (the lower-privileged delegated MultiTenantOrganization.ReadBasic.All returns displayName and tenantId of active tenants only); delegated access additionally needs Security Reader or Global Reader, the least-privileged supported Entra roles; personal Microsoft accounts are not supported. Multi-tenant-organization reads run in the commercial Global service.",
     note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract. Multi-tenant-organization participation needs Entra ID P1.",
     sources: ["https://learn.microsoft.com/graph/api/multitenantorganization-list-tenants?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/multitenantorganizationmember?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')", kind: "single", query: [], fields: KNOWN_TENANT_INFORMATION_FIELDS,
+    access: "D/A CrossTenantInformation.ReadBasic.All. Delegated callers pass it as --scopes; application callers need it admin-consented; personal Microsoft accounts are not supported. No Entra role is required and no P1/P2 prerequisite is stated for this read.",
+    note: "Tenant lookup by domain name: the raw path carries the domain as an OData-quoted function argument and the shared session re-validates, re-quotes and encodes it; only this allowlisted shape binds. The operation documents no query parameters, so the full reviewed tenantInformation set is always returned.",
+    sources: ["https://learn.microsoft.com/graph/api/tenantrelationship-findtenantinformationbydomainname?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/tenantinformation?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')", kind: "single", query: [], fields: KNOWN_TENANT_INFORMATION_FIELDS,
+    access: "D/A CrossTenantInformation.ReadBasic.All. Delegated callers pass it as --scopes; application callers need it admin-consented; personal Microsoft accounts are not supported. No Entra role is required and no P1/P2 prerequisite is stated for this read.",
+    note: "Tenant lookup by tenant ID: the raw path carries the GUID as an OData-quoted function argument and the shared session re-validates, re-quotes and encodes it; only this allowlisted shape binds. The operation documents no query parameters, so the full reviewed tenantInformation set is always returned.",
+    sources: ["https://learn.microsoft.com/graph/api/tenantrelationship-findtenantinformationbytenantid?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/tenantinformation?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/contracts/{contract-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CONTRACT_FIELDS,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
     note: "No P1/P2 prerequisite is stated for contract reads.",
@@ -627,9 +640,31 @@ function matchTemplate(template: string, pathname: string): Record<string, strin
       if (!segment.length || /[()]/.test(segment)) return null;
       encodeGraphPathSegment(segment);
       params[name] = segment;
+    } else if (/[{}]/.test(slot)) {
+      const bound = matchFunctionArgument(template, slot, segment);
+      if (!bound) return null;
+      Object.assign(params, bound);
     } else if (slot.toLowerCase() !== segment.toLowerCase()) return null;
   }
   return params;
+}
+
+// Structural match of one allowlisted function-argument segment from a raw
+// path: the template slot must be the exact allowlisted shape and the
+// actual segment must carry the value as one OData-quoted literal (single
+// quotes doubled). The unquoted value is validated here and bound for the
+// session, which re-validates, re-quotes and encodes it canonically before
+// credentials. Anything else is not this route.
+function matchFunctionArgument(template: string, slot: string, segment: string): Record<string, string> | null {
+  const binding = functionBindingFor(template);
+  if (!binding || slot !== `${binding.functionName}(${binding.param}='{${binding.placeholder}}')`) return null;
+  const head = `${binding.functionName}(${binding.param}=`;
+  if (!segment.toLowerCase().startsWith(head.toLowerCase()) || !segment.endsWith(")")) return null;
+  const literal = /^'((?:[^']|'')*)'$/.exec(segment.slice(head.length, -1))?.[1];
+  if (literal === undefined) return null;
+  const value = literal.replaceAll("''", "'");
+  binding.validate(value);
+  return { [binding.placeholder]: value };
 }
 
 export function matchReviewed(pathname: string): { route: ReviewedRawRoute; params: Record<string, string> } | null {
@@ -672,6 +707,10 @@ function checkQueryKeys(route: ReviewedRawRoute, query: Record<string, string>):
 
 function checkQuery(route: ReviewedRawRoute, query: Record<string, string>): void {
   checkQueryKeys(route, query);
+  // Routes without a documented $select contract (the tenant-information
+  // function lookups) never carry server field selection; every other
+  // reviewed route defaults to its reviewed set.
+  if (!route.query.includes("$select")) return;
   const select = query["$select"] ??= (route.defaultFields ?? route.fields).join(",");
   const fields = select.split(",").map(field => field.trim()).filter(field => field.length > 0);
   if (!fields.length) throw new AxiError("Empty $select names no fields", "VALIDATION_ERROR", [`Reviewed fields: ${route.fields.join(", ")}`]);
@@ -789,10 +828,10 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
     const url = new URL(request.url);
     const query = Object.fromEntries(url.searchParams);
     delete query["$skiptoken"];
-    query["$select"] ??= selection["$select"]!;
+    if (route.query.includes("$select")) query["$select"] ??= selection["$select"]!;
     checkQuery(route, query);
     if (localSelection) url.searchParams.delete("$select");
-    else url.searchParams.set("$select", query["$select"]!);
+    else if (query["$select"] !== undefined) url.searchParams.set("$select", query["$select"]!);
     const response = await deps.transport({ ...request, url: url.toString() });
     if (response.status < 200 || response.status >= 300 || !response.body) return response;
     let body: unknown;
@@ -803,7 +842,9 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
   } });
   const selection = query ?? { ...session.cursorQuery(operation, args.cursor!) };
   checkQuery(route, selection);
-  const outputRoute = { ...route, fields: selection["$select"]!.split(",").map(field => field.trim()).filter(Boolean) };
+  // Select-less routes project the full reviewed set; every other route
+  // projects exactly the requested selection.
+  const outputRoute = { ...route, fields: selection["$select"] !== undefined ? selection["$select"].split(",").map(field => field.trim()).filter(Boolean) : [...route.fields] };
   const full = !!args.full;
   if (route.kind === "single") {
     const body = await session.execute({ profile: args.profile, operation, params, query, scopes });

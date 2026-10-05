@@ -69,6 +69,7 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra delegated-admin-customer ", "delegated administration"],
   ["entra delegated-admin-relationship ", "delegated administration"],
   ["entra multi-tenant-organization ", "multi-tenant organization"],
+  ["entra tenant-information ", "tenant information"],
   ["entra sign-in ", "sign-ins and audit logs"],
   ["entra directory-audit ", "sign-ins and audit logs"],
   ["entra application ", "applications and consent grants"],
@@ -280,7 +281,6 @@ export function capabilityDocument(): string {
   const unavailableInvitationRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Marked unavailable by firstmate EXT-03b decision: "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
   const unavailableCertAuthRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01d decision: "));
-  const deferredSubscriptionRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate directory-subscriptions scope "));
   const deferredOnPremSyncRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate on-premises-synchronization scope "));
   const deferredTermsOfUseRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate terms-of-use scope "));
   const deferredDirectoryObjectRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate directory-objects scope "));
@@ -403,13 +403,9 @@ export function capabilityDocument(): string {
     "## EXT-01 directory-subscriptions scope decisions",
     "",
     "This change covers the three v1.0 commercial-subscription reads above (subscription list, show and count).",
-    "The commerceSubscriptionId alternate-key lookup below remains scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new command or raw access is approved for it.",
-    "Alternate-key function segments (key='value') are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review.",
+    "The show leaf additionally serves the commerceSubscriptionId alternate-key lookup via --commerce-subscription-id, and the reviewed raw surface carries the matching function route; both bind the key only through the allowlisted session function-argument contract (validated, OData-quoted and encoded).",
     "Subscription reads support v1.0 only; beta needs its own review.",
     "",
-    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
-    "|---|---|---|---|",
-    ...deferredSubscriptionRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "## EXT-01 group lifecycle scope decisions",
     "",
     "This change covers the six v1.0 group lifecycle policy and group setting template reads above (list, show, count per family).",
@@ -505,7 +501,7 @@ export function capabilityDocument(): string {
     "",
     "Firstmate scope: approve narrowing this change to the twelve v1.0 delegated-admin reads above (customer list/show, relationship list/show, access-assignment list/show, operation list/show, request list/show and service-management-detail list/show).",
     "The operations below remain scheduled with an explicit deferred disposition to a later EXT-04 subfamily; no new commands or raw access are approved.",
-    "Scalar counts need a separate query and response contract from the approved list/show reads; the tenantRelationship container root needs its own projection review; multi-tenant-organization reads shipped in the section below, and tenant-lookup functions belong to the mg-ext-04e follow-up.",
+    "Scalar counts need a separate query and response contract from the approved list/show reads; the tenantRelationship container root needs its own projection review; multi-tenant-organization reads shipped in the section below, and tenant-lookup functions ship as tenant-information show under the mg-ext-04e function-argument contract.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
@@ -518,6 +514,12 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredMtoRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),    "",
+    "## EXT-04 tenant-lookup scope decisions",
+    "",
+    "Firstmate scope: approve the mg-ext-04e function-argument contract with the three v1.0 reads it unblocks (tenant-information show by domain name or tenant ID, subscription show by commerce subscription ID).",
+    "The shared session binds parenthesised function arguments only for these three allowlisted catalogue operations, each with its exact function/key name and parameter name; every other path keeps the refusal. Values arrive only as explicit CLI flags, are validated per type (DNS name, tenant GUID, commerce identifier), OData-quoted with single quotes doubled, then percent-encoded past the RFC3986 unreserved set; control characters, separators, reserved characters and overlong values fail before credentials. The reviewed raw surface carries the same three routes with the same binding.",
+    "Tenant-information lookups need CrossTenantInformation.ReadBasic.All with no Entra role; the commerce lookup needs Organization.Read.All plus a supported subscription role. Personal Microsoft accounts are not supported for any of the three. Tenant-information reads support v1.0 only; beta needs its own review.",
+    "",
     "## EXT-02 access-review scope decisions",
     "",
     "The access-review scope covers the ten reads above (definition, instance, decision, contacted-reviewer and stage list/show reads).",

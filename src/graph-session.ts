@@ -35,6 +35,7 @@ const READ_SCOPES = new Set([
   "Application.Read.All",
   "AuditLog.Read.All",
   "CustomSecAttributeDefinition.Read.All",
+  "CrossTenantInformation.ReadBasic.All",
   "DelegatedAdminRelationship.Read.All",
   "Device.Read.All",
   "Directory.Read.All",
@@ -255,6 +256,16 @@ function bindingName(segment: string): string | null {
 // Match an authorized path against the operation route template, extracting
 // the encoded binding for each placeholder. Literals compare
 // case-insensitively, matching Graph routing; bindings stay exact.
+// Function-argument segments match only for allowlisted operations: the
+// literal head and closing paren compare case-insensitively while the bound
+// middle stays exact for the authorizeUrl comparison below.
+function matchFunctionSegment(route: string, slot: string, segment: string): Record<string, string> | null {
+  const binding = functionBindingFor(route);
+  if (!binding || slot !== functionTemplate(binding)) return null;
+  const head = `${binding.functionName}(${binding.param}=`;
+  if (segment.length <= head.length + 1 || !segment.toLowerCase().startsWith(head.toLowerCase()) || !segment.endsWith(")")) return null;
+  return { [binding.placeholder]: segment.slice(head.length, -1) };
+}
 function matchRoute(route: string, pathname: string): Record<string, string> | null {
   const template = splitPath(route);
   const actual = splitPath(pathname);
@@ -264,7 +275,12 @@ function matchRoute(route: string, pathname: string): Record<string, string> | n
     const slot = template[i]!;
     const segment = actual[i]!;
     const name = bindingName(slot);
-    if (!name && /[{}]/.test(slot)) return null;
+    if (!name && /[{}]/.test(slot)) {
+      const bound = matchFunctionSegment(route, slot, segment);
+      if (!bound) return null;
+      Object.assign(params, bound);
+      continue;
+    }
     if (name) params[name] = segment;
     else if (slot.toLowerCase() !== segment.toLowerCase()) return null;
   }
@@ -301,6 +317,109 @@ function checkOperation(operation: SessionOperation): void {
 const UNSAFE_PARAM = /[%/?\\{}()]/;
 const CONTROL = /[\s\x00-\x1f\x7f]/;
 
+// EXT-04e: allowlisted function-argument binding. A few singleton reads are
+// addressable only through a parenthesised function or alternate-key
+// segment, which whole-segment placeholders cannot express. The guard binds
+// those shapes only for the exact catalogue operations below, each with its
+// exact function/key name, parameter name and value contract. Values arrive
+// only as explicit CLI arguments, are OData-quoted (single quotes doubled)
+// and then percent-encoded past the RFC3986 unreserved set, so a bound
+// value can never close the quotes, the parentheses or the segment.
+// Every other template keeps today's refusal byte-for-byte.
+export interface FunctionArgumentBinding {
+  /** Exact inventory route path this binding belongs to. */
+  readonly route: string;
+  /** Literal function/key name heading the segment (e.g. findTenantInformationByDomainName, or subscriptions for the alternate key). */
+  readonly functionName: string;
+  /** Exact OData parameter name inside the parentheses. */
+  readonly param: string;
+  /** Placeholder name bound from params (without braces). */
+  readonly placeholder: string;
+  /** Strict value contract; throws VALIDATION_ERROR before any request. */
+  validate(value: string): void;
+}
+
+function checkFunctionValue(value: unknown, what: string): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    !value.length ||
+    value.length > 256 ||
+    /[\x00-\x1f\x7f\s]/.test(value) ||
+    /[/\\?#$%]/.test(value)
+  ) {
+    throw new AxiError(`Invalid ${what}`, "VALIDATION_ERROR", [
+      "Bind one validated identifier per function argument; control characters, whitespace, separators and reserved characters are rejected",
+    ]);
+  }
+}
+
+function validateDomainName(value: string): void {
+  checkFunctionValue(value, "domain name");
+  const labels = value.length > 253 ? [] : value.split(".");
+  if (!labels.length || labels.some(label => !/^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label))) {
+    throw new AxiError("Invalid domain name", "VALIDATION_ERROR", [
+      "Pass a valid DNS name such as example.invalid; labels bind alphanumerics and hyphens without leading or trailing dots",
+    ]);
+  }
+}
+
+const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+function validateTenantId(value: string): void {
+  checkFunctionValue(value, "tenant ID");
+  if (!GUID.test(value)) {
+    throw new AxiError("Invalid tenant ID", "VALIDATION_ERROR", [
+      "Pass the tenant GUID (8-4-4-4-12 hexadecimal digits); domain names belong on the domain-name lookup instead",
+    ]);
+  }
+}
+
+function validateCommerceSubscriptionId(value: string): void {
+  checkFunctionValue(value, "commerce subscription ID");
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(value)) {
+    throw new AxiError("Invalid commerce subscription ID", "VALIDATION_ERROR", [
+      "Pass the commerce-system subscription identifier (letters, digits, dash and underscore, up to 64 characters)",
+    ]);
+  }
+}
+
+const FUNCTION_ARGUMENT_BINDINGS: readonly FunctionArgumentBinding[] = [
+  {
+    route: "/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')",
+    functionName: "findTenantInformationByDomainName",
+    param: "domainName",
+    placeholder: "domainName",
+    validate: validateDomainName,
+  },
+  {
+    route: "/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')",
+    functionName: "findTenantInformationByTenantId",
+    param: "tenantId",
+    placeholder: "tenantId",
+    validate: validateTenantId,
+  },
+  {
+    route: "/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')",
+    functionName: "subscriptions",
+    param: "commerceSubscriptionId",
+    placeholder: "commerceSubscriptionId",
+    validate: validateCommerceSubscriptionId,
+  },
+];
+
+export function functionBindingFor(route: string): FunctionArgumentBinding | undefined {
+  return FUNCTION_ARGUMENT_BINDINGS.find(entry => entry.route === route);
+}
+
+function functionTemplate(binding: FunctionArgumentBinding): string {
+  return `${binding.functionName}(${binding.param}='{${binding.placeholder}}')`;
+}
+
+function encodeFunctionArgument(value: string): string {
+  const literal = `'${value.replaceAll("'", "''")}'`;
+  return encodeURIComponent(literal).replace(/[!'()*]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
 export function encodeGraphPathSegment(value: string): string {
   if (typeof value !== "string" || !value.length || value === "." || value === ".." || UNSAFE_PARAM.test(value) || CONTROL.test(value)) {
     throw new AxiError("Invalid path parameter", "VALIDATION_ERROR", [
@@ -315,12 +434,28 @@ export function encodeGraphPathSegment(value: string): string {
   return encodeURIComponent(value);
 }
 
+function bindFunctionSegment(route: string, segment: string, params: Record<string, string>, used: Set<string>): string | null {
+  const binding = functionBindingFor(route);
+  if (!binding || segment !== functionTemplate(binding)) return null;
+  if (!Object.hasOwn(params, binding.placeholder)) {
+    throw new AxiError(`Missing path parameter {${binding.placeholder}} for ${route}`, "VALIDATION_ERROR", [
+      "Bind one resource identifier per placeholder from the catalogued route",
+    ]);
+  }
+  used.add(binding.placeholder);
+  const value = params[binding.placeholder]!;
+  binding.validate(value);
+  return `${binding.functionName}(${binding.param}=${encodeFunctionArgument(value)})`;
+}
+
 function buildPath(route: string, params: Record<string, string>): string {
   const used = new Set<string>();
   const path = splitPath(route)
     .map(segment => {
       const name = bindingName(segment);
       if (!name) {
+        const bound = bindFunctionSegment(route, segment, params, used);
+        if (bound !== null) return bound;
         if (/[{}]/.test(segment)) {
           throw new AxiError(`Unsupported path template ${route}`, "VALIDATION_ERROR", [
             "Use a catalogued route with whole-segment placeholders",
@@ -388,9 +523,16 @@ export function authorizeUrl(operation: SessionOperation, params: Record<string,
   if (!url.pathname.startsWith(prefix)) throw denied(operation, `the target leaves version ${operation.version}`);
   const bindings = matchRoute(operation.path, url.pathname.slice(prefix.length));
   if (!bindings) throw denied(operation, `the target leaves the catalogued route ${operation.path}`);
+  const functionBinding = functionBindingFor(operation.path);
   for (const [name, actual] of Object.entries(bindings)) {
     const expected = params[name];
-    if (typeof expected !== "string" || actual.toLowerCase() !== encodeGraphPathSegment(expected).toLowerCase()) {
+    if (typeof expected !== "string") {
+      throw denied(operation, `the target changes the bound resource {${name}}`);
+    }
+    const binding = functionBinding?.placeholder === name ? functionBinding : undefined;
+    if (binding) binding.validate(expected);
+    const encoded = binding ? encodeFunctionArgument(expected) : encodeGraphPathSegment(expected);
+    if (actual.toLowerCase() !== encoded.toLowerCase()) {
       throw denied(operation, `the target changes the bound resource {${name}}`);
     }
   }

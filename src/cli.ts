@@ -30,6 +30,7 @@ import { listContacts, showContact, countContacts, showContactManager, listConta
 import { countContracts, listContracts, showContract } from "./entra-contracts.js";
 import { listDelegatedAdminCustomers, showDelegatedAdminCustomer, listDelegatedAdminRelationships, showDelegatedAdminRelationship, listDelegatedAdminAccessAssignments, showDelegatedAdminAccessAssignment, listDelegatedAdminOperations, showDelegatedAdminOperation, listDelegatedAdminRequests, showDelegatedAdminRequest, listDelegatedAdminServiceManagementDetails, showDelegatedAdminServiceManagementDetail } from "./entra-delegated-admin.js";
 import { listMultiTenantOrganizationTenants, showMultiTenantOrganization, showMultiTenantOrganizationJoinRequest, countMultiTenantOrganizationTenants } from "./entra-multi-tenant-organization.js";
+import { showTenantInformation } from "./entra-tenant-information.js";
 import { countLifecyclePolicies, listLifecyclePolicies, showLifecyclePolicy, countSettingTemplates, listSettingTemplates, showSettingTemplate } from "./entra-group-lifecycle.js";
 import { listAttributeSets, showAttributeSet, countAttributeSets, listCustomSecurityAttributeDefinitions, showCustomSecurityAttributeDefinition, countCustomSecurityAttributeDefinitions, listAllowedValues, showAllowedValue, countAllowedValues } from "./entra-custom-security-attributes.js";
 import { listIdentityProviders, showIdentityProvider, countIdentityProviders, availableIdentityProviderTypes } from "./entra-identity-providers.js";
@@ -1072,6 +1073,31 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra multi-tenant-organization tenant list": return listMultiTenantOrganizationTenants(session, flags, selected.profile, operation, help, selected.name);
       default: return countMultiTenantOrganizationTenants(session, flags, selected.profile, operation, help, selected.name);
     }
+  }
+  if (leaf.path === "entra tenant-information show") {
+    if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
+      throw new AxiError("Tenant-information lookups support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, "v1.0");
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    return showTenantInformation(session, flags, selected.profile, operation, help, selected.name);
   }
   if (leaf.path === "entra identity-provider list" || leaf.path === "entra identity-provider show" || leaf.path === "entra identity-provider count" || leaf.path === "entra identity-provider available-types") {
     if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {

@@ -40,8 +40,8 @@ import type { AnyProfile } from "./profiles.js";
 // service-management-detail reads run queryless and project locally. The
 // $count scalars and the tenantRelationship container root stay scheduled
 // for later EXT-04 subfamilies, as do the multi-tenant-organization reads
-// (shipped separately) and the tenant-lookup functions (mg-ext-04e).
-// Beta stays out. No delegated-admin mutation exists in this slice:
+// (shipped separately) and the tenant-lookup functions (shipped as
+// tenant-information show under mg-ext-04e). Beta stays out. No delegated-admin mutation exists in this slice:
 // relationship creation, approval and termination are writes.
 
 // Every customer property this slice may request or display, matching the

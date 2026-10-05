@@ -491,3 +491,108 @@ test("continuation authorization keeps the bound resource", () => {
   );
   assert.throws(() => authorizeUrl(userById, { "user-id": "fixture-id" }, "https://graph.microsoft.com/v1.0/users/other-id"), { code: "POLICY_DENIED" });
 });
+
+// EXT-04e: allowlisted function-argument binding. Only the three catalogue
+// operations bind parenthesised arguments; values arrive as explicit CLI
+// arguments and the session validates, OData-quotes and encodes them before
+// credentials. Every other parenthesised template keeps the refusal.
+const tenantByDomain = resolveSessionOperation("v1.0", "GET", "/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')");
+const tenantById = resolveSessionOperation("v1.0", "GET", "/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')");
+const subscriptionByCommerceId = resolveSessionOperation("v1.0", "GET", "/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')");
+const tenantLookupScopes = ["https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All"];
+const commerceScopes = ["https://graph.microsoft.com/Organization.Read.All"];
+const lookupTenantId = "55555555-5555-4555-8555-555555555555";
+const lookupCommerceId = "66666666-6666-4666-8666-666666666666";
+
+const functionCases = [
+  {
+    name: "domain-name lookup",
+    operation: tenantByDomain,
+    params: { domainName: "example.invalid" },
+    canonical: "https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByDomainName(domainName=%27example.invalid%27)",
+    scopes: tenantLookupScopes,
+    bad: ["x') OR '1'='1", "')", "a/b", "a%2Fb", "$batch", "..", "a\nb", "a b", "a?b", "a#b", "", "x".repeat(300), "not_a_domain!", "-bad-start.invalid", "bad-end-.invalid", "a..invalid", ".invalid", "invalid."],
+  },
+  {
+    name: "tenant-ID lookup",
+    operation: tenantById,
+    params: { tenantId: lookupTenantId },
+    canonical: `https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByTenantId(tenantId=%27${lookupTenantId}%27)`,
+    scopes: tenantLookupScopes,
+    bad: ["example.invalid", "x') OR '1'='1", "')", "a/b", "a%2Fb", "$batch", "..", "a\nb", "zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz", "5555555545554555855555555555555", "", "x".repeat(300)],
+  },
+  {
+    name: "commerce-key lookup",
+    operation: subscriptionByCommerceId,
+    params: { commerceSubscriptionId: lookupCommerceId },
+    canonical: `https://graph.microsoft.com/v1.0/directory/subscriptions(commerceSubscriptionId=%27${lookupCommerceId}%27)`,
+    scopes: commerceScopes,
+    bad: ["x') OR '1'='1", "')", "a/b", "a%2Fb", "$batch", "..", "a\nb", "a b", "", "x".repeat(65), "a+b", "a.b", "a:b"],
+  },
+];
+
+for (const { name, operation, params, canonical, scopes: scopeArgs } of functionCases) {
+  for (const [profile, args] of [[delegatedProfile, { scopes: scopeArgs }], [appProfile, {}]]) {
+    test(`${profile.mode} binds the ${name} to its canonical function URL`, async () => {
+      const f = fixture(json(200, { id: "a" }));
+      await f.session.execute({ profile, operation, params, ...args });
+      assert.equal(f.requests[0].url, canonical);
+    });
+  }
+}
+
+for (const { name, operation, params, scopes: scopeArgs, bad } of functionCases) {
+  const key = Object.keys(params)[0];
+  for (const value of bad) {
+    test(`${name} refuses injection ${JSON.stringify(String(value).slice(0, 24))} before credentials`, async () => {
+      const f = fixture(json(200, {}));
+      await assert.rejects(
+        f.session.execute({ profile: delegatedProfile, operation, params: { [key]: value }, scopes: scopeArgs }),
+        { code: "VALIDATION_ERROR" },
+      );
+      assert.equal(f.credentialCalls.length, 0);
+      assert.equal(f.requests.length, 0);
+    });
+  }
+}
+
+test("function routes refuse missing and unknown parameters before credentials", async () => {
+  const f = fixture(json(200, {}));
+  await assert.rejects(
+    f.session.execute({ profile: delegatedProfile, operation: tenantByDomain, params: {}, scopes: tenantLookupScopes }),
+    error => error.code === "VALIDATION_ERROR" && /Missing path parameter/.test(error.message),
+  );
+  await assert.rejects(
+    f.session.execute({ profile: delegatedProfile, operation: tenantByDomain, params: { domainName: "example.invalid", tenantId: lookupTenantId }, scopes: tenantLookupScopes }),
+    error => error.code === "VALIDATION_ERROR" && /Unknown path parameter/.test(error.message),
+  );
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
+});
+
+test("a non-allowlisted parenthesised operation is still refused before credentials", async () => {
+  const operation = resolveSessionOperation("v1.0", "GET", "/servicePrincipals(appId='{appId}')");
+  const f = fixture(json(200, {}));
+  await assert.rejects(
+    f.session.execute({ profile: delegatedProfile, operation, params: { appId: "00000000-0000-4000-8000-000000000000" }, scopes: ["https://graph.microsoft.com/Application.Read.All"] }),
+    error => error.code === "VALIDATION_ERROR" && /Unsupported path template/.test(error.message),
+  );
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
+  assert.throws(() => authorizeUrl(operation, { appId: "00000000-0000-4000-8000-000000000000" }, "/v1.0/servicePrincipals(appId='00000000-0000-4000-8000-000000000000')"), { code: "POLICY_DENIED" });
+});
+
+test("continuation authorization re-authorizes the bound function argument", () => {
+  assert.equal(
+    authorizeUrl(tenantByDomain, { domainName: "example.invalid" }, "https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByDomainName(domainName=%27example.invalid%27)"),
+    "https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByDomainName(domainName=%27example.invalid%27)",
+  );
+  assert.throws(
+    () => authorizeUrl(tenantByDomain, { domainName: "example.invalid" }, "https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByDomainName(domainName=%27other.invalid%27)"),
+    { code: "POLICY_DENIED" },
+  );
+  assert.throws(
+    () => authorizeUrl(tenantByDomain, { domainName: "a/b" }, "https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByDomainName(domainName=%27a%2Fb%27)"),
+    { code: "VALIDATION_ERROR" },
+  );
+});

@@ -89,6 +89,21 @@ APPROVED_CONTRACT_READS = {
     "/contracts/{contract-id}",
     "/contracts/$count",
 }
+# The ten approved EXT-01m v1.0 contact manager/directReports navigation
+# reads: the manager single, the directReports collection and scalar plus
+# their user/contact typed casts, and the per-report singles plus casts.
+APPROVED_CONTACT_NAV_READS = {
+    "/contacts/{orgContact-id}/manager",
+    "/contacts/{orgContact-id}/directReports",
+    "/contacts/{orgContact-id}/directReports/$count",
+    "/contacts/{orgContact-id}/directReports/graph.orgContact",
+    "/contacts/{orgContact-id}/directReports/graph.orgContact/$count",
+    "/contacts/{orgContact-id}/directReports/graph.user",
+    "/contacts/{orgContact-id}/directReports/graph.user/$count",
+    "/contacts/{orgContact-id}/directReports/{directoryObject-id}",
+    "/contacts/{orgContact-id}/directReports/{directoryObject-id}/graph.orgContact",
+    "/contacts/{orgContact-id}/directReports/{directoryObject-id}/graph.user",
+}
 # The six approved EXT-01c v1.0 group lifecycle reads: list, show and count
 # per family (group lifecycle policies and group setting templates).
 APPROVED_GROUP_LIFECYCLE_READS = {
@@ -305,8 +320,13 @@ def make_row(version, path, method, operation):
         reason = "Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/contacts/delta()":
         reason = "Deferred by firstmate contacts scope to a later EXT-01 contacts delta subfamily: delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads."
-    if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.startswith("/contacts/{orgContact-id}/"):
-        reason = "Deferred by firstmate contacts scope to a later EXT-01 contacts navigation subfamily: the per-contact navigation reads (manager, directReports, memberOf, transitiveMemberOf, serviceProvisioningErrors, onPremisesSyncBehavior) need their own route and projection review."
+    if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path in {
+            "/contacts/{orgContact-id}/serviceProvisioningErrors",
+            "/contacts/{orgContact-id}/serviceProvisioningErrors/$count",
+            "/contacts/{orgContact-id}/onPremisesSyncBehavior"}:
+        disposition, reason = "unavailable", "Marked unavailable by firstmate mg-ext-01m decision: no operation-level permission documentation exists for these reads (the guessed operation pages return 404 and onPremisesSyncBehavior is absent from the orgContact resource page), so no read-scope contract can be established (https://learn.microsoft.com/en-us/graph/api/resources/orgcontact?view=graph-rest-1.0)."
+    if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.startswith("/contacts/{orgContact-id}/") and path not in APPROVED_CONTACT_NAV_READS:
+        reason = "Split into EXT-01n (mg-ext-01n) to limit this piece's size: memberOf and transitiveMemberOf reads need their own multi-scope and advanced-query review; the ten approved manager/directReports navigation reads ship in mg-ext-01m."
     if owner == "EXT-01" and method == "GET" and version == "beta" and disposition == "scheduled" and path.split("/")[1] == "contacts":
         reason = "Deferred by firstmate contacts scope to a later EXT-01 contacts beta subfamily: the three approved reads cover v1.0 only; beta contacts need separate review."
     if owner == "EXT-01" and method == "POST" and not mutates and disposition == "scheduled" and "/contacts" in path and path != "/contacts" and not path.endswith("/restore"):

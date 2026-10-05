@@ -80,6 +80,10 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra contact list/);
   assert.match(result.stdout, /entra contact show/);
   assert.match(result.stdout, /entra contact count/);
+  assert.match(result.stdout, /entra contact show-manager/);
+  assert.match(result.stdout, /entra contact list-direct-reports/);
+  assert.match(result.stdout, /entra contact show-direct-report/);
+  assert.match(result.stdout, /entra contact count-direct-reports/);
   assert.match(result.stdout, /entra group-lifecycle-policy list/);
   assert.match(result.stdout, /entra group-lifecycle-policy show/);
   assert.match(result.stdout, /entra group-lifecycle-policy count/);

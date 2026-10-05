@@ -210,6 +210,14 @@ const contactRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to OrgContact.Read.All, the documented least privilege" },
 };
+const contactNavRead = {
+  select: { value: "comma-separated-properties", description: "Request server properties from id, displayName, mail; richer per-type fields need the subtype's single-object reads" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to OrgContact.Read.All, the documented least privilege" },
+  as: { value: "user|orgContact", description: "Return only this directory-object subtype via the typed cast route" },
+};
 const lifecycleRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties; lifecycle-policy reads need Directory.Read.All" },
@@ -830,6 +838,38 @@ export const LEAVES: Leaf[] = [
     ...common,
     scopes: contactRead.scopes,
   }, examples: ["mg-axi entra contact count --profile soc"] },
+  { path: "entra contact show-manager", description: "Show one contact's manager as a directory object with type plus minimal rows (id, displayName); mail needs an explicit --select", operation: "GET:/contacts/{orgContact-id}/manager", flags: {
+    ...common, id: { value: "contact-id", required: true, description: "Organizational-contact object ID" },
+    select: contactNavRead.select,
+    fields: contactNavRead.fields,
+    full: contactNavRead.full,
+    scopes: contactNavRead.scopes,
+  }, examples: ["mg-axi entra contact show-manager --id <contact-id> --profile soc"] },
+  { path: "entra contact list-direct-reports", description: "List one contact's direct reports as directory objects with type plus minimal rows (id, displayName); --as selects the user or contact cast route", operation: "GET:/contacts/{orgContact-id}/directReports", flags: {
+    ...common, id: { value: "contact-id", required: true, description: "Organizational-contact object ID" },
+    as: contactNavRead.as,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    select: contactNavRead.select,
+    fields: contactNavRead.fields,
+    full: contactNavRead.full,
+    cursor: contactNavRead.cursor,
+    scopes: contactNavRead.scopes,
+  }, examples: ["mg-axi entra contact list-direct-reports --id <contact-id> --profile soc", "mg-axi entra contact list-direct-reports --id <contact-id> --as user --profile soc"] },
+  { path: "entra contact show-direct-report", description: "Show one direct report as a directory object with type plus minimal rows (id, displayName); --as selects the user or contact cast route", operation: "GET:/contacts/{orgContact-id}/directReports/{directoryObject-id}", flags: {
+    ...common, id: { value: "contact-id", required: true, description: "Organizational-contact object ID" },
+    "report-id": { value: "report-id", required: true, description: "Direct-report directory-object ID" },
+    as: contactNavRead.as,
+    select: contactNavRead.select,
+    fields: contactNavRead.fields,
+    full: contactNavRead.full,
+    scopes: contactNavRead.scopes,
+  }, examples: ["mg-axi entra contact show-direct-report --id <contact-id> --report-id <report-id> --profile soc"] },
+  { path: "entra contact count-direct-reports", description: "Count one contact's direct reports as one scalar; the $count route takes no --select, --limit or --cursor; --as selects the user or contact cast route", operation: "GET:/contacts/{orgContact-id}/directReports/$count", flags: {
+    ...common, id: { value: "contact-id", required: true, description: "Organizational-contact object ID" },
+    as: contactNavRead.as,
+    scopes: contactNavRead.scopes,
+  }, examples: ["mg-axi entra contact count-direct-reports --id <contact-id> --profile soc"] },
   { path: "entra group-lifecycle-policy list", description: "List group lifecycle (expiry) policies with compact properties (id, groupLifetimeInDays, managedGroupTypes); --filter passes through as plain $filter", operation: "GET:/groupLifecyclePolicies", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

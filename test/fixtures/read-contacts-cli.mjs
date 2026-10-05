@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Socket } from "node:net";
 import { mock } from "node:test";
 
-const { mode, contacts, denied } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const { mode, contacts, denied, manager, reports } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
 const allowedDelegated = new Set(["https://graph.microsoft.com/OrgContact.Read.All"]);
 const [major, minor] = process.versions.node.split(".").map(Number);
 const exportOption = major >= 26 || (major === 25 && minor >= 9) || (major === 24 && minor >= 15)
@@ -37,6 +37,42 @@ function single(rows, pathname) {
   return found;
 }
 
+function castRows(rows, cast) {
+  if (cast === undefined) return rows;
+  assert.ok(cast === "graph.user" || cast === "graph.orgContact", `Unexpected cast ${cast}`);
+  return rows.filter(row => row["@odata.type"] === `#microsoft.graph.${cast.slice("graph.".length)}`);
+}
+
+// Navigation routes under one contact: manager single, directReports
+// collection/casts/singles and their $count scalars. Unknown contact ids
+// 404 like the top-level single route.
+function navRoute(url) {
+  const rest = url.pathname.slice(`${base}/`.length).split("/");
+  const [contactId, head, ...tail] = rest;
+  assert.ok(contacts.some(row => row.id === contactId), `Unexpected contact route ${url.pathname}`);
+  assert.ok(manager !== undefined && reports !== undefined, `No navigation fixture for ${url.pathname}`);
+  if (head === "manager" && tail.length === 0) return manager;
+  if (head === "directReports" && tail.length === 0) return { value: reports };
+  if (head === "directReports" && tail.length === 1 && tail[0] === "$count") {
+    assert.equal(url.searchParams.size, 0);
+    return { scalar: reports.length };
+  }
+  if (head === "directReports" && tail.length === 1 && tail[0].startsWith("graph.")) {
+    return { value: castRows(reports, tail[0]) };
+  }
+  if (head === "directReports" && tail.length === 2 && tail[1] === "$count" && tail[0].startsWith("graph.")) {
+    return { scalar: castRows(reports, tail[0]).length };
+  }
+  if (head === "directReports" && (tail.length === 1 || (tail.length === 2 && tail[1].startsWith("graph.")))) {
+    const [reportId, cast] = tail;
+    const candidates = cast === undefined ? reports : castRows(reports, cast);
+    const found = candidates.find(row => row.id === reportId);
+    assert.ok(found, `Unexpected contact route ${url.pathname}`);
+    return found;
+  }
+  assert.fail(`Unexpected contact route ${url.pathname}`);
+}
+
 mock.module(new URL("../../dist/msal-provider.js", import.meta.url), {
   [exportOption]: { MsalProvider: class {
     storage = "session-only";
@@ -65,6 +101,13 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
       return { status, headers: { "Content-Type": "text/plain" }, body: String(contacts.length) };
     } else if (url.pathname === base) {
       body = { value: contacts };
+    } else if (url.pathname.startsWith(`${base}/`) && url.pathname.split("/").length > 4) {
+      const nav = navRoute(url);
+      if (nav !== null && typeof nav === "object" && Object.hasOwn(nav, "scalar")) {
+        assert.equal(request.headers.ConsistencyLevel, "eventual");
+        return { status, headers: { "Content-Type": "text/plain" }, body: String(nav.scalar) };
+      }
+      body = nav;
     } else {
       body = single(contacts, url.pathname);
     }

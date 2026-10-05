@@ -31,8 +31,8 @@ import type { AnyProfile } from "./profiles.js";
 // rather than an error; at most one multitenant organization exists per
 // tenant. The single-member read stays scheduled: its documented least
 // privilege is the write scope MultiTenantOrganization.ReadWrite.All in
-// both modes. The tenant-lookup functions belong to the mg-ext-04e
-// follow-up. Beta stays out. No multi-tenant-organization mutation exists
+// both modes. The tenant-lookup functions ship as tenant-information show
+// under the mg-ext-04e function-argument contract. Beta stays out. No multi-tenant-organization mutation exists
 // in this slice: creation, update, member add/remove and join acceptance
 // are writes.
 

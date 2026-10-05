@@ -1,5 +1,5 @@
 import { AxiError } from "axi-sdk-js";
-import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { resolveSessionOperation, type CollectArgs, type GraphSession, type SessionOperation } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 directory-subscriptions subfamily: the read mapping behind
@@ -20,9 +20,9 @@ import type { AnyProfile } from "./profiles.js";
 // no $count or ConsistencyLevel contract; the single GET documents $select
 // only. The $count route carries no operation-level documentation page and
 // takes no --filter/--select/--limit/--cursor. The commerceSubscriptionId
-// alternate-key lookup stays out: alternate-key function segments are not
-// whole-segment placeholders, so the shared session path template and the
-// raw-route matcher cannot bind them without their own contract review.
+// alternate-key lookup ships on `show --commerce-subscription-id` through
+// the allowlisted session function binding: the key arrives only as an
+// explicit CLI flag and the session validates, OData-quotes and encodes it.
 // Beta subscriptions stay out ("beta needs its own review"). No mutation
 // lives here.
 //
@@ -239,6 +239,27 @@ function subscriptionId(flags: SubscriptionFlags, help: string): string {
   return id;
 }
 
+// Exactly one subscription key selects the show route: the object ID from
+// the catalogue-resolved operation, or the commerce-system alternate key
+// from the allowlisted function route. The key value itself is validated by
+// the session binding before credentials.
+function subscriptionTarget(flags: SubscriptionFlags, operation: SessionOperation, help: string): { operation: SessionOperation; params: Record<string, string> } {
+  const id = flags.id;
+  const commerceId = flags["commerce-subscription-id"];
+  if (id !== undefined && commerceId !== undefined) {
+    throw new AxiError("--id and --commerce-subscription-id cannot be combined", "VALIDATION_ERROR", [help]);
+  }
+  if (commerceId !== undefined) {
+    if (!String(commerceId).trim()) throw new AxiError("--commerce-subscription-id needs the commerce-system subscription ID", "VALIDATION_ERROR", [help]);
+    return {
+      operation: resolveSessionOperation("v1.0", "GET", "/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')"),
+      params: { commerceSubscriptionId: String(commerceId) },
+    };
+  }
+  if (id === undefined) throw new AxiError("Subscription show needs exactly one of --id or --commerce-subscription-id", "VALIDATION_ERROR", [help]);
+  return { operation, params: { "companySubscription-id": subscriptionId(flags, help) } };
+}
+
 function singleResult(
   raw: unknown,
   fields: string[],
@@ -300,11 +321,11 @@ export async function showSubscription(
   const { select, fields } = selectedFields(flags, DEFAULT_SHOW_SELECT, help);
   const scopes = scopesFor(flags, DEFAULT_SUBSCRIPTION_SCOPES, profile, help);
   const full = flags.full === true;
-  const id = subscriptionId(flags, help);
+  const target = subscriptionTarget(flags, operation, help);
   const raw = await withGuidance(SUBSCRIPTION_DENIAL_HINTS, () => session.execute({
     profile,
-    operation,
-    params: { "companySubscription-id": id },
+    operation: target.operation,
+    params: target.params,
     query: { $select: select.join(",") },
     scopes,
   }));

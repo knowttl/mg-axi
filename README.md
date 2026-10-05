@@ -499,7 +499,7 @@ mg-axi entra subscription count --profile soc
 `entra subscription list` defaults to compact properties (`id`, `skuPartNumber`, `status`, `totalLicenses`); an empty list may mean the tenant holds no commercial subscriptions.
 All three subscription commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
 Subscription lists accept `--filter` as plain `$filter`, without adding `$count=true` or `ConsistencyLevel`; the show command documents `$select` only and the count command takes no `--filter`, `--select`, `--limit` or `--cursor`.
-`entra subscription show --id <subscription-id>` defaults to the full reviewed companySubscription set; the commerceSubscriptionId alternate-key lookup stays out because function-key segments need a shared session path-template contract review.
+`entra subscription show --id <subscription-id>` defaults to the full reviewed companySubscription set; `entra subscription show --commerce-subscription-id <commerce-subscription-id>` serves the same object through the commerce-system alternate key, binding it only through the allowlisted session function-argument contract (validated, OData-quoted, encoded).
 Subscription lists return `subscriptions` and single-subscription reads return `subscription`; count commands return `count: { returned: <total>, complete: true }`.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to subscription reads.
 Delegated subscription reads default to `https://graph.microsoft.com/Organization.Read.All`, while application profiles use the configured `.default` audience.

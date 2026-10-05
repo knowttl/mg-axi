@@ -110,6 +110,7 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra multi-tenant-organization join-request show/);
   assert.match(result.stdout, /entra multi-tenant-organization tenant list/);
   assert.match(result.stdout, /entra multi-tenant-organization tenant count/);
+  assert.match(result.stdout, /entra tenant-information show/);
   assert.match(result.stdout, /entra conditional-access policy list/);
   assert.match(result.stdout, /entra conditional-access named-location list/);
   assert.match(result.stdout, /entra group member add/);

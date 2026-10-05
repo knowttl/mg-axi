@@ -273,6 +273,10 @@ const multiTenantOrganizationTenantRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: multiTenantOrganizationRead.scopes,
 };
+const tenantInformationRead = {
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to CrossTenantInformation.ReadBasic.All" },
+};
 const attributeSetRead = {
   select: { value: "comma-separated-properties", description: "Request server properties; attribute-set reads need CustomSecAttributeDefinition.Read.All" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
@@ -744,13 +748,15 @@ export const LEAVES: Leaf[] = [
     cursor: subscriptionRead.cursor,
     scopes: subscriptionRead.scopes,
   }, examples: ["mg-axi entra subscription list --profile soc", "mg-axi entra subscription list --profile soc --limit 10", "mg-axi entra subscription list --profile soc --filter \"status eq 'Enabled'\""] },
-  { path: "entra subscription show", description: "Show one commercial subscription with the full reviewed property set", operation: "GET:/directory/subscriptions/{companySubscription-id}", flags: {
-    ...common, id: { value: "subscription-id", required: true, description: "Commercial-subscription object ID" },
+  { path: "entra subscription show", description: "Show one commercial subscription with the full reviewed property set, by object ID or commerce subscription ID", operation: "GET:/directory/subscriptions/{companySubscription-id}", flags: {
+    ...common,
+    id: { value: "subscription-id", description: "Commercial-subscription object ID; exactly one of --id or --commerce-subscription-id" },
+    "commerce-subscription-id": { value: "commerce-subscription-id", description: "Commerce-system subscription ID; exactly one of --id or --commerce-subscription-id" },
     select: subscriptionRead.select,
     fields: subscriptionRead.fields,
     full: subscriptionRead.full,
     scopes: subscriptionRead.scopes,
-  }, examples: ["mg-axi entra subscription show --id <subscription-id> --profile soc", "mg-axi entra subscription show --id <subscription-id> --profile soc --full"] },
+  }, examples: ["mg-axi entra subscription show --id <subscription-id> --profile soc", "mg-axi entra subscription show --id <subscription-id> --profile soc --full", "mg-axi entra subscription show --commerce-subscription-id <commerce-subscription-id> --profile soc"] },
   { path: "entra subscription count", description: "Count commercial subscriptions as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/directory/subscriptions/$count", flags: {
     ...common,
     scopes: subscriptionRead.scopes,
@@ -1130,6 +1136,13 @@ export const LEAVES: Leaf[] = [
     ...common,
     scopes: multiTenantOrganizationRead.scopes,
   }, examples: ["mg-axi entra multi-tenant-organization tenant count --profile soc"] },
+  { path: "entra tenant-information show", description: "Show tenant information for one Microsoft Entra tenant by domain name or tenant ID, with the full reviewed tenantInformation set (defaultDomainName, displayName, federationBrandName, tenantId); no Entra role is required and the lookup takes no --select, --filter, --limit or --cursor", operation: "GET:/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')", flags: {
+    ...common,
+    "domain-name": { value: "domain-name", description: "Primary domain name of the tenant; exactly one of --domain-name or --tenant-id" },
+    "tenant-id": { value: "tenant-guid", description: "Unique tenant identifier (GUID); exactly one of --domain-name or --tenant-id" },
+    full: tenantInformationRead.full,
+    scopes: tenantInformationRead.scopes,
+  }, examples: ["mg-axi entra tenant-information show --domain-name example.invalid --profile soc", "mg-axi entra tenant-information show --tenant-id <tenant-id> --profile soc"] },
   { path: "entra sign-in list", description: "List sign-ins in a bounded time window (AuditLog.Read.All; delegated callers also need Global Reader, Reports Reader, Security Administrator, Security Operator or Security Reader; conservative P1/P2 deployment prerequisite)", operation: "GET:/auditLogs/signIns", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

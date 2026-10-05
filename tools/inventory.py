@@ -102,12 +102,19 @@ APPROVED_DELEGATED_ADMIN_READS = {
 # The four approved EXT-04c v1.0 multi-tenant-organization reads:
 # organization show, join-request show, tenant list and tenant count. The
 # single-member read stays scheduled: its documented least privilege is the
-# write scope. The tenant-lookup functions stay scheduled for mg-ext-04e.
+# write scope.
 APPROVED_MTO_READS = {
     "/tenantRelationships/multiTenantOrganization",
     "/tenantRelationships/multiTenantOrganization/joinRequest",
     "/tenantRelationships/multiTenantOrganization/tenants",
     "/tenantRelationships/multiTenantOrganization/tenants/$count",
+}
+# The two approved mg-ext-04e v1.0 tenant-lookup function reads: tenant
+# information by domain name and by tenant ID. Both bind only through the
+# allowlisted session function-argument contract.
+APPROVED_TENANT_LOOKUP_READS = {
+    "/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')",
+    "/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')",
 }
 # The ten approved EXT-01m v1.0 contact manager/directReports navigation
 # reads: the manager single, the directReports collection and scalar plus
@@ -287,7 +294,7 @@ def make_row(version, path, method, operation):
             reason = "Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle beta subfamily: the six approved reads cover v1.0 only; beta policies and templates need separate review."
     if owner == "EXT-01" and not mutates and disposition == "scheduled" and path.split("/")[1] == "directory" and ("/attributeSets" in path or "/customSecurityAttributeDefinitions" in path) and version == "beta":
         reason = "Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review."
-    if owner == "EXT-04" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.split("/")[1] == "tenantRelationships" and path not in APPROVED_DELEGATED_ADMIN_READS and path not in APPROVED_MTO_READS:
+    if owner == "EXT-04" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.split("/")[1] == "tenantRelationships" and path not in APPROVED_DELEGATED_ADMIN_READS and path not in APPROVED_MTO_READS and path not in APPROVED_TENANT_LOOKUP_READS:
         if path == "/tenantRelationships/multiTenantOrganization/tenants/{multiTenantOrganizationMember-id}":
             reason = "Deferred by firstmate multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for the single-member read."
         elif path.startswith("/tenantRelationships/multiTenantOrganization"):
@@ -330,8 +337,6 @@ def make_row(version, path, method, operation):
         disposition, reason = "unavailable", "Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md)."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and (path == "/certificateBasedAuthConfiguration" or path.startswith("/certificateBasedAuthConfiguration/")):
         disposition, reason = "unavailable", "Marked unavailable by firstmate mg-ext-01d decision: the v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped /organization/{organization-id}/certificateBasedAuthConfiguration routes, with no documented GET contract for these root reads (https://learn.microsoft.com/en-us/graph/api/resources/certificatebasedauthconfiguration?view=graph-rest-1.0)."
-    if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')":
-        reason = "Deferred by firstmate directory-subscriptions scope to a later EXT-01 subscriptions lookup subfamily: alternate-key function segments (key='value') are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/directory/onPremisesSynchronization/$count":
         reason = "Deferred by firstmate on-premises-synchronization scope to a later EXT-01 on-premises-synchronization counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
     if owner == "EXT-01" and method == "GET" and version == "beta" and disposition == "scheduled" and path.split("/")[1] == "directory" and "/onPremisesSynchronization" in path:

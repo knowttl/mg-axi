@@ -27,8 +27,8 @@ import type { AnyProfile } from "./profiles.js";
 // contract. The $count scalars, the tenantRelationship container root, the
 // serviceManagementDetails navigation and the relationship accessAssignments,
 // operations and requests navigations stay scheduled for later EXT-04
-// subfamilies, as do the multi-tenant-organization and tenant-lookup
-// functions. Beta stays out. No delegated-admin mutation exists in this
+// subfamilies, as do the multi-tenant-organization reads (shipped) and the
+// tenant-lookup functions (shipped as tenant-information show). Beta stays out. No delegated-admin mutation exists in this
 // slice: relationship creation, approval and termination are writes.
 
 // Every customer property this slice may request or display, matching the

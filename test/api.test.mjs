@@ -373,12 +373,12 @@ test("reviewed $select travels on the authorized URL", async () => {
 });
 
 for (const route of REVIEWED_ROUTES) test(`${route.id} defaults to reviewed fields and filters its response`, async () => {
-  const path = route.id.slice("v1.0:GET:".length).replace(/\{[^}]+\}/g, "fixture-id");
+  const path = route.id.slice("v1.0:GET:".length).replace(/\{tenantId\}/g, "55555555-5555-4555-8555-555555555555").replace(/\{[^}]+\}/g, "fixture-id");
   const row = { id: "a", unreviewed: "must-not-escape" };
   const body = route.kind === "single" ? row : { value: [row] };
   const f = read({ path }, json(200, body));
   const result = await f.run({});
-  assert.equal(new URL(f.requests[0].url).searchParams.get("$select"), route.id === "v1.0:GET:/users/{user-id}/authentication/methods" ? null : (route.defaultFields ?? route.fields).join(","));
+  assert.equal(new URL(f.requests[0].url).searchParams.get("$select"), route.id === "v1.0:GET:/users/{user-id}/authentication/methods" || !route.query.includes("$select") ? null : (route.defaultFields ?? route.fields).join(","));
   const { warnings, ...data } = result;
   const wanted = Object.fromEntries(Object.entries(row).filter(([field]) => route.fields.includes(field)));
   assert.deepEqual(data, route.kind === "single" ? wanted : { returned: 1, complete: true, value: [wanted] });
@@ -773,4 +773,77 @@ test("top help lists the raw read leaf", () => {
   const result = cli(["--help"]);
   assert.equal(result.status, 0);
   assert.match(result.stdout, /api get/);
+});
+
+// EXT-04e: reviewed raw reads for the three allowlisted function routes. A
+// raw path carries the value as one OData-quoted literal; the session
+// re-validates, re-quotes and encodes it before credentials.
+const tenantLookupScope = "https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All";
+const commerceRawScope = "https://graph.microsoft.com/Organization.Read.All";
+const lookupTenant = "55555555-5555-4555-8555-555555555555";
+const lookupCommerce = "66666666-6666-4666-8666-666666666666";
+
+for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: tenantLookupScope }], [appProfile, {}]]) {
+  test(`${profile.mode} raw tenant lookup by domain binds the canonical function URL`, async () => {
+    const f = fixture(json(200, { tenantId: lookupTenant, defaultDomainName: "example.invalid", displayName: "Example", federationBrandName: null, unreviewed: "drop me" }));
+    const body = await runApiGet({ path: "/tenantRelationships/findTenantInformationByDomainName(domainName='example.invalid')", apiVersion: "v1.0", profile, ...scopeArgs }, f.deps);
+    assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByDomainName(domainName=%27example.invalid%27)");
+    assert.deepEqual(body, { tenantId: lookupTenant, defaultDomainName: "example.invalid", displayName: "Example", federationBrandName: null });
+  });
+
+  test(`${profile.mode} raw tenant lookup by tenant ID binds the canonical function URL`, async () => {
+    const f = fixture(json(200, { tenantId: lookupTenant, defaultDomainName: "example.invalid", displayName: "Example", federationBrandName: null }));
+    const body = await runApiGet({ path: `/tenantRelationships/findTenantInformationByTenantId(tenantId='${lookupTenant}')`, apiVersion: "v1.0", profile, ...scopeArgs }, f.deps);
+    assert.equal(f.requests[0].url, `https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByTenantId(tenantId=%27${lookupTenant}%27)`);
+    assert.deepEqual(body, { tenantId: lookupTenant, defaultDomainName: "example.invalid", displayName: "Example", federationBrandName: null });
+  });
+}
+
+for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: commerceRawScope }], [appProfile, {}]]) {
+  test(`${profile.mode} raw commerce-key lookup binds the canonical function URL`, async () => {
+    const f = fixture(json(200, { id: "860697e3-b0aa-4196-a6c6-7ec361ed58f7", commerceSubscriptionId: lookupCommerce, status: "Enabled", secret: "drop me" }));
+    const body = await runApiGet({ path: `/directory/subscriptions(commerceSubscriptionId='${lookupCommerce}')`, apiVersion: "v1.0", profile, odata: "$select=id,commerceSubscriptionId,status", ...scopeArgs }, f.deps);
+    assert.equal(f.requests[0].url, `https://graph.microsoft.com/v1.0/directory/subscriptions(commerceSubscriptionId=%27${lookupCommerce}%27)?%24select=id%2CcommerceSubscriptionId%2Cstatus`);
+    assert.deepEqual(body, { id: "860697e3-b0aa-4196-a6c6-7ec361ed58f7", commerceSubscriptionId: lookupCommerce, status: "Enabled" });
+  });
+}
+
+for (const [path, pattern, scopeArgs] of [
+  ["/tenantRelationships/findTenantInformationByDomainName(domainName=example.invalid)", /not in the reviewed raw inventory/, { scopes: tenantLookupScope }],
+  ["/tenantRelationships/findTenantInformationByDomainName(domain='example.invalid')", /not in the reviewed raw inventory/, { scopes: tenantLookupScope }],
+  ["/tenantRelationships/findTenantInformationByTenant(domainName='example.invalid')", /not in the reviewed raw inventory/, { scopes: tenantLookupScope }],
+  ["/tenantRelationships/findTenantInformationByDomainName(domainName='a%2Fb')", /Invalid domain name/, { scopes: tenantLookupScope }],
+  ["/tenantRelationships/findTenantInformationByDomainName(domainName='a/b')", /not in the reviewed raw inventory/, { scopes: tenantLookupScope }],
+  ["/tenantRelationships/findTenantInformationByTenantId(tenantId='example.invalid')", /Invalid tenant ID/, { scopes: tenantLookupScope }],
+  ["/directory/subscriptions(commerceSubscriptionId='a%2Fb')", /Invalid commerce subscription ID/, { scopes: commerceRawScope }],
+  ["/servicePrincipals(appId='00000000-0000-4000-8000-000000000000')", /not in the reviewed raw inventory/, { scopes }],
+]) test(`raw function path ${path} is refused before credentials`, async () => {
+  const f = fixture(json(200, {}));
+  await assert.rejects(runApiGet({ path, apiVersion: "v1.0", profile: delegatedProfile, ...scopeArgs }, f.deps), error => {
+    assert.equal(error.code, "VALIDATION_ERROR");
+    assert.match(`${error.message} ${error.suggestions.join("\n")}`, pattern);
+    return true;
+  });
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
+});
+
+test("raw tenant lookups refuse server field selection before credentials", async () => {
+  const f = fixture(json(200, {}));
+  await assert.rejects(
+    runApiGet({ path: "/tenantRelationships/findTenantInformationByDomainName(domainName='example.invalid')", apiVersion: "v1.0", profile: delegatedProfile, scopes: tenantLookupScope, odata: "$select=id" }, f.deps),
+    error => error.code === "VALIDATION_ERROR" && /Unsupported query key \$select/.test(error.message),
+  );
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
+});
+
+test("raw function routes refuse the beta version before credentials", async () => {
+  const f = fixture(json(200, {}));
+  await assert.rejects(
+    runApiGet({ path: "/tenantRelationships/findTenantInformationByDomainName(domainName='example.invalid')", apiVersion: "beta", profile: delegatedProfile, scopes: tenantLookupScope }, f.deps),
+    error => error.code === "VALIDATION_ERROR" && /No reviewed beta raw reads/.test(error.message),
+  );
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
 });

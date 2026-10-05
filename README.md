@@ -19,6 +19,7 @@ READ-07 adds application and service-principal list/show with credential expiry 
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
 READ-08 adds service-principal delegated-grant and app-role-assignment consent reads for a named client through the same session.
 EXT-01 (domains) adds tenant-domain list/show, per-domain verification and service-configuration DNS record reads, and top-level domain DNS record reads through the same session.
+EXT-01 (certificate auth) adds PKI configuration and certificate-authority list/show/count reads with default certificate-blob omission through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
@@ -289,7 +290,7 @@ The named-list caps, `count`, cursors, null/missing preservation and 500-charact
 All five named reads default to `--api-version v1.0`; explicit `--api-version beta` requires a preview-enabled profile, with no automatic fallback.
 Organization and localization lists offer no `--filter`: Graph documents `$select` only on these routes, so the flag is refused before credentials.
 Denied organization and branding reads name the scope, role and licensing guidance instead of only the generic cause.
-No organization mutation lives here; certificate-based-auth configuration, extensions, beta-only settings and the POST lookup actions belong to later pieces; see the [organization scope decisions](docs/coverage.md#ext-01-organization-scope-decisions) for deferred reads and later subfamilies.
+No organization mutation lives here; organization-scoped certificate-based-auth configuration, extensions, beta-only settings and the POST lookup actions belong to later pieces; see the [organization scope decisions](docs/coverage.md#ext-01-organization-scope-decisions) for deferred reads and later subfamilies.
 
 Log in with `https://graph.microsoft.com/Directory.Read.All`, then inspect group lifecycle policies:
 
@@ -375,6 +376,32 @@ Delegated domain and DNS record reads default to `https://graph.microsoft.com/Do
 Delegated callers additionally need a supported Entra role (Domain Name Administrator or Global Reader are least-privileged); personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for domain reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
 No domain mutation lives here; see the [domain scope decisions](docs/coverage.md#ext-01-domain-scope-decisions) for deferred reads and later subfamilies.
+
+Log in with `https://graph.microsoft.com/PublicKeyInfrastructure.Read.All`, then inspect certificate-based-auth PKI configurations and their certificate authorities:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/PublicKeyInfrastructure.Read.All
+mg-axi entra certificate-auth-pki list --profile soc
+mg-axi entra certificate-auth-pki show --profile soc --id <pki-id>
+mg-axi entra certificate-auth-pki count --profile soc
+mg-axi entra certificate-authority list --profile soc --pki <pki-id>
+mg-axi entra certificate-authority show --profile soc --pki <pki-id> --id <authority-id>
+mg-axi entra certificate-authority count --profile soc --pki <pki-id>
+```
+
+`entra certificate-auth-pki list` defaults to compact properties (`id`, `displayName`, `status`); an empty list may mean certificate-based authentication is not configured.
+All six certificate-auth commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+PKI and authority lists accept `--filter` as plain `$filter`, without adding `$count=true` or `ConsistencyLevel`; counts accept `--filter` to narrow the total server-side.
+`entra certificate-auth-pki show --id <pki-id>` defaults to the full reviewed PKI set and points at its authorities; authority lists take `--pki <pki-id>` and default to `id`, `displayName`, `certificateAuthorityType` and `expirationDateTime`.
+Authority show commands also take `--pki <pki-id>` and require `--id <authority-id>`; the show default is the full reviewed set except the public-certificate blob.
+Authority entries carry public certificates only, but the base64 `certificate` blob (up to 8 KB per CA file) is omitted from every default select and needs an explicit `--select certificate`; explicitly selected blobs still truncate at 500 characters unless `--full` is passed.
+PKI lists return `certificateAuthPkis` and single-PKI reads return `certificateAuthPki`; authority lists return `certificateAuthorities` with single-authority reads returning `certificateAuthority`.
+Count commands return `count: { returned: <total>, complete: true }` and accept no `--select`, `--fields`, `--limit` or `--cursor`.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to certificate-auth reads.
+Delegated certificate-auth reads default to `https://graph.microsoft.com/PublicKeyInfrastructure.Read.All`, while application profiles use the configured `.default` audience.
+Delegated callers additionally need Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported.
+No P1/P2 prerequisite is stated for certificate-auth reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
+No certificate-auth mutation lives here; the root `/certificateBasedAuthConfiguration` reads carry no documented v1.0 operation contract and the org-scoped certificate-auth reads belong to a later piece; see the [certificate-auth scope decisions](docs/coverage.md#ext-01-certificate-auth-scope-decisions).
 
 Log in with `https://graph.microsoft.com/IdentityProvider.Read.All`, then read workforce identity providers:
 
@@ -590,7 +617,9 @@ mg-axi api get /identity/conditionalAccess/policies --scopes https://graph.micro
 
 `api get` accepts only GET routes in the [reviewed route catalogue](src/api.ts), which owns route-specific query keys, `$select` fields and access constraints.
 OData parameters use `--odata`; `--query` is reserved for output queries and is not implemented here.
-Omitting `$select` selects the route's reviewed fields, and every response is filtered to reviewed fields before output.
+Omitting `$select` selects the route's default reviewed fields, and every response is filtered to the selected subset before output.
+Raw PKI and certificate-authority list/show reads use the certificate-auth paths in the [reviewed route catalogue](src/api.ts); their `$count` routes are available only through the named count commands above.
+Raw certificate-authority defaults omit `certificate`; request it explicitly with `--odata '$select=certificate'`, subject to the raw text truncation described below.
 For `/users/<user-id>/authentication/methods`, `$select` is the only supported OData parameter and selects output properties locally; an explicit selection restricts output to that subset.
 Method requests omit `$select` on initial requests, continuations, redirects and retries, while cursors preserve the local selection.
 Other routes send `$select` to Graph.

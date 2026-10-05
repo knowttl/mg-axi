@@ -10,15 +10,15 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 76 (74 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 82 (80 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
 - inventory reviewed-raw-read: 0
-- inventory scheduled: 8446
+- inventory scheduled: 8443
 - inventory intentionally-blocked: 3071
 - inventory deprecated: 870
-- inventory unavailable: 8
+- inventory unavailable: 11
 - inventory excluded: 35056
 
 ## Commands
@@ -56,6 +56,12 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra domain service-configuration-record show` | `GET:/domains/{domain-id}/serviceConfigurationRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
 | `mg-axi entra domain-dns-record list` | `GET:/domainDnsRecords` | scheduled | EXT-01 |
 | `mg-axi entra domain-dns-record show` | `GET:/domainDnsRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
+| `mg-axi entra certificate-auth-pki list` | `GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations` | scheduled | EXT-01 |
+| `mg-axi entra certificate-auth-pki show` | `GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}` | scheduled | EXT-01 |
+| `mg-axi entra certificate-auth-pki count` | `GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/$count` | scheduled | EXT-01 |
+| `mg-axi entra certificate-authority list` | `GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities` | scheduled | EXT-01 |
+| `mg-axi entra certificate-authority show` | `GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities/{certificateAuthorityDetail-id}` | scheduled | EXT-01 |
+| `mg-axi entra certificate-authority count` | `GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities/$count` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy list` | `GET:/groupLifecyclePolicies` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy show` | `GET:/groupLifecyclePolicies/{groupLifecyclePolicy-id}` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy count` | `GET:/groupLifecyclePolicies/$count` | scheduled | EXT-01 |
@@ -262,6 +268,19 @@ Stream image and CSS bytes stay out because they need a separate binary-output c
 | `v1.0:POST:/organization/{organization-id}/getMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate organization scope to a later EXT-01 organization lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
 | `v1.0:POST:/organization/{organization-id}/getMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate organization scope to a later EXT-01 organization lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
 
+## EXT-01 certificate-auth scope decisions
+
+This change covers the six v1.0 PKI and certificate-authority reads above (certificate-auth-pki and certificate-authority list, show and count).
+The three root /certificateBasedAuthConfiguration reads below carry an explicit reviewed unavailable disposition; no new commands or raw access are approved for them.
+The v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped routes, which belong to the deferred organization certificate-auth subfamily.
+Certificate-authority entries carry public certificates only; the base64 certificate blob is omitted from default selects and needs an explicit --select naming it.
+Certificate-auth reads support v1.0 only; beta needs its own review.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `v1.0:GET:/certificateBasedAuthConfiguration` | unavailable | EXT-01 | Marked unavailable by firstmate mg-ext-01d decision: the v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped /organization/{organization-id}/certificateBasedAuthConfiguration routes, with no documented GET contract for these root reads (https://learn.microsoft.com/en-us/graph/api/resources/certificatebasedauthconfiguration?view=graph-rest-1.0). |
+| `v1.0:GET:/certificateBasedAuthConfiguration/$count` | unavailable | EXT-01 | Marked unavailable by firstmate mg-ext-01d decision: the v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped /organization/{organization-id}/certificateBasedAuthConfiguration routes, with no documented GET contract for these root reads (https://learn.microsoft.com/en-us/graph/api/resources/certificatebasedauthconfiguration?view=graph-rest-1.0). |
+| `v1.0:GET:/certificateBasedAuthConfiguration/{certificateBasedAuthConfiguration-id}` | unavailable | EXT-01 | Marked unavailable by firstmate mg-ext-01d decision: the v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped /organization/{organization-id}/certificateBasedAuthConfiguration routes, with no documented GET contract for these root reads (https://learn.microsoft.com/en-us/graph/api/resources/certificatebasedauthconfiguration?view=graph-rest-1.0). |
 ## EXT-01 group lifecycle scope decisions
 
 This change covers the six v1.0 group lifecycle policy and group setting template reads above (list, show, count per family).

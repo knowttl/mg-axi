@@ -50,6 +50,8 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra domain verification-dns-record list/);
   assert.match(result.stdout, /entra domain service-configuration-record list/);
   assert.match(result.stdout, /entra domain-dns-record list/);
+  assert.match(result.stdout, /entra certificate-auth-pki list/);
+  assert.match(result.stdout, /entra certificate-authority list/);
   assert.match(result.stdout, /entra group-lifecycle-policy list/);
   assert.match(result.stdout, /entra group-lifecycle-policy show/);
   assert.match(result.stdout, /entra group-lifecycle-policy count/);

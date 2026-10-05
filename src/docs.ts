@@ -44,6 +44,8 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra device ", "devices"],
   ["entra administrative-unit ", "administrative units"],
   ["entra organization ", "organization and branding"],
+  ["entra certificate-auth-pki ", "certificate authentication"],
+  ["entra certificate-authority ", "certificate authentication"],
   ["entra domain ", "domains and DNS records"],
   ["entra domain-dns-record ", "domains and DNS records"],
   ["entra group-lifecycle-policy ", "group lifecycle policies"],
@@ -255,6 +257,7 @@ export function capabilityDocument(): string {
   const deferredProviderRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred to a later EXT-03 "));
   const unavailableInvitationRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Marked unavailable by firstmate EXT-03b decision: "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
+  const unavailableCertAuthRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01d decision: "));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
   const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
@@ -330,6 +333,17 @@ export function capabilityDocument(): string {
     "|---|---|---|---|",
     ...deferredOrganizationRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
+    "## EXT-01 certificate-auth scope decisions",
+    "",
+    "This change covers the six v1.0 PKI and certificate-authority reads above (certificate-auth-pki and certificate-authority list, show and count).",
+    "The three root /certificateBasedAuthConfiguration reads below carry an explicit reviewed unavailable disposition; no new commands or raw access are approved for them.",
+    "The v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped routes, which belong to the deferred organization certificate-auth subfamily.",
+    "Certificate-authority entries carry public certificates only; the base64 certificate blob is omitted from default selects and needs an explicit --select naming it.",
+    "Certificate-auth reads support v1.0 only; beta needs its own review.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...unavailableCertAuthRows.map(row => `| \`${row.id}\` | ${row.disposition} | ${row.owningSlice} | ${row.reason} |`),
     "## EXT-01 group lifecycle scope decisions",
     "",
     "This change covers the six v1.0 group lifecycle policy and group setting template reads above (list, show, count per family).",

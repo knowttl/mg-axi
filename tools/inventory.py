@@ -292,6 +292,17 @@ def make_row(version, path, method, operation):
         reason = "Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects beta subfamily: the three approved reads cover v1.0 only; beta directory objects need separate review."
     if owner == "EXT-01" and method == "POST" and disposition == "scheduled" and "/directoryObjects" in path and path != "/directoryObjects" and not path.endswith("/restore"):
         reason = "Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review."
+    if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.split("/")[1] == "directory" and "/deletedItems" in path:
+        if path in ("/directory/deletedItems", "/directory/deletedItems/$count"):
+            reason = "Deferred by firstmate deleted-items scope: upstream requires the OData cast as part of the list URI and states calling GET /directory/deletedItems without a type is not supported, so no untyped list or count command is approved (https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0)."
+        elif "/graph.device" in path:
+            reason = "Deferred by firstmate deleted-items scope: the v1.0 deletedItems list/get pages name the supported types and document per-type least-privilege permissions, and device is not among them, so no device cast command is approved (https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0)."
+        elif path.startswith("/directory/deletedItems/{directoryObject-id}/graph."):
+            reason = "Deferred by firstmate deleted-items scope: covered by the approved deleted-item show, which reads the untyped get returning the same object for every type; the cast suffix only asserts the expected type and no separate reviewed route is approved."
+    if owner == "EXT-01" and method == "GET" and version == "beta" and disposition == "scheduled" and path.split("/")[1] == "directory" and "/deletedItems" in path:
+        reason = "Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review."
+    if owner == "EXT-01" and method == "POST" and not mutates and disposition == "scheduled" and path.split("/")[1] == "directory" and "/deletedItems" in path and not path.endswith("/restore"):
+        reason = "Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review."
     if owner == "EXT-01" and method == "GET" and disposition == "scheduled" and path.split("/")[1] in {"agreements", "agreementAcceptances"}:
         if path.endswith("/$count"):
             reason = "Deferred by firstmate terms-of-use scope to a later EXT-01 terms-of-use counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
@@ -301,6 +312,8 @@ def make_row(version, path, method, operation):
             reason = "Deferred by firstmate terms-of-use scope to a later EXT-01 terms-of-use beta subfamily: the six approved reads cover v1.0 only; beta agreements and acceptances need separate review."
     if mutates and owner is not None:
         owner = "WRITE-N"
+        if disposition == "scheduled":
+            reason = "No implemented command or reviewed raw contract yet."
         if method == "PATCH" and path == "/users/{user-id}":
             owner = "WRITE-02"
         elif method == "POST" and path == "/groups/{group-id}/members/$ref":

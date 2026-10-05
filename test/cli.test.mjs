@@ -66,6 +66,17 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra directory-object list/);
   assert.match(result.stdout, /entra directory-object show/);
   assert.match(result.stdout, /entra directory-object count/);
+  assert.match(result.stdout, /entra deleted-user list/);
+  assert.match(result.stdout, /entra deleted-user count/);
+  assert.match(result.stdout, /entra deleted-group list/);
+  assert.match(result.stdout, /entra deleted-group count/);
+  assert.match(result.stdout, /entra deleted-application list/);
+  assert.match(result.stdout, /entra deleted-application count/);
+  assert.match(result.stdout, /entra deleted-service-principal list/);
+  assert.match(result.stdout, /entra deleted-service-principal count/);
+  assert.match(result.stdout, /entra deleted-administrative-unit list/);
+  assert.match(result.stdout, /entra deleted-administrative-unit count/);
+  assert.match(result.stdout, /entra deleted-item show/);
   assert.match(result.stdout, /entra group-lifecycle-policy list/);
   assert.match(result.stdout, /entra group-lifecycle-policy show/);
   assert.match(result.stdout, /entra group-lifecycle-policy count/);

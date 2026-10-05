@@ -25,6 +25,7 @@ import { listSubscriptions, showSubscription, countSubscriptions } from "./entra
 import { listSynchronizations, showSynchronization } from "./entra-on-premises-synchronization.js";
 import { listAgreements, showAgreement, listAgreementAcceptances, showAgreementAcceptance, listAcceptances, showAcceptance } from "./entra-terms-of-use.js";
 import { listDirectoryObjects, showDirectoryObject, countDirectoryObjects } from "./entra-directory-objects.js";
+import { listDeletedItems, showDeletedItem, countDeletedItems } from "./entra-deleted-items.js";
 import { countContracts, listContracts, showContract } from "./entra-contracts.js";
 import { countLifecyclePolicies, listLifecyclePolicies, showLifecyclePolicy, countSettingTemplates, listSettingTemplates, showSettingTemplate } from "./entra-group-lifecycle.js";
 import { listAttributeSets, showAttributeSet, countAttributeSets, listCustomSecurityAttributeDefinitions, showCustomSecurityAttributeDefinition, countCustomSecurityAttributeDefinitions, listAllowedValues, showAllowedValue, countAllowedValues } from "./entra-custom-security-attributes.js";
@@ -814,6 +815,44 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra directory-object list": return listDirectoryObjects(session, flags, selected.profile, operation, help, selected.name);
       case "entra directory-object show": return showDirectoryObject(session, flags, selected.profile, operation, help, selected.name);
       default: return countDirectoryObjects(session, flags, selected.profile, operation, help, selected.name);
+    }
+  }
+  if (leaf.path === "entra deleted-user list" || leaf.path === "entra deleted-user count"
+    || leaf.path === "entra deleted-group list" || leaf.path === "entra deleted-group count"
+    || leaf.path === "entra deleted-application list" || leaf.path === "entra deleted-application count"
+    || leaf.path === "entra deleted-service-principal list" || leaf.path === "entra deleted-service-principal count"
+    || leaf.path === "entra deleted-administrative-unit list" || leaf.path === "entra deleted-administrative-unit count"
+    || leaf.path === "entra deleted-item show") {
+    if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
+      throw new AxiError("Deleted-item reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, "v1.0");
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra deleted-item show": return showDeletedItem(session, flags, selected.profile, operation, help, selected.name);
+      case "entra deleted-user count":
+      case "entra deleted-group count":
+      case "entra deleted-application count":
+      case "entra deleted-service-principal count":
+      case "entra deleted-administrative-unit count": return countDeletedItems(session, flags, selected.profile, operation, help, selected.name);
+      default: return listDeletedItems(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "entra group-lifecycle-policy list" || leaf.path === "entra group-lifecycle-policy show" || leaf.path === "entra group-lifecycle-policy count"

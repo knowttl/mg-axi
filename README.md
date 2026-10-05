@@ -24,6 +24,7 @@ EXT-01 (directory subscriptions) adds commercial-subscription list/show/count re
 EXT-01 (on-premises synchronization) adds on-premises directory-synchronization list/show reads with Global Administrator role guidance through the same session.
 EXT-01 (terms of use) adds terms-of-use agreement list/show, per-agreement acceptance list/show and tenant-wide agreement-acceptance list/show reads with Security Reader role and Entra ID P1 guidance through the same session.
 EXT-01 (directory objects) adds directory-object list/show/count reads with @odata.type subtype rows and Directory.Read.All guidance through the same session.
+EXT-01 (deleted items) adds soft-deleted user, group, application, service-principal and administrative-unit list/count reads plus deleted-item show with per-type least-privilege scope guidance through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 EXT-01 (federation configurations) adds workforce directory federation-configuration list/show/count/available-types reads with default signing-certificate omission through the same session.
 EXT-03 (data policy operations) adds workforce data-policy-operation list/show/count reads with storage-location redaction through the same session.
@@ -524,6 +525,30 @@ The named-list caps, cursors, null/missing preservation and 500-character text t
 Reads default to `https://graph.microsoft.com/Directory.Read.All` for delegated access, while application profiles use the configured `.default` audience.
 No delegated role or P1/P2 prerequisite is stated for directory-object reads; personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
 No directory-object mutation lives here; the delta sync, the POST lookup/validation actions and beta operations stay scheduled; see the [directory-objects scope decisions](docs/coverage.md#ext-01-directory-objects-scope-decisions).
+
+Log in with the scope matching the deleted type (`User.Read.All`, `Group.Read.All`, `Application.Read.All` or `AdministrativeUnit.Read.All`), then inspect the directory recycle bin:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Group.Read.All
+mg-axi entra deleted-user list --profile soc
+mg-axi entra deleted-group list --profile soc
+mg-axi entra deleted-group count --profile soc
+mg-axi entra deleted-item show --profile soc --id <object-id> --scopes https://graph.microsoft.com/Group.Read.All
+```
+
+Each deleted-type list defaults to compact rows (`id`, `displayName`, `deletedDateTime`, plus `appId` for applications and service principals) and carries the `@odata.type` discriminator naming the kind; deleted users are personal data, so user defaults stay minimal and identifying fields need an explicit `--select`.
+`deleted-item show --id <object-id>` reads the untyped get returning the same object for every type, so it takes no default scope: delegated callers pass the scope matching the object's type as `--scopes` (list the recycle bin first and read each row's `@odata.type` kind).
+All eleven deleted-item commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+No typed list offers `--filter`: only `$select` is reviewed here, so strict input validation refuses the flag before credentials.
+Type lists return `deletedItems`, single reads return `deletedItem`, and counts return `count` with the scalar total.
+Upstream requires the OData cast as part of the list URI, so untyped list/count commands do not exist; device casts carry no documented v1.0 permission contract and stay out with an explicit deferred disposition.
+Rows are polymorphic: only the reviewed per-type properties are ever requested or projected, the discriminator rides along automatically without being selectable, and credential collections (`keyCredentials`, `passwordCredentials`) are never selectable, so secret values can never appear.
+`appId` (client ID) is distinct from the object `id` on applications and service principals.
+Soft-deleted security groups report `securityEnabled` false through a known upstream limitation; read `groupTypes` to name the real kind.
+The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to deleted-item reads.
+List and count reads default to the type's least-privileged scope for delegated access (`User.Read.All`, `Group.Read.All`, `Application.Read.All` or `AdministrativeUnit.Read.All`, all read scopes already allowlisted), while application profiles use the configured `.default` audience.
+No delegated role or P1/P2 prerequisite is stated for deleted-item reads; personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
+No deleted-item mutation lives here; restore and permanent delete stay out entirely, and the POST lookup/validation actions and beta operations stay scheduled; see the [deleted-items scope decisions](docs/coverage.md#ext-01-deleted-items-scope-decisions).
 
 Log in with `https://graph.microsoft.com/IdentityProvider.Read.All`, then read workforce identity providers:
 

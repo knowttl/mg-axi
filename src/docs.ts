@@ -51,6 +51,12 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra agreement ", "terms-of-use agreements and acceptances"],
   ["entra agreement-acceptance ", "terms-of-use agreements and acceptances"],
   ["entra directory-object ", "directory objects"],
+  ["entra deleted-user ", "deleted directory items"],
+  ["entra deleted-group ", "deleted directory items"],
+  ["entra deleted-application ", "deleted directory items"],
+  ["entra deleted-service-principal ", "deleted directory items"],
+  ["entra deleted-administrative-unit ", "deleted directory items"],
+  ["entra deleted-item ", "deleted directory items"],
   ["entra domain ", "domains and DNS records"],
   ["entra domain-dns-record ", "domains and DNS records"],
   ["entra group-lifecycle-policy ", "group lifecycle policies"],
@@ -274,6 +280,7 @@ export function capabilityDocument(): string {
   const deferredOnPremSyncRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate on-premises-synchronization scope "));
   const deferredTermsOfUseRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate terms-of-use scope "));
   const deferredDirectoryObjectRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate directory-objects scope "));
+  const deferredDeletedItemsRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate deleted-items scope"));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
   const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate custom-security-attributes scope "));
@@ -448,6 +455,20 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredDirectoryObjectRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-01 deleted-items scope decisions",
+    "",
+    "This change covers the eleven v1.0 deleted directory-item reads above (deleted-user, deleted-group, deleted-application, deleted-service-principal and deleted-administrative-unit list and count, plus deleted-item show).",
+    "The rows below remain scheduled with an explicit deferred disposition; no new commands or raw access are approved for them.",
+    "Deleted-item reads support v1.0 only; beta needs its own review.",
+    "Untyped list/count commands do not exist because upstream requires the OData cast as part of the list URI.",
+    "Device casts carry no documented v1.0 permission contract: the list/get pages name the supported types and device is not among them.",
+    "Typed-cast singles are covered by the approved untyped show, which returns the same object for every type; the cast suffix only asserts the expected type.",
+    "The POST lookup and validation actions need their own request and projection review; restore and permanent delete are mutations and stay out entirely.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredDeletedItemsRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-04 partner contracts scope decisions",
     "",

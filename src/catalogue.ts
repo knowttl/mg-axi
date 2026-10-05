@@ -210,6 +210,16 @@ const contactRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to OrgContact.Read.All, the documented least privilege" },
 };
+const contactMembershipRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph with $count=true and ConsistencyLevel eventual; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from id, displayName, mail; richer per-type fields need the subtype's single-object reads" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to OrgContact.Read.All, the documented least privilege (transitive reads additionally need Group.Read.All)" },
+  transitive: { description: "Read the flat transitive closure instead of direct memberships" },
+  as: { value: "group|administrativeUnit", description: "Return only this directory-object subtype via the typed cast route" },
+};
 const contactNavRead = {
   select: { value: "comma-separated-properties", description: "Request server properties from id, displayName, mail; richer per-type fields need the subtype's single-object reads" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
@@ -870,6 +880,35 @@ export const LEAVES: Leaf[] = [
     as: contactNavRead.as,
     scopes: contactNavRead.scopes,
   }, examples: ["mg-axi entra contact count-direct-reports --id <contact-id> --profile soc"] },
+  { path: "entra contact list-member-of", description: "List groups and administrative units one contact belongs to as directory objects with type plus minimal rows (id, displayName); --transitive flattens nested membership; --as selects the group or administrativeUnit cast route", operation: "GET:/contacts/{orgContact-id}/memberOf", flags: {
+    ...common, id: { value: "contact-id", required: true, description: "Organizational-contact object ID" },
+    transitive: contactMembershipRead.transitive,
+    as: contactMembershipRead.as,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: contactMembershipRead.filter,
+    select: contactMembershipRead.select,
+    fields: contactMembershipRead.fields,
+    full: contactMembershipRead.full,
+    cursor: contactMembershipRead.cursor,
+    scopes: contactMembershipRead.scopes,
+  }, examples: ["mg-axi entra contact list-member-of --id <contact-id> --profile soc", "mg-axi entra contact list-member-of --id <contact-id> --transitive --profile soc"] },
+  { path: "entra contact show-member-of", description: "Show one membership as a directory object with type plus minimal rows (id, displayName); --transitive reads the transitive closure; --as selects the group or administrativeUnit cast route", operation: "GET:/contacts/{orgContact-id}/memberOf/{directoryObject-id}", flags: {
+    ...common, id: { value: "contact-id", required: true, description: "Organizational-contact object ID" },
+    "member-id": { value: "membership-id", required: true, description: "Membership directory-object ID" },
+    transitive: contactMembershipRead.transitive,
+    as: contactMembershipRead.as,
+    select: contactMembershipRead.select,
+    fields: contactMembershipRead.fields,
+    full: contactMembershipRead.full,
+    scopes: contactMembershipRead.scopes,
+  }, examples: ["mg-axi entra contact show-member-of --id <contact-id> --member-id <membership-id> --profile soc"] },
+  { path: "entra contact count-member-of", description: "Count one contact's memberships as one scalar; the $count route takes no --select, --limit or --cursor; --transitive counts the transitive closure; --as selects the group or administrativeUnit cast route", operation: "GET:/contacts/{orgContact-id}/memberOf/$count", flags: {
+    ...common, id: { value: "contact-id", required: true, description: "Organizational-contact object ID" },
+    transitive: contactMembershipRead.transitive,
+    as: contactMembershipRead.as,
+    scopes: contactMembershipRead.scopes,
+  }, examples: ["mg-axi entra contact count-member-of --id <contact-id> --profile soc"] },
   { path: "entra group-lifecycle-policy list", description: "List group lifecycle (expiry) policies with compact properties (id, groupLifetimeInDays, managedGroupTypes); --filter passes through as plain $filter", operation: "GET:/groupLifecyclePolicies", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

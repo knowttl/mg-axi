@@ -100,6 +100,9 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra contact list-direct-reports` | native | read |
 | `mg-axi entra contact show-direct-report` | native | read |
 | `mg-axi entra contact count-direct-reports` | native | read |
+| `mg-axi entra contact list-member-of` | native | read |
+| `mg-axi entra contact show-member-of` | native | read |
+| `mg-axi entra contact count-member-of` | native | read |
 | `mg-axi entra group-lifecycle-policy list` | native | read |
 | `mg-axi entra group-lifecycle-policy show` | native | read |
 | `mg-axi entra group-lifecycle-policy count` | native | read |

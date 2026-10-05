@@ -283,7 +283,6 @@ export function capabilityDocument(): string {
   const deferredDirectoryObjectRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate directory-objects scope "));
   const deferredDeletedItemsRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate deleted-items scope"));
   const deferredContactRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate contacts scope "));
-  const splitContactRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Split into EXT-01n "));
   const unavailableContactRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01m decision: "));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
@@ -476,17 +475,16 @@ export function capabilityDocument(): string {
     "",
     "## EXT-01 contacts scope decisions",
     "",
-    "This change covers the three v1.0 top-level contact reads above (contact list, show and count) plus the ten v1.0 manager/directReports navigation reads above (show-manager, list/show/count-direct-reports with user/contact casts).",
-    "The delta sync, the memberOf/transitiveMemberOf navigation reads, the POST lookup actions and the beta operations below remain scheduled with an explicit deferred disposition to later EXT-01 subfamilies; no new commands or raw access are approved.",
+    "This change covers the three v1.0 top-level contact reads above (contact list, show and count), the ten v1.0 manager/directReports navigation reads above (show-manager, list/show/count-direct-reports with user/contact casts), and the eighteen v1.0 memberOf/transitiveMemberOf navigation reads above (list/show/count-member-of with transitive and group/administrativeUnit casts).",
+    "The delta sync, the POST lookup actions and the beta operations below remain scheduled with an explicit deferred disposition to later EXT-01 subfamilies; no new commands or raw access are approved.",
     "Contact reads support v1.0 only; beta needs its own review.",
-    "Delta-token sync needs its own change-tracking contract beyond the approved reads; the memberOf/transitiveMemberOf reads are split into EXT-01n (mg-ext-01n) to limit this piece's size: they need their own multi-scope and advanced-query review; the POST lookup actions need their own request and projection review.",
+    "Delta-token sync needs its own change-tracking contract beyond the approved reads; the POST lookup actions need their own request and projection review.",
     "Contacts are personal data: top-level default rows carry id, displayName, mail and companyName only; navigation rows carry the @odata.type discriminator plus id and displayName only, and identifying fields need an explicit --select.",
     "The three error/sync navigation reads below are unavailable by firstmate mg-ext-01m decision: no operation-level permission documentation exists for them, so no read-scope contract can be established.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredContactRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
-    ...splitContactRows.map(row => `| \`${row.id}\` | ${row.disposition} (split) | ${row.owningSlice} | ${row.reason} |`),
     ...unavailableContactRows.map(row => `| \`${row.id}\` | ${row.disposition} | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-04 partner contracts scope decisions",

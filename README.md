@@ -27,6 +27,7 @@ EXT-01 (directory objects) adds directory-object list/show/count reads with @oda
 EXT-01 (deleted items) adds soft-deleted user, group, application, service-principal and administrative-unit list/count reads plus deleted-item show with per-type least-privilege scope guidance through the same session.
 EXT-01 (contacts) adds organizational-contact list/show/count reads with minimal personal-data rows and OrgContact.Read.All guidance through the same session.
 EXT-01m (contact navigation) adds per-contact manager and direct-report reads (show-manager, list/show/count-direct-reports with user/contact casts) as directory objects with type plus minimal rows through the same session.
+EXT-01n (contact membership) adds per-contact memberOf and transitiveMemberOf reads (list/show/count-member-of with transitive and group/administrativeUnit casts) as directory objects with type plus minimal rows through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 EXT-01 (federation configurations) adds workforce directory federation-configuration list/show/count/available-types reads with default signing-certificate omission through the same session.
 EXT-03 (data policy operations) adds workforce data-policy-operation list/show/count reads with storage-location redaction through the same session.
@@ -562,19 +563,22 @@ mg-axi entra contact show-manager --profile soc --id <contact-id>
 mg-axi entra contact list-direct-reports --profile soc --id <contact-id>
 mg-axi entra contact show-direct-report --profile soc --id <contact-id> --report-id <report-id>
 mg-axi entra contact count-direct-reports --profile soc --id <contact-id>
+mg-axi entra contact list-member-of --profile soc --id <contact-id>
+mg-axi entra contact show-member-of --profile soc --id <contact-id> --member-id <membership-id>
+mg-axi entra contact count-member-of --profile soc --id <contact-id>
 ```
 
 Contacts are personal data: `entra contact list` and `show` default to minimal rows (`id`, `displayName`, `mail`, `companyName`), and identifying fields beyond that need an explicit `--select`.
-Navigation results are directory objects: `show-manager`, `list-direct-reports` and `show-direct-report` default to the `@odata.type` discriminator plus `id` and `displayName` only, with `mail` one explicit `--select` away; `--as user|orgContact` selects the typed cast route on direct-report reads, and application callers with narrow consent receive limited-information rows carrying only type and id.
-All seven contact commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
-`entra contact list` offers `--filter`, passed through as plain `$filter` with `$count=true` and `ConsistencyLevel eventual`; `$search` and `$orderby` stay unreviewed.
+Navigation results are directory objects: `show-manager`, `list-direct-reports`, `show-direct-report`, `list-member-of` and `show-member-of` default to the `@odata.type` discriminator plus `id` and `displayName` only, with `mail` one explicit `--select` away; `--as user|orgContact` selects the typed cast route on direct-report reads and `--as group|administrativeUnit` on member-of reads, `--transitive` reads the transitiveMemberOf closure on member-of reads, and application callers with narrow consent receive limited-information rows carrying only type and id.
+All ten contact commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+`entra contact list` and `list-member-of` offer `--filter`, passed through as plain `$filter` with `$count=true` and `ConsistencyLevel eventual`; `$search` and `$orderby` stay unreviewed.
 Direct-report reads take `$select` only; `$filter`, `$search` and `$top` stay unreviewed there.
-Top-level `list` returns `contacts` and `show` returns `contact`; `show-manager` returns `manager`, `list-direct-reports` returns `directReports` and `show-direct-report` returns `directReport`, and counts return `count` with the scalar total; each count sends `ConsistencyLevel eventual` like the documented `$count` example.
+Top-level `list` returns `contacts` and `show` returns `contact`; `show-manager` returns `manager`, `list-direct-reports` returns `directReports` and `show-direct-report` returns `directReport`, `list-member-of` returns `memberOf` and `show-member-of` returns `memberOf`, and counts return `count` with the scalar total; each count sends `ConsistencyLevel eventual` like the documented `$count` example.
 Top-level list and show request and project only flat scalar properties (`$expand` is not offered, so navigation objects never appear there); navigation reads return directory objects through their own routes, and the nested phones/addresses collections need their own projection review.
 The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to contact reads.
-Reads default to `https://graph.microsoft.com/OrgContact.Read.All` for delegated access, while application profiles use the configured `.default` audience.
+Reads default to `https://graph.microsoft.com/OrgContact.Read.All` for delegated access, while application profiles use the configured `.default` audience; transitive member-of reads additionally need `https://graph.microsoft.com/Group.Read.All`.
 Delegated callers additionally need a supported Entra role (Directory Readers reads basic properties; Global Reader, Directory Writers, Intune Administrator or User Administrator also work); personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
-No contact mutation lives here; the delta sync, the memberOf/transitiveMemberOf navigation reads (split into EXT-01n), the POST lookup actions and beta operations stay scheduled, and the error/sync navigation reads stay unavailable with no documented permission contract; see the [contacts scope decisions](docs/coverage.md#ext-01-contacts-scope-decisions).
+No contact mutation lives here; the delta sync, the POST lookup actions and beta operations stay scheduled, and the error/sync navigation reads stay unavailable with no documented permission contract; see the [contacts scope decisions](docs/coverage.md#ext-01-contacts-scope-decisions).
 
 Log in with `https://graph.microsoft.com/IdentityProvider.Read.All`, then read workforce identity providers:
 

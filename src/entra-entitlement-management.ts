@@ -500,8 +500,9 @@ async function listCollection(
   const saved = cursor === undefined ? undefined : session.cursorQuery(operation, cursor);
   const savedSelect = saved?.$select;
   const isSyntheticResume = shape.synthetic !== undefined && cursor !== undefined && flags.select === undefined && flags.fields === undefined;
+  if (isSyntheticResume && savedSelect === undefined) throw new AxiError("Repeat the original --select/--fields with --cursor for this resume", "VALIDATION_ERROR", [help, resumeHint]);
   const { select, fields, fetch } = selectedFields(flags,
-    savedSelect === undefined ? (isSyntheticResume ? [...shape.synthetic!] : shape.defaultSelect) : fieldList(savedSelect, "select", shape.known, shape.knownList, help),
+    savedSelect === undefined ? shape.defaultSelect : fieldList(savedSelect, "select", shape.known, shape.knownList, help),
     shape.known, shape.knownList, help, shape.synthetic);
   if (isSyntheticResume && savedSelect !== undefined) {
     const stripped = shape.defaultSelect.filter(field => !shape.synthetic!.has(field));

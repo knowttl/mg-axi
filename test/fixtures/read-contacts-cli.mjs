@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { Socket } from "node:net";
 import { mock } from "node:test";
 
-const { mode, contacts, denied, manager, reports } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
-const allowedDelegated = new Set(["https://graph.microsoft.com/OrgContact.Read.All"]);
+const { mode, contacts, denied, manager, reports, memberships } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const allowedDelegated = new Set(["https://graph.microsoft.com/OrgContact.Read.All", "https://graph.microsoft.com/Group.Read.All"]);
 const [major, minor] = process.versions.node.split(".").map(Number);
 const exportOption = major >= 26 || (major === 25 && minor >= 9) || (major === 24 && minor >= 15)
   ? "exports" : "namedExports";
@@ -17,8 +17,8 @@ function credential(profile, scopes, expectedMode) {
   if (mode === "application") {
     assert.deepEqual(scopes, ["https://graph.microsoft.com/.default"]);
   } else {
-    assert.equal(scopes.length, 1);
-    assert.ok(allowedDelegated.has(scopes[0]), `Unexpected delegated scope ${scopes[0]}`);
+    assert.ok(scopes.length >= 1 && scopes.length <= 2, `Unexpected delegated scope count ${scopes.length}`);
+    for (const scope of scopes) assert.ok(allowedDelegated.has(scope), `Unexpected delegated scope ${scope}`);
   }
   return {
     token: `opaque-fixture-${mode}-token`,
@@ -39,17 +39,22 @@ function single(rows, pathname) {
 
 function castRows(rows, cast) {
   if (cast === undefined) return rows;
-  assert.ok(cast === "graph.user" || cast === "graph.orgContact", `Unexpected cast ${cast}`);
+  assert.ok(cast === "graph.user" || cast === "graph.orgContact" || cast === "graph.group" || cast === "graph.administrativeUnit", `Unexpected cast ${cast}`);
   return rows.filter(row => row["@odata.type"] === `#microsoft.graph.${cast.slice("graph.".length)}`);
 }
 
 // Navigation routes under one contact: manager single, directReports
-// collection/casts/singles and their $count scalars. Unknown contact ids
-// 404 like the top-level single route.
+// collection/casts/singles and their $count scalars, plus the EXT-01n
+// memberOf/transitiveMemberOf membership collection/casts/singles and their
+// $count scalars. Unknown contact ids 404 like the top-level single route.
 function navRoute(url) {
   const rest = url.pathname.slice(`${base}/`.length).split("/");
   const [contactId, head, ...tail] = rest;
   assert.ok(contacts.some(row => row.id === contactId), `Unexpected contact route ${url.pathname}`);
+  if (head === "memberOf" || head === "transitiveMemberOf") {
+    assert.ok(memberships !== undefined, `No membership fixture for ${url.pathname}`);
+    return membershipRoute(url, head, tail);
+  }
   assert.ok(manager !== undefined && reports !== undefined, `No navigation fixture for ${url.pathname}`);
   if (head === "manager" && tail.length === 0) return manager;
   if (head === "directReports" && tail.length === 0) return { value: reports };
@@ -67,6 +72,31 @@ function navRoute(url) {
     const [reportId, cast] = tail;
     const candidates = cast === undefined ? reports : castRows(reports, cast);
     const found = candidates.find(row => row.id === reportId);
+    assert.ok(found, `Unexpected contact route ${url.pathname}`);
+    return found;
+  }
+  assert.fail(`Unexpected contact route ${url.pathname}`);
+}
+
+// Membership routes under one contact: the memberOf/transitiveMemberOf
+// collection/casts/singles and their $count scalars, mirroring the
+// directReports shapes above.
+function membershipRoute(url, head, tail) {
+  if (tail.length === 0) return { value: memberships };
+  if (tail.length === 1 && tail[0] === "$count") {
+    assert.equal(url.searchParams.size, 0);
+    return { scalar: memberships.length };
+  }
+  if (tail.length === 1 && tail[0].startsWith("graph.")) {
+    return { value: castRows(memberships, tail[0]) };
+  }
+  if (tail.length === 2 && tail[1] === "$count" && tail[0].startsWith("graph.")) {
+    return { scalar: castRows(memberships, tail[0]).length };
+  }
+  if (tail.length === 1 || (tail.length === 2 && tail[1].startsWith("graph."))) {
+    const [memberId, cast] = tail;
+    const candidates = cast === undefined ? memberships : castRows(memberships, cast);
+    const found = candidates.find(row => row.id === memberId);
     assert.ok(found, `Unexpected contact route ${url.pathname}`);
     return found;
   }

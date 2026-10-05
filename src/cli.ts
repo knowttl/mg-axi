@@ -26,7 +26,7 @@ import { listSynchronizations, showSynchronization } from "./entra-on-premises-s
 import { listAgreements, showAgreement, listAgreementAcceptances, showAgreementAcceptance, listAcceptances, showAcceptance } from "./entra-terms-of-use.js";
 import { listDirectoryObjects, showDirectoryObject, countDirectoryObjects } from "./entra-directory-objects.js";
 import { listDeletedItems, showDeletedItem, countDeletedItems } from "./entra-deleted-items.js";
-import { listContacts, showContact, countContacts, showContactManager, listContactDirectReports, showContactDirectReport, countContactDirectReports, castDirectReports } from "./entra-contacts.js";
+import { listContacts, showContact, countContacts, showContactManager, listContactDirectReports, showContactDirectReport, countContactDirectReports, castDirectReports, listContactMemberOf, showContactMemberOf, countContactMemberOf, transitMembership, castMembership } from "./entra-contacts.js";
 import { countContracts, listContracts, showContract } from "./entra-contracts.js";
 import { countLifecyclePolicies, listLifecyclePolicies, showLifecyclePolicy, countSettingTemplates, listSettingTemplates, showSettingTemplate } from "./entra-group-lifecycle.js";
 import { listAttributeSets, showAttributeSet, countAttributeSets, listCustomSecurityAttributeDefinitions, showCustomSecurityAttributeDefinition, countCustomSecurityAttributeDefinitions, listAllowedValues, showAllowedValue, countAllowedValues } from "./entra-custom-security-attributes.js";
@@ -858,14 +858,21 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
   }
   if (leaf.path === "entra contact list" || leaf.path === "entra contact show" || leaf.path === "entra contact count"
     || leaf.path === "entra contact show-manager" || leaf.path === "entra contact list-direct-reports"
-    || leaf.path === "entra contact show-direct-report" || leaf.path === "entra contact count-direct-reports") {
+    || leaf.path === "entra contact show-direct-report" || leaf.path === "entra contact count-direct-reports"
+    || leaf.path === "entra contact list-member-of" || leaf.path === "entra contact show-member-of"
+    || leaf.path === "entra contact count-member-of") {
     if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
       throw new AxiError("Contact reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
     }
     const selected = profiles.resolve(flags.profile as string | undefined);
-    // --as selects the typed-cast route for direct-report reads; anything
-    // else is refused before credentials and never falls back silently.
-    const template = flags.as === undefined ? leaf.operation! : castDirectReports(leaf.operation!, flags.as, leafHelp(leaf));
+    const isMembership = leaf.path === "entra contact list-member-of" || leaf.path === "entra contact show-member-of"
+      || leaf.path === "entra contact count-member-of";
+    // --transitive selects the transitiveMemberOf route on member-of reads
+    // and --as selects the typed-cast route; anything else is refused before
+    // credentials and never falls back silently.
+    const routed = isMembership && flags.transitive === true ? transitMembership(leaf.operation!, leafHelp(leaf)) : leaf.operation!;
+    const template = flags.as === undefined ? routed
+      : isMembership ? castMembership(routed, flags.as, leafHelp(leaf)) : castDirectReports(routed, flags.as, leafHelp(leaf));
     const operation = operationFor({ ...leaf, operation: template }, "v1.0");
     if (!operation || operation.method !== "GET") {
       throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
@@ -890,6 +897,9 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra contact show-manager": return showContactManager(session, flags, selected.profile, operation, help, selected.name);
       case "entra contact list-direct-reports": return listContactDirectReports(session, flags, selected.profile, operation, help, selected.name);
       case "entra contact show-direct-report": return showContactDirectReport(session, flags, selected.profile, operation, help, selected.name);
+      case "entra contact list-member-of": return listContactMemberOf(session, flags, selected.profile, operation, help, selected.name);
+      case "entra contact show-member-of": return showContactMemberOf(session, flags, selected.profile, operation, help, selected.name);
+      case "entra contact count-member-of": return countContactMemberOf(session, flags, selected.profile, operation, help, selected.name);
       case "entra contact count": return countContacts(session, flags, selected.profile, operation, help, selected.name);
       default: return countContactDirectReports(session, flags, selected.profile, operation, help, selected.name);
     }

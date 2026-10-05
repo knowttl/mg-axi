@@ -278,6 +278,10 @@ def make_row(version, path, method, operation):
         disposition, reason = "unavailable", "Marked unavailable by firstmate mg-ext-01d decision: the v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped /organization/{organization-id}/certificateBasedAuthConfiguration routes, with no documented GET contract for these root reads (https://learn.microsoft.com/en-us/graph/api/resources/certificatebasedauthconfiguration?view=graph-rest-1.0)."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')":
         reason = "Deferred by firstmate directory-subscriptions scope to a later EXT-01 subscriptions lookup subfamily: alternate-key function segments (key='value') are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review."
+    if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/directory/onPremisesSynchronization/$count":
+        reason = "Deferred by firstmate on-premises-synchronization scope to a later EXT-01 on-premises-synchronization counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
+    if owner == "EXT-01" and method == "GET" and version == "beta" and disposition == "scheduled" and path.split("/")[1] == "directory" and "/onPremisesSynchronization" in path:
+        reason = "Deferred by firstmate on-premises-synchronization scope to a later EXT-01 on-premises-synchronization beta subfamily: the two approved reads cover v1.0 only; beta on-premises synchronization needs separate review."
     if mutates and owner is not None:
         owner = "WRITE-N"
         if method == "PATCH" and path == "/users/{user-id}":

@@ -21,6 +21,7 @@ READ-08 adds service-principal delegated-grant and app-role-assignment consent r
 EXT-01 (domains) adds tenant-domain list/show, per-domain verification and service-configuration DNS record reads, and top-level domain DNS record reads through the same session.
 EXT-01 (certificate auth) adds PKI configuration and certificate-authority list/show/count reads with default certificate-blob omission through the same session.
 EXT-01 (directory subscriptions) adds commercial-subscription list/show/count reads with compact licence rows through the same session.
+EXT-01 (on-premises synchronization) adds on-premises directory-synchronization list/show reads with Global Administrator role guidance through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
@@ -453,6 +454,24 @@ Delegated subscription reads default to `https://graph.microsoft.com/Organizatio
 Delegated callers additionally need Global Reader, Directory Readers, or Dynamics 365 Business Central Administrator for read-only standard properties; personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for subscription reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
 No subscription mutation lives here; see the [directory-subscriptions scope decisions](docs/coverage.md#ext-01-directory-subscriptions-scope-decisions).
+
+Log in with `https://graph.microsoft.com/OnPremDirectorySynchronization.Read.All`, then inspect on-premises directory synchronization (delegated profiles only):
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/OnPremDirectorySynchronization.Read.All
+mg-axi entra on-premises-synchronization list --profile soc
+mg-axi entra on-premises-synchronization show --profile soc --id <synchronization-id>
+```
+
+`entra on-premises-synchronization list` and `show` default to the reviewed property set (`id`, `configuration`, `features`); an empty list may mean on-premises directory sync is not configured for the tenant.
+Both commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+Neither leaf offers `--filter`: Graph documents `$select` only here, so strict input validation refuses the flag before credentials.
+Synchronization lists return `synchronizations` and single reads return `synchronization`; secret-shaped values inside `configuration` and `features` stay redacted by the shared session.
+The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to on-premises-synchronization reads.
+Delegated reads default to `https://graph.microsoft.com/OnPremDirectorySynchronization.Read.All`; application profiles are refused before credentials because Graph documents no supported application permission for this operation.
+Delegated callers additionally need Global Administrator, the only supported Entra role for this operation; personal Microsoft accounts are not supported.
+No P1/P2 prerequisite is stated for on-premises-synchronization reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
+No on-premises-synchronization mutation lives here; the `$count` scalar and beta operations stay scheduled; see the [on-premises-synchronization scope decisions](docs/coverage.md#ext-01-on-premises-synchronization-scope-decisions).
 
 Log in with `https://graph.microsoft.com/IdentityProvider.Read.All`, then read workforce identity providers:
 

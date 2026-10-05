@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 94 (92 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 96 (94 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -65,6 +65,8 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra subscription list` | `GET:/directory/subscriptions` | scheduled | EXT-01 |
 | `mg-axi entra subscription show` | `GET:/directory/subscriptions/{companySubscription-id}` | scheduled | EXT-01 |
 | `mg-axi entra subscription count` | `GET:/directory/subscriptions/$count` | scheduled | EXT-01 |
+| `mg-axi entra on-premises-synchronization list` | `GET:/directory/onPremisesSynchronization` | scheduled | EXT-01 |
+| `mg-axi entra on-premises-synchronization show` | `GET:/directory/onPremisesSynchronization/{onPremisesDirectorySynchronization-id}` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy list` | `GET:/groupLifecyclePolicies` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy show` | `GET:/groupLifecyclePolicies/{groupLifecyclePolicy-id}` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy count` | `GET:/groupLifecyclePolicies/$count` | scheduled | EXT-01 |
@@ -340,6 +342,20 @@ Beta attribute sets, definitions and allowed values need their own review; defin
 | `beta:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
 | `beta:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
 | `beta:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues/{allowedValue-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review. |
+
+## EXT-01 on-premises-synchronization scope decisions
+
+This change covers the two v1.0 on-premises-synchronization reads above (on-premises-synchronization list and show).
+The $count scalar and the three beta operations below remain scheduled with an explicit deferred disposition to later EXT-01 subfamilies; no new commands or raw access are approved.
+On-premises-synchronization reads support v1.0 only; beta needs its own review.
+Scalar counts need a separate query and response contract from the approved list/show reads.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/directory/onPremisesSynchronization` | scheduled (deferred) | EXT-01 | Deferred by firstmate on-premises-synchronization scope to a later EXT-01 on-premises-synchronization beta subfamily: the two approved reads cover v1.0 only; beta on-premises synchronization needs separate review. |
+| `beta:GET:/directory/onPremisesSynchronization/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate on-premises-synchronization scope to a later EXT-01 on-premises-synchronization beta subfamily: the two approved reads cover v1.0 only; beta on-premises synchronization needs separate review. |
+| `beta:GET:/directory/onPremisesSynchronization/{onPremisesDirectorySynchronization-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate on-premises-synchronization scope to a later EXT-01 on-premises-synchronization beta subfamily: the two approved reads cover v1.0 only; beta on-premises synchronization needs separate review. |
+| `v1.0:GET:/directory/onPremisesSynchronization/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate on-premises-synchronization scope to a later EXT-01 on-premises-synchronization counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
 
 ## EXT-04 partner contracts scope decisions
 

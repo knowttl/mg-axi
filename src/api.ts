@@ -6,6 +6,7 @@ import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organi
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
 import { KNOWN_SUBSCRIPTION_FIELDS } from "./entra-subscriptions.js";
+import { KNOWN_SYNC_FIELDS } from "./entra-on-premises-synchronization.js";
 import { KNOWN_LIFECYCLE_FIELDS, KNOWN_TEMPLATE_FIELDS } from "./entra-group-lifecycle.js";
 import { KNOWN_ALLOWED_VALUE_FIELDS, KNOWN_ATTRIBUTE_SET_FIELDS, KNOWN_CUSTOM_SECURITY_DEFINITION_FIELDS } from "./entra-custom-security-attributes.js";
 import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
@@ -47,6 +48,8 @@ export interface ReviewedRawRoute {
   readonly defaultFields?: readonly string[];
   /** Supported read permission choices with delegated/application distinction. */
   readonly access: string;
+  /** When true, application profiles are refused before credentials: Graph documents no supported application permission. */
+  readonly delegatedOnly?: boolean;
   readonly note?: string;
   readonly warning?: string;
   /** Primary-source operation documentation, rechecked on REVIEWED_ON. */
@@ -272,6 +275,16 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Organization.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Global Reader, Directory Readers, or Dynamics 365 Business Central Administrator for read-only standard properties); personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for this read.",
     note: "The commerceSubscriptionId alternate-key route stays out: alternate-key function segments are not whole-segment placeholders, so the shared session path template and the raw-route matcher cannot bind them without their own contract review.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/companysubscription-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/companysubscription?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/onPremisesSynchronization", kind: "collection", query: ["$select"], fields: KNOWN_SYNC_FIELDS,
+    access: "D OnPremDirectorySynchronization.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Global Administrator, the only supported Entra role for this operation; personal Microsoft accounts are not supported and Graph documents no supported application permission, so application profiles are refused before credentials. No P1/P2 prerequisite is stated for on-premises-synchronization reads.",
+    delegatedOnly: true,
+    note: "Graph documents $select only on the on-premises-synchronization list; $filter is not reviewed here. The $count scalar stays scheduled for a later counts subfamily.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/onpremisesdirectorysynchronization-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/onpremisesdirectorysynchronization?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/onPremisesSynchronization/{onPremisesDirectorySynchronization-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_SYNC_FIELDS,
+    access: "D OnPremDirectorySynchronization.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Global Administrator, the only supported Entra role for this operation; personal Microsoft accounts are not supported and Graph documents no supported application permission, so application profiles are refused before credentials. No P1/P2 prerequisite is stated for this read.",
+    delegatedOnly: true,
+    note: "Secret-shaped values inside configuration and features stay redacted by the shared session; no credential fields are projected.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/onpremisesdirectorysynchronization-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/onpremisesdirectorysynchronization?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/groupLifecyclePolicies", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_LIFECYCLE_FIELDS,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for lifecycle-policy reads. Personal Microsoft accounts are not supported.",
     note: "Filtering uses plain $filter with no $count or ConsistencyLevel contract; no P1/P2 prerequisite is stated for lifecycle-policy reads.",
@@ -526,6 +539,11 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
     ]);
   }
   const { route, params } = matched;
+  if (route.delegatedOnly === true && args.profile.mode === "application") {
+    throw new AxiError(`GET ${pathname} needs a delegated profile; Graph documents no supported application permission for ${route.id}`, "VALIDATION_ERROR", [
+      "mg-axi profile create --name <name> --tenant <tenant-id> --client <client-id> --cloud commercial",
+    ]);
+  }
   if (route.kind === "single" && args.cursor !== undefined) {
     throw new AxiError("--cursor is available for collection reads only", "VALIDATION_ERROR", ["Resume with the same collection path that returned the cursor"]);
   }

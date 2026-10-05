@@ -21,6 +21,7 @@ import { listBrandingLocalizations, listOrganizations, showBranding, showBrandin
 import { updateCaPolicy } from "./entra-ca-policy-update.js";
 import { listDomains, showDomain, listVerificationDnsRecords, showVerificationDnsRecord, listServiceConfigurationRecords, showServiceConfigurationRecord, listDomainDnsRecords, showDomainDnsRecord } from "./entra-domains.js";
 import { countContracts, listContracts, showContract } from "./entra-contracts.js";
+import { countLifecyclePolicies, listLifecyclePolicies, showLifecyclePolicy, countSettingTemplates, listSettingTemplates, showSettingTemplate } from "./entra-group-lifecycle.js";
 import { listIdentityProviders, showIdentityProvider, countIdentityProviders, availableIdentityProviderTypes } from "./entra-identity-providers.js";
 import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions, showDecision, listContactedReviewers, showContactedReviewer, listStages, showStage } from "./entra-access-reviews.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
@@ -652,6 +653,39 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra domain service-configuration-record show": return showServiceConfigurationRecord(session, flags, selected.profile, operation, help, selected.name);
       case "entra domain-dns-record list": return listDomainDnsRecords(session, flags, selected.profile, operation, help, selected.name);
       default: return showDomainDnsRecord(session, flags, selected.profile, operation, help, selected.name);
+    }
+  }
+  if (leaf.path === "entra group-lifecycle-policy list" || leaf.path === "entra group-lifecycle-policy show" || leaf.path === "entra group-lifecycle-policy count"
+    || leaf.path === "entra group-setting-template list" || leaf.path === "entra group-setting-template show" || leaf.path === "entra group-setting-template count") {
+    if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
+      throw new AxiError("Group lifecycle policy and setting-template reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, "v1.0");
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra group-lifecycle-policy list": return listLifecyclePolicies(session, flags, selected.profile, operation, help, selected.name);
+      case "entra group-lifecycle-policy show": return showLifecyclePolicy(session, flags, selected.profile, operation, help, selected.name);
+      case "entra group-lifecycle-policy count": return countLifecyclePolicies(session, flags, selected.profile, operation, help, selected.name);
+      case "entra group-setting-template list": return listSettingTemplates(session, flags, selected.profile, operation, help, selected.name);
+      case "entra group-setting-template show": return showSettingTemplate(session, flags, selected.profile, operation, help, selected.name);
+      default: return countSettingTemplates(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "entra contract list" || leaf.path === "entra contract show" || leaf.path === "entra contract count") {

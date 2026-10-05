@@ -39,6 +39,7 @@ const READ_SCOPES = new Set([
   "EntitlementManagement.Read.All",
   "Group.Read.All",
   "GroupMember.Read.All",
+  "GroupSettings.Read.All",
   "GroupMember.ReadBasic.All",
   "IdentityProvider.Read.All",
   "IdentityRiskEvent.Read.All",

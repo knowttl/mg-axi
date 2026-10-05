@@ -20,6 +20,7 @@ import { listPolicies, showPolicy, listNamedLocations, showNamedLocation } from 
 import { listBrandingLocalizations, listOrganizations, showBranding, showBrandingLocalization, showOrganization } from "./entra-organization.js";
 import { updateCaPolicy } from "./entra-ca-policy-update.js";
 import { listDomains, showDomain, listVerificationDnsRecords, showVerificationDnsRecord, listServiceConfigurationRecords, showServiceConfigurationRecord, listDomainDnsRecords, showDomainDnsRecord } from "./entra-domains.js";
+import { listCertificateAuthPkis, showCertificateAuthPki, countCertificateAuthPkis, listCertificateAuthorities, showCertificateAuthority, countCertificateAuthorities } from "./entra-certificate-auth.js";
 import { countContracts, listContracts, showContract } from "./entra-contracts.js";
 import { listIdentityProviders, showIdentityProvider, countIdentityProviders, availableIdentityProviderTypes } from "./entra-identity-providers.js";
 import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions, showDecision, listContactedReviewers, showContactedReviewer, listStages, showStage } from "./entra-access-reviews.js";
@@ -652,6 +653,39 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra domain service-configuration-record show": return showServiceConfigurationRecord(session, flags, selected.profile, operation, help, selected.name);
       case "entra domain-dns-record list": return listDomainDnsRecords(session, flags, selected.profile, operation, help, selected.name);
       default: return showDomainDnsRecord(session, flags, selected.profile, operation, help, selected.name);
+    }
+  }
+  if (leaf.path === "entra certificate-auth-pki list" || leaf.path === "entra certificate-auth-pki show" || leaf.path === "entra certificate-auth-pki count"
+    || leaf.path === "entra certificate-authority list" || leaf.path === "entra certificate-authority show" || leaf.path === "entra certificate-authority count") {
+    if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
+      throw new AxiError("Certificate-auth reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, "v1.0");
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra certificate-auth-pki list": return listCertificateAuthPkis(session, flags, selected.profile, operation, help, selected.name);
+      case "entra certificate-auth-pki show": return showCertificateAuthPki(session, flags, selected.profile, operation, help, selected.name);
+      case "entra certificate-auth-pki count": return countCertificateAuthPkis(session, flags, selected.profile, operation, help, selected.name);
+      case "entra certificate-authority list": return listCertificateAuthorities(session, flags, selected.profile, operation, help, selected.name);
+      case "entra certificate-authority show": return showCertificateAuthority(session, flags, selected.profile, operation, help, selected.name);
+      default: return countCertificateAuthorities(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "entra contract list" || leaf.path === "entra contract show" || leaf.path === "entra contract count") {

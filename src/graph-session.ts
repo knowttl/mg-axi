@@ -51,6 +51,7 @@ const READ_SCOPES = new Set([
   "Policy.Read.AuthenticationMethod",
   "Policy.Read.ConditionalAccess",
   "PrivilegedEligibilitySchedule.Read.AzureADGroup",
+  "PublicKeyInfrastructure.Read.All",
   "RoleAssignmentSchedule.Read.Directory",
   "RoleEligibilitySchedule.Read.Directory",
   "RoleManagement.Read.Directory",

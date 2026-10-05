@@ -138,6 +138,8 @@ for (const profile of [delegatedProfile, appProfile]) {
     "/domains/contoso.com/verificationDnsRecords/$count",
     "/domains/contoso.com/serviceConfigurationRecords/$count",
     "/contracts/$count",
+    "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/$count",
+    "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/pki-1/certificateAuthorities/$count",
     "/domains/$count/verificationDnsRecords",
     "/identity/identityProviders/$count",
     "/users/$value",

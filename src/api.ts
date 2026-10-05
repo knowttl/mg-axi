@@ -4,6 +4,7 @@ import { DelegatedAuth } from "./auth.js";
 import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITION_FIELDS, KNOWN_INSTANCE_FIELDS, KNOWN_STAGE_FIELDS } from "./entra-access-reviews.js";
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
+import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
 import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
@@ -244,6 +245,20 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
     note: "No operation-level documentation page; access follows the documented domain/DNS-read contract and the domainDnsRecord resource reference.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/domaindnsrecord?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_PKI_FIELDS,
+    access: "D/A PublicKeyInfrastructure.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for PKI reads; an empty list may mean certificate-based authentication is not configured.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/publickeyinfrastructureroot-list-certificatebasedauthconfigurations?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_PKI_FIELDS,
+    access: "D/A PublicKeyInfrastructure.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for this read.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/certificatebasedauthpki-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_CA_FIELDS,
+    access: "D/A PublicKeyInfrastructure.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for authority reads.",
+    note: "The certificate field carries the public CA key only; large blobs stay truncated at the output boundary unless --full is passed.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/certificatebasedauthpki-list-certificateauthorities?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/certificateauthoritydetail?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities/{certificateAuthorityDetail-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CA_FIELDS,
+    access: "D/A PublicKeyInfrastructure.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for this read.",
+    note: "No operation-level query documentation beyond $select; access follows the parent authority-list contract and the certificateAuthorityDetail resource reference. The certificate field carries the public CA key only.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/certificatebasedauthpki-list-certificateauthorities?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/certificateauthoritydetail-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/certificateauthoritydetail?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/contracts", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_CONTRACT_FIELDS,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
     note: "Filtering is documented for customerId, defaultDomainName and displayName; no P1/P2 prerequisite is stated for contract reads.",

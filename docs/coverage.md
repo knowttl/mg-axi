@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 162 (160 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 168 (166 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -185,6 +185,12 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra entitlement resource-role-scope list` | `GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes` | scheduled | EXT-02 |
 | `mg-axi entra entitlement resource-role-scope show` | `GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes/{accessPackageResourceRoleScope-id}` | scheduled | EXT-02 |
 | `mg-axi entra entitlement resource-role-scope count` | `GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes/$count` | scheduled | EXT-02 |
+| `mg-axi entra entitlement assignment list` | `GET:/identityGovernance/entitlementManagement/assignments` | scheduled | EXT-02 |
+| `mg-axi entra entitlement assignment show` | `GET:/identityGovernance/entitlementManagement/assignments/{accessPackageAssignment-id}` | scheduled | EXT-02 |
+| `mg-axi entra entitlement assignment count` | `GET:/identityGovernance/entitlementManagement/assignments/$count` | scheduled | EXT-02 |
+| `mg-axi entra entitlement assignment-request list` | `GET:/identityGovernance/entitlementManagement/assignmentRequests` | scheduled | EXT-02 |
+| `mg-axi entra entitlement assignment-request show` | `GET:/identityGovernance/entitlementManagement/assignmentRequests/{accessPackageAssignmentRequest-id}` | scheduled | EXT-02 |
+| `mg-axi entra entitlement assignment-request count` | `GET:/identityGovernance/entitlementManagement/assignmentRequests/$count` | scheduled | EXT-02 |
 | `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |
 | `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |
 
@@ -962,8 +968,8 @@ No new commands or raw access are approved for any row below.
 
 ## EXT-02 entitlement-management scope decisions
 
-The entitlement-management scope covers the twelve reads above (catalog, access-package, assignment-policy and resource-role-scope list/show/count reads).
-Assignment, request, approval and subject reads carry personal data and stay scheduled for a later part with no new commands or raw access approved; so do the top-level assignment-policy and resource-role-scope lists, catalog navigation reads (accessPackages, resources, resourceScopes, resourceRoles, customWorkflowExtensions), package navigation reads (catalog, incompatible sets), policy navigation reads (questions, custom-extension stages), role/scope link expansion, filterByCurrentUser and additionalAccess functions, and every beta operation below.
+The entitlement-management scope covers the eighteen reads above (catalog, access-package, assignment-policy and resource-role-scope list/show/count reads plus assignment and assignment-request list/show/count reads).
+Approval and subject reads carry personal data and stay scheduled for later parts with no new commands or raw access approved; so do assignment and request navigation sub-reads (assignment target/accessPackage/assignmentPolicy, request accessPackage/assignment/requestor), the top-level assignment-policy and resource-role-scope lists, catalog navigation reads (accessPackages, resources, resourceScopes, resourceRoles, customWorkflowExtensions), package navigation reads (catalog, incompatible sets), policy navigation reads (questions, custom-extension stages), role/scope link expansion, filterByCurrentUser and additionalAccess functions (parenthesised function segments need their own session-guard binding review), and every beta operation below. Raw $expand review is a separate change: the named assignment and request reads flatten one fixed documented expansion in code, and no user-supplied $expand exists on any route.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|

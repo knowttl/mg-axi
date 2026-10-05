@@ -62,6 +62,8 @@ const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["entra access-review", "access-review"],
   ["entra entitlement catalog", "entitlement catalogs and access packages"],
   ["entra entitlement access-package", "entitlement catalogs and access packages"],
+  ["entra entitlement assignment", "entitlement assignments and requests"],
+  ["entra entitlement assignment-request", "entitlement assignments and requests"],
   ["entra entitlement assignment-policy", "entitlement catalogs and access packages"],
   ["entra entitlement resource-role-scope", "entitlement catalogs and access packages"],
 ];

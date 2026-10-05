@@ -88,6 +88,66 @@ const policies = [pol1, pol2];
 const rs1 = { id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", createdDateTime: "2024-01-03T00:00:00Z" };
 const rs2 = { id: "ffffffff-ffff-4fff-8fff-ffffffffffff", createdDateTime: "2024-02-03T00:00:00Z" };
 const roleScopes = [rs1, rs2];
+const asg1 = {
+  id: "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  state: "delivered",
+  status: "Delivered",
+  expiredDateTime: "2024-06-01T00:00:00Z",
+  schedule: { startDateTime: "2024-01-01T00:00:00Z", endDateTime: "2024-12-31T00:00:00Z" },
+  customExtensionCalloutInstances: [],
+  target: {
+    id: "99999999-9999-4999-8999-999999999999",
+    objectId: "99999999-9999-4999-8999-999999999999",
+    displayName: "Alice Example",
+    email: "alice@example.invalid",
+    principalName: "alice@example.invalid",
+    subjectType: "user",
+  },
+  accessPackage: { id: pkg1.id, displayName: "Engineering bundle", description: "Laptops, repos and review duties" },
+};
+const asg2 = {
+  id: "22222222-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  state: "expired",
+  status: "ExpiredNotificationTriggered",
+  expiredDateTime: "2024-07-01T00:00:00Z",
+  schedule: null,
+  customExtensionCalloutInstances: null,
+  target: null,
+  accessPackage: { id: pkg2.id },
+};
+const assignments = [asg1, asg2];
+const longJustification = `Temporary cover for the release${" with considerable detail".repeat(30)}`;
+const req1 = {
+  id: "33333333-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  requestType: "userAdd",
+  state: "delivered",
+  status: "Delivered",
+  justification: longJustification,
+  schedule: { startDateTime: "2024-01-01T00:00:00Z", endDateTime: "2024-12-31T00:00:00Z" },
+  createdDateTime: "2024-01-02T00:00:00Z",
+  completedDateTime: "2024-01-03T00:00:00Z",
+  answers: [{ displayValue: "Covering the release", answeredQuestion: { id: "q1" } }],
+  customExtensionCalloutInstances: [],
+  accessPackage: { id: pkg1.id, displayName: "Engineering bundle" },
+  assignment: { id: asg1.id },
+  requestor: { id: "99999999-9999-4999-8999-999999999999", displayName: "Alice Example" },
+};
+const req2 = {
+  id: "44444444-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  requestType: "adminAdd",
+  state: "pendingApproval",
+  status: "PendingApproval",
+  justification: null,
+  schedule: null,
+  createdDateTime: "2024-02-02T00:00:00Z",
+  completedDateTime: null,
+  answers: [],
+  customExtensionCalloutInstances: [],
+  accessPackage: { id: pkg2.id },
+  assignment: null,
+  requestor: { id: "88888888-8888-4888-8888-888888888888", displayName: "Bob Example" },
+};
+const assignmentRequests = [req1, req2];
 
 function setupProfiles() {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-read-entitlement-"));
@@ -151,6 +211,12 @@ function entitlementTransport() {
     if (path === `${emBase}/accessPackages/${pkg1.id}/resourceRoleScopes/$count`) {
       return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(roleScopes.length) };
     }
+    if (path === `${emBase}/assignments/$count`) {
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(assignments.length) };
+    }
+    if (path === `${emBase}/assignmentRequests/$count`) {
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(assignmentRequests.length) };
+    }
     if (path === `${emBase}/catalogs`) {
       if (url.searchParams.has("$skiptoken")) return json(200, { value: [cat3] });
       return json(200, {
@@ -159,6 +225,14 @@ function entitlementTransport() {
       });
     }
     if (path === `${emBase}/accessPackages`) return json(200, { value: accessPackages });
+    if (path === `${emBase}/assignments`) {
+      if (url.searchParams.has("$skiptoken")) return json(200, { value: [asg2] });
+      return json(200, {
+        value: [asg1],
+        "@odata.nextLink": "https://graph.microsoft.com/v1.0/identityGovernance/entitlementManagement/assignments?%24skiptoken=page2",
+      });
+    }
+    if (path === `${emBase}/assignmentRequests`) return json(200, { value: assignmentRequests });
     if (path === `${emBase}/accessPackages/${pkg1.id}/assignmentPolicies`) return json(200, { value: policies });
     if (path === `${emBase}/accessPackages/${pkg1.id}/resourceRoleScopes`) return json(200, { value: roleScopes });
     for (const rows of [catalogs, accessPackages, policies, roleScopes]) {
@@ -166,6 +240,10 @@ function entitlementTransport() {
         || path === `${emBase}/accessPackages/${row.id}`
         || path === `${emBase}/accessPackages/${pkg1.id}/assignmentPolicies/${row.id}`
         || path === `${emBase}/accessPackages/${pkg1.id}/resourceRoleScopes/${row.id}`);
+      if (found) return json(200, found);
+    }
+    for (const [rows, base] of [[assignments, `${emBase}/assignments`], [assignmentRequests, `${emBase}/assignmentRequests`]]) {
+      const found = rows.find(row => path === `${base}/${row.id}`);
       if (found) return json(200, found);
     }
     return json(404, { error: { code: "Request_ResourceNotFound", message: "no such entitlement object" } });
@@ -195,7 +273,7 @@ function runEntitlementCli(args, state, mode, denied = false) {
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
-      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, catalogs: [cat1, cat2], accessPackages, policies, roleScopes, denied }),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, catalogs: [cat1, cat2], accessPackages, policies, roleScopes, assignments, assignmentRequests, denied }),
     },
   });
 }
@@ -442,6 +520,267 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
+  test(`${mode} lists assignments with flattened linkage from the fixed expand`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "entitlement", "assignment", "list", "--profile", profile], overrides);
+      assert.deepEqual(result.assignments, [
+        {
+          id: asg1.id,
+          state: "delivered",
+          targetId: "99999999-9999-4999-8999-999999999999",
+          targetDisplayName: "Alice Example",
+          accessPackageId: pkg1.id,
+          expiredDateTime: "2024-06-01T00:00:00Z",
+          schedule: { startDateTime: "2024-01-01T00:00:00Z", endDateTime: "2024-12-31T00:00:00Z" },
+        },
+        {
+          id: asg2.id,
+          state: "expired",
+          accessPackageId: pkg2.id,
+          expiredDateTime: "2024-07-01T00:00:00Z",
+          schedule: null,
+        },
+      ]);
+      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("entra entitlement assignment show --id <assignment-id>")));
+      const sent = new URL(requests[0].url).searchParams;
+      assert.equal(sent.get("$expand"), "target,accessPackage");
+      assert.ok(!sent.get("$select").split(",").some(field => ["targetId", "targetDisplayName", "accessPackageId"].includes(field)));
+      assert.ok(!JSON.stringify(result).includes("alice@example.invalid"));
+      assert.ok(!JSON.stringify(result).includes("Laptops, repos and review duties"));
+      if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(entitlementScopes)));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists assignments with a plain documented filter`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "entitlement", "assignment", "list", "--profile", profile,
+        "--filter", "state eq 'Delivered'"], overrides);
+      assert.equal(result.count.returned, 2);
+      const sent = new URL(requests[0].url).searchParams;
+      assert.equal(sent.get("$filter"), "state eq 'Delivered'");
+      assert.equal(sent.get("$expand"), "target,accessPackage");
+      assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} resumes a capped assignment list with linkage intact`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const first = await executeArgv(["entra", "entitlement", "assignment", "list", "--profile", profile, "--limit", "1"], overrides);
+      assert.deepEqual(first.assignments.map(row => row.id), [asg1.id]);
+      assert.equal(first.assignments[0].targetDisplayName, "Alice Example");
+      assert.equal(first.count.complete, false);
+      assert.equal(typeof first.cursor, "string");
+      const second = await executeArgv(["entra", "entitlement", "assignment", "list", "--profile", profile, "--cursor", first.cursor], overrides);
+      assert.deepEqual(second.assignments.map(row => row.id), [asg2.id]);
+      assert.equal(second.assignments[0].accessPackageId, pkg2.id);
+      assert.ok(!Object.hasOwn(second.assignments[0], "targetId"));
+      assert.deepEqual(second.count, { returned: 1, complete: true });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one assignment with the full reviewed grant set`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "entitlement", "assignment", "show", "--id", asg1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.assignment, {
+        id: asg1.id,
+        state: "delivered",
+        status: "Delivered",
+        expiredDateTime: "2024-06-01T00:00:00Z",
+        schedule: { startDateTime: "2024-01-01T00:00:00Z", endDateTime: "2024-12-31T00:00:00Z" },
+        customExtensionCalloutInstances: [],
+        targetId: "99999999-9999-4999-8999-999999999999",
+        targetDisplayName: "Alice Example",
+        accessPackageId: pkg1.id,
+      });
+      assert.equal(new URL(requests[0].url).searchParams.get("$expand"), "target,accessPackage");
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} unknown assignment ids report absence, not emptiness`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      await assert.rejects(executeArgv(["entra", "entitlement", "assignment", "show", "--id", "assignment-missing", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists assignment requests with compact linkage and no justification`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "entitlement", "assignment-request", "list", "--profile", profile], overrides);
+      assert.deepEqual(result.assignmentRequests, [
+        {
+          id: req1.id,
+          requestType: "userAdd",
+          state: "delivered",
+          accessPackageId: pkg1.id,
+          assignmentId: asg1.id,
+          createdDateTime: "2024-01-02T00:00:00Z",
+          completedDateTime: "2024-01-03T00:00:00Z",
+          schedule: { startDateTime: "2024-01-01T00:00:00Z", endDateTime: "2024-12-31T00:00:00Z" },
+        },
+        {
+          id: req2.id,
+          requestType: "adminAdd",
+          state: "pendingApproval",
+          accessPackageId: pkg2.id,
+          createdDateTime: "2024-02-02T00:00:00Z",
+          completedDateTime: null,
+          schedule: null,
+        },
+      ]);
+      assert.deepEqual(result.count, { returned: 2, complete: true });
+      const sent = new URL(requests[0].url).searchParams;
+      assert.equal(sent.get("$expand"), "accessPackage,assignment");
+      assert.ok(!JSON.stringify(result).includes(longJustification.slice(0, 50)));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} request justification and answers ride only behind an explicit select`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const shown = await executeArgv(["entra", "entitlement", "assignment-request", "show",
+        "--id", req1.id, "--profile", profile], overrides);
+      assert.ok(!Object.hasOwn(shown.assignmentRequest, "justification"));
+      assert.ok(!Object.hasOwn(shown.assignmentRequest, "answers"));
+      const selected = await executeArgv(["entra", "entitlement", "assignment-request", "show",
+        "--id", req1.id, "--profile", profile, "--select", "id,justification,answers"], overrides);
+      assert.deepEqual(selected.assignmentRequest, {
+        id: req1.id,
+        justification: `${longJustification.slice(0, 500)}... (truncated, ${longJustification.length} chars total)`,
+        answers: req1.answers,
+      });
+      assert.ok(selected.help.some(hint => hint.includes("--full")));
+      assert.ok(new URL(requests[1].url).searchParams.get("$select").split(",").includes("justification"));
+      const full = await executeArgv(["entra", "entitlement", "assignment-request", "show",
+        "--id", req1.id, "--profile", profile, "--select", "id,justification", "--full"], overrides);
+      assert.equal(full.assignmentRequest.justification, longJustification);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} counts assignments and assignment requests as scalars`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const assignmentCount = await executeArgv(["entra", "entitlement", "assignment", "count", "--profile", profile], overrides);
+      assert.deepEqual(assignmentCount, { count: { returned: 2, complete: true } });
+      const requestCount = await executeArgv(["entra", "entitlement", "assignment-request", "count", "--profile", profile], overrides);
+      assert.deepEqual(requestCount, { count: { returned: 2, complete: true } });
+      assert.deepEqual(requests.map(request => request.url), [
+        "https://graph.microsoft.com/v1.0/identityGovernance/entitlementManagement/assignments/$count",
+        "https://graph.microsoft.com/v1.0/identityGovernance/entitlementManagement/assignmentRequests/$count",
+      ]);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} assignment counts refuse collection flags before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "entitlement", "assignment", "count", "--profile", profile, "--limit", "1"], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      await assert.rejects(
+        executeArgv(["entra", "entitlement", "assignment-request", "count", "--profile", profile, "--filter", "state eq 'Delivered'"], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} navigation names fail as unknown properties on assignment reads`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "entitlement", "assignment", "list", "--profile", profile, "--select", "id,target"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /Unknown property target/.test(error.message)
+          && error.suggestions.join("\n").includes("Known properties: "),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "entitlement", "assignment-request", "list", "--profile", profile, "--select", "id,requestor"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /Unknown property requestor/.test(error.message),
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} denied assignment reads surface the delegation roles and licensing`, async () => {
+    const state = setupProfiles();
+    try {
+      const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
+      const { overrides } = overridesFor(mode, denied);
+      await assert.rejects(executeArgv(["entra", "entitlement", "assignment", "list", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        assert.ok(error.suggestions.some(hint => hint.includes("Catalog reader")));
+        assert.ok(error.suggestions.some(hint => hint.includes("Identity Governance Administrator")));
+        assert.ok(error.suggestions.some(hint => hint.includes("P2 or ID Governance")));
+        return /grant, role, licence/.test(error.message);
+      });
+      await assert.rejects(executeArgv(["entra", "entitlement", "assignment-request", "count", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        assert.ok(error.suggestions.some(hint => hint.includes("EntitlementManagement.Read.All")));
+        return /grant, role, licence/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} empty assignment and request lists stay definitive`, async () => {
+    const state = setupProfiles();
+    try {
+      const empty = transport(() => json(200, { value: [] }));
+      const { overrides } = overridesFor(mode, empty);
+      const listed = await executeArgv(["entra", "entitlement", "assignment", "list", "--profile", profile], overrides);
+      assert.deepEqual(listed.assignments, []);
+      assert.deepEqual(listed.count, { returned: 0, complete: true });
+      assert.ok(listed.help.some(hint => hint.includes("0 assignments matched")));
+      const requested = await executeArgv(["entra", "entitlement", "assignment-request", "list", "--profile", profile], overrides);
+      assert.deepEqual(requested.assignmentRequests, []);
+      assert.ok(requested.help.some(hint => hint.includes("0 assignment requests matched")));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
   test(`${mode} unknown entitlement properties fail naming the known set`, async () => {
     const state = setupProfiles();
     try {
@@ -551,6 +890,43 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(scopeCounted.status, 0, scopeCounted.stdout);
       assert.deepEqual(decode(scopeCounted.stdout).count, { returned: 2, complete: true });
       assert.ok(!scopeCounted.stdout.includes(`opaque-fixture-${mode}-token`));
+
+      const assignmentsListed = runEntitlementCli(["entra", "entitlement", "assignment", "list", "--profile", profile], state, mode);
+      assert.equal(assignmentsListed.status, 0, assignmentsListed.stdout);
+      assert.deepEqual(decode(assignmentsListed.stdout).assignments.map(row => row.id), [asg1.id, asg2.id]);
+
+      const assignmentShown = runEntitlementCli(["entra", "entitlement", "assignment", "show",
+        "--id", asg1.id, "--profile", profile], state, mode);
+      assert.equal(assignmentShown.status, 0, assignmentShown.stdout);
+      assert.deepEqual(decode(assignmentShown.stdout).assignment, {
+        id: asg1.id,
+        state: "delivered",
+        status: "Delivered",
+        expiredDateTime: "2024-06-01T00:00:00Z",
+        schedule: { startDateTime: "2024-01-01T00:00:00Z", endDateTime: "2024-12-31T00:00:00Z" },
+        customExtensionCalloutInstances: [],
+        targetId: "99999999-9999-4999-8999-999999999999",
+        targetDisplayName: "Alice Example",
+        accessPackageId: pkg1.id,
+      });
+
+      const assignmentCounted = runEntitlementCli(["entra", "entitlement", "assignment", "count", "--profile", profile], state, mode);
+      assert.equal(assignmentCounted.status, 0, assignmentCounted.stdout);
+      assert.deepEqual(decode(assignmentCounted.stdout).count, { returned: 2, complete: true });
+
+      const requestsListed = runEntitlementCli(["entra", "entitlement", "assignment-request", "list", "--profile", profile], state, mode);
+      assert.equal(requestsListed.status, 0, requestsListed.stdout);
+      assert.deepEqual(decode(requestsListed.stdout).assignmentRequests.map(row => row.id), [req1.id, req2.id]);
+
+      const requestShown = runEntitlementCli(["entra", "entitlement", "assignment-request", "show",
+        "--id", req1.id, "--profile", profile], state, mode);
+      assert.equal(requestShown.status, 0, requestShown.stdout);
+      assert.ok(!Object.hasOwn(decode(requestShown.stdout).assignmentRequest, "justification"));
+
+      const requestCounted = runEntitlementCli(["entra", "entitlement", "assignment-request", "count", "--profile", profile], state, mode);
+      assert.equal(requestCounted.status, 0, requestCounted.stdout);
+      assert.deepEqual(decode(requestCounted.stdout).count, { returned: 2, complete: true });
+      assert.ok(!requestCounted.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
 
@@ -581,6 +957,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["entitlement", "resource-role-scope", "list"], ["--access-package", pkg1.id]],
     [["entitlement", "resource-role-scope", "show"], ["--access-package", pkg1.id, "--id", rs1.id]],
     [["entitlement", "resource-role-scope", "count"], ["--access-package", pkg1.id]],
+    [["entitlement", "assignment", "list"], []],
+    [["entitlement", "assignment", "show"], ["--id", asg1.id]],
+    [["entitlement", "assignment", "count"], []],
+    [["entitlement", "assignment-request", "list"], []],
+    [["entitlement", "assignment-request", "show"], ["--id", req1.id]],
+    [["entitlement", "assignment-request", "count"], []],
   ]) {
     for (const preview of [false, true]) {
       test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {

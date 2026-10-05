@@ -37,7 +37,7 @@ import { listIdentityProviders, showIdentityProvider, countIdentityProviders, av
 import { listFederationConfigurations, showFederationConfiguration, countFederationConfigurations, availableFederationProviderTypes } from "./entra-federation-configurations.js";
 import { listDataPolicyOperations, showDataPolicyOperation, countDataPolicyOperations } from "./entra-data-policy-operations.js";
 import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions, showDecision, listContactedReviewers, showContactedReviewer, listStages, showStage } from "./entra-access-reviews.js";
-import { listCatalogs, showCatalog, countCatalogs, listAccessPackages, showAccessPackage, countAccessPackages, listAssignmentPolicies, showAssignmentPolicy, countAssignmentPolicies, listResourceRoleScopes, showResourceRoleScope, countResourceRoleScopes } from "./entra-entitlement-management.js";
+import { listCatalogs, showCatalog, countCatalogs, listAccessPackages, showAccessPackage, countAccessPackages, listAssignmentPolicies, showAssignmentPolicy, countAssignmentPolicies, listResourceRoleScopes, showResourceRoleScope, countResourceRoleScopes, listAssignments, showAssignment, countAssignments, listAssignmentRequests, showAssignmentRequest, countAssignmentRequests } from "./entra-entitlement-management.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
 import { addGroupMember } from "./entra-group-member-add.js";
 import { fetchTransport } from "./api.js";
@@ -195,7 +195,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       default: return listDecisions(session, flags, selected.profile, operation, help, selected.name);
     }
   }
-  if (leaf.path === "entra entitlement catalog list" || leaf.path === "entra entitlement catalog show" || leaf.path === "entra entitlement catalog count" || leaf.path === "entra entitlement access-package list" || leaf.path === "entra entitlement access-package show" || leaf.path === "entra entitlement access-package count" || leaf.path === "entra entitlement assignment-policy list" || leaf.path === "entra entitlement assignment-policy show" || leaf.path === "entra entitlement assignment-policy count" || leaf.path === "entra entitlement resource-role-scope list" || leaf.path === "entra entitlement resource-role-scope show" || leaf.path === "entra entitlement resource-role-scope count") {
+  if (leaf.path === "entra entitlement catalog list" || leaf.path === "entra entitlement catalog show" || leaf.path === "entra entitlement catalog count" || leaf.path === "entra entitlement access-package list" || leaf.path === "entra entitlement access-package show" || leaf.path === "entra entitlement access-package count" || leaf.path === "entra entitlement assignment-policy list" || leaf.path === "entra entitlement assignment-policy show" || leaf.path === "entra entitlement assignment-policy count" || leaf.path === "entra entitlement resource-role-scope list" || leaf.path === "entra entitlement resource-role-scope show" || leaf.path === "entra entitlement resource-role-scope count" || leaf.path === "entra entitlement assignment list" || leaf.path === "entra entitlement assignment show" || leaf.path === "entra entitlement assignment count" || leaf.path === "entra entitlement assignment-request list" || leaf.path === "entra entitlement assignment-request show" || leaf.path === "entra entitlement assignment-request count") {
     if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
       throw new AxiError("Entitlement-management reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
     }
@@ -231,6 +231,12 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra entitlement assignment-policy count": return countAssignmentPolicies(session, flags, selected.profile, operation, help, selected.name);
       case "entra entitlement resource-role-scope list": return listResourceRoleScopes(session, flags, selected.profile, operation, help, selected.name);
       case "entra entitlement resource-role-scope show": return showResourceRoleScope(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement assignment list": return listAssignments(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement assignment show": return showAssignment(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement assignment count": return countAssignments(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement assignment-request list": return listAssignmentRequests(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement assignment-request show": return showAssignmentRequest(session, flags, selected.profile, operation, help, selected.name);
+      case "entra entitlement assignment-request count": return countAssignmentRequests(session, flags, selected.profile, operation, help, selected.name);
       default: return countResourceRoleScopes(session, flags, selected.profile, operation, help, selected.name);
     }
   }

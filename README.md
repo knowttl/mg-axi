@@ -289,7 +289,7 @@ The named-list caps, `count`, cursors, null/missing preservation and 500-charact
 All five named reads default to `--api-version v1.0`; explicit `--api-version beta` requires a preview-enabled profile, with no automatic fallback.
 Organization and localization lists offer no `--filter`: Graph documents `$select` only on these routes, so the flag is refused before credentials.
 Denied organization and branding reads name the scope, role and licensing guidance instead of only the generic cause.
-No organization mutation lives here; certificate-based-auth configuration, extensions, beta-only settings and the POST lookup actions belong to later pieces; see the [organization scope decisions](docs/coverage.md#ext-01-organization-scope-decisions) for deferred reads and later subfamilies.
+No organization mutation lives here; organization-scoped certificate-based-auth configuration, extensions, beta-only settings and the POST lookup actions belong to later pieces; see the [organization scope decisions](docs/coverage.md#ext-01-organization-scope-decisions) for deferred reads and later subfamilies.
 
 Log in with `https://graph.microsoft.com/Directory.Read.All`, then inspect partner-tenant customer contracts:
 
@@ -361,7 +361,8 @@ PKI and authority lists accept `--filter` as plain `$filter`, without adding `$c
 `entra certificate-auth-pki show --id <pki-id>` defaults to the full reviewed PKI set and points at its authorities; authority lists take `--pki <pki-id>` and default to `id`, `displayName`, `certificateAuthorityType` and `expirationDateTime`.
 Authority show commands also take `--pki <pki-id>` and require `--id <authority-id>`; the show default is the full reviewed set except the public-certificate blob.
 Authority entries carry public certificates only, but the base64 `certificate` blob (up to 8 KB per CA file) is omitted from every default select and needs an explicit `--select certificate`; explicitly selected blobs still truncate at 500 characters unless `--full` is passed.
-PKI lists return `certificateAuthPkis` and single-PKI reads return `certificateAuthPki`; authority lists return `certificateAuthorities` with single-authority reads returning `certificateAuthority`, and counts return `count` with the scalar total.
+PKI lists return `certificateAuthPkis` and single-PKI reads return `certificateAuthPki`; authority lists return `certificateAuthorities` with single-authority reads returning `certificateAuthority`.
+Count commands return `count: { returned: <total>, complete: true }` and accept no `--select`, `--fields`, `--limit` or `--cursor`.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to certificate-auth reads.
 Delegated certificate-auth reads default to `https://graph.microsoft.com/PublicKeyInfrastructure.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported.
@@ -582,7 +583,9 @@ mg-axi api get /identity/conditionalAccess/policies --scopes https://graph.micro
 
 `api get` accepts only GET routes in the [reviewed route catalogue](src/api.ts), which owns route-specific query keys, `$select` fields and access constraints.
 OData parameters use `--odata`; `--query` is reserved for output queries and is not implemented here.
-Omitting `$select` selects the route's reviewed fields, and every response is filtered to reviewed fields before output.
+Omitting `$select` selects the route's default reviewed fields, and every response is filtered to the selected subset before output.
+Raw PKI and certificate-authority list/show reads use the certificate-auth paths in the [reviewed route catalogue](src/api.ts); their `$count` routes are available only through the named count commands above.
+Raw certificate-authority defaults omit `certificate`; request it explicitly with `--odata '$select=certificate'`, subject to the raw text truncation described below.
 For `/users/<user-id>/authentication/methods`, `$select` is the only supported OData parameter and selects output properties locally; an explicit selection restricts output to that subset.
 Method requests omit `$select` on initial requests, continuations, redirects and retries, while cursors preserve the local selection.
 Other routes send `$select` to Graph.

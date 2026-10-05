@@ -533,7 +533,7 @@ async function listCollection(
     args.limit = flags.limit === undefined ? 100 : Number(flags.limit);
   }
   const result = await withGuidance(() => session.collect(args), shape.hints);
-  const effectiveFlags: EntitlementManagementFlags = { ...flags, ...(result.query.$select === undefined ? {} : { select: result.query.$select }) };
+  const effectiveFlags: EntitlementManagementFlags = { ...flags, ...(result.query.$select === undefined ? {} : { select: select.join(",") }) };
   if (result.query.$filter !== undefined) effectiveFlags.filter = result.query.$filter;
   const rows: Record<string, unknown>[] = [];
   let truncated = false;

@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 115 (113 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 126 (124 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -125,6 +125,17 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra federation-configuration show` | `GET:/directory/federationConfigurations/{identityProviderBase-id}` | scheduled | EXT-01 |
 | `mg-axi entra federation-configuration count` | `GET:/directory/federationConfigurations/$count` | scheduled | EXT-01 |
 | `mg-axi entra federation-configuration available-types` | `GET:/directory/federationConfigurations/availableProviderTypes()` | scheduled | EXT-01 |
+| `mg-axi entra deleted-user list` | `GET:/directory/deletedItems/graph.user` | scheduled | EXT-01 |
+| `mg-axi entra deleted-user count` | `GET:/directory/deletedItems/graph.user/$count` | scheduled | EXT-01 |
+| `mg-axi entra deleted-group list` | `GET:/directory/deletedItems/graph.group` | scheduled | EXT-01 |
+| `mg-axi entra deleted-group count` | `GET:/directory/deletedItems/graph.group/$count` | scheduled | EXT-01 |
+| `mg-axi entra deleted-application list` | `GET:/directory/deletedItems/graph.application` | scheduled | EXT-01 |
+| `mg-axi entra deleted-application count` | `GET:/directory/deletedItems/graph.application/$count` | scheduled | EXT-01 |
+| `mg-axi entra deleted-service-principal list` | `GET:/directory/deletedItems/graph.servicePrincipal` | scheduled | EXT-01 |
+| `mg-axi entra deleted-service-principal count` | `GET:/directory/deletedItems/graph.servicePrincipal/$count` | scheduled | EXT-01 |
+| `mg-axi entra deleted-administrative-unit list` | `GET:/directory/deletedItems/graph.administrativeUnit` | scheduled | EXT-01 |
+| `mg-axi entra deleted-administrative-unit count` | `GET:/directory/deletedItems/graph.administrativeUnit/$count` | scheduled | EXT-01 |
+| `mg-axi entra deleted-item show` | `GET:/directory/deletedItems/{directoryObject-id}` | scheduled | EXT-01 |
 | `mg-axi entra data-policy-operation list` | `GET:/dataPolicyOperations` | scheduled | EXT-03 |
 | `mg-axi entra data-policy-operation show` | `GET:/dataPolicyOperations/{dataPolicyOperation-id}` | scheduled | EXT-03 |
 | `mg-axi entra data-policy-operation count` | `GET:/dataPolicyOperations/$count` | scheduled | EXT-03 |
@@ -478,6 +489,63 @@ Rows are polymorphic: only the base-type properties plus the @odata.type discrim
 | `v1.0:POST:/directoryObjects/{directoryObject-id}/checkMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
 | `v1.0:POST:/directoryObjects/{directoryObject-id}/getMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
 | `v1.0:POST:/directoryObjects/{directoryObject-id}/getMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+
+## EXT-01 deleted-items scope decisions
+
+This change covers the eleven v1.0 deleted directory-item reads above (deleted-user, deleted-group, deleted-application, deleted-service-principal and deleted-administrative-unit list and count, plus deleted-item show).
+The rows below remain scheduled with an explicit deferred disposition; no new commands or raw access are approved for them.
+Deleted-item reads support v1.0 only; beta needs its own review.
+Untyped list/count commands do not exist because upstream requires the OData cast as part of the list URI.
+Device casts carry no documented v1.0 permission contract: the list/get pages name the supported types and device is not among them.
+Typed-cast singles are covered by the approved untyped show, which returns the same object for every type; the cast suffix only asserts the expected type.
+The POST lookup and validation actions need their own request and projection review; restore and permanent delete are mutations and stay out entirely.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/directory/deletedItems` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.administrativeUnit` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.administrativeUnit/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.application` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.application/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.device` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.device/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.group` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.group/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.servicePrincipal` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.servicePrincipal/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.user` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/graph.user/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/{directoryObject-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/{directoryObject-id}/graph.administrativeUnit` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/{directoryObject-id}/graph.application` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/{directoryObject-id}/graph.device` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/{directoryObject-id}/graph.group` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/{directoryObject-id}/graph.servicePrincipal` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:GET:/directory/deletedItems/{directoryObject-id}/graph.user` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review. |
+| `beta:POST:/directory/deletedItems/getByIds` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `beta:POST:/directory/deletedItems/validateProperties` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `beta:POST:/directory/deletedItems/{directoryObject-id}/checkMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `beta:POST:/directory/deletedItems/{directoryObject-id}/checkMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `beta:POST:/directory/deletedItems/{directoryObject-id}/getMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `beta:POST:/directory/deletedItems/{directoryObject-id}/getMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:GET:/directory/deletedItems` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope: upstream requires the OData cast as part of the list URI and states calling GET /directory/deletedItems without a type is not supported, so no untyped list or count command is approved (https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0). |
+| `v1.0:GET:/directory/deletedItems/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope: upstream requires the OData cast as part of the list URI and states calling GET /directory/deletedItems without a type is not supported, so no untyped list or count command is approved (https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0). |
+| `v1.0:GET:/directory/deletedItems/graph.device` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope: the v1.0 deletedItems list/get pages name the supported types and document per-type least-privilege permissions, and device is not among them, so no device cast command is approved (https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0). |
+| `v1.0:GET:/directory/deletedItems/graph.device/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope: the v1.0 deletedItems list/get pages name the supported types and document per-type least-privilege permissions, and device is not among them, so no device cast command is approved (https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0). |
+| `v1.0:GET:/directory/deletedItems/{directoryObject-id}/graph.administrativeUnit` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope: covered by the approved deleted-item show, which reads the untyped get returning the same object for every type; the cast suffix only asserts the expected type and no separate reviewed route is approved. |
+| `v1.0:GET:/directory/deletedItems/{directoryObject-id}/graph.application` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope: covered by the approved deleted-item show, which reads the untyped get returning the same object for every type; the cast suffix only asserts the expected type and no separate reviewed route is approved. |
+| `v1.0:GET:/directory/deletedItems/{directoryObject-id}/graph.device` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope: the v1.0 deletedItems list/get pages name the supported types and document per-type least-privilege permissions, and device is not among them, so no device cast command is approved (https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0). |
+| `v1.0:GET:/directory/deletedItems/{directoryObject-id}/graph.group` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope: covered by the approved deleted-item show, which reads the untyped get returning the same object for every type; the cast suffix only asserts the expected type and no separate reviewed route is approved. |
+| `v1.0:GET:/directory/deletedItems/{directoryObject-id}/graph.servicePrincipal` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope: covered by the approved deleted-item show, which reads the untyped get returning the same object for every type; the cast suffix only asserts the expected type and no separate reviewed route is approved. |
+| `v1.0:GET:/directory/deletedItems/{directoryObject-id}/graph.user` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope: covered by the approved deleted-item show, which reads the untyped get returning the same object for every type; the cast suffix only asserts the expected type and no separate reviewed route is approved. |
+| `v1.0:POST:/directory/deletedItems/getAvailableExtensionProperties` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directory/deletedItems/getByIds` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directory/deletedItems/validateProperties` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directory/deletedItems/{directoryObject-id}/checkMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directory/deletedItems/{directoryObject-id}/checkMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directory/deletedItems/{directoryObject-id}/getMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directory/deletedItems/{directoryObject-id}/getMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
 
 ## EXT-01 contacts scope decisions
 

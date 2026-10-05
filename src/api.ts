@@ -11,6 +11,7 @@ import { KNOWN_SUBSCRIPTION_FIELDS } from "./entra-subscriptions.js";
 import { KNOWN_SYNC_FIELDS } from "./entra-on-premises-synchronization.js";
 import { KNOWN_ACCEPTANCE_FIELDS, KNOWN_AGREEMENT_FIELDS } from "./entra-terms-of-use.js";
 import { KNOWN_DIRECTORY_OBJECT_FIELDS } from "./entra-directory-objects.js";
+import { KNOWN_DELETED_ADMINISTRATIVE_UNIT_FIELDS, KNOWN_DELETED_APPLICATION_FIELDS, KNOWN_DELETED_GROUP_FIELDS, KNOWN_DELETED_SERVICE_PRINCIPAL_FIELDS, KNOWN_DELETED_SHOW_FIELDS, KNOWN_DELETED_USER_FIELDS } from "./entra-deleted-items.js";
 import { KNOWN_CONTACT_FIELDS } from "./entra-contacts.js";
 import { KNOWN_LIFECYCLE_FIELDS, KNOWN_TEMPLATE_FIELDS } from "./entra-group-lifecycle.js";
 import { KNOWN_ALLOWED_VALUE_FIELDS, KNOWN_ATTRIBUTE_SET_FIELDS, KNOWN_CUSTOM_SECURITY_DEFINITION_FIELDS } from "./entra-custom-security-attributes.js";
@@ -330,6 +331,30 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for this read. Personal Microsoft accounts are not supported.",
     note: "Single reads return the base-type properties plus the @odata.type discriminator; subtype detail needs the subtype's named reads. Only base properties are projected, so subtype secrets or credentials can never appear.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/directoryobject-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/directoryobject?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/deletedItems/graph.user", kind: "collection", query: ["$select"], fields: KNOWN_DELETED_USER_FIELDS, defaultFields: ["id", "displayName", "deletedDateTime"], keepODataType: true,
+    access: "D/A User.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for deleted-user reads. Personal Microsoft accounts are not supported.",
+    note: "Upstream requires the user cast: untyped GET /directory/deletedItems is not supported. Rows are polymorphic: the @odata.type discriminator rides along automatically. Deleted users are personal data and default rows stay minimal.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/user?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/deletedItems/graph.group", kind: "collection", query: ["$select"], fields: KNOWN_DELETED_GROUP_FIELDS, defaultFields: ["id", "displayName", "deletedDateTime"], keepODataType: true,
+    access: "D/A Group.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for deleted-group reads. Personal Microsoft accounts are not supported.",
+    note: "Upstream requires the group cast: untyped GET /directory/deletedItems is not supported. Soft-deleted security groups report securityEnabled false through a known upstream limitation; read groupTypes to name the real kind.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/group?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/deletedItems/graph.application", kind: "collection", query: ["$select"], fields: KNOWN_DELETED_APPLICATION_FIELDS, defaultFields: ["id", "appId", "displayName", "deletedDateTime"], keepODataType: true,
+    access: "D/A Application.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for deleted-application reads. Personal Microsoft accounts are not supported.",
+    note: "Upstream requires the application cast: untyped GET /directory/deletedItems is not supported. appId (client ID) is distinct from the object id; credential collections are never projected and GET never returns secret values.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/application?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/deletedItems/graph.servicePrincipal", kind: "collection", query: ["$select"], fields: KNOWN_DELETED_SERVICE_PRINCIPAL_FIELDS, defaultFields: ["id", "appId", "displayName", "deletedDateTime"], keepODataType: true,
+    access: "D/A Application.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for deleted-service-principal reads. Personal Microsoft accounts are not supported.",
+    note: "Upstream requires the servicePrincipal cast: untyped GET /directory/deletedItems is not supported. appId (client ID) is distinct from the object id; secret-bearing fields are never projected.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/serviceprincipal?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/deletedItems/graph.administrativeUnit", kind: "collection", query: ["$select"], fields: KNOWN_DELETED_ADMINISTRATIVE_UNIT_FIELDS, defaultFields: ["id", "displayName", "deletedDateTime"], keepODataType: true,
+    access: "D/A AdministrativeUnit.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for deleted-administrative-unit reads. Personal Microsoft accounts are not supported.",
+    note: "Upstream requires the administrativeUnit cast: untyped GET /directory/deletedItems is not supported. Rows are polymorphic: the @odata.type discriminator rides along automatically.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/administrativeunit?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/deletedItems/{directoryObject-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_DELETED_SHOW_FIELDS, keepODataType: true,
+    access: "D/A User.Read.All, Group.Read.All, Application.Read.All or AdministrativeUnit.Read.All matching the object's type. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for this read. Personal Microsoft accounts are not supported.",
+    note: "The untyped get can return any deletable type, so only the cross-type safe properties are reviewed here; per-type detail needs the typed deleted-item lists.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/directoryobject?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/contacts", kind: "collection", query: ["$select", "$filter", "$top"], fields: KNOWN_CONTACT_FIELDS, defaultFields: ["id", "displayName", "mail", "companyName"],
     access: "D/A OrgContact.Read.All least-privileged (Directory.Read.All is the documented higher-privileged alternative). Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers reads basic properties; Global Reader, Directory Writers, Intune Administrator or User Administrator also work). Personal Microsoft accounts are not supported.",
     note: "Filtering passes through as plain $filter with $count=true and ConsistencyLevel eventual; $search and $orderby stay unreviewed. Contacts are personal data: default rows carry id, displayName, mail and companyName only, and identifying fields need an explicit $select. Only flat scalar properties are reviewed; $expand is never offered and the nested phones/addresses/error collections need their own projection review.",

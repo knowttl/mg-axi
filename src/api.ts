@@ -5,6 +5,7 @@ import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITIO
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { KNOWN_DATA_POLICY_FIELDS } from "./entra-data-policy-operations.js";
+import { KNOWN_FEDERATION_FIELDS } from "./entra-federation-configurations.js";
 import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
 import { KNOWN_SUBSCRIPTION_FIELDS } from "./entra-subscriptions.js";
 import { KNOWN_SYNC_FIELDS } from "./entra-on-premises-synchronization.js";
@@ -384,6 +385,14 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A IdentityProvider.Read.All. Delegated callers pass it as --scopes; delegated reads additionally need a directory role that can read federation configuration (Global Reader is the least-privileged read-only directory role). Personal Microsoft accounts are not supported; no per-operation licence prerequisite is stated.",
     note: "Workforce context only. clientSecret and certificateData are never projected: the former is write-only and the latter is key material.",
     sources: ["https://learn.microsoft.com/graph/api/identityproviderbase-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/federationConfigurations", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_FEDERATION_FIELDS,
+    access: "D/A Domain.Read.All least-privileged (Domain.ReadWrite.All is the documented higher-privileged alternative). Delegated callers pass one as --scopes; delegated access additionally needs External Identity Provider Administrator, the least-privileged supported Entra role for this operation; personal Microsoft accounts are not supported. No per-operation licence prerequisite is stated for these reads.",
+    note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract. The domains navigation property needs its own review ($expand is not reviewed here). signingCertificate carries the public token-signing key only and stays truncated at the output boundary unless --full is passed.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/samlorwsfedexternaldomainfederation-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/samlorwsfedexternaldomainfederation?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directory/federationConfigurations/{identityProviderBase-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_FEDERATION_FIELDS,
+    access: "D/A Domain.Read.All least-privileged (Domain.ReadWrite.All is the documented higher-privileged alternative). Delegated callers pass one as --scopes; delegated access additionally needs External Identity Provider Administrator, the least-privileged supported Entra role for this operation; personal Microsoft accounts are not supported. No per-operation licence prerequisite is stated for this read.",
+    note: "The domains navigation property needs its own review ($expand is not reviewed here). signingCertificate carries the public token-signing key only; no private key material exists on this resource.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/samlorwsfedexternaldomainfederation-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/samlorwsfedexternaldomainfederation?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/dataPolicyOperations", kind: "collection", query: ["$select"], fields: KNOWN_DATA_POLICY_FIELDS,
     access: "D/A User.Export.All plus User.Read.All. Delegated callers pass both as --scopes; delegated access additionally needs Company Administrator, the privileged role documented for export reads; personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for these reads.",
     note: "No list operation documentation page exists; the list shares the single-get permission contract and resource shape. Graph documents $select only here, so $filter is not reviewed. storageLocation always renders as the redaction marker: export blob URLs and signed links never reach output. Workforce context only; export submission belongs to no read slice.",

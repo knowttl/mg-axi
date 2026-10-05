@@ -1,7 +1,7 @@
 ---
 name: mg-axi
 description: >
-  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, data policy operations, access reviews, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
+  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, federation configurations, data policy operations, access reviews, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
 user-invocable: false
 ---
 
@@ -137,6 +137,10 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra identity-provider show` | native | read |
 | `mg-axi entra identity-provider count` | native | read |
 | `mg-axi entra identity-provider available-types` | native | read |
+| `mg-axi entra federation-configuration list` | native | read |
+| `mg-axi entra federation-configuration show` | native | read |
+| `mg-axi entra federation-configuration count` | native | read |
+| `mg-axi entra federation-configuration available-types` | native | read |
 | `mg-axi entra data-policy-operation list` | native | read |
 | `mg-axi entra data-policy-operation show` | native | read |
 | `mg-axi entra data-policy-operation count` | native | read |

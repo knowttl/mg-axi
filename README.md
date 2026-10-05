@@ -25,6 +25,7 @@ EXT-01 (on-premises synchronization) adds on-premises directory-synchronization 
 EXT-01 (terms of use) adds terms-of-use agreement list/show, per-agreement acceptance list/show and tenant-wide agreement-acceptance list/show reads with Security Reader role and Entra ID P1 guidance through the same session.
 EXT-01 (directory objects) adds directory-object list/show/count reads with @odata.type subtype rows and Directory.Read.All guidance through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
+EXT-01 (federation configurations) adds workforce directory federation-configuration list/show/count/available-types reads with default signing-certificate omission through the same session.
 EXT-03 (data policy operations) adds workforce data-policy-operation list/show/count reads with storage-location redaction through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
@@ -550,6 +551,30 @@ Delegated provider reads default to `https://graph.microsoft.com/IdentityProvide
 Delegated callers additionally need a directory role that can read federation configuration (Global Reader is the least-privileged read-only directory role); personal Microsoft accounts are not supported.
 No per-operation licence prerequisite is stated for these reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
 Workforce tenants only; external-customer (B2C/External ID) user flows, cross-tenant access and provisioning are separate later pieces (see the [identity-provider scope decisions](docs/coverage.md#ext-03-identity-provider-scope-decisions)).
+
+Log in with `https://graph.microsoft.com/Domain.Read.All`, then read workforce directory federation configurations:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Domain.Read.All
+mg-axi entra federation-configuration list --profile soc
+mg-axi entra federation-configuration show --profile soc --id <configuration-id>
+mg-axi entra federation-configuration count --profile soc
+mg-axi entra federation-configuration available-types --profile soc
+```
+
+`entra federation-configuration list` defaults to compact properties (`id`, `displayName`); `show --id <configuration-id>` defaults to the full reviewed set except the signing-certificate blob, which needs an explicit `--select signingCertificate`.
+All four federation-configuration commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+List and show accept `--select` from the [reviewed configuration property set](src/entra-federation-configurations.ts); `--fields` must be a subset of the fetched selection.
+Configuration lists return `federationConfigurations`, single-configuration reads return `federationConfiguration`, and counts return `count` with the scalar total.
+`available-types` returns `availableProviderTypes`, an array of type names available for the tenant, with a `count` aggregate; it defaults to `https://graph.microsoft.com/IdentityProvider.Read.All` while list, show and count default to `https://graph.microsoft.com/Domain.Read.All`, and application profiles use the configured `.default` audience.
+`signingCertificate` carries the public token-signing key only and is omitted from every default select; request it explicitly when rotation evidence is needed. No private key material exists on these resources.
+Configuration lists accept `--filter` as plain `$filter`; counts accept `--filter` to narrow the total server-side.
+Rows carry `@odata.type` naming the configuration kind.
+Configuration lists use the named-list caps, `count` aggregate and cursors described above.
+List and show preserve null/missing properties and truncate text longer than 500 characters; `--full` restores complete text without lifting row caps.
+Delegated callers additionally need External Identity Provider Administrator, the least-privileged supported Entra role for these reads; personal Microsoft accounts are not supported.
+No per-operation licence prerequisite is stated for these reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
+No domain federationConfiguration sub-read, no domains navigation expansion and no mutation live here; beta operations stay scheduled (see the [federation-configuration scope decisions](docs/coverage.md#ext-01-federation-configuration-scope-decisions)).
 
 Log in with `https://graph.microsoft.com/User.Export.All,https://graph.microsoft.com/User.Read.All`, then read workforce data-policy operations:
 

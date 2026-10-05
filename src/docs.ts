@@ -48,6 +48,8 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra certificate-authority ", "certificate authentication"],
   ["entra domain ", "domains and DNS records"],
   ["entra domain-dns-record ", "domains and DNS records"],
+  ["entra group-lifecycle-policy ", "group lifecycle policies"],
+  ["entra group-setting-template ", "group setting templates"],
   ["entra contract ", "partner contracts"],
   ["entra sign-in ", "sign-ins and audit logs"],
   ["entra directory-audit ", "sign-ins and audit logs"],
@@ -257,6 +259,7 @@ export function capabilityDocument(): string {
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
   const unavailableCertAuthRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01d decision: "));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
+  const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
   const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
@@ -341,6 +344,15 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...unavailableCertAuthRows.map(row => `| \`${row.id}\` | ${row.disposition} | ${row.owningSlice} | ${row.reason} |`),
+    "## EXT-01 group lifecycle scope decisions",
+    "",
+    "This change covers the six v1.0 group lifecycle policy and group setting template reads above (list, show, count per family).",
+    "The operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.",
+    "Beta policies and templates need their own review; delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads; the POST lookup actions need their own request and projection review.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredGroupLifecycleRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-04 partner contracts scope decisions",
     "",

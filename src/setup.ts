@@ -27,6 +27,8 @@ const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["entra domain-dns-record", "domain and domain DNS"],
   ["entra certificate-auth-pki", "certificate authentication"],
   ["entra certificate-authority", "certificate authentication"],
+  ["entra group-lifecycle-policy", "group lifecycle policies"],
+  ["entra group-setting-template", "group setting templates"],
   ["entra contract", "partner contracts"],
   ["entra sign-in", "sign-in/directory-audit"],
   ["entra directory-audit", "sign-in/directory-audit"],

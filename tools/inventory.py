@@ -89,6 +89,16 @@ APPROVED_CONTRACT_READS = {
     "/contracts/{contract-id}",
     "/contracts/$count",
 }
+# The six approved EXT-01c v1.0 group lifecycle reads: list, show and count
+# per family (group lifecycle policies and group setting templates).
+APPROVED_GROUP_LIFECYCLE_READS = {
+    "/groupLifecyclePolicies",
+    "/groupLifecyclePolicies/{groupLifecyclePolicy-id}",
+    "/groupLifecyclePolicies/$count",
+    "/groupSettingTemplates",
+    "/groupSettingTemplates/{groupSettingTemplate-id}",
+    "/groupSettingTemplates/$count",
+}
 MANAGED_TENANT_NAV = set("auditEvents conditionalAccessPolicyCoverages credentialUserRegistrationsSummaries myRoles tenantGroups tenantTags tenants tenantsCustomizedInformation tenantsDetailedInformation".split())
 EXCLUDED_NAV = {
     "Mail": set("mailboxSettings messages mailFolders calendars calendar contactFolders outlook".split()),
@@ -233,6 +243,13 @@ def make_row(version, path, method, operation):
             reason = "Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review."
         elif version == "beta":
             reason = "Deferred by firstmate contracts scope to a later EXT-04 beta contracts subfamily: the three approved reads cover v1.0 only; beta contracts need separate review."
+    if owner == "EXT-01" and not mutates and disposition == "scheduled" and path.split("/")[1] in {"groupLifecyclePolicies", "groupSettingTemplates"} and (path not in APPROVED_GROUP_LIFECYCLE_READS or version == "beta"):
+        if path.endswith("/delta()"):
+            reason = "Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle delta subfamily: delta-token sync needs its own paging and change-tracking contract beyond the approved list/show/count reads."
+        elif method == "POST":
+            reason = "Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review."
+        elif version == "beta":
+            reason = "Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle beta subfamily: the six approved reads cover v1.0 only; beta policies and templates need separate review."
     if owner == "EXT-02" and method == "GET" and disposition == "scheduled" and "/accessReviews/historyDefinitions" in path:
         disposition, reason = "intentionally-blocked", "Blocked: documented least privilege is the write scope AccessReview.ReadWrite.All (no read scope), and history instances return SAS download URLs in downloadUri; recording or emitting that URL needs its own redaction and output review."
         owner = "EXT-02c"

@@ -24,6 +24,7 @@ EXT-03 (identity providers) adds workforce identity-provider list/show/count/ava
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
 EXT-04 (contracts) adds partner-tenant customer-contract list/show/count through the same session.
+EXT-01 (group lifecycle) adds group lifecycle-policy and group setting-template list/show/count reads through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
 Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
@@ -290,6 +291,39 @@ All five named reads default to `--api-version v1.0`; explicit `--api-version be
 Organization and localization lists offer no `--filter`: Graph documents `$select` only on these routes, so the flag is refused before credentials.
 Denied organization and branding reads name the scope, role and licensing guidance instead of only the generic cause.
 No organization mutation lives here; organization-scoped certificate-based-auth configuration, extensions, beta-only settings and the POST lookup actions belong to later pieces; see the [organization scope decisions](docs/coverage.md#ext-01-organization-scope-decisions) for deferred reads and later subfamilies.
+
+Log in with `https://graph.microsoft.com/Directory.Read.All`, then inspect group lifecycle policies:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Directory.Read.All
+mg-axi entra group-lifecycle-policy list --profile soc
+mg-axi entra group-lifecycle-policy show --profile soc --id <policy-id>
+mg-axi entra group-lifecycle-policy count --profile soc
+```
+
+Log in with `https://graph.microsoft.com/GroupSettings.Read.All`, then inspect group setting templates:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/GroupSettings.Read.All
+mg-axi entra group-setting-template list --profile soc
+mg-axi entra group-setting-template show --profile soc --id <template-id>
+mg-axi entra group-setting-template count --profile soc
+```
+
+`entra group-lifecycle-policy list` defaults to compact properties (`id`, `groupLifetimeInDays`, `managedGroupTypes`); `entra group-lifecycle-policy show --id <policy-id>` defaults to the full reviewed lifecycle set (`id`, `alternateNotificationEmails`, `groupLifetimeInDays`, `managedGroupTypes`).
+`entra group-setting-template list` defaults to compact properties (`id`, `displayName`, `description`); `entra group-setting-template show --id <template-id>` defaults to the full reviewed template set (`id`, `deletedDateTime`, `displayName`, `description`, `values`).
+`--select` requests properties from the [reviewed group lifecycle field sets](src/entra-group-lifecycle.ts); `--fields` projects locally and must be a subset of the fetched selection.
+Lifecycle-policy lists accept `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`; template lists offer no `--filter` because Graph documents `$select` only for `/groupSettingTemplates`.
+Each `count` returns one scalar (`groupLifecyclePolicyCount`, `groupSettingTemplateCount`) from its text/plain `$count` route and takes no `--filter`, `--select`, `--limit` or `--cursor`.
+Raw `api get` supports `/groupLifecyclePolicies`, `/groupLifecyclePolicies/<policy-id>`, `/groupSettingTemplates` and `/groupSettingTemplates/<template-id>`; the `$count` routes are available only through the named count commands.
+Lifecycle-policy lists return `groupLifecyclePolicies`, single-policy reads return `groupLifecyclePolicy`, template lists return `groupSettingTemplates` and single-template reads return `groupSettingTemplate`.
+The named-list caps, `count`, cursors and null/missing preservation described above also apply to these reads.
+Named reads truncate top-level strings and strings in string arrays at 500 characters with a `--full` recovery hint; nested objects in template `values` pass through without text truncation.
+All six named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+Delegated lifecycle-policy reads default to `https://graph.microsoft.com/Directory.Read.All` and delegated template reads default to `https://graph.microsoft.com/GroupSettings.Read.All`, while application profiles use the configured `.default` audience.
+Delegated template callers additionally need a supported Entra role (Directory Readers or Global Reader are the least-privileged roles); no delegated role prerequisite is stated for lifecycle-policy reads; personal Microsoft accounts are not supported on either family.
+No P1/P2 prerequisite is stated for these reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
+No lifecycle or template mutation lives here; `groupSettingTemplates/delta()`, beta policies and templates and the POST lookup actions belong to later pieces; see the [group lifecycle scope decisions](docs/coverage.md#ext-01-group-lifecycle-scope-decisions) for deferred reads and later subfamilies.
 
 Log in with `https://graph.microsoft.com/Directory.Read.All`, then inspect partner-tenant customer contracts:
 

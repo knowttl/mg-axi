@@ -52,6 +52,12 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra domain-dns-record list/);
   assert.match(result.stdout, /entra certificate-auth-pki list/);
   assert.match(result.stdout, /entra certificate-authority list/);
+  assert.match(result.stdout, /entra group-lifecycle-policy list/);
+  assert.match(result.stdout, /entra group-lifecycle-policy show/);
+  assert.match(result.stdout, /entra group-lifecycle-policy count/);
+  assert.match(result.stdout, /entra group-setting-template list/);
+  assert.match(result.stdout, /entra group-setting-template show/);
+  assert.match(result.stdout, /entra group-setting-template count/);
   assert.match(result.stdout, /entra contract list/);
   assert.match(result.stdout, /entra contract show/);
   assert.match(result.stdout, /entra contract count/);
@@ -94,6 +100,11 @@ for (const [name, args, error] of [
   ["missing required domain for verification records", ["entra", "domain", "verification-dns-record", "list"], /--domain is required/],
   ["missing required domain for service records", ["entra", "domain", "service-configuration-record", "list"], /--domain is required/],
   ["domain list rejects filters", ["entra", "domain", "list", "--filter", "isVerified eq true"], /unknown flag --filter/],
+  ["missing required lifecycle policy ID", ["entra", "group-lifecycle-policy", "show"], /--id is required/],
+  ["lifecycle policy count rejects limits", ["entra", "group-lifecycle-policy", "count", "--limit", "5"], /unknown flag --limit/],
+  ["missing required setting template ID", ["entra", "group-setting-template", "show"], /--id is required/],
+  ["setting template list rejects filters", ["entra", "group-setting-template", "list", "--filter", "displayName eq 'Group.Unified'"], /unknown flag --filter/],
+  ["setting template count rejects limits", ["entra", "group-setting-template", "count", "--limit", "5"], /unknown flag --limit/],
   ["missing required contract ID", ["entra", "contract", "show"], /--id is required/],
   ["contract count rejects limits", ["entra", "contract", "count", "--limit", "5"], /unknown flag --limit/],
   ["missing required service-principal", ["entra", "service-principal", "owner", "list"], /--service-principal is required/],

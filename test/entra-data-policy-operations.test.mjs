@@ -453,6 +453,33 @@ test("raw api serves reviewed operation list and show with redacted blob URLs", 
   assert.ok(!JSON.stringify(show).includes("fixture-signature"));
 });
 
+test("raw api redacts storage locations without a sig sentinel in list, show and cursor", async () => {
+  const plainUrl = "https://contoso.blob.core.windows.net/exports/plain.zip";
+  const plainOp = { ...op1, id: "op-plain-9", storageLocation: plainUrl };
+  const plainOp2 = { ...op2, id: "op-plain-10", storageLocation: plainUrl };
+  const plainBody = request => {
+    const url = new URL(request.url);
+    if (url.pathname === "/v1.0/dataPolicyOperations") {
+      if (url.searchParams.has("$skiptoken")) return { status: 200, headers: {}, body: JSON.stringify({ value: [] }) };
+      return { status: 200, headers: {}, body: JSON.stringify({ value: [plainOp, plainOp2], "@odata.nextLink": "https://graph.microsoft.com/v1.0/dataPolicyOperations?%24skiptoken=page2" }) };
+    }
+    if (url.pathname === `/v1.0/dataPolicyOperations/${plainOp.id}`) return { status: 200, headers: {}, body: JSON.stringify(plainOp) };
+    return { status: 404, headers: {}, body: JSON.stringify({ error: { code: "Unknown", message: "unexpected route" } }) };
+  };
+  const f = rawFixture(plainBody);
+  const list = await runApiGet({ path: "/dataPolicyOperations", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: rawScopes }, f.deps);
+  assert.equal(list.value[0].storageLocation, "***redacted***");
+  assert.ok(!JSON.stringify(list).includes("contoso.blob.core.windows.net"));
+  const show = await runApiGet({ path: `/dataPolicyOperations/${plainOp.id}`, apiVersion: "v1.0", profile: delegatedRawProfile, scopes: rawScopes }, rawFixture(plainBody).deps);
+  assert.equal(show.storageLocation, "***redacted***");
+  assert.ok(!JSON.stringify(show).includes("contoso.blob.core.windows.net"));
+  const g = rawFixture(plainBody);
+  const partial = await runApiGet({ path: "/dataPolicyOperations", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: rawScopes, limit: 1 }, g.deps);
+  assert.equal(partial.complete, false);
+  assert.equal(partial.value[0].storageLocation, "***redacted***");
+  assert.ok(!JSON.stringify(partial).includes("contoso.blob.core.windows.net"));
+});
+
 test("raw api refuses the operation $count scalar before credentials", async () => {
   const f = rawFixture(rawBody);
   await assert.rejects(

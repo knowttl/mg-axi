@@ -41,6 +41,7 @@ export interface ReviewedRawRoute {
   readonly query: readonly string[];
   /** Allowed $select fields: reviewed, non-secret server properties. */
   readonly fields: readonly string[];
+  readonly defaultFields?: readonly string[];
   /** Supported read permission choices with delegated/application distinction. */
   readonly access: string;
   readonly note?: string;
@@ -54,6 +55,7 @@ export interface ReviewedRawRoute {
 // stay unsupported here; $skiptoken is server paging state, paged via --all.
 const COLLECTION_QUERY = ["$select", "$filter", "$top", "$orderby"] as const;
 const SINGLE_QUERY = ["$select"] as const;
+const DEFAULT_CA_FIELDS = KNOWN_CA_FIELDS.filter(field => field !== "certificate");
 
 const USER_FIELDS = ["id", "displayName", "userPrincipalName", "mail", "accountEnabled", "userType", "jobTitle", "department", "officeLocation", "businessPhones", "mobilePhone", "createdDateTime"];
 const GROUP_FIELDS = ["id", "displayName", "description", "mail", "mailEnabled", "mailNickname", "securityEnabled", "groupTypes", "visibility", "classification", "isAssignableToRole", "createdDateTime", "expirationDateTime", "renewedDateTime", "membershipRule", "membershipRuleProcessingState"];
@@ -251,11 +253,11 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
   { id: "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_PKI_FIELDS,
     access: "D/A PublicKeyInfrastructure.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for this read.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/certificatebasedauthpki-get?view=graph-rest-1.0"] },
-  { id: "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_CA_FIELDS,
+  { id: "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_CA_FIELDS, defaultFields: DEFAULT_CA_FIELDS,
     access: "D/A PublicKeyInfrastructure.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for authority reads.",
     note: "The certificate field carries the public CA key only; large blobs stay truncated at the output boundary unless --full is passed.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/certificatebasedauthpki-list-certificateauthorities?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/certificateauthoritydetail?view=graph-rest-1.0"] },
-  { id: "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities/{certificateAuthorityDetail-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CA_FIELDS,
+  { id: "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities/{certificateAuthorityDetail-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CA_FIELDS, defaultFields: DEFAULT_CA_FIELDS,
     access: "D/A PublicKeyInfrastructure.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported. No P1/P2 prerequisite is stated for this read.",
     note: "No operation-level query documentation beyond $select; access follows the parent authority-list contract and the certificateAuthorityDetail resource reference. The certificate field carries the public CA key only.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/certificatebasedauthpki-list-certificateauthorities?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/certificateauthoritydetail-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/certificateauthoritydetail?view=graph-rest-1.0"] },
@@ -382,7 +384,7 @@ function checkQueryKeys(route: ReviewedRawRoute, query: Record<string, string>):
 
 function checkQuery(route: ReviewedRawRoute, query: Record<string, string>): void {
   checkQueryKeys(route, query);
-  const select = query["$select"] ??= route.fields.join(",");
+  const select = query["$select"] ??= (route.defaultFields ?? route.fields).join(",");
   const fields = select.split(",").map(field => field.trim()).filter(field => field.length > 0);
   if (!fields.length) throw new AxiError("Empty $select names no fields", "VALIDATION_ERROR", [`Reviewed fields: ${route.fields.join(", ")}`]);
   const unknown = fields.filter(field => !route.fields.includes(field));
@@ -492,6 +494,7 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
     const url = new URL(request.url);
     const query = Object.fromEntries(url.searchParams);
     delete query["$skiptoken"];
+    query["$select"] ??= selection["$select"]!;
     checkQuery(route, query);
     if (localSelection) url.searchParams.delete("$select");
     else url.searchParams.set("$select", query["$select"]!);
@@ -499,17 +502,17 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
     if (response.status < 200 || response.status >= 300 || !response.body) return response;
     let body: unknown;
     try { body = JSON.parse(response.body); } catch { return response; }
-    if (route.kind === "single") body = reviewedFields(route, body);
+    if (route.kind === "single") body = reviewedFields(outputRoute, body);
     else if (isRecord(body) && Array.isArray(body.value)) body = { ...body, value: body.value.map(row => reviewedFields(outputRoute, row)) };
     return { ...response, body: JSON.stringify(body), receivedBodyBytes: response.receivedBodyBytes ?? Buffer.byteLength(response.body, "utf8") };
   } });
   const selection = query ?? { ...session.cursorQuery(operation, args.cursor!) };
   checkQuery(route, selection);
-  const outputRoute = localSelection ? { ...route, fields: selection["$select"]!.split(",").map(field => field.trim()).filter(Boolean) } : route;
+  const outputRoute = { ...route, fields: selection["$select"]!.split(",").map(field => field.trim()).filter(Boolean) };
   const full = !!args.full;
   if (route.kind === "single") {
     const body = await session.execute({ profile: args.profile, operation, params, query, scopes });
-    const shaped = truncateForOutput(reviewedFields(route, body), full);
+    const shaped = truncateForOutput(reviewedFields(outputRoute, body), full);
     const record = isRecord(shaped.value) ? (shaped.value as Record<string, unknown>) : { value: shaped.value };
     return shaped.truncated ? { ...record, help: ["Strings truncated at 4000 chars; re-run with --full"] } : record;
   }

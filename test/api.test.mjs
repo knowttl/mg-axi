@@ -261,7 +261,7 @@ for (const route of REVIEWED_ROUTES) test(`${route.id} defaults to reviewed fiel
   const body = route.kind === "single" ? row : { value: [row] };
   const f = read({ path }, json(200, body));
   const result = await f.run({});
-  assert.equal(new URL(f.requests[0].url).searchParams.get("$select"), route.id === "v1.0:GET:/users/{user-id}/authentication/methods" ? null : route.fields.join(","));
+  assert.equal(new URL(f.requests[0].url).searchParams.get("$select"), route.id === "v1.0:GET:/users/{user-id}/authentication/methods" ? null : (route.defaultFields ?? route.fields).join(","));
   const { warnings, ...data } = result;
   assert.deepEqual(data, route.kind === "single" ? { id: "a" } : { returned: 1, complete: true, value: [{ id: "a" }] });
 });
@@ -271,6 +271,55 @@ for (const path of ["/users/a", "/users"]) test(`explicit selection on ${path} s
   const f = read({ path, odata: "$select=id" }, json(200, path === "/users" ? { value: [row] } : row));
   assert.deepEqual(await f.run({}), path === "/users" ? { returned: 1, complete: true, value: [{ id: "a" }] } : { id: "a" });
 });
+
+const authorityPath = "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/pki-1/certificateAuthorities";
+const certificate = "A".repeat(4100);
+for (const profile of [delegatedProfile, appProfile]) {
+  for (const single of [false, true]) {
+    for (const [odata, includeCertificate, includeName] of [
+      [undefined, false, true],
+      ["$select=id", false, false],
+      ["$select=id,certificate", true, false],
+    ]) {
+      for (const full of [false, true]) {
+        test(`${profile.mode} raw authority ${single ? "single" : "collection"} honors ${odata ?? "default selection"} with full=${full}`, async () => {
+          const row = { id: "ca-1", displayName: "Root CA", certificate };
+          const f = read({ path: `${authorityPath}${single ? "/ca-1" : ""}`, profile,
+            scopes: profile.mode === "delegated" ? "https://graph.microsoft.com/PublicKeyInfrastructure.Read.All" : undefined,
+            odata, full }, json(200, single ? row : { value: [row] }));
+          const result = await f.run({});
+          const output = single ? result : result.value[0];
+          assert.equal(output.id, "ca-1");
+          assert.equal(output.displayName, includeName ? "Root CA" : undefined);
+          assert.equal(output.certificate, includeCertificate
+            ? (full ? certificate : `${certificate.slice(0, 4000)}... (truncated, 4100 chars total)`)
+            : undefined);
+          const selected = new URL(f.requests[0].url).searchParams.get("$select").split(",");
+          assert.equal(selected.includes("certificate"), includeCertificate);
+        });
+      }
+    }
+  }
+
+  for (const [odata, includeCertificate] of [[undefined, false], ["$select=id,certificate", true]]) {
+    test(`${profile.mode} raw authority cursors preserve ${odata ?? "default selection"} across buffered rows and pages`, async () => {
+      const f = read({ path: authorityPath, profile, limit: 1, full: true,
+        scopes: profile.mode === "delegated" ? "https://graph.microsoft.com/PublicKeyInfrastructure.Read.All" : undefined }, (_request, count) => count === 1
+        ? json(200, { value: [{ id: "a", certificate }, { id: "b", certificate }],
+          "@odata.nextLink": `https://graph.microsoft.com/v1.0${authorityPath}?$skiptoken=next` })
+        : json(200, { value: [{ id: "c", certificate }] }));
+      const first = await f.run({ odata });
+      assert.deepEqual(first.value, [{ id: "a", ...(includeCertificate ? { certificate } : {}) }]);
+      assert.deepEqual(JSON.parse(Buffer.from(first.cursor, "base64url").toString("utf8")).buffered,
+        [{ id: "b", ...(includeCertificate ? { certificate } : {}) }]);
+      assert.deepEqual(await f.run({ cursor: first.cursor, limit: undefined }), {
+        returned: 2, complete: true,
+        value: [{ id: "b", ...(includeCertificate ? { certificate } : {}) }, { id: "c", ...(includeCertificate ? { certificate } : {}) }],
+      });
+      assert.equal(new URL(f.requests[1].url).searchParams.get("$select").split(",").includes("certificate"), includeCertificate);
+    });
+  }
+}
 
 test("singleton expansion is refused before credentials", async () => {
   const f = read({ path: "/users/a", odata: "$expand=ownedObjects" });

@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 109 (107 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 112 (110 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -73,6 +73,9 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra agreement acceptance show` | `GET:/agreements/{agreement-id}/acceptances/{agreementAcceptance-id}` | scheduled | EXT-01 |
 | `mg-axi entra agreement-acceptance list` | `GET:/agreementAcceptances` | scheduled | EXT-01 |
 | `mg-axi entra agreement-acceptance show` | `GET:/agreementAcceptances/{agreementAcceptance-id}` | scheduled | EXT-01 |
+| `mg-axi entra directory-object list` | `GET:/directoryObjects` | scheduled | EXT-01 |
+| `mg-axi entra directory-object show` | `GET:/directoryObjects/{directoryObject-id}` | scheduled | EXT-01 |
+| `mg-axi entra directory-object count` | `GET:/directoryObjects/$count` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy list` | `GET:/groupLifecyclePolicies` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy show` | `GET:/groupLifecyclePolicies/{groupLifecyclePolicy-id}` | scheduled | EXT-01 |
 | `mg-axi entra group-lifecycle-policy count` | `GET:/groupLifecyclePolicies/$count` | scheduled | EXT-01 |
@@ -442,6 +445,36 @@ Scalar counts need a separate query and response contract from the approved list
 | `v1.0:GET:/agreements/{agreement-id}/files/{agreementFileLocalization-id}/versions` | scheduled (deferred) | EXT-01 | Deferred by firstmate terms-of-use scope to a later EXT-01 terms-of-use file-content subfamily: agreement file contents and localizations need a separate binary-output and projection contract, and file bytes are never downloaded or printed. |
 | `v1.0:GET:/agreements/{agreement-id}/files/{agreementFileLocalization-id}/versions/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate terms-of-use scope to a later EXT-01 terms-of-use counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
 | `v1.0:GET:/agreements/{agreement-id}/files/{agreementFileLocalization-id}/versions/{agreementFileVersion-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate terms-of-use scope to a later EXT-01 terms-of-use file-content subfamily: agreement file contents and localizations need a separate binary-output and projection contract, and file bytes are never downloaded or printed. |
+
+## EXT-01 directory-objects scope decisions
+
+This change covers the three v1.0 directory-object reads above (directory-object list, show and count).
+The delta sync, the POST lookup/validation actions and the beta operations below remain scheduled with an explicit deferred disposition to later EXT-01 subfamilies; no new commands or raw access are approved.
+Directory-object reads support v1.0 only; beta needs its own review.
+Delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads; the POST lookup and validation actions need their own request and projection review.
+Rows are polymorphic: only the base-type properties plus the @odata.type discriminator are projected, so subtype secrets or credentials can never appear.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/directoryObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects beta subfamily: the three approved reads cover v1.0 only; beta directory objects need separate review. |
+| `beta:GET:/directoryObjects/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects beta subfamily: the three approved reads cover v1.0 only; beta directory objects need separate review. |
+| `beta:GET:/directoryObjects/delta()` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects beta subfamily: the three approved reads cover v1.0 only; beta directory objects need separate review. |
+| `beta:GET:/directoryObjects/{directoryObject-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects beta subfamily: the three approved reads cover v1.0 only; beta directory objects need separate review. |
+| `beta:POST:/directoryObjects/getByIds` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `beta:POST:/directoryObjects/getUserOwnedObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `beta:POST:/directoryObjects/validateProperties` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `beta:POST:/directoryObjects/{directoryObject-id}/checkMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `beta:POST:/directoryObjects/{directoryObject-id}/checkMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `beta:POST:/directoryObjects/{directoryObject-id}/getMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `beta:POST:/directoryObjects/{directoryObject-id}/getMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:GET:/directoryObjects/delta()` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects delta subfamily: delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads. |
+| `v1.0:POST:/directoryObjects/getAvailableExtensionProperties` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directoryObjects/getByIds` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directoryObjects/validateProperties` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directoryObjects/{directoryObject-id}/checkMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directoryObjects/{directoryObject-id}/checkMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directoryObjects/{directoryObject-id}/getMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
+| `v1.0:POST:/directoryObjects/{directoryObject-id}/getMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review. |
 
 ## EXT-04 partner contracts scope decisions
 

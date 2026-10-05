@@ -50,6 +50,7 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra on-premises-synchronization ", "on-premises synchronization"],
   ["entra agreement ", "terms-of-use agreements and acceptances"],
   ["entra agreement-acceptance ", "terms-of-use agreements and acceptances"],
+  ["entra directory-object ", "directory objects"],
   ["entra domain ", "domains and DNS records"],
   ["entra domain-dns-record ", "domains and DNS records"],
   ["entra group-lifecycle-policy ", "group lifecycle policies"],
@@ -272,6 +273,7 @@ export function capabilityDocument(): string {
   const deferredSubscriptionRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate directory-subscriptions scope "));
   const deferredOnPremSyncRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate on-premises-synchronization scope "));
   const deferredTermsOfUseRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate terms-of-use scope "));
+  const deferredDirectoryObjectRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate directory-objects scope "));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
   const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate custom-security-attributes scope "));
@@ -434,6 +436,18 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredTermsOfUseRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-01 directory-objects scope decisions",
+    "",
+    "This change covers the three v1.0 directory-object reads above (directory-object list, show and count).",
+    "The delta sync, the POST lookup/validation actions and the beta operations below remain scheduled with an explicit deferred disposition to later EXT-01 subfamilies; no new commands or raw access are approved.",
+    "Directory-object reads support v1.0 only; beta needs its own review.",
+    "Delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads; the POST lookup and validation actions need their own request and projection review.",
+    "Rows are polymorphic: only the base-type properties plus the @odata.type discriminator are projected, so subtype secrets or credentials can never appear.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredDirectoryObjectRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-04 partner contracts scope decisions",
     "",

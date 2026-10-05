@@ -23,6 +23,7 @@ EXT-01 (certificate auth) adds PKI configuration and certificate-authority list/
 EXT-01 (directory subscriptions) adds commercial-subscription list/show/count reads with compact licence rows through the same session.
 EXT-01 (on-premises synchronization) adds on-premises directory-synchronization list/show reads with Global Administrator role guidance through the same session.
 EXT-01 (terms of use) adds terms-of-use agreement list/show, per-agreement acceptance list/show and tenant-wide agreement-acceptance list/show reads with Security Reader role and Entra ID P1 guidance through the same session.
+EXT-01 (directory objects) adds directory-object list/show/count reads with @odata.type subtype rows and Directory.Read.All guidance through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 EXT-01 (federation configurations) adds workforce directory federation-configuration list/show/count/available-types reads with default signing-certificate omission through the same session.
 EXT-03 (data policy operations) adds workforce data-policy-operation list/show/count reads with storage-location redaction through the same session.
@@ -504,6 +505,25 @@ Delegated callers additionally need Security Reader, the least-privileged suppor
 Terms of use needs Microsoft Entra ID P1; denied reads name the scope, role and licensing guidance instead of only the generic cause.
 Agreement file contents are never downloaded or printed; only agreement metadata is projected.
 No terms-of-use mutation lives here; the acceptances `$count` scalar, the agreement file/localization sub-reads and beta operations stay scheduled; see the [terms-of-use scope decisions](docs/coverage.md#ext-01-terms-of-use-scope-decisions).
+
+Log in with `https://graph.microsoft.com/Directory.Read.All`, then inspect directory objects:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Directory.Read.All
+mg-axi entra directory-object list --profile soc
+mg-axi entra directory-object show --profile soc --id <object-id>
+mg-axi entra directory-object count --profile soc
+```
+
+`entra directory-object list` defaults to compact rows (`id` plus the `@odata.type` subtype discriminator) and `show` defaults to the reviewed base set (`id`, `deletedDateTime`) plus the discriminator; an empty list is unexpected because every tenant directory carries objects, so verify the profile tenant before treating it as empty.
+All three commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+Neither list nor show offers `--filter`: Graph documents no List operation page for the collection, so strict input validation refuses the flag before credentials.
+Lists return `directoryObjects`, single reads return `directoryObject`, and counts return `count` with the scalar total.
+Rows are polymorphic: only the base-type properties are ever requested or projected (`$expand` is not offered), the discriminator rides along automatically without being selectable, and subtype secrets or credentials can never appear; subtype detail needs the subtype's named reads.
+The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to directory-object reads.
+Reads default to `https://graph.microsoft.com/Directory.Read.All` for delegated access, while application profiles use the configured `.default` audience.
+No delegated role or P1/P2 prerequisite is stated for directory-object reads; personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
+No directory-object mutation lives here; the delta sync, the POST lookup/validation actions and beta operations stay scheduled; see the [directory-objects scope decisions](docs/coverage.md#ext-01-directory-objects-scope-decisions).
 
 Log in with `https://graph.microsoft.com/IdentityProvider.Read.All`, then read workforce identity providers:
 

@@ -499,14 +499,17 @@ async function listCollection(
   if (cursor !== undefined && !cursor.trim()) throw new AxiError("--cursor needs the opaque cursor from a partial result", "VALIDATION_ERROR", [help]);
   const saved = cursor === undefined ? undefined : session.cursorQuery(operation, cursor);
   const savedSelect = saved?.$select;
+  const isSyntheticResume = shape.synthetic !== undefined && cursor !== undefined && flags.select === undefined && flags.fields === undefined;
   const { select, fields, fetch } = selectedFields(flags,
-    savedSelect === undefined ? shape.defaultSelect : fieldList(savedSelect, "select", shape.known, shape.knownList, help),
+    savedSelect === undefined ? (isSyntheticResume ? [...shape.synthetic!] : shape.defaultSelect) : fieldList(savedSelect, "select", shape.known, shape.knownList, help),
     shape.known, shape.knownList, help, shape.synthetic);
-  // A resumed list without narrowed flags regains the full default row:
-  // the fixed $expand refetches linkage the stored $select never names.
-  if (shape.synthetic !== undefined && cursor !== undefined && flags.select === undefined && flags.fields === undefined) {
-    for (const field of shape.defaultSelect) if (!select.includes(field)) select.push(field);
-    fields.splice(0, fields.length, ...select);
+  if (isSyntheticResume && savedSelect !== undefined) {
+    const stripped = shape.defaultSelect.filter(field => !shape.synthetic!.has(field));
+    const stored = fieldList(savedSelect, "select", shape.known, shape.knownList, help);
+    if (stored.length === stripped.length && stripped.every(field => stored.includes(field))) {
+      for (const field of shape.defaultSelect) if (!select.includes(field)) select.push(field);
+      fields.splice(0, fields.length, ...select);
+    }
   }
   const savedFilter = saved?.$filter;
   const filter = flags.filter === undefined ? savedFilter : String(flags.filter);

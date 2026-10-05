@@ -322,8 +322,29 @@ mg-axi entra lifecycle task-definition count --profile soc
 mg-axi entra lifecycle settings show --profile soc
 ```
 
+Read one workflow's runs and user/subject processing results through nine views; reporting reads default to the reports scope:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/LifecycleWorkflows-Reports.Read.All
+mg-axi entra lifecycle run list --workflow <workflow-id> --profile soc --limit 10
+mg-axi entra lifecycle run list --workflow <workflow-id> --profile soc --filter "processingStatus eq 'completed'"
+mg-axi entra lifecycle run show --workflow <workflow-id> --profile soc --id <run-id>
+mg-axi entra lifecycle run count --workflow <workflow-id> --profile soc
+mg-axi entra lifecycle user-processing-result list --workflow <workflow-id> --profile soc --limit 10
+mg-axi entra lifecycle user-processing-result show --workflow <workflow-id> --profile soc --id <result-id>
+mg-axi entra lifecycle user-processing-result count --workflow <workflow-id> --profile soc
+mg-axi entra lifecycle subject-processing-result list --workflow <workflow-id> --profile soc --limit 10
+mg-axi entra lifecycle subject-processing-result show --workflow <workflow-id> --profile soc --id <result-id>
+mg-axi entra lifecycle subject-processing-result count --workflow <workflow-id> --profile soc
+```
+
+`entra lifecycle run list` defaults to `id`, `processingStatus`, `totalUsersCount`, `failedUsersCount` and `successfulUsersCount`, and `entra lifecycle run show` defaults to the full reviewed scalar set; run rows never carry processing results.
+User and subject processing results are personal data: lists and singles default to status and counts only (subject lists add `subjectType`), and the subject link is never requested.
+The subject list documents `$filter` but not `$select` and the subject get documents `$expand` only, so subject rows always arrive whole and `--fields` projects them locally; `--select` is refused before credentials.
+Run-nested and third-level processing results, reprocessed runs, task reports and the time-windowed summary functions belong to later slices.
+
 `entra lifecycle workflow list` defaults to `id`, `displayName`, `category`, `isEnabled` and `isSchedulingEnabled`, and `entra lifecycle workflow show --id <workflow-id>` defaults to the full reviewed scalar set.
-Workflow rows never carry tasks, runs or processing results: tasks ride expanded by default on the get and are dropped in local projection, and runs with user, subject and task processing results belong to a later part, never to these reads.
+Workflow rows never carry tasks, runs or processing results: tasks ride expanded by default on the get and are dropped in local projection, and run-nested processing results, task reports and summaries belong to later parts, never to these reads.
 `entra lifecycle workflow-template list` defaults to `id`, `displayName` and `category`; the template get documents no query parameters, so `entra lifecycle workflow-template show --id <template-id>` takes no `--select` and always returns whole rows.
 `entra lifecycle task-definition list` defaults to `id`, `displayName`, `category` and `version`, and `entra lifecycle task-definition show --id <task-definition-id>` defaults to the full reviewed parameter set.
 `entra lifecycle settings show` returns the tenant schedule interval with the email and quarantine configuration; updating settings belongs to no read slice.
@@ -332,7 +353,7 @@ Workflow rows never carry tasks, runs or processing results: tasks ride expanded
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to lifecycle reads.
 Resume any lifecycle list with `--cursor -` and supply the returned cursor on stdin.
 Delegated workflow reads default to `https://graph.microsoft.com/LifecycleWorkflows-Workflow.ReadBasic.All` (richer detail may need `LifecycleWorkflows-Workflow.Read.All` or `LifecycleWorkflows.Read.All`) and template, task-definition and settings reads to `https://graph.microsoft.com/LifecycleWorkflows.Read.All`, while application profiles use the configured `.default` audience.
-See the [lifecycle-workflows scope decisions](docs/coverage.md#ext-02-lifecycle-workflows-scope-decisions) for the scheduled run and processing-result part.
+See the [lifecycle-workflows scope decisions](docs/coverage.md#ext-02-lifecycle-workflows-scope-decisions) for the scheduled task-report, nested-result and summary parts.
 Delegated callers additionally need Global Reader or Lifecycle Workflows Administrator.
 Denied reads name that scope, role and licensing requirement instead of only the generic grant/role/licence cause.
 Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite (every governed user, not only administrators), and delegated personal Microsoft accounts are not supported.

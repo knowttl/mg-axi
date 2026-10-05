@@ -38,7 +38,7 @@ import { listFederationConfigurations, showFederationConfiguration, countFederat
 import { listDataPolicyOperations, showDataPolicyOperation, countDataPolicyOperations } from "./entra-data-policy-operations.js";
 import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions, showDecision, listContactedReviewers, showContactedReviewer, listStages, showStage } from "./entra-access-reviews.js";
 import { listCatalogs, showCatalog, countCatalogs, listAccessPackages, showAccessPackage, countAccessPackages, listAssignmentPolicies, showAssignmentPolicy, countAssignmentPolicies, listResourceRoleScopes, showResourceRoleScope, countResourceRoleScopes, listAssignments, showAssignment, countAssignments, listAssignmentRequests, showAssignmentRequest, countAssignmentRequests } from "./entra-entitlement-management.js";
-import { listWorkflows, showWorkflow, countWorkflows, listWorkflowTemplates, showWorkflowTemplate, countWorkflowTemplates, listTaskDefinitions, showTaskDefinition, countTaskDefinitions, showLifecycleSettings } from "./entra-lifecycle-workflows.js";
+import { listWorkflows, showWorkflow, countWorkflows, listWorkflowTemplates, showWorkflowTemplate, countWorkflowTemplates, listTaskDefinitions, showTaskDefinition, countTaskDefinitions, showLifecycleSettings, listRuns, showRun, countRuns, listUserProcessingResults, showUserProcessingResult, countUserProcessingResults, listSubjectProcessingResults, showSubjectProcessingResult, countSubjectProcessingResults } from "./entra-lifecycle-workflows.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
 import { addGroupMember } from "./entra-group-member-add.js";
 import { fetchTransport } from "./api.js";
@@ -241,7 +241,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       default: return countResourceRoleScopes(session, flags, selected.profile, operation, help, selected.name);
     }
   }
-  if (leaf.path === "entra lifecycle workflow list" || leaf.path === "entra lifecycle workflow show" || leaf.path === "entra lifecycle workflow count" || leaf.path === "entra lifecycle workflow-template list" || leaf.path === "entra lifecycle workflow-template show" || leaf.path === "entra lifecycle workflow-template count" || leaf.path === "entra lifecycle task-definition list" || leaf.path === "entra lifecycle task-definition show" || leaf.path === "entra lifecycle task-definition count" || leaf.path === "entra lifecycle settings show") {
+  if (leaf.path === "entra lifecycle workflow list" || leaf.path === "entra lifecycle workflow show" || leaf.path === "entra lifecycle workflow count" || leaf.path === "entra lifecycle workflow-template list" || leaf.path === "entra lifecycle workflow-template show" || leaf.path === "entra lifecycle workflow-template count" || leaf.path === "entra lifecycle task-definition list" || leaf.path === "entra lifecycle task-definition show" || leaf.path === "entra lifecycle task-definition count" || leaf.path === "entra lifecycle settings show" || leaf.path === "entra lifecycle run list" || leaf.path === "entra lifecycle run show" || leaf.path === "entra lifecycle run count" || leaf.path === "entra lifecycle user-processing-result list" || leaf.path === "entra lifecycle user-processing-result show" || leaf.path === "entra lifecycle user-processing-result count" || leaf.path === "entra lifecycle subject-processing-result list" || leaf.path === "entra lifecycle subject-processing-result show" || leaf.path === "entra lifecycle subject-processing-result count") {
     if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
       throw new AxiError("Lifecycle-workflow reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
     }
@@ -275,6 +275,15 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra lifecycle task-definition list": return listTaskDefinitions(session, flags, selected.profile, operation, help, selected.name);
       case "entra lifecycle task-definition show": return showTaskDefinition(session, flags, selected.profile, operation, help, selected.name);
       case "entra lifecycle task-definition count": return countTaskDefinitions(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle run list": return listRuns(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle run show": return showRun(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle run count": return countRuns(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle user-processing-result list": return listUserProcessingResults(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle user-processing-result show": return showUserProcessingResult(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle user-processing-result count": return countUserProcessingResults(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle subject-processing-result list": return listSubjectProcessingResults(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle subject-processing-result show": return showSubjectProcessingResult(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle subject-processing-result count": return countSubjectProcessingResults(session, flags, selected.profile, operation, help, selected.name);
       default: return showLifecycleSettings(session, flags, selected.profile, operation, help, selected.name);
     }
   }

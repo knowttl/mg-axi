@@ -49,6 +49,7 @@ const READ_SCOPES = new Set([
   "IdentityRiskEvent.Read.All",
   "IdentityRiskyUser.Read.All",
   "LicenseAssignment.Read.All",
+  "LifecycleWorkflows-Reports.Read.All",
   "LifecycleWorkflows-Workflow.Read.All",
   "LifecycleWorkflows-Workflow.ReadBasic.All",
   "LifecycleWorkflows.Read.All",

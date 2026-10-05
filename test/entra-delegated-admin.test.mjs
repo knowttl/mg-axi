@@ -46,6 +46,55 @@ const rel2 = {
 };
 const rel3 = { id: "rel-bare-3" };
 const relationships = [rel1, rel2, rel3];
+const aa1 = {
+  accessContainer: { accessContainerId: "227a2f44-2682-4831-a021-f8d69a34bcba", accessContainerType: "securityGroup" },
+  accessDetails: { unifiedRoles: [{ roleDefinitionId: "88d8e3e3-8f55-4a1e-953a-9b9898b8876b" }] },
+  createdDateTime: "2022-03-07T22:55:18.6780449Z",
+  id: "84c586df-0943-416e-b95f-7289cb8d3bd5",
+  lastModifiedDateTime: "2022-03-11T23:50:35.8970153Z",
+  status: "active",
+};
+const aa2 = {
+  accessContainer: { accessContainerId: "869713c9-0b28-4d08-8949-ae07ae1bf528", accessContainerType: "securityGroup" },
+  id: "8d56bce3-440f-4b4f-b5c2-cc0bcbd0199c",
+  status: "pending",
+};
+const aa3 = { id: "aa-bare-3" };
+const assignmentRows = [aa1, aa2, aa3];
+const longData = `{"id":"a97a9b4c-f43e-4c47-bbd6-50d8d3c88d94","status":"active","padding":"${"p".repeat(600)}"}`;
+const op1 = {
+  createdDateTime: "2022-02-09T22:17:43.9821847Z",
+  data: '{"id":"a97a9b4c-f43e-4c47-bbd6-50d8d3c88d94","status":"active"}',
+  id: "e7de9158-df46-478e-820c-d6eff099d27b",
+  lastModifiedDateTime: "2022-02-09T22:17:43.9821847Z",
+  operationType: "delegatedAdminAccessAssignmentUpdate",
+  status: "succeeded",
+};
+const op2 = {
+  createdDateTime: "2022-02-11T19:27:31.4047395Z",
+  data: longData,
+  id: "f7a7dad4-8cc4-40d7-be44-dd3501b1f4e0",
+  lastModifiedDateTime: "2022-02-11T19:27:31.4047395Z",
+  operationType: "delegatedAdminAccessAssignmentUpdate",
+  status: "running",
+};
+const op3 = { id: "op-bare-3" };
+const operationRows = [op1, op2, op3];
+const rq1 = {
+  action: "lockForApproval",
+  createdDateTime: "2022-02-01T06:14:55.5398865Z",
+  id: "ae5a6b9e-6355-43dd-b708-48486b69c3ff",
+  lastModifiedDateTime: "2022-02-01T06:14:55.5398865Z",
+  status: "succeeded",
+};
+const rq2 = { action: "terminate", id: "8a1b6676-5c12-47ba-8d3a-1d38387b0909", status: "running" };
+const rq3 = { id: "rq-bare-3" };
+const requestRows = [rq1, rq2, rq3];
+const longUrl = `https://admin.teams.microsoft.com/?delegatedOrg=contoso.com&padding=${"q".repeat(500)}`;
+const smd1 = { id: "fa5fa04e-13df-4b7c-9e99-92573ba1fa55", serviceManagementUrl: "https://lighthouse.microsoft.com", serviceName: "Microsoft 365 Lighthouse" };
+const smd2 = { id: "ce0b42f4-bfde-4abe-a5f7-add83f104b23", serviceManagementUrl: longUrl, serviceName: "Teams" };
+const smd3 = { id: "smd-bare-3" };
+const detailRows = [smd1, smd2, smd3];
 
 function setupProfiles() {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-read-delegated-admin-"));
@@ -119,6 +168,34 @@ function delegatedAdminTransport() {
       const found = relationships.find(row => row.id === decodeURIComponent(relationship[1]));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such relationship" } });
     }
+    const navigation = /^\/v1\.0\/tenantRelationships\/delegatedAdminRelationships\/([^/]+)\/(accessAssignments|operations|requests)(\/([^/]+))?$/.exec(path);
+    if (navigation) {
+      const rows = navigation[2] === "accessAssignments" ? assignmentRows : navigation[2] === "operations" ? operationRows : requestRows;
+      if (navigation[4] !== undefined) {
+        const found = rows.find(row => row.id === decodeURIComponent(navigation[4]));
+        return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such navigation row" } });
+      }
+      if (navigation[2] === "accessAssignments") {
+        if (url.searchParams.has("$skiptoken")) return json(200, { value: [aa3] });
+        return json(200, {
+          value: [aa1, aa2],
+          "@odata.nextLink": `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(navigation[1])}/accessAssignments?%24skiptoken=page2`,
+        });
+      }
+      return json(200, { value: rows });
+    }
+    const serviceDetails = /^\/v1\.0\/tenantRelationships\/delegatedAdminCustomers\/([^/]+)\/serviceManagementDetails(\/([^/]+))?$/.exec(path);
+    if (serviceDetails) {
+      if (serviceDetails[3] !== undefined) {
+        const found = detailRows.find(row => row.id === decodeURIComponent(serviceDetails[3]));
+        return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such service-management detail" } });
+      }
+      if (url.searchParams.has("$skiptoken")) return json(200, { value: [smd3] });
+      return json(200, {
+        value: [smd1, smd2],
+        "@odata.nextLink": `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminCustomers/${encodeURIComponent(serviceDetails[1])}/serviceManagementDetails?%24skiptoken=page2`,
+      });
+    }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
@@ -146,7 +223,8 @@ function runDelegatedAdminCli(args, state, mode, denied = false) {
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
-      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, customers: [cu1, cu2], relationships: [rel1, rel2], denied }),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, customers: [cu1, cu2], relationships: [rel1, rel2],
+        assignments: [aa1, aa2], operations: [op1, op2], requests: [rq1, rq2], details: [smd1, smd2], denied }),
     },
   });
 }
@@ -240,6 +318,254 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     } finally {
       teardownProfiles(state);
     }
+  });
+
+  test(`${mode} lists relationship access assignments with compact rows bound to the parent`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile,
+        "--select", "id,status,accessContainer,accessDetails"], overrides);
+      assert.deepEqual(result.delegatedAdminAccessAssignments, [
+        { id: aa1.id, status: "active", accessContainer: aa1.accessContainer, accessDetails: aa1.accessDetails },
+        { id: aa2.id, status: "pending", accessContainer: aa2.accessContainer },
+        { id: aa3.id },
+      ]);
+      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-relationship show-access-assignment --id <relationship-id> --assignment-id <assignment-id>")));
+      assert.ok(result.help.some(hint => hint.includes("partner tenant")));
+      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/accessAssignments?`));
+      assert.ok(!new URL(requests[0].url).searchParams.has("$filter"));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists relationship operations with compact rows and truncates the data payload`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "delegated-admin-relationship", "list-operations", "--id", rel1.id, "--profile", profile,
+        "--select", "id,operationType,status,lastModifiedDateTime,data"], overrides);
+      assert.deepEqual(result.delegatedAdminRelationshipOperations.map(row => row.id), [op1.id, op2.id, op3.id]);
+      assert.equal(result.delegatedAdminRelationshipOperations[0].data, op1.data);
+      assert.match(result.delegatedAdminRelationshipOperations[1].data, /truncated, \d+ chars total/);
+      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-relationship show-operation")));
+      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/operations?`));
+      const full = await executeArgv(["entra", "delegated-admin-relationship", "list-operations", "--id", rel1.id, "--profile", profile, "--full",
+        "--select", "id,data"], overrides);
+      assert.equal(full.delegatedAdminRelationshipOperations[1].data, longData);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists relationship requests with compact rows`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "delegated-admin-relationship", "list-requests", "--id", rel1.id, "--profile", profile,
+        "--select", "id,action,status,lastModifiedDateTime"], overrides);
+      assert.deepEqual(result.delegatedAdminRelationshipRequests, [
+        { id: rq1.id, action: "lockForApproval", status: "succeeded", lastModifiedDateTime: rq1.lastModifiedDateTime },
+        { id: rq2.id, action: "terminate", status: "running" },
+        { id: rq3.id },
+      ]);
+      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-relationship show-request")));
+      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/requests?`));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists service-management details whole with no query parameters`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.delegatedAdminServiceManagementDetails, [
+        smd1,
+        { ...smd2, serviceManagementUrl: smd2.serviceManagementUrl.slice(0, 500) + `... (truncated, ${smd2.serviceManagementUrl.length} chars total)` },
+        smd3,
+      ]);
+      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-customer show-service-management-detail --id <customer-id> --detail-id <detail-id>")));
+      const sent = new URL(requests[0].url);
+      assert.equal(sent.pathname, `/v1.0/tenantRelationships/delegatedAdminCustomers/${cu1.id}/serviceManagementDetails`);
+      assert.equal(sent.search, "");
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists relationship access assignments with a plain documented $filter`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile,
+        "--filter", "status eq 'active'"], overrides);
+      assert.equal(result.count.returned, 3);
+      const sent = new URL(requests[0].url).searchParams;
+      assert.equal(sent.get("$filter"), "status eq 'active'");
+      assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} resumes a capped access-assignment list through its opaque cursor`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const first = await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile, "--limit", "1"], overrides);
+      assert.deepEqual(first.delegatedAdminAccessAssignments.map(row => row.id), [aa1.id]);
+      assert.equal(first.count.complete, false);
+      assert.equal(typeof first.cursor, "string");
+      const second = await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile, "--cursor", first.cursor], overrides);
+      assert.deepEqual(second.delegatedAdminAccessAssignments.map(row => row.id), [aa2.id, aa3.id]);
+      assert.deepEqual(second.count, { returned: 2, complete: true });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} resumes a capped service-management-detail list through its opaque cursor`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const first = await executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile, "--limit", "1"], overrides);
+      assert.deepEqual(first.delegatedAdminServiceManagementDetails.map(row => row.id), [smd1.id]);
+      assert.equal(first.count.complete, false);
+      const second = await executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile, "--cursor", first.cursor], overrides);
+      assert.deepEqual(second.delegatedAdminServiceManagementDetails.map(row => row.id), [smd2.id, smd3.id]);
+      assert.deepEqual(second.count, { returned: 2, complete: true });
+      // The only query state ever sent is the server's own $skiptoken from
+      // its nextLink; $select/$filter never leave this client.
+      assert.ok(requests.every(request => {
+        const params = new URL(request.url).searchParams;
+        return !params.has("$select") && !params.has("$filter");
+      }));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one access assignment with the full reviewed set`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "delegated-admin-relationship", "show-access-assignment", "--id", rel1.id, "--assignment-id", aa1.id, "--profile", profile,
+        "--select", "accessContainer,accessDetails,createdDateTime,id,lastModifiedDateTime,status"], overrides);
+      assert.deepEqual(result.delegatedAdminAccessAssignment, aa1);
+      assert.equal(result.help, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one relationship operation with the full reviewed set`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "delegated-admin-relationship", "show-operation", "--id", rel1.id, "--operation-id", op1.id, "--profile", profile,
+        "--select", "createdDateTime,data,id,lastModifiedDateTime,operationType,status"], overrides);
+      assert.deepEqual(result.delegatedAdminRelationshipOperation, op1);
+      assert.equal(result.help, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one relationship request with the full reviewed set`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "delegated-admin-relationship", "show-request", "--id", rel1.id, "--request-id", rq1.id, "--profile", profile,
+        "--select", "action,createdDateTime,id,lastModifiedDateTime,status"], overrides);
+      assert.deepEqual(result.delegatedAdminRelationshipRequest, rq1);
+      assert.equal(result.help, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one service-management detail whole and projects fields locally`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.delegatedAdminServiceManagementDetail, smd1);
+      assert.equal(result.help, undefined);
+      assert.equal(new URL(requests[0].url).search, "");
+      const projected = await executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", profile,
+        "--fields", "serviceName"], overrides);
+      assert.deepEqual(projected.delegatedAdminServiceManagementDetail, { serviceName: smd1.serviceName });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} unknown navigation ids report absence, not emptiness`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "show-access-assignment", "--id", rel1.id, "--assignment-id", "aa-missing", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(error.message);
+      });
+      await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", "smd-missing", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} denied navigation reads surface scope and partner guidance`, async () => {
+    const state = setupProfiles();
+    try {
+      const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
+      const { overrides } = overridesFor(mode, denied);
+      await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        assert.ok(error.suggestions.some(hint => hint.includes("DelegatedAdminRelationship.Read.All")));
+        assert.ok(error.suggestions.some(hint => hint.includes("partner tenant")));
+        return /grant, role, licence/.test(error.message);
+      });
+      await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        assert.ok(error.suggestions.some(hint => hint.includes("partner tenant")));
+        return /grant, role, licence/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} executable lists and shows navigation reads end to end`, () => {
+    const state = setupProfiles();
+    try {
+      const listed = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile], state, mode);
+      assert.equal(listed.status, 0, listed.stdout);
+      assert.equal(listed.stderr, "");
+      assert.deepEqual(decode(listed.stdout).delegatedAdminAccessAssignments.map(row => row.id), [aa1.id, aa2.id]);
+
+      const shown = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "show-operation", "--id", rel1.id, "--operation-id", op1.id, "--profile", profile], state, mode);
+      assert.equal(shown.status, 0, shown.stdout);
+      assert.deepEqual(decode(shown.stdout).delegatedAdminRelationshipOperation, op1);
+
+      const listedDetails = runDelegatedAdminCli(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile], state, mode);
+      assert.equal(listedDetails.status, 0, listedDetails.stdout);
+      assert.deepEqual(decode(listedDetails.stdout).delegatedAdminServiceManagementDetails.map(row => row.id), [smd1.id, smd2.id]);
+
+      const shownDetail = runDelegatedAdminCli(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", profile], state, mode);
+      assert.equal(shownDetail.status, 0, shownDetail.stdout);
+      assert.deepEqual(decode(shownDetail.stdout).delegatedAdminServiceManagementDetail, smd1);
+      assert.ok(!shownDetail.stdout.includes(`opaque-fixture-${mode}-token`));
+    } finally { teardownProfiles(state); }
   });
 
   test(`${mode} shows one delegated-admin customer with the full reviewed set`, async () => {
@@ -374,6 +700,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["delegated-admin-customer", "show"], ["--id", cu1.id]],
     [["delegated-admin-relationship", "list"], ["--limit", "1"]],
     [["delegated-admin-relationship", "show"], ["--id", rel1.id]],
+    [["delegated-admin-relationship", "list-access-assignments"], ["--id", rel1.id, "--limit", "1"]],
+    [["delegated-admin-relationship", "show-access-assignment"], ["--id", rel1.id, "--assignment-id", aa1.id]],
+    [["delegated-admin-relationship", "list-operations"], ["--id", rel1.id, "--limit", "1"]],
+    [["delegated-admin-relationship", "show-operation"], ["--id", rel1.id, "--operation-id", op1.id]],
+    [["delegated-admin-relationship", "list-requests"], ["--id", rel1.id, "--limit", "1"]],
+    [["delegated-admin-relationship", "show-request"], ["--id", rel1.id, "--request-id", rq1.id]],
+    [["delegated-admin-customer", "list-service-management-details"], ["--id", cu1.id, "--limit", "1"]],
+    [["delegated-admin-customer", "show-service-management-detail"], ["--id", cu1.id, "--detail-id", smd1.id]],
   ]) {
     for (const preview of [false, true]) {
       test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
@@ -444,7 +778,13 @@ test("unknown properties and unfetched fields fail before HTTP", async () => {
     await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "list", "--profile", "soc", "--select", "id,owner"], overrides), { code: "VALIDATION_ERROR" });
     await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "list", "--profile", "soc", "--select", "id,displayName", "--fields", "tenantId"], overrides), { code: "VALIDATION_ERROR" });
     await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "list", "--profile", "soc", "--fields", "duration"], overrides), { code: "VALIDATION_ERROR" });
-    await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "show", "--id", rel1.id, "--profile", "soc", "--select", "id,zone"], overrides), { code: "VALIDATION_ERROR" });
+    await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "list", "--profile", "soc", "--select", "id,zone"], overrides), { code: "VALIDATION_ERROR" });
+    await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", "soc", "--select", "id,zone"], overrides), { code: "VALIDATION_ERROR" });
+    await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", "soc", "--select", "id,status", "--fields", "createdDateTime"], overrides), { code: "VALIDATION_ERROR" });
+    await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", "soc", "--select", "id"], overrides), { code: "VALIDATION_ERROR" });
+    await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", "soc", "--filter", "serviceName eq 'Teams'"], overrides), { code: "VALIDATION_ERROR" });
+    await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", "soc", "--select", "id"], overrides), { code: "VALIDATION_ERROR" });
+    await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", "soc", "--fields", "zone"], overrides), { code: "VALIDATION_ERROR" });
     await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "list", "--profile", "soc", "--cursor", "not-a-cursor"], overrides), { code: "VALIDATION_ERROR" });
     assert.equal(requests.length, 0);
   } finally {
@@ -456,6 +796,12 @@ test("delegated-admin read flags validate before profiles or HTTP", async () => 
   await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "show"]), { code: "VALIDATION_ERROR" });
   await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "show", "--id="]), { code: "VALIDATION_ERROR" });
   await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "show"]), { code: "VALIDATION_ERROR" });
+  await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments"]), { code: "VALIDATION_ERROR" });
+  await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "show-access-assignment", "--id", rel1.id]), { code: "VALIDATION_ERROR" });
+  await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--bogus"]), { code: "VALIDATION_ERROR" });
+  await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "show-operation", "--id", rel1.id]), { code: "VALIDATION_ERROR" });
+  await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "list-service-management-details"]), { code: "VALIDATION_ERROR" });
+  await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id]), { code: "VALIDATION_ERROR" });
   await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "list", "--bogus"]), { code: "VALIDATION_ERROR" });
   await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "list", "--bogus"]), { code: "VALIDATION_ERROR" });
 });

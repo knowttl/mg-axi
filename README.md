@@ -398,6 +398,14 @@ mg-axi entra delegated-admin-customer list --profile soc
 mg-axi entra delegated-admin-customer show --profile soc --id <customer-id>
 mg-axi entra delegated-admin-relationship list --profile soc
 mg-axi entra delegated-admin-relationship show --profile soc --id <relationship-id>
+mg-axi entra delegated-admin-relationship list-access-assignments --profile soc --id <relationship-id>
+mg-axi entra delegated-admin-relationship show-access-assignment --profile soc --id <relationship-id> --assignment-id <assignment-id>
+mg-axi entra delegated-admin-relationship list-operations --profile soc --id <relationship-id>
+mg-axi entra delegated-admin-relationship show-operation --profile soc --id <relationship-id> --operation-id <operation-id>
+mg-axi entra delegated-admin-relationship list-requests --profile soc --id <relationship-id>
+mg-axi entra delegated-admin-relationship show-request --profile soc --id <relationship-id> --request-id <request-id>
+mg-axi entra delegated-admin-customer list-service-management-details --profile soc --id <customer-id>
+mg-axi entra delegated-admin-customer show-service-management-detail --profile soc --id <customer-id> --detail-id <detail-id>
 ```
 
 Delegated-admin reads run in the partner tenant; customer objects are created by the system when a relationship exists and deleted when none remain, so a non-partner tenant lists zero customers, which is an answer rather than an error.
@@ -405,11 +413,14 @@ Delegated-admin reads run in the partner tenant; customer objects are created by
 `--select` requests properties from the reviewed delegated-admin field sets; `--fields` projects locally and must be a subset of the fetched selection.
 Both lists accept `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to delegated-admin reads.
-All four named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+The access-assignment, operation and request navigation lists bind their parent relationship through `--id` and take `--assignment-id`, `--operation-id` and `--request-id` on their shows; the service-management-detail reads bind their parent customer through `--id` and take `--detail-id` on the show.
+The navigation lists default to compact properties (`id`, `status`, `accessContainer`, `accessDetails` for assignments; `id`, `operationType`, `status`, `lastModifiedDateTime` for operations; `id`, `action`, `status`, `lastModifiedDateTime` for requests) while the service-management-detail reads always carry (`id`, `serviceName`, `serviceManagementUrl`); every show defaults to its full reviewed property set.
+The access-assignment, operation and request lists accept `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`; Graph documents no query parameters for service-management details, so those two reads take no `--select` or `--filter` and project `--fields` locally.
+All twelve named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
 Delegated delegated-admin reads default to `https://graph.microsoft.com/DelegatedAdminRelationship.Read.All`, while application profiles use the configured `.default` audience.
 Personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for delegated-admin reads; denied reads name the scope, partner-tenant and licensing guidance instead of only the generic cause.
-No delegated-admin mutation lives here; the `$count` scalars, the container root, service-management details and relationship access-assignment/operation/request navigations belong to later pieces, while the multi-tenant-organization reads shipped in the next section and tenant-lookup functions belong to a later follow-up; see the [delegated-admin scope decisions](docs/coverage.md#ext-04-delegated-admin-scope-decisions) for deferred reads and later subfamilies.
+No delegated-admin mutation lives here; the `$count` scalars and the container root belong to later pieces, while the multi-tenant-organization reads shipped in the next section and tenant-lookup functions belong to a later follow-up; see the [delegated-admin scope decisions](docs/coverage.md#ext-04-delegated-admin-scope-decisions) for deferred reads and later subfamilies.
 
 Log in with `https://graph.microsoft.com/MultiTenantOrganization.Read.All`, then inspect the tenant multitenant organization:
 

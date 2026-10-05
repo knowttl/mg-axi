@@ -32,6 +32,7 @@ const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["entra agreement", "terms-of-use agreements and acceptances"],
   ["entra agreement-acceptance", "terms-of-use agreements and acceptances"],
   ["entra directory-object", "directory objects"],
+  ["entra contact", "organizational contacts"],
   ["entra group-lifecycle-policy", "group lifecycle policies"],
   ["entra group-setting-template", "group setting templates"],
   ["entra attribute-set", "attribute sets and custom security attributes"],

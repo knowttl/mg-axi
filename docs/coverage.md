@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 70 (68 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 76 (74 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -56,6 +56,12 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra domain service-configuration-record show` | `GET:/domains/{domain-id}/serviceConfigurationRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
 | `mg-axi entra domain-dns-record list` | `GET:/domainDnsRecords` | scheduled | EXT-01 |
 | `mg-axi entra domain-dns-record show` | `GET:/domainDnsRecords/{domainDnsRecord-id}` | scheduled | EXT-01 |
+| `mg-axi entra group-lifecycle-policy list` | `GET:/groupLifecyclePolicies` | scheduled | EXT-01 |
+| `mg-axi entra group-lifecycle-policy show` | `GET:/groupLifecyclePolicies/{groupLifecyclePolicy-id}` | scheduled | EXT-01 |
+| `mg-axi entra group-lifecycle-policy count` | `GET:/groupLifecyclePolicies/$count` | scheduled | EXT-01 |
+| `mg-axi entra group-setting-template list` | `GET:/groupSettingTemplates` | scheduled | EXT-01 |
+| `mg-axi entra group-setting-template show` | `GET:/groupSettingTemplates/{groupSettingTemplate-id}` | scheduled | EXT-01 |
+| `mg-axi entra group-setting-template count` | `GET:/groupSettingTemplates/$count` | scheduled | EXT-01 |
 | `mg-axi entra contract list` | `GET:/contracts` | scheduled | EXT-04 |
 | `mg-axi entra contract show` | `GET:/contracts/{contract-id}` | scheduled | EXT-04 |
 | `mg-axi entra contract count` | `GET:/contracts/$count` | scheduled | EXT-04 |
@@ -255,6 +261,26 @@ Stream image and CSS bytes stay out because they need a separate binary-output c
 | `v1.0:POST:/organization/{organization-id}/checkMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate organization scope to a later EXT-01 organization lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
 | `v1.0:POST:/organization/{organization-id}/getMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate organization scope to a later EXT-01 organization lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
 | `v1.0:POST:/organization/{organization-id}/getMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate organization scope to a later EXT-01 organization lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+
+## EXT-01 group lifecycle scope decisions
+
+This change covers the six v1.0 group lifecycle policy and group setting template reads above (list, show, count per family).
+The operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.
+Beta policies and templates need their own review; delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads; the POST lookup actions need their own request and projection review.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/groupLifecyclePolicies` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle beta subfamily: the six approved reads cover v1.0 only; beta policies and templates need separate review. |
+| `beta:GET:/groupLifecyclePolicies/$count` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle beta subfamily: the six approved reads cover v1.0 only; beta policies and templates need separate review. |
+| `beta:GET:/groupLifecyclePolicies/{groupLifecyclePolicy-id}` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle beta subfamily: the six approved reads cover v1.0 only; beta policies and templates need separate review. |
+| `v1.0:GET:/groupSettingTemplates/delta()` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle delta subfamily: delta-token sync needs its own paging and change-tracking contract beyond the approved list/show/count reads. |
+| `v1.0:POST:/groupSettingTemplates/getAvailableExtensionProperties` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/groupSettingTemplates/getByIds` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/groupSettingTemplates/validateProperties` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/groupSettingTemplates/{groupSettingTemplate-id}/checkMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/groupSettingTemplates/{groupSettingTemplate-id}/checkMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/groupSettingTemplates/{groupSettingTemplate-id}/getMemberGroups` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
+| `v1.0:POST:/groupSettingTemplates/{groupSettingTemplate-id}/getMemberObjects` | scheduled (deferred) | EXT-01 | Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review. |
 
 ## EXT-04 partner contracts scope decisions
 

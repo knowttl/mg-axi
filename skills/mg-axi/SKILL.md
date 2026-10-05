@@ -1,7 +1,7 @@
 ---
 name: mg-axi
 description: >
-  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, access reviews, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
+  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, group lifecycle policies, group setting templates, partner contracts, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, access reviews, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
 user-invocable: false
 ---
 
@@ -73,6 +73,12 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra domain service-configuration-record show` | native | read |
 | `mg-axi entra domain-dns-record list` | native | read |
 | `mg-axi entra domain-dns-record show` | native | read |
+| `mg-axi entra group-lifecycle-policy list` | native | read |
+| `mg-axi entra group-lifecycle-policy show` | native | read |
+| `mg-axi entra group-lifecycle-policy count` | native | read |
+| `mg-axi entra group-setting-template list` | native | read |
+| `mg-axi entra group-setting-template show` | native | read |
+| `mg-axi entra group-setting-template count` | native | read |
 | `mg-axi entra contract list` | native | read |
 | `mg-axi entra contract show` | native | read |
 | `mg-axi entra contract count` | native | read |

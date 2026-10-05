@@ -148,6 +148,21 @@ const dnsRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Domain.Read.All" },
 };
+const lifecycleRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties; lifecycle-policy reads need Directory.Read.All" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Directory.Read.All" },
+};
+const templateRead = {
+  select: { value: "comma-separated-properties", description: "Request server properties; setting-template reads need GroupSettings.Read.All" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to GroupSettings.Read.All" },
+};
 const contractRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; filtering is documented for customerId, defaultDomainName and displayName; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties; contract reads need Directory.Read.All" },
@@ -522,6 +537,49 @@ export const LEAVES: Leaf[] = [
     full: dnsRead.full,
     scopes: dnsRead.scopes,
   }, examples: ["mg-axi entra domain-dns-record show --id <record-id> --profile soc"] },
+  { path: "entra group-lifecycle-policy list", description: "List group lifecycle (expiry) policies with compact properties (id, groupLifetimeInDays, managedGroupTypes); --filter passes through as plain $filter", operation: "GET:/groupLifecyclePolicies", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: lifecycleRead.filter,
+    select: lifecycleRead.select,
+    fields: lifecycleRead.fields,
+    full: lifecycleRead.full,
+    cursor: lifecycleRead.cursor,
+    scopes: lifecycleRead.scopes,
+  }, examples: ["mg-axi entra group-lifecycle-policy list --profile soc", "mg-axi entra group-lifecycle-policy list --profile soc --limit 10"] },
+  { path: "entra group-lifecycle-policy show", description: "Show one group lifecycle policy with the full reviewed property set (id, alternateNotificationEmails, groupLifetimeInDays, managedGroupTypes)", operation: "GET:/groupLifecyclePolicies/{groupLifecyclePolicy-id}", flags: {
+    ...common, id: { value: "policy-id", required: true, description: "Lifecycle policy identifier" },
+    select: lifecycleRead.select,
+    fields: lifecycleRead.fields,
+    full: lifecycleRead.full,
+    scopes: lifecycleRead.scopes,
+  }, examples: ["mg-axi entra group-lifecycle-policy show --id <policy-id> --profile soc", "mg-axi entra group-lifecycle-policy show --id <policy-id> --profile soc --full"] },
+  { path: "entra group-lifecycle-policy count", description: "Count group lifecycle policies as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/groupLifecyclePolicies/$count", flags: {
+    ...common,
+    scopes: lifecycleRead.scopes,
+  }, examples: ["mg-axi entra group-lifecycle-policy count --profile soc"] },
+  { path: "entra group-setting-template list", description: "List group setting templates with compact properties (id, displayName, description); --filter is unsupported on /groupSettingTemplates (Graph documents $select only)", operation: "GET:/groupSettingTemplates", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    select: templateRead.select,
+    fields: templateRead.fields,
+    full: templateRead.full,
+    cursor: templateRead.cursor,
+    scopes: templateRead.scopes,
+  }, examples: ["mg-axi entra group-setting-template list --profile soc", "mg-axi entra group-setting-template list --profile soc --limit 10"] },
+  { path: "entra group-setting-template show", description: "Show one group setting template with the full reviewed property set including the values collection of setting names, types and defaults", operation: "GET:/groupSettingTemplates/{groupSettingTemplate-id}", flags: {
+    ...common, id: { value: "template-id", required: true, description: "Setting template identifier" },
+    select: templateRead.select,
+    fields: templateRead.fields,
+    full: templateRead.full,
+    scopes: templateRead.scopes,
+  }, examples: ["mg-axi entra group-setting-template show --id <template-id> --profile soc", "mg-axi entra group-setting-template show --id <template-id> --profile soc --full"] },
+  { path: "entra group-setting-template count", description: "Count group setting templates as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/groupSettingTemplates/$count", flags: {
+    ...common,
+    scopes: templateRead.scopes,
+  }, examples: ["mg-axi entra group-setting-template count --profile soc"] },
   { path: "entra contract list", description: "List partner-tenant customer contracts with compact properties (id, displayName, contractType, defaultDomainName); contracts exist in partner tenants only; --filter passes through as plain $filter", operation: "GET:/contracts", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

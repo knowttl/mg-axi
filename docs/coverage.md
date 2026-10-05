@@ -15,10 +15,10 @@ list below is the implemented truth and never counts scheduled work as complete.
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
 - inventory reviewed-raw-read: 0
-- inventory scheduled: 8454
+- inventory scheduled: 8446
 - inventory intentionally-blocked: 3071
 - inventory deprecated: 870
-- inventory unavailable: 0
+- inventory unavailable: 8
 - inventory excluded: 35056
 
 ## Commands
@@ -150,6 +150,24 @@ Workforce context only; no external-customer (B2C/External ID tenant) support is
 | `beta:GET:/identity/identityProviders/$count` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review. |
 | `beta:GET:/identity/identityProviders/availableProviderTypes()` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review. |
 | `beta:GET:/identity/identityProviders/{identityProviderBase-id}` | scheduled (deferred) | EXT-03 | Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review. |
+
+## EXT-03 invitations scope decisions
+
+Firstmate decision (mg-ext-03b inbox 001): do not implement these reads and add no scope.
+The eight v1.0 invitation reads below carry an explicit reviewed unavailable disposition; no new commands or raw access are approved.
+The [v1.0 invitation resource documentation](https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md) lists Create only in its Methods table and provides no documented GET contract for these invitation reads.
+Workforce B2B context only; no invitation creation or any mutation is claimed here.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `v1.0:GET:/invitations` | unavailable | EXT-03 | Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md). |
+| `v1.0:GET:/invitations/$count` | unavailable | EXT-03 | Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md). |
+| `v1.0:GET:/invitations/invitedUser` | unavailable | EXT-03 | Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md). |
+| `v1.0:GET:/invitations/invitedUser/serviceProvisioningErrors` | unavailable | EXT-03 | Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md). |
+| `v1.0:GET:/invitations/invitedUser/serviceProvisioningErrors/$count` | unavailable | EXT-03 | Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md). |
+| `v1.0:GET:/invitations/invitedUserSponsors` | unavailable | EXT-03 | Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md). |
+| `v1.0:GET:/invitations/invitedUserSponsors/$count` | unavailable | EXT-03 | Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md). |
+| `v1.0:GET:/invitations/invitedUserSponsors/{directoryObject-id}` | unavailable | EXT-03 | Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md). |
 
 ## EXT-01 organization scope decisions
 

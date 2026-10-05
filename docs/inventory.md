@@ -83,7 +83,9 @@ For example, a scheduled application or user GET is not permission to project cr
 
 No row currently claims a named command or reviewed raw read.
 The validator rejects those dispositions for this discovery-only artifact.
-`unavailable` is reserved for an explicitly sourced version/cloud limitation, rather than inferred from a missing route.
+`unavailable` records an explicitly sourced version/cloud limitation or a reviewed decision that the selected version has no documented operation contract.
+It is never inferred merely from a missing metadata route.
+See the generated [capability report](coverage.md) for operation-level dispositions and their sourced reasons.
 There is no completeness percentage.
 Future capability reports must count named, raw, scheduled, blocked, deprecated and unavailable scoped operations separately and cannot count scheduled work as complete.
 Excluded rows must be counted separately from scoped capabilities.

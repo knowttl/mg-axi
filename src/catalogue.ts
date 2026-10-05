@@ -2078,8 +2078,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (Object.hasOwn(flags, name)) fail(`duplicate flag --${name}`);
     if (flag!.value) {
       const value = match![2] ?? argv[++i];
-      if (!value?.trim() || (value.startsWith("-") && !(name === "cursor" && value === "-"
-        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra access-review definition list" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review decision list" || leaf.path === "entra access-review contacted-reviewer list" || leaf.path === "entra access-review stage list" || leaf.path === "entra entitlement catalog list" || leaf.path === "entra entitlement access-package list" || leaf.path === "entra entitlement assignment-policy list" || leaf.path === "entra entitlement resource-role-scope list" || leaf.path === "entra entitlement assignment list" || leaf.path === "entra entitlement assignment-request list" || leaf.path === "entra lifecycle workflow list" || leaf.path === "entra lifecycle workflow-template list" || leaf.path === "entra lifecycle task-definition list")))) fail(`--${name} requires a non-empty value`);
+      if (!value?.trim() || (value.startsWith("-") && !(name === "cursor" && value === "-" && String(flag!.value ?? "").includes("|-")))) fail(`--${name} requires a non-empty value`);
       flags[name] = value!;
     } else {
       if (match![2] !== undefined) fail(`--${name} does not take a value`);

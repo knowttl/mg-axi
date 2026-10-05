@@ -36,6 +36,7 @@ EXT-01 (organization) adds tenant-organization list/show, default sign-in brandi
 EXT-04 (contracts) adds partner-tenant customer-contract list/show/count through the same session.
 EXT-04 (delegated-admin) adds partner-tenant delegated-admin customer and relationship list/show through the same session.
 EXT-04 (multi-tenant-organization) adds multitenant-organization show, join-request show and member-tenant list/count through the same session.
+EXT-04 (tenant-information) adds tenant-information show by domain name or tenant ID through the allowlisted session function-argument contract.
 EXT-01 (group lifecycle) adds group lifecycle-policy and group setting-template list/show/count reads through the same session.
 EXT-01 (custom security attributes) adds attribute-set, custom-security-attribute-definition and allowed-value list/show/count reads with attribute-role denial guidance through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
@@ -109,7 +110,7 @@ The revoke command rejects caller-supplied `--scopes`.
 A 403 denial surfaces the `User.RevokeSessions.All` requirement without inventing a role verdict; a timeout or 5xx after sending reports `OUTCOME_UNKNOWN`, and neither outcome is ever replayed.
 Unknown-outcome guidance includes a user read with `--select id`; that read checks target accessibility, not whether revocation took effect.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
-Resource identifiers in named commands and raw paths cannot begin with `$` or contain parentheses; OData route segments such as `$count`, `$value` and `$ref`, and function-style segments such as `delta()`, cannot be used as IDs and fail validation before credentials.
+Resource identifiers in named commands and raw paths cannot begin with `$` or contain parentheses, except the three allowlisted function-argument routes (the two tenant-information lookups and the subscription commerce-key lookup), whose parenthesised values arrive only as validated CLI flags and are OData-quoted and encoded by the shared session; OData route segments such as `$count`, `$value` and `$ref`, and other function-style segments such as `delta()`, cannot be used as IDs and fail validation before credentials.
 Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
 Data and structured errors use TOON on stdout; diagnostics belong on stderr.
 Bare `-v`, `-V` and `--version` print only the package version without importing the catalogue.
@@ -420,7 +421,7 @@ All twelve named reads support only `--api-version v1.0`; `--api-version beta` f
 Delegated delegated-admin reads default to `https://graph.microsoft.com/DelegatedAdminRelationship.Read.All`, while application profiles use the configured `.default` audience.
 Personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for delegated-admin reads; denied reads name the scope, partner-tenant and licensing guidance instead of only the generic cause.
-No delegated-admin mutation lives here; the `$count` scalars and the container root belong to later pieces, while the multi-tenant-organization reads shipped in the next section and tenant-lookup functions belong to a later follow-up; see the [delegated-admin scope decisions](docs/coverage.md#ext-04-delegated-admin-scope-decisions) for deferred reads and later subfamilies.
+No delegated-admin mutation lives here; the `$count` scalars and the container root belong to later pieces, while the multi-tenant-organization reads shipped in the next section and tenant-lookup functions ship as `entra tenant-information show` in the tenant-information usage below; see the [delegated-admin scope decisions](docs/coverage.md#ext-04-delegated-admin-scope-decisions) for deferred reads and later subfamilies.
 
 Log in with `https://graph.microsoft.com/MultiTenantOrganization.Read.All`, then inspect the tenant multitenant organization:
 
@@ -441,7 +442,25 @@ All four named reads support only `--api-version v1.0`; `--api-version beta` fai
 Delegated multi-tenant-organization reads default to `https://graph.microsoft.com/MultiTenantOrganization.Read.All` (the lower-privileged delegated `MultiTenantOrganization.ReadBasic.All` returns displayName and tenantId only) and additionally need Security Reader or Global Reader, while application profiles use the configured `.default` audience.
 Personal Microsoft accounts are not supported, and these reads run in the commercial Global service only.
 Multi-tenant-organization participation needs Entra ID P1; denied reads name the scope, roles and licensing guidance instead of only the generic cause.
-No multi-tenant-organization mutation lives here; the single-member read stays scheduled because its documented least privilege is the write scope `MultiTenantOrganization.ReadWrite.All`, and tenant-lookup functions belong to a later follow-up; see the [multi-tenant-organization scope decisions](docs/coverage.md#ext-04-multi-tenant-organization-scope-decisions) for the deferred read.
+No multi-tenant-organization mutation lives here; the single-member read stays scheduled because its documented least privilege is the write scope `MultiTenantOrganization.ReadWrite.All`, and tenant-lookup functions ship as `entra tenant-information show` in the tenant-information usage below; see the [multi-tenant-organization scope decisions](docs/coverage.md#ext-04-multi-tenant-organization-scope-decisions) for the deferred read.
+
+Log in with `https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All`, then look up tenant information by domain name or tenant ID:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All
+mg-axi entra tenant-information show --domain-name example.invalid --profile soc
+mg-axi entra tenant-information show --tenant-id <tenant-id> --profile soc
+```
+
+`entra tenant-information show` needs exactly one of `--domain-name` or `--tenant-id`; combining them or omitting both fails validation before credentials.
+Both lookups return the full reviewed tenantInformation set (`defaultDomainName`, `displayName`, `federationBrandName`, `tenantId`); Graph documents no query parameters here, so the lookup takes no `--select`, `--filter`, `--limit` or `--cursor`.
+Both lookups support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+Delegated tenant-information reads default to `https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All`, while application profiles use the configured `.default` audience.
+No Entra role is required for tenant-information lookups; personal Microsoft accounts are not supported.
+No P1/P2 prerequisite is stated for tenant-information lookups; denied reads name the scope and licensing guidance instead of only the generic cause.
+Null/missing preservation and 500-character text truncation described above also apply to tenant-information reads; `--full` removes text truncation.
+Lookup values bind only through the allowlisted session function-argument contract (validated, OData-quoted and encoded); every other parenthesised path keeps the refusal.
+No tenant-information mutation lives here; see the [tenant-lookup scope decisions](docs/coverage.md#ext-04-tenant-lookup-scope-decisions) for the three reads this contract unblocks.
 
 Log in with `https://graph.microsoft.com/Domain.Read.All`, then inspect tenant domains and their DNS records:
 
@@ -504,6 +523,7 @@ Log in with `https://graph.microsoft.com/Organization.Read.All`, then inspect co
 mg-axi login --profile soc --scopes https://graph.microsoft.com/Organization.Read.All
 mg-axi entra subscription list --profile soc
 mg-axi entra subscription show --profile soc --id <subscription-id>
+mg-axi entra subscription show --profile soc --commerce-subscription-id <commerce-subscription-id>
 mg-axi entra subscription count --profile soc
 ```
 

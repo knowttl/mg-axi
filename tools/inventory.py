@@ -89,15 +89,24 @@ APPROVED_CONTRACT_READS = {
     "/contracts/{contract-id}",
     "/contracts/$count",
 }
-# The four approved EXT-04b v1.0 delegated-admin reads: customer and
-# relationship list/show. Counts, the container root, navigation
-# sub-resources and the multi-tenant-organization/lookup functions stay
+# The twelve approved EXT-04b/EXT-04d v1.0 delegated-admin reads: customer
+# and relationship list/show plus the access-assignment, operation, request
+# and service-management-detail navigation list/show reads. Counts, the
+# container root and the multi-tenant-organization/lookup functions stay
 # scheduled for later EXT-04 subfamilies.
 APPROVED_DELEGATED_ADMIN_READS = {
     "/tenantRelationships/delegatedAdminCustomers",
     "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}",
+    "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails",
+    "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/{delegatedAdminServiceManagementDetail-id}",
     "/tenantRelationships/delegatedAdminRelationships",
     "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}",
+    "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments",
+    "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/{delegatedAdminAccessAssignment-id}",
+    "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations",
+    "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/{delegatedAdminRelationshipOperation-id}",
+    "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests",
+    "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/{delegatedAdminRelationshipRequest-id}",
 }
 # The four approved EXT-04c v1.0 multi-tenant-organization reads:
 # organization show, join-request show, tenant list and tenant count. The

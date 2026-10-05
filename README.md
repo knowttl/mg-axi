@@ -285,6 +285,7 @@ Contracts exist in partner tenants only (Cloud Solution Provider, Office 365 Syn
 `--select` requests properties from the [reviewed contract field set](src/entra-contracts.ts); `--fields` projects locally and must be a subset of the fetched selection.
 Contract lists accept `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`; filtering is documented for `customerId`, `defaultDomainName` and `displayName`.
 `entra contract count` returns one scalar (`contractCount`) from the text/plain `$count` route and takes no `--filter`, `--select`, `--limit` or `--cursor`.
+Raw `api get` supports `/contracts` and `/contracts/<contract-id>`; `/contracts/$count` is available only through the named count command.
 Contract lists return `contracts` and single-contract reads return `contract`.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to contract reads.
 All three named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
@@ -535,6 +536,7 @@ mg-axi api get /identity/conditionalAccess/policies --scopes https://graph.micro
 ```
 
 `api get` accepts only GET routes in the [reviewed route catalogue](src/api.ts), which owns route-specific query keys, `$select` fields and access constraints.
+Resource IDs in raw paths cannot contain parentheses; function-style segments such as `/contracts/delta()` are refused before credentials.
 OData parameters use `--odata`; `--query` is reserved for output queries and is not implemented here.
 Omitting `$select` selects the route's reviewed fields, and every response is filtered to reviewed fields before output.
 For `/users/<user-id>/authentication/methods`, `$select` is the only supported OData parameter and selects output properties locally; an explicit selection restricts output to that subset.

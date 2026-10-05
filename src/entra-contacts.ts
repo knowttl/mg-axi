@@ -498,8 +498,8 @@ function navCollectionCommon(
   const cursor = flags.cursor === undefined ? undefined : String(flags.cursor);
   if (cursor !== undefined && !cursor.trim()) throw new AxiError("--cursor needs the opaque cursor from a partial result", "VALIDATION_ERROR", [help]);
   const saved = cursor === undefined ? undefined : session.cursorQuery(operation, cursor);
-  const { select, fields } = selectedFields(flags,
-    saved?.["$select"] === undefined ? DEFAULT_NAV_SELECT : fieldList(saved["$select"], KNOWN_NAV, KNOWN_NAV_FIELDS, "select", help), help);
+  const defaults = saved?.["$select"] === undefined ? [...DEFAULT_NAV_SELECT] : fieldList(saved["$select"], KNOWN_NAV, KNOWN_NAV_FIELDS, "select", help);
+  const { select, fields } = navFieldsFor(flags, help, defaults);
   return { cursor, select, fields, scopes: scopesFor(flags, DEFAULT_CONTACT_SCOPES, profile, help), full: flags.full === true };
 }
 
@@ -534,8 +534,8 @@ function navSingleResult(
   return projectNav(raw, fields, full);
 }
 
-function navFieldsFor(flags: ContactFlags, help: string): { select: string[]; fields: string[] } {
-  const select = flags.select === undefined ? [...DEFAULT_NAV_SELECT] : fieldList(flags.select, KNOWN_NAV, KNOWN_NAV_FIELDS, "select", help);
+function navFieldsFor(flags: ContactFlags, help: string, defaults: string[] = DEFAULT_NAV_SELECT): { select: string[]; fields: string[] } {
+  const select = flags.select === undefined ? [...defaults] : fieldList(flags.select, KNOWN_NAV, KNOWN_NAV_FIELDS, "select", help);
   const fields = flags.fields === undefined ? [...select] : fieldList(flags.fields, KNOWN_NAV, KNOWN_NAV_FIELDS, "fields", help);
   const missing = fields.find(field => !select.includes(field));
   if (missing) {

@@ -657,6 +657,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         executeArgv(["entra", "contact", "count-direct-reports", "--id", c1.id, "--profile", profile, "--select", "id"], overrides),
         error => error.code === "VALIDATION_ERROR" && /unknown flag --select/.test(error.message),
       );
+      await assert.rejects(
+        executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile, "--select", "companyName"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /Unknown contact property companyName/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile, "--select", "id,displayName", "--fields", "companyName"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /Unknown contact property companyName/.test(error.message),
+      );
       assert.equal(calls.length, 0);
       assert.equal(requests.length, 0);
     } finally {

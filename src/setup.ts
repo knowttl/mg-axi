@@ -8,7 +8,47 @@ import { Profiles } from "./profiles.js";
 // hooks; ordinary commands never gain installation side effects. See
 // README.md for the release notes and skills/mg-axi/SKILL.md for the
 // installable skill.
+// EXT-01b document gate (D2): the capability prose lists the shipped read
+// families, driven from the catalogue in catalogue order, so a merged read
+// slice extends the sentence without touching this template. Paths outside
+// the known prefixes fall back to their two-segment leaf key and are never
+// silently omitted from the list.
+const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
+  ["entra user", "user"],
+  ["entra registration", "registration"],
+  ["entra group", "group"],
+  ["entra directory-role", "directory-role/PIM"],
+  ["entra role-assignment", "directory-role/PIM"],
+  ["entra pim", "directory-role/PIM"],
+  ["entra device", "device"],
+  ["entra administrative-unit", "administrative-unit"],
+  ["entra organization", "organization and branding"],
+  ["entra domain", "domain and domain DNS"],
+  ["entra domain-dns-record", "domain and domain DNS"],
+  ["entra sign-in", "sign-in/directory-audit"],
+  ["entra directory-audit", "sign-in/directory-audit"],
+  ["entra application", "application/service-principal and consent grants"],
+  ["entra service-principal", "application/service-principal and consent grants"],
+  ["entra risky-user", "risk"],
+  ["entra risk-detection", "risk"],
+  ["entra conditional-access", "Conditional Access"],
+  ["entra identity-provider", "identity-provider"],
+  ["entra access-review", "access-review"],
+];
+
+function shippedReadFamilies(): string[] {
+  const seen: string[] = [];
+  for (const leaf of LEAVES) {
+    if (leaf.operation === undefined || !leaf.operation.startsWith("GET:")) continue;
+    const match = READ_FAMILY_PREFIXES.find(([prefix]) => leaf.path === prefix || leaf.path.startsWith(`${prefix} `));
+    const label = match ? match[1] : leaf.path.split(" ").slice(0, 2).join(" ");
+    if (!seen.includes(label)) seen.push(label);
+  }
+  return seen;
+}
+
 export function setupView(store: Profiles): Record<string, unknown> {
+  const families = shippedReadFamilies();
   const items = store.list();
   const implemented = LEAVES.map(leaf => leaf.path);
   const reads = LEAVES.filter(leaf => (leaf.operation !== undefined && leaf.operation.startsWith("GET:")) || leaf.path === "api get" || leaf.path === "doctor").length;
@@ -36,7 +76,7 @@ export function setupView(store: Profiles): Record<string, unknown> {
       reads,
       writes,
       local: implemented.length - reads - writes,
-      api: "Entra user, group, directory-role/PIM, device, administrative-unit, sign-in/directory-audit, application/service-principal, consent-grant, risk and Conditional Access reads plus reviewed raw api get, one gated group-membership write, one gated account enable/disable write, one gated session-revocation write and one gated risky-user dismissal write; every other operation is scheduled, blocked, deprecated or excluded",
+      api: `Entra ${families.slice(0, -1).join(", ")} and ${families.at(-1)} reads plus reviewed raw api get, one gated group-membership write, one gated account enable/disable write, one gated session-revocation write and one gated risky-user dismissal write; every other operation is scheduled, blocked, deprecated or excluded`,
       report: "docs/coverage.md",
     },
     integration: "Install skills/mg-axi/SKILL.md explicitly through your agent's skill installation mechanism; setup only shows guidance and installs no skills or hooks",

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Socket } from "node:net";
 import { mock } from "node:test";
 
-const { mode, denied, scopes, definitions, instances, decisions } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const { mode, denied, scopes, definitions, instances, decisions, reviewers = [], stages = [] } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
 const expectedDelegated = scopes ?? "https://graph.microsoft.com/AccessReview.Read.All";
 const [major, minor] = process.versions.node.split(".").map(Number);
 const exportOption = major >= 26 || (major === 25 && minor >= 9) || (major === 24 && minor >= 15)
@@ -59,6 +59,22 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
     } else if (url.pathname.endsWith("/decisions")) {
       assert.ok(!url.searchParams.get("$select")?.split(",").includes("justification"));
       body = { value: decisions };
+    } else if (/\/decisions\/[^/]+$/.test(url.pathname)) {
+      const decision = decisions.find(row => url.pathname.endsWith(`/decisions/${row.id}`));
+      assert.ok(decision, "Unexpected access-review decision route");
+      body = decision;
+    } else if (url.pathname.endsWith("/contactedReviewers")) {
+      body = { value: reviewers };
+    } else if (/\/contactedReviewers\/[^/]+$/.test(url.pathname)) {
+      const reviewer = reviewers.find(row => url.pathname.endsWith(`/contactedReviewers/${row.id}`));
+      assert.ok(reviewer, "Unexpected contacted-reviewer route");
+      body = reviewer;
+    } else if (url.pathname.endsWith("/stages")) {
+      body = { value: stages };
+    } else if (/\/stages\/[^/]+$/.test(url.pathname)) {
+      const stage = stages.find(row => url.pathname.endsWith(`/stages/${row.id}`));
+      assert.ok(stage, "Unexpected stage route");
+      body = stage;
     } else if (url.pathname === base) {
       body = { value: definitions };
     } else if (url.pathname === `${base}/${definitions[0].id}/instances`) {

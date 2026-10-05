@@ -12,6 +12,7 @@ import { KNOWN_SYNC_FIELDS } from "./entra-on-premises-synchronization.js";
 import { KNOWN_ACCEPTANCE_FIELDS, KNOWN_AGREEMENT_FIELDS } from "./entra-terms-of-use.js";
 import { KNOWN_DIRECTORY_OBJECT_FIELDS } from "./entra-directory-objects.js";
 import { KNOWN_DELETED_ADMINISTRATIVE_UNIT_FIELDS, KNOWN_DELETED_APPLICATION_FIELDS, KNOWN_DELETED_GROUP_FIELDS, KNOWN_DELETED_SERVICE_PRINCIPAL_FIELDS, KNOWN_DELETED_SHOW_FIELDS, KNOWN_DELETED_USER_FIELDS } from "./entra-deleted-items.js";
+import { KNOWN_CONTACT_FIELDS } from "./entra-contacts.js";
 import { KNOWN_LIFECYCLE_FIELDS, KNOWN_TEMPLATE_FIELDS } from "./entra-group-lifecycle.js";
 import { KNOWN_ALLOWED_VALUE_FIELDS, KNOWN_ATTRIBUTE_SET_FIELDS, KNOWN_CUSTOM_SECURITY_DEFINITION_FIELDS } from "./entra-custom-security-attributes.js";
 import { encodeGraphPathSegment, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
@@ -354,6 +355,14 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A User.Read.All, Group.Read.All, Application.Read.All or AdministrativeUnit.Read.All matching the object's type. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for this read. Personal Microsoft accounts are not supported.",
     note: "The untyped get can return any deletable type, so only the cross-type safe properties are reviewed here; per-type detail needs the typed deleted-item lists.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/directoryobject?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/contacts", kind: "collection", query: ["$select", "$filter", "$top"], fields: KNOWN_CONTACT_FIELDS, defaultFields: ["id", "displayName", "mail", "companyName"],
+    access: "D/A OrgContact.Read.All least-privileged (Directory.Read.All is the documented higher-privileged alternative). Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers reads basic properties; Global Reader, Directory Writers, Intune Administrator or User Administrator also work). Personal Microsoft accounts are not supported.",
+    note: "Filtering passes through as plain $filter with $count=true and ConsistencyLevel eventual; $search and $orderby stay unreviewed. Contacts are personal data: default rows carry id, displayName, mail and companyName only, and identifying fields need an explicit $select. Only flat scalar properties are reviewed; $expand is never offered and the nested phones/addresses/error collections need their own projection review.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/orgcontact-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/orgcontact?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/contacts/{orgContact-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CONTACT_FIELDS, defaultFields: ["id", "displayName", "mail", "companyName"],
+    access: "D/A OrgContact.Read.All least-privileged (Directory.Read.All is the documented higher-privileged alternative). Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers reads basic properties; Global Reader, Directory Writers, Intune Administrator or User Administrator also work). Personal Microsoft accounts are not supported.",
+    note: "Single reads return the reviewed flat scalar set with minimal personal-data defaults; navigation objects are never expanded and subtype detail is not applicable. Only $select is reviewed.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/orgcontact-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/orgcontact?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/groupLifecyclePolicies", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_LIFECYCLE_FIELDS,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for lifecycle-policy reads. Personal Microsoft accounts are not supported.",
     note: "Filtering uses plain $filter with no $count or ConsistencyLevel contract; no P1/P2 prerequisite is stated for lifecycle-policy reads.",

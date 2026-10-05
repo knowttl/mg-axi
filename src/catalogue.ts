@@ -202,6 +202,14 @@ const directoryObjectRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Directory.Read.All" },
 };
+const contactRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph with $count=true and ConsistencyLevel eventual; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed contact set; contacts are personal data and default rows stay minimal (id, displayName, mail, companyName), so identifying fields need an explicit --select naming them" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to OrgContact.Read.All, the documented least privilege" },
+};
 const lifecycleRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
   select: { value: "comma-separated-properties", description: "Request server properties; lifecycle-policy reads need Directory.Read.All" },
@@ -800,6 +808,28 @@ export const LEAVES: Leaf[] = [
     ...common,
     scopes: directoryObjectRead.scopes,
   }, examples: ["mg-axi entra directory-object count --profile soc"] },
+  { path: "entra contact list", description: "List organizational contacts with minimal personal-data rows (id, displayName, mail, companyName); --filter passes through as plain $filter with ConsistencyLevel eventual", operation: "GET:/contacts", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: contactRead.filter,
+    select: contactRead.select,
+    fields: contactRead.fields,
+    full: contactRead.full,
+    cursor: contactRead.cursor,
+    scopes: contactRead.scopes,
+  }, examples: ["mg-axi entra contact list --profile soc", "mg-axi entra contact list --profile soc --limit 10"] },
+  { path: "entra contact show", description: "Show one organizational contact with minimal personal-data rows (id, displayName, mail, companyName); identifying fields need an explicit --select", operation: "GET:/contacts/{orgContact-id}", flags: {
+    ...common, id: { value: "contact-id", required: true, description: "Organizational-contact object ID" },
+    select: contactRead.select,
+    fields: contactRead.fields,
+    full: contactRead.full,
+    scopes: contactRead.scopes,
+  }, examples: ["mg-axi entra contact show --id <contact-id> --profile soc", "mg-axi entra contact show --id <contact-id> --profile soc --full"] },
+  { path: "entra contact count", description: "Count organizational contacts as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/contacts/$count", flags: {
+    ...common,
+    scopes: contactRead.scopes,
+  }, examples: ["mg-axi entra contact count --profile soc"] },
   { path: "entra group-lifecycle-policy list", description: "List group lifecycle (expiry) policies with compact properties (id, groupLifetimeInDays, managedGroupTypes); --filter passes through as plain $filter", operation: "GET:/groupLifecyclePolicies", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

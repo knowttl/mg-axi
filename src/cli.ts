@@ -26,6 +26,7 @@ import { listSynchronizations, showSynchronization } from "./entra-on-premises-s
 import { listAgreements, showAgreement, listAgreementAcceptances, showAgreementAcceptance, listAcceptances, showAcceptance } from "./entra-terms-of-use.js";
 import { listDirectoryObjects, showDirectoryObject, countDirectoryObjects } from "./entra-directory-objects.js";
 import { listDeletedItems, showDeletedItem, countDeletedItems } from "./entra-deleted-items.js";
+import { listContacts, showContact, countContacts } from "./entra-contacts.js";
 import { countContracts, listContracts, showContract } from "./entra-contracts.js";
 import { countLifecyclePolicies, listLifecyclePolicies, showLifecyclePolicy, countSettingTemplates, listSettingTemplates, showSettingTemplate } from "./entra-group-lifecycle.js";
 import { listAttributeSets, showAttributeSet, countAttributeSets, listCustomSecurityAttributeDefinitions, showCustomSecurityAttributeDefinition, countCustomSecurityAttributeDefinitions, listAllowedValues, showAllowedValue, countAllowedValues } from "./entra-custom-security-attributes.js";
@@ -853,6 +854,35 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra deleted-service-principal count":
       case "entra deleted-administrative-unit count": return countDeletedItems(session, flags, selected.profile, operation, help, selected.name);
       default: return listDeletedItems(session, flags, selected.profile, operation, help, selected.name);
+    }
+  }
+  if (leaf.path === "entra contact list" || leaf.path === "entra contact show" || leaf.path === "entra contact count") {
+    if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
+      throw new AxiError("Contact reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, "v1.0");
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra contact list": return listContacts(session, flags, selected.profile, operation, help, selected.name);
+      case "entra contact show": return showContact(session, flags, selected.profile, operation, help, selected.name);
+      default: return countContacts(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "entra group-lifecycle-policy list" || leaf.path === "entra group-lifecycle-policy show" || leaf.path === "entra group-lifecycle-policy count"

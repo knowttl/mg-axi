@@ -151,6 +151,7 @@ for (const profile of [delegatedProfile, appProfile]) {
     "/directory/deletedItems/graph.servicePrincipal/$count",
     "/directory/deletedItems/graph.administrativeUnit/$count",
     "/directory/deletedItems/$count",
+    "/contacts/$count",
     "/agreements/agreement-1/acceptances/$count",
     "/directory/attributeSets/$count",
     "/directory/customSecurityAttributeDefinitions/$count",
@@ -194,6 +195,20 @@ for (const profile of [delegatedProfile, appProfile]) {
       await assert.rejects(
         runApiGet({ path, apiVersion: "v1.0", profile,
           ...(profile.mode === "delegated" ? { scopes: "https://graph.microsoft.com/Directory.Read.All" } : {}) }, f.deps),
+        error => error.code === "VALIDATION_ERROR" && /not in the reviewed raw inventory/.test(error.message),
+      );
+      assert.equal(f.credentialCalls.length, 0);
+      assert.equal(f.requests.length, 0);
+    });
+  }
+}
+for (const profile of [delegatedProfile, appProfile]) {
+  for (const path of ["/contacts/delta()", "/CONTACTS/DELTA()/"]) {
+    test(`${profile.mode} raw ${path} rejects deferred delta before credentials or HTTP`, async () => {
+      const f = fixture(json(200, {}));
+      await assert.rejects(
+        runApiGet({ path, apiVersion: "v1.0", profile,
+          ...(profile.mode === "delegated" ? { scopes: "https://graph.microsoft.com/OrgContact.Read.All" } : {}) }, f.deps),
         error => error.code === "VALIDATION_ERROR" && /not in the reviewed raw inventory/.test(error.message),
       );
       assert.equal(f.credentialCalls.length, 0);

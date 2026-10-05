@@ -68,6 +68,7 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra contract ", "partner contracts"],
   ["entra delegated-admin-customer ", "delegated administration"],
   ["entra delegated-admin-relationship ", "delegated administration"],
+  ["entra multi-tenant-organization ", "multi-tenant organization"],
   ["entra sign-in ", "sign-ins and audit logs"],
   ["entra directory-audit ", "sign-ins and audit logs"],
   ["entra application ", "applications and consent grants"],
@@ -288,6 +289,7 @@ export function capabilityDocument(): string {
   const unavailableContactRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01m decision: "));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const deferredDelegatedAdminRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate delegated-admin scope "));
+  const deferredMtoRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate multi-tenant-organization scope "));
   const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
   const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate custom-security-attributes scope "));
   const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
@@ -503,11 +505,20 @@ export function capabilityDocument(): string {
     "",
     "Firstmate scope: approve narrowing this change to the four v1.0 delegated-admin reads above (customer list/show, relationship list/show).",
     "The operations below remain scheduled with an explicit deferred disposition to a later EXT-04 subfamily; no new commands or raw access are approved.",
-    "Scalar counts need a separate query and response contract from the approved list/show reads; service-management details and relationship access-assignment, operation and request navigations need their own review; multi-tenant-organization and tenant-lookup functions belong to the follow-up piece.",
+    "Scalar counts need a separate query and response contract from the approved list/show reads; service-management details and relationship access-assignment, operation and request navigations need their own review; the multi-tenant-organization reads shipped in the section below, and tenant-lookup functions belong to the mg-ext-04e follow-up.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
-    ...deferredDelegatedAdminRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),    "## EXT-02 access-review scope decisions",
+    ...deferredDelegatedAdminRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),    "",
+    "## EXT-04 multi-tenant-organization scope decisions",
+    "",
+    "Firstmate scope: approve narrowing this change to the four v1.0 multi-tenant-organization reads above (organization show, join-request show, tenant list/count).",
+    "The single-member read below remains scheduled with an explicit deferred disposition: its documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for it until its own least-privilege review lands.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredMtoRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),    "",
+    "## EXT-02 access-review scope decisions",
     "",
     "The access-review scope covers the ten reads above (definition, instance, decision, contacted-reviewer and stage list/show reads).",
     "The legacy accessReviews and unified alias reads below are split into the EXT-02c follow-up to limit this piece's size; beta-only operations stay deferred (\"beta needs its own review\").",

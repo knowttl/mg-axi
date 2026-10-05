@@ -47,6 +47,7 @@ const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["entra contract", "partner contracts"],
   ["entra delegated-admin-customer", "delegated administration"],
   ["entra delegated-admin-relationship", "delegated administration"],
+  ["entra multi-tenant-organization", "multi-tenant organization"],
   ["entra sign-in", "sign-in/directory-audit"],
   ["entra directory-audit", "sign-in/directory-audit"],
   ["entra application", "application/service-principal and consent grants"],

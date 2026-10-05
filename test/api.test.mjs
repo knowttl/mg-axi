@@ -140,6 +140,7 @@ for (const profile of [delegatedProfile, appProfile]) {
     "/contracts/$count",
     "/tenantRelationships/delegatedAdminCustomers/$count",
     "/tenantRelationships/delegatedAdminRelationships/$count",
+    "/tenantRelationships/multiTenantOrganization/tenants/$count",
     "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/$count",
     "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/pki-1/certificateAuthorities/$count",
     "/groupLifecyclePolicies/$count",
@@ -240,13 +241,44 @@ for (const profile of [delegatedProfile, appProfile]) {
   for (const path of [
     "/tenantRelationships/delegatedAdminCustomers/customer-1/serviceManagementDetails",
     "/tenantRelationships/delegatedAdminRelationships/relationship-1/requests",
-    "/tenantRelationships/multiTenantOrganization/tenants",
   ]) {
     test(`${profile.mode} raw ${path} rejects deferred delegated-admin navigation before credentials or HTTP`, async () => {
       const f = fixture(json(200, {}));
       await assert.rejects(
         runApiGet({ path, apiVersion: "v1.0", profile,
           ...(profile.mode === "delegated" ? { scopes: "https://graph.microsoft.com/DelegatedAdminRelationship.Read.All" } : {}) }, f.deps),
+        error => error.code === "VALIDATION_ERROR" && /not in the reviewed raw inventory/.test(error.message),
+      );
+      assert.equal(f.credentialCalls.length, 0);
+      assert.equal(f.requests.length, 0);
+    });
+  }
+}
+for (const profile of [delegatedProfile, appProfile]) {
+  test(`${profile.mode} raw multi-tenant-organization tenant list reviews $filter but not $top`, async () => {
+    const ok = fixture(json(200, { value: [] }));
+    await runApiGet({ path: "/tenantRelationships/multiTenantOrganization/tenants", odata: "$select=tenantId,displayName&$filter=state eq 'active'",
+      apiVersion: "v1.0", profile,
+      ...(profile.mode === "delegated" ? { scopes: "https://graph.microsoft.com/MultiTenantOrganization.Read.All" } : {}) }, ok.deps);
+    assert.equal(new URL(ok.requests[0].url).searchParams.get("$filter"), "state eq 'active'");
+    const bad = fixture(json(200, {}));
+    await assert.rejects(runApiGet({ path: "/tenantRelationships/multiTenantOrganization/tenants", odata: "$top=5",
+      apiVersion: "v1.0", profile,
+      ...(profile.mode === "delegated" ? { scopes: "https://graph.microsoft.com/MultiTenantOrganization.Read.All" } : {}) }, bad.deps),
+      error => error.code === "VALIDATION_ERROR" && /Unsupported query key \$top/.test(error.message));
+    assert.equal(bad.credentialCalls.length, 0);
+    assert.equal(bad.requests.length, 0);
+  });
+}
+for (const profile of [delegatedProfile, appProfile]) {
+  for (const path of [
+    "/tenantRelationships/multiTenantOrganization/tenants/member-1",
+  ]) {
+    test(`${profile.mode} raw ${path} rejects the deferred single-member read before credentials or HTTP`, async () => {
+      const f = fixture(json(200, {}));
+      await assert.rejects(
+        runApiGet({ path, apiVersion: "v1.0", profile,
+          ...(profile.mode === "delegated" ? { scopes: "https://graph.microsoft.com/MultiTenantOrganization.Read.All" } : {}) }, f.deps),
         error => error.code === "VALIDATION_ERROR" && /not in the reviewed raw inventory/.test(error.message),
       );
       assert.equal(f.credentialCalls.length, 0);
@@ -348,7 +380,8 @@ for (const route of REVIEWED_ROUTES) test(`${route.id} defaults to reviewed fiel
   const result = await f.run({});
   assert.equal(new URL(f.requests[0].url).searchParams.get("$select"), route.id === "v1.0:GET:/users/{user-id}/authentication/methods" ? null : (route.defaultFields ?? route.fields).join(","));
   const { warnings, ...data } = result;
-  assert.deepEqual(data, route.kind === "single" ? { id: "a" } : { returned: 1, complete: true, value: [{ id: "a" }] });
+  const wanted = Object.fromEntries(Object.entries(row).filter(([field]) => route.fields.includes(field)));
+  assert.deepEqual(data, route.kind === "single" ? wanted : { returned: 1, complete: true, value: [wanted] });
 });
 
 for (const path of ["/users/a", "/users"]) test(`explicit selection on ${path} still filters unexpected fields`, async () => {

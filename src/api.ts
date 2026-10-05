@@ -5,6 +5,7 @@ import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITIO
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { KNOWN_DELEGATED_ADMIN_CUSTOMER_FIELDS, KNOWN_DELEGATED_ADMIN_RELATIONSHIP_FIELDS } from "./entra-delegated-admin.js";
+import { KNOWN_MTO_FIELDS, KNOWN_MTO_JOIN_REQUEST_FIELDS, KNOWN_MTO_TENANT_FIELDS } from "./entra-multi-tenant-organization.js";
 import { KNOWN_DATA_POLICY_FIELDS } from "./entra-data-policy-operations.js";
 import { KNOWN_FEDERATION_FIELDS } from "./entra-federation-configurations.js";
 import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
@@ -500,6 +501,18 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A DelegatedAdminRelationship.Read.All. Delegated callers pass it as --scopes; application callers need it admin-consented; personal Microsoft accounts are not supported. Delegated-admin reads run in the partner tenant.",
     note: "Single reads may return the resellerDelegatedAdminRelationship subtype; its unreviewed extras are never projected. No P1/P2 prerequisite is stated for delegated-admin reads.",
     sources: ["https://learn.microsoft.com/graph/api/delegatedadminrelationship-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/delegatedadminrelationship?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/tenantRelationships/multiTenantOrganization", kind: "single", query: SINGLE_QUERY, fields: KNOWN_MTO_FIELDS,
+    access: "D/A MultiTenantOrganization.Read.All. Delegated callers pass it as --scopes (the lower-privileged delegated MultiTenantOrganization.ReadBasic.All is also accepted); delegated access additionally needs Security Reader or Global Reader, the least-privileged supported Entra roles; personal Microsoft accounts are not supported. Multi-tenant-organization reads run in the commercial Global service.",
+    note: "At most one multitenant organization exists per tenant; a tenant outside any multitenant organization reads state inactive with null properties. Multi-tenant-organization participation needs Entra ID P1.",
+    sources: ["https://learn.microsoft.com/graph/api/multitenantorganization-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/multitenantorganization?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/tenantRelationships/multiTenantOrganization/joinRequest", kind: "single", query: SINGLE_QUERY, fields: KNOWN_MTO_JOIN_REQUEST_FIELDS,
+    access: "D/A MultiTenantOrganization.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Security Reader or Global Reader, the least-privileged supported Entra roles; personal Microsoft accounts are not supported. Multi-tenant-organization reads run in the commercial Global service.",
+    note: "Join acceptance is a write and stays out of raw reads. Multi-tenant-organization participation needs Entra ID P1.",
+    sources: ["https://learn.microsoft.com/graph/api/multitenantorganizationjoinrequestrecord-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/multitenantorganizationjoinrequestrecord?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/tenantRelationships/multiTenantOrganization/tenants", kind: "collection", query: ["$select", "$filter"], fields: KNOWN_MTO_TENANT_FIELDS,
+    access: "D/A MultiTenantOrganization.Read.All. Delegated callers pass it as --scopes (the lower-privileged delegated MultiTenantOrganization.ReadBasic.All returns displayName and tenantId of active tenants only); delegated access additionally needs Security Reader or Global Reader, the least-privileged supported Entra roles; personal Microsoft accounts are not supported. Multi-tenant-organization reads run in the commercial Global service.",
+    note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract. Multi-tenant-organization participation needs Entra ID P1.",
+    sources: ["https://learn.microsoft.com/graph/api/multitenantorganization-list-tenants?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/multitenantorganizationmember?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/contracts/{contract-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CONTRACT_FIELDS,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported. Contracts exist in partner tenants only.",
     note: "No P1/P2 prerequisite is stated for contract reads.",

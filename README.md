@@ -20,6 +20,7 @@ READ-10 adds directory-device and administrative-unit list/show and unit-member 
 READ-08 adds service-principal delegated-grant and app-role-assignment consent reads for a named client through the same session.
 EXT-01 (domains) adds tenant-domain list/show, per-domain verification and service-configuration DNS record reads, and top-level domain DNS record reads through the same session.
 EXT-01 (certificate auth) adds PKI configuration and certificate-authority list/show/count reads with default certificate-blob omission through the same session.
+EXT-01 (directory subscriptions) adds commercial-subscription list/show/count reads with compact licence rows through the same session.
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
@@ -402,6 +403,26 @@ Delegated certificate-auth reads default to `https://graph.microsoft.com/PublicK
 Delegated callers additionally need Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for certificate-auth reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
 No certificate-auth mutation lives here; the root `/certificateBasedAuthConfiguration` reads carry no documented v1.0 operation contract and the org-scoped certificate-auth reads belong to a later piece; see the [certificate-auth scope decisions](docs/coverage.md#ext-01-certificate-auth-scope-decisions).
+
+Log in with `https://graph.microsoft.com/Organization.Read.All`, then inspect commercial subscriptions:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Organization.Read.All
+mg-axi entra subscription list --profile soc
+mg-axi entra subscription show --profile soc --id <subscription-id>
+mg-axi entra subscription count --profile soc
+```
+
+`entra subscription list` defaults to compact properties (`id`, `skuPartNumber`, `status`, `totalLicenses`); an empty list may mean the tenant holds no commercial subscriptions.
+All three subscription commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+Subscription lists accept `--filter` as plain `$filter`, without adding `$count=true` or `ConsistencyLevel`; the show command documents `$select` only and the count command takes no `--filter`, `--select`, `--limit` or `--cursor`.
+`entra subscription show --id <subscription-id>` defaults to the full reviewed companySubscription set; the commerceSubscriptionId alternate-key lookup stays out because function-key segments need a shared session path-template contract review.
+Subscription lists return `subscriptions` and single-subscription reads return `subscription`; count commands return `count: { returned: <total>, complete: true }`.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to subscription reads.
+Delegated subscription reads default to `https://graph.microsoft.com/Organization.Read.All`, while application profiles use the configured `.default` audience.
+Delegated callers additionally need Global Reader, Directory Readers, or Dynamics 365 Business Central Administrator for read-only standard properties; personal Microsoft accounts are not supported.
+No P1/P2 prerequisite is stated for subscription reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
+No subscription mutation lives here; see the [directory-subscriptions scope decisions](docs/coverage.md#ext-01-directory-subscriptions-scope-decisions).
 
 Log in with `https://graph.microsoft.com/IdentityProvider.Read.All`, then read workforce identity providers:
 

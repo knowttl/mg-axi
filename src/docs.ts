@@ -50,6 +50,9 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra domain-dns-record ", "domains and DNS records"],
   ["entra group-lifecycle-policy ", "group lifecycle policies"],
   ["entra group-setting-template ", "group setting templates"],
+  ["entra attribute-set ", "attribute sets and custom security attributes"],
+  ["entra custom-security-attribute-definition ", "attribute sets and custom security attributes"],
+  ["entra allowed-value ", "attribute sets and custom security attributes"],
   ["entra contract ", "partner contracts"],
   ["entra sign-in ", "sign-ins and audit logs"],
   ["entra directory-audit ", "sign-ins and audit logs"],
@@ -260,6 +263,7 @@ export function capabilityDocument(): string {
   const unavailableCertAuthRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01d decision: "));
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
+  const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate custom-security-attributes scope "));
   const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
@@ -353,6 +357,16 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredGroupLifecycleRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-01 custom-security-attributes scope decisions",
+    "",
+    "This change covers the nine v1.0 attribute-set, custom-security-attribute-definition and allowed-value reads above (list, show, count per family).",
+    "The nine beta operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.",
+    "Beta attribute sets, definitions and allowed values need their own review; definition $expand (inline allowedValues) is not reviewed here and stays on the dedicated allowed-value list/show reads.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredCustomSecurityRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-04 partner contracts scope decisions",
     "",

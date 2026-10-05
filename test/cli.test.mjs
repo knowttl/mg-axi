@@ -58,6 +58,15 @@ test("top help lists only the shell catalogue", () => {
   assert.match(result.stdout, /entra group-setting-template list/);
   assert.match(result.stdout, /entra group-setting-template show/);
   assert.match(result.stdout, /entra group-setting-template count/);
+  assert.match(result.stdout, /entra attribute-set list/);
+  assert.match(result.stdout, /entra attribute-set show/);
+  assert.match(result.stdout, /entra attribute-set count/);
+  assert.match(result.stdout, /entra custom-security-attribute-definition list/);
+  assert.match(result.stdout, /entra custom-security-attribute-definition show/);
+  assert.match(result.stdout, /entra custom-security-attribute-definition count/);
+  assert.match(result.stdout, /entra allowed-value list/);
+  assert.match(result.stdout, /entra allowed-value show/);
+  assert.match(result.stdout, /entra allowed-value count/);
   assert.match(result.stdout, /entra contract list/);
   assert.match(result.stdout, /entra contract show/);
   assert.match(result.stdout, /entra contract count/);

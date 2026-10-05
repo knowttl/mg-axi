@@ -251,6 +251,14 @@ const contractRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Directory.Read.All" },
 };
+const delegatedAdminRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter with no $count or ConsistencyLevel contract; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties; delegated-admin reads need DelegatedAdminRelationship.Read.All" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to DelegatedAdminRelationship.Read.All" },
+};
 const attributeSetRead = {
   select: { value: "comma-separated-properties", description: "Request server properties; attribute-set reads need CustomSecAttributeDefinition.Read.All" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
@@ -1043,6 +1051,42 @@ export const LEAVES: Leaf[] = [
     ...common,
     scopes: contractRead.scopes,
   }, examples: ["mg-axi entra contract count --profile soc"] },
+  { path: "entra delegated-admin-customer list", description: "List delegated-admin customers of the partner tenant with compact properties (id, displayName, tenantId); delegated-admin reads run in the partner tenant; --filter passes through as plain $filter", operation: "GET:/tenantRelationships/delegatedAdminCustomers", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: delegatedAdminRead.filter,
+    select: delegatedAdminRead.select,
+    fields: delegatedAdminRead.fields,
+    full: delegatedAdminRead.full,
+    cursor: delegatedAdminRead.cursor,
+    scopes: delegatedAdminRead.scopes,
+  }, examples: ["mg-axi entra delegated-admin-customer list --profile soc", "mg-axi entra delegated-admin-customer list --profile soc --limit 10", "mg-axi entra delegated-admin-customer list --profile soc --filter \"displayName eq 'Contoso'\""] },
+  { path: "entra delegated-admin-customer show", description: "Show one delegated-admin customer with the full reviewed property set (displayName, id, tenantId)", operation: "GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}", flags: {
+    ...common, id: { value: "customer-id", required: true, description: "Delegated-admin customer identifier" },
+    select: delegatedAdminRead.select,
+    fields: delegatedAdminRead.fields,
+    full: delegatedAdminRead.full,
+    scopes: delegatedAdminRead.scopes,
+  }, examples: ["mg-axi entra delegated-admin-customer show --id <customer-id> --profile soc", "mg-axi entra delegated-admin-customer show --id <customer-id> --profile soc --full"] },
+  { path: "entra delegated-admin-relationship list", description: "List partner-tenant delegated-admin relationships with compact properties (id, displayName, status, customer, endDateTime); --filter passes through as plain $filter", operation: "GET:/tenantRelationships/delegatedAdminRelationships", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: delegatedAdminRead.filter,
+    select: delegatedAdminRead.select,
+    fields: delegatedAdminRead.fields,
+    full: delegatedAdminRead.full,
+    cursor: delegatedAdminRead.cursor,
+    scopes: delegatedAdminRead.scopes,
+  }, examples: ["mg-axi entra delegated-admin-relationship list --profile soc", "mg-axi entra delegated-admin-relationship list --profile soc --limit 10", "mg-axi entra delegated-admin-relationship list --profile soc --filter \"status eq 'active'\""] },
+  { path: "entra delegated-admin-relationship show", description: "Show one delegated-admin relationship with the full reviewed property set (accessDetails, activatedDateTime, autoExtendDuration, createdDateTime, customer, displayName, duration, endDateTime, id, lastModifiedDateTime, status)", operation: "GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}", flags: {
+    ...common, id: { value: "relationship-id", required: true, description: "Delegated-admin relationship identifier" },
+    select: delegatedAdminRead.select,
+    fields: delegatedAdminRead.fields,
+    full: delegatedAdminRead.full,
+    scopes: delegatedAdminRead.scopes,
+  }, examples: ["mg-axi entra delegated-admin-relationship show --id <relationship-id> --profile soc", "mg-axi entra delegated-admin-relationship show --id <relationship-id> --profile soc --full"] },
   { path: "entra sign-in list", description: "List sign-ins in a bounded time window (AuditLog.Read.All; delegated callers also need Global Reader, Reports Reader, Security Administrator, Security Operator or Security Reader; conservative P1/P2 deployment prerequisite)", operation: "GET:/auditLogs/signIns", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

@@ -34,6 +34,7 @@ EXT-03 (data policy operations) adds workforce data-policy-operation list/show/c
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
 EXT-04 (contracts) adds partner-tenant customer-contract list/show/count through the same session.
+EXT-04 (delegated-admin) adds partner-tenant delegated-admin customer and relationship list/show through the same session.
 EXT-01 (group lifecycle) adds group lifecycle-policy and group setting-template list/show/count reads through the same session.
 EXT-01 (custom security attributes) adds attribute-set, custom-security-attribute-definition and allowed-value list/show/count reads with attribute-role denial guidance through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
@@ -387,6 +388,27 @@ Delegated contract reads default to `https://graph.microsoft.com/Directory.Read.
 Delegated callers additionally need a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for contract reads; denied reads name the scope, role, partner-tenant and licensing guidance instead of only the generic cause.
 No contract mutation lives here; `contracts/delta()`, beta contracts and the POST lookup actions belong to later pieces; see the [partner contracts scope decisions](docs/coverage.md#ext-04-partner-contracts-scope-decisions) for deferred reads and later subfamilies.
+
+Log in with `https://graph.microsoft.com/DelegatedAdminRelationship.Read.All`, then inspect partner-tenant delegated administration:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/DelegatedAdminRelationship.Read.All
+mg-axi entra delegated-admin-customer list --profile soc
+mg-axi entra delegated-admin-customer show --profile soc --id <customer-id>
+mg-axi entra delegated-admin-relationship list --profile soc
+mg-axi entra delegated-admin-relationship show --profile soc --id <relationship-id>
+```
+
+Delegated-admin reads run in the partner tenant; customer objects are created by the system when a relationship exists and deleted when none remain, so a non-partner tenant lists zero customers, which is an answer rather than an error.
+`entra delegated-admin-customer list` defaults to compact properties (`id`, `displayName`, `tenantId`); `entra delegated-admin-relationship list` defaults to (`id`, `displayName`, `status`, `customer`, `endDateTime`); both show commands default to the full reviewed property set.
+`--select` requests properties from the reviewed delegated-admin field sets; `--fields` projects locally and must be a subset of the fetched selection.
+Both lists accept `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to delegated-admin reads.
+All four named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+Delegated delegated-admin reads default to `https://graph.microsoft.com/DelegatedAdminRelationship.Read.All`, while application profiles use the configured `.default` audience.
+Personal Microsoft accounts are not supported.
+No P1/P2 prerequisite is stated for delegated-admin reads; denied reads name the scope, partner-tenant and licensing guidance instead of only the generic cause.
+No delegated-admin mutation lives here; the `$count` scalars, the container root, service-management details, relationship access-assignment/operation/request navigations, multi-tenant-organization reads and tenant-lookup functions belong to later pieces; see the [delegated-admin scope decisions](docs/coverage.md#ext-04-delegated-admin-scope-decisions) for deferred reads and later subfamilies.
 
 Log in with `https://graph.microsoft.com/Domain.Read.All`, then inspect tenant domains and their DNS records:
 

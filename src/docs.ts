@@ -68,6 +68,7 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra risk-detection ", "risk"],
   ["entra conditional-access ", "Conditional Access"],
   ["entra identity-provider ", "identity providers"],
+  ["entra federation-configuration ", "federation configurations"],
   ["entra data-policy-operation ", "data policy operations"],
   ["entra access-review ", "access reviews"],
   ["api get", "reviewed raw reads"],
@@ -265,6 +266,7 @@ export function capabilityDocument(): string {
   });
   const deferredDomainRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate R1 "));
   const deferredProviderRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred to a later EXT-03 "));
+  const deferredFederationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate federation-configuration scope "));
   const deferredDataPolicyRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred by firstmate data-policy-operations scope "));
   const unavailableInvitationRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Marked unavailable by firstmate EXT-03b decision: "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
@@ -328,6 +330,18 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredProviderRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-01 federation-configuration scope decisions",
+    "",
+    "This change covers the four v1.0 workforce directory federation-configuration reads above (federation-configuration list, show, count and available-types).",
+    "The four beta operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.",
+    "Federation-configuration reads support v1.0 only; beta needs its own review.",
+    "signingCertificate carries the public token-signing key only and is omitted from default selects; no private key material exists on these resources and the domains navigation property needs its own review.",
+    "Workforce context only; domain federationConfiguration sub-reads (/domains/{domain-id}/federationConfiguration) stay scheduled in the later domain federation subfamily.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredFederationRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-03 data-policy-operations scope decisions",
     "",

@@ -30,6 +30,7 @@ import { countContracts, listContracts, showContract } from "./entra-contracts.j
 import { countLifecyclePolicies, listLifecyclePolicies, showLifecyclePolicy, countSettingTemplates, listSettingTemplates, showSettingTemplate } from "./entra-group-lifecycle.js";
 import { listAttributeSets, showAttributeSet, countAttributeSets, listCustomSecurityAttributeDefinitions, showCustomSecurityAttributeDefinition, countCustomSecurityAttributeDefinitions, listAllowedValues, showAllowedValue, countAllowedValues } from "./entra-custom-security-attributes.js";
 import { listIdentityProviders, showIdentityProvider, countIdentityProviders, availableIdentityProviderTypes } from "./entra-identity-providers.js";
+import { listFederationConfigurations, showFederationConfiguration, countFederationConfigurations, availableFederationProviderTypes } from "./entra-federation-configurations.js";
 import { listDataPolicyOperations, showDataPolicyOperation, countDataPolicyOperations } from "./entra-data-policy-operations.js";
 import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions, showDecision, listContactedReviewers, showContactedReviewer, listStages, showStage } from "./entra-access-reviews.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
@@ -972,6 +973,36 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra identity-provider show": return showIdentityProvider(session, flags, selected.profile, operation, help, selected.name);
       case "entra identity-provider available-types": return availableIdentityProviderTypes(session, flags, selected.profile, operation, help);
       default: return countIdentityProviders(session, flags, selected.profile, operation, help, selected.name);
+    }
+  }
+  if (leaf.path === "entra federation-configuration list" || leaf.path === "entra federation-configuration show" || leaf.path === "entra federation-configuration count" || leaf.path === "entra federation-configuration available-types") {
+    if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
+      throw new AxiError("Federation-configuration reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, "v1.0");
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra federation-configuration list": return listFederationConfigurations(session, flags, selected.profile, operation, help, selected.name);
+      case "entra federation-configuration show": return showFederationConfiguration(session, flags, selected.profile, operation, help, selected.name);
+      case "entra federation-configuration available-types": return availableFederationProviderTypes(session, flags, selected.profile, operation, help);
+      default: return countFederationConfigurations(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "entra data-policy-operation list" || leaf.path === "entra data-policy-operation show" || leaf.path === "entra data-policy-operation count") {

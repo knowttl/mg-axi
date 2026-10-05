@@ -271,6 +271,14 @@ const providerRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to IdentityProvider.Read.All" },
 };
+const federationRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed federation-configuration set; the public signingCertificate blob needs an explicit --select naming it" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to Domain.Read.All (available-types defaults to IdentityProvider.Read.All)" },
+};
 const dataPolicyRead = {
   select: { value: "comma-separated-properties", description: "Request server properties from the reviewed data-policy-operation set; storageLocation always renders redacted and export submission is never sent" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
@@ -1188,6 +1196,33 @@ export const LEAVES: Leaf[] = [
     ...common,
     scopes: providerRead.scopes,
   }, examples: ["mg-axi entra identity-provider available-types --profile soc"] },
+  { path: "entra federation-configuration list", description: "List workforce federation configurations with compact properties (id, displayName); rows carry @odata.type naming the configuration kind; signing-certificate blobs are omitted by default", operation: "GET:/directory/federationConfigurations", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: federationRead.filter,
+    select: federationRead.select,
+    fields: federationRead.fields,
+    full: federationRead.full,
+    cursor: federationRead.cursor,
+    scopes: federationRead.scopes,
+  }, examples: ["mg-axi entra federation-configuration list --profile soc", "mg-axi entra federation-configuration list --profile soc --limit 10"] },
+  { path: "entra federation-configuration show", description: "Show one workforce federation configuration with the full reviewed property set except the signing-certificate blob, which needs an explicit --select", operation: "GET:/directory/federationConfigurations/{identityProviderBase-id}", flags: {
+    ...common, id: { value: "configuration-id", required: true, description: "Federation configuration object ID" },
+    select: federationRead.select,
+    fields: federationRead.fields,
+    full: federationRead.full,
+    scopes: federationRead.scopes,
+  }, examples: ["mg-axi entra federation-configuration show --id <configuration-id> --profile soc", "mg-axi entra federation-configuration show --id <configuration-id> --profile soc --full"] },
+  { path: "entra federation-configuration count", description: "Count workforce federation configurations as a scalar number; --filter narrows the count server-side", operation: "GET:/directory/federationConfigurations/$count", flags: {
+    ...common,
+    filter: federationRead.filter,
+    scopes: federationRead.scopes,
+  }, examples: ["mg-axi entra federation-configuration count --profile soc"] },
+  { path: "entra federation-configuration available-types", description: "List available workforce federation provider types for the tenant; availability does not mean a federation configuration exists", operation: "GET:/directory/federationConfigurations/availableProviderTypes()", flags: {
+    ...common,
+    scopes: federationRead.scopes,
+  }, examples: ["mg-axi entra federation-configuration available-types --profile soc"] },
   { path: "entra data-policy-operation list", description: "List workforce data-policy operations with compact properties (id, status, userId, submittedDateTime); storageLocation always renders redacted and export submission is never sent; Graph documents $select only, so no --filter", operation: "GET:/dataPolicyOperations", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

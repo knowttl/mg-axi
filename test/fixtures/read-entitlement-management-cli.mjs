@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Socket } from "node:net";
 import { mock } from "node:test";
 
-const { mode, catalogs, accessPackages, policies, roleScopes, denied } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const { mode, catalogs, accessPackages, policies, roleScopes, assignments, assignmentRequests, denied } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
 const allowedDelegated = new Set(["https://graph.microsoft.com/EntitlementManagement.Read.All"]);
 const [major, minor] = process.versions.node.split(".").map(Number);
 const exportOption = major >= 26 || (major === 25 && minor >= 9) || (major === 24 && minor >= 15)
@@ -69,6 +69,8 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
     } else if (url.pathname.endsWith("/$count")) {
       const count = url.pathname.includes("/assignmentPolicies") ? policies.length
         : url.pathname.includes("/resourceRoleScopes") ? roleScopes.length
+        : url.pathname === `${base}/assignments/$count` ? assignments.length
+        : url.pathname === `${base}/assignmentRequests/$count` ? assignmentRequests.length
         : url.pathname === `${base}/accessPackages/$count` ? accessPackages.length
         : catalogs.length;
       return { status, headers: { "Content-Type": "text/plain" }, body: String(count) };
@@ -76,10 +78,18 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
       body = { value: catalogs };
     } else if (url.pathname === `${base}/accessPackages`) {
       body = { value: accessPackages };
+    } else if (url.pathname === `${base}/assignments`) {
+      body = { value: assignments };
+    } else if (url.pathname === `${base}/assignmentRequests`) {
+      body = { value: assignmentRequests };
     } else if (url.pathname === `${base}/accessPackages/${accessPackages[0].id}/assignmentPolicies`) {
       body = { value: policies };
     } else if (url.pathname === `${base}/accessPackages/${accessPackages[0].id}/resourceRoleScopes`) {
       body = { value: roleScopes };
+    } else if (url.pathname.startsWith(`${base}/assignments/`)) {
+      body = single(assignments, url.pathname, `${base}/assignments`);
+    } else if (url.pathname.startsWith(`${base}/assignmentRequests/`)) {
+      body = single(assignmentRequests, url.pathname, `${base}/assignmentRequests`);
     } else if (url.pathname.startsWith(`${base}/catalogs/`)) {
       body = single(catalogs, url.pathname, `${base}/catalogs`);
     } else if (url.pathname.includes("/assignmentPolicies/")) {

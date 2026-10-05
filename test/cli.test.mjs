@@ -355,6 +355,39 @@ test("entitlement assignment-policy list leaf help marks parent package with app
   assert.match(result.stdout, /who may request and how approval and review run/);
 });
 
+test("entitlement assignment list leaf help marks flattened linkage with later-slice subjects", () => {
+  const result = run(["entra", "entitlement", "assignment", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /flatten one fixed documented \$expand/);
+  assert.match(result.stdout, /--cursor/);
+  assert.match(result.stdout, /EntitlementManagement\.Read\.All/);
+});
+
+test("entitlement assignment show leaf help marks the grant set", () => {
+  const result = run(["entra", "entitlement", "assignment", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /flattened target and access-package linkage/);
+  assert.match(result.stdout, /--id.*required/);
+});
+
+test("entitlement assignment-request list leaf help marks justification behind select", () => {
+  const result = run(["entra", "entitlement", "assignment-request", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /justification text and answers ride only behind an explicit --select/);
+  assert.match(result.stdout, /--cursor/);
+});
+
+test("entitlement assignment-request show leaf help marks the explicit-select exclusion", () => {
+  const result = run(["entra", "entitlement", "assignment-request", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /justification and answers stay behind an explicit --select/);
+  assert.match(result.stdout, /--id.*required/);
+});
+
 test("entitlement resource-role-scope list leaf help marks pairing scope with later-slice links", () => {
   const result = run(["entra", "entitlement", "resource-role-scope", "list", "--help"]);
   assert.equal(result.status, 0);

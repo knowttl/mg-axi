@@ -274,7 +274,7 @@ Catalogs are package containers and never carry their access packages: `entra en
 Access packages are the assignable bundles: `entra entitlement access-package list` defaults to `id`, `displayName` and `isHidden`, and `entra entitlement access-package show --id <access-package-id>` defaults to the full reviewed bundle set.
 `entra entitlement assignment-policy list --access-package <access-package-id>` defaults to `id`, `displayName` and `allowedTargetScope`: policies name who may request and how approval and review run, and `entra entitlement assignment-policy show` takes `--access-package` and `--id` and defaults to the full reviewed request, approval and review set.
 `entra entitlement resource-role-scope list --access-package <access-package-id>` defaults to `id` and `createdDateTime`: role-plus-scope pairs a package grants, and `entra entitlement resource-role-scope show` takes `--access-package` and `--id`.
-Assignment, request, approval and subject reads carry personal data and belong to a later part, never to these reads; questions, custom-extension stages and the linked role/scope detail need `$expand` and belong to later slices.
+Approval and subject reads carry personal data and belong to later parts, never to these reads; questions, custom-extension stages and the linked role/scope detail need `$expand` and belong to later slices.
 `--select` requests properties from the [reviewed entitlement property sets](src/entra-entitlement-management.ts); `--fields` must be a subset of the fetched selection.
 `--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract.
 The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to entitlement reads.
@@ -284,6 +284,25 @@ See the [entitlement-management scope decisions](docs/coverage.md#ext-02-entitle
 Delegated callers additionally need a supported Entra role with catalog visibility (Global Reader and Identity Governance Administrator are among the supported roles).
 Denied reads name that role requirement instead of only the generic grant/role/licence cause.
 Entitlement management needs P2 or ID Governance depending on capability, not one uniform licence, and delegated personal Microsoft accounts are not supported.
+
+Read assignments and assignment requests through six views; they use the same scope default and login as the twelve reads above:
+
+```sh
+mg-axi entra entitlement assignment list --profile soc --limit 10
+mg-axi entra entitlement assignment list --profile soc --filter "state eq 'Delivered'"
+mg-axi entra entitlement assignment show --profile soc --id <assignment-id>
+mg-axi entra entitlement assignment count --profile soc
+mg-axi entra entitlement assignment-request list --profile soc --limit 10
+mg-axi entra entitlement assignment-request show --profile soc --id <request-id>
+mg-axi entra entitlement assignment-request count --profile soc
+```
+
+The wire resources carry no target or access-package linkage as scalars, so each list and show sends one fixed documented `$expand` set in code (target and accessPackage for assignments; accessPackage and assignment for requests) and projects only flattened linkage identifiers: `entra entitlement assignment list` defaults to `id`, `state`, `targetId`, `targetDisplayName`, `accessPackageId`, `expiredDateTime` and `schedule`, and `entra entitlement assignment-request list` defaults to `id`, `requestType`, `state`, `accessPackageId`, `assignmentId`, `createdDateTime`, `completedDateTime` and `schedule`.
+There is no user-supplied `$expand` anywhere: `--select` names only reviewed scalar or flattened fields, and navigation names fail as unknown properties.
+Request justification text and answers are personal-data payloads and ride only behind an explicit `--select`, even on show; the requestor subject, the assignment policy link and the `filterByCurrentUser`/`additionalAccess` functions belong to later slices.
+Callers with only catalog-scoped roles must filter to one access package, for example `--filter "accessPackage/id eq '<access-package-id>'"`.
+Assignment and request reads never mutate: no request creation, cancellation, approval or reprocessing, and no beta.
+Denied assignment and request reads name the Catalog reader least-privileged role and the supported Entra roles instead of only the generic grant/role/licence cause.
 
 Log in with `https://graph.microsoft.com/Device.Read.All` or `https://graph.microsoft.com/AdministrativeUnit.Read.All`, then inspect directory devices and administrative units:
 

@@ -85,7 +85,7 @@ The revoke command rejects caller-supplied `--scopes`.
 A 403 denial surfaces the `User.RevokeSessions.All` requirement without inventing a role verdict; a timeout or 5xx after sending reports `OUTCOME_UNKNOWN`, and neither outcome is ever replayed.
 Unknown-outcome guidance includes a user read with `--select id`; that read checks target accessibility, not whether revocation took effect.
 Unknown flags, unexpected arguments, missing required values and unsupported combinations exit 2 before credential acquisition or HTTP.
-Resource identifiers in named commands and raw paths cannot begin with `$`; OData route segments such as `$count`, `$value` and `$ref` cannot be used as IDs and fail validation before credentials.
+Resource identifiers in named commands and raw paths cannot begin with `$` or contain parentheses; OData route segments such as `$count`, `$value` and `$ref`, and function-style segments such as `delta()`, cannot be used as IDs and fail validation before credentials.
 Help and successful views, including partial lists, exit 0; authentication, policy and Graph failures exit 1.
 Data and structured errors use TOON on stdout; diagnostics belong on stderr.
 Bare `-v`, `-V` and `--version` print only the package version without importing the catalogue.
@@ -536,7 +536,6 @@ mg-axi api get /identity/conditionalAccess/policies --scopes https://graph.micro
 ```
 
 `api get` accepts only GET routes in the [reviewed route catalogue](src/api.ts), which owns route-specific query keys, `$select` fields and access constraints.
-Resource IDs in raw paths cannot contain parentheses; function-style segments such as `/contracts/delta()` are refused before credentials.
 OData parameters use `--odata`; `--query` is reserved for output queries and is not implemented here.
 Omitting `$select` selects the route's reviewed fields, and every response is filtered to reviewed fields before output.
 For `/users/<user-id>/authentication/methods`, `$select` is the only supported OData parameter and selects output properties locally; an explicit selection restricts output to that subset.

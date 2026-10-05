@@ -99,6 +99,16 @@ APPROVED_DELEGATED_ADMIN_READS = {
     "/tenantRelationships/delegatedAdminRelationships",
     "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}",
 }
+# The four approved EXT-04c v1.0 multi-tenant-organization reads:
+# organization show, join-request show, tenant list and tenant count. The
+# single-member read stays scheduled: its documented least privilege is the
+# write scope. The tenant-lookup functions stay scheduled for mg-ext-04e.
+APPROVED_MTO_READS = {
+    "/tenantRelationships/multiTenantOrganization",
+    "/tenantRelationships/multiTenantOrganization/joinRequest",
+    "/tenantRelationships/multiTenantOrganization/tenants",
+    "/tenantRelationships/multiTenantOrganization/tenants/$count",
+}
 # The ten approved EXT-01m v1.0 contact manager/directReports navigation
 # reads: the manager single, the directReports collection and scalar plus
 # their user/contact typed casts, and the per-report singles plus casts.
@@ -277,8 +287,10 @@ def make_row(version, path, method, operation):
             reason = "Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle beta subfamily: the six approved reads cover v1.0 only; beta policies and templates need separate review."
     if owner == "EXT-01" and not mutates and disposition == "scheduled" and path.split("/")[1] == "directory" and ("/attributeSets" in path or "/customSecurityAttributeDefinitions" in path) and version == "beta":
         reason = "Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review."
-    if owner == "EXT-04" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.split("/")[1] == "tenantRelationships" and path not in APPROVED_DELEGATED_ADMIN_READS:
-        if path.startswith("/tenantRelationships/multiTenantOrganization"):
+    if owner == "EXT-04" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.split("/")[1] == "tenantRelationships" and path not in APPROVED_DELEGATED_ADMIN_READS and path not in APPROVED_MTO_READS:
+        if path == "/tenantRelationships/multiTenantOrganization/tenants/{multiTenantOrganizationMember-id}":
+            reason = "Deferred by firstmate multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for the single-member read."
+        elif path.startswith("/tenantRelationships/multiTenantOrganization"):
             reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 multi-tenant-organization subfamily: multi-tenant-organization reads need their own MultiTenantOrganization access, Entra P1 licensing and projection review beyond the approved delegated-admin list/show reads."
         elif "findTenantInformation" in path:
             reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 tenant-lookup subfamily: tenant-information lookup functions need their own CrossTenantInformation access and explicit domain/tenant-argument review beyond the approved delegated-admin list/show reads."

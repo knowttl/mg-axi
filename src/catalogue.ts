@@ -259,6 +259,20 @@ const delegatedAdminRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to DelegatedAdminRelationship.Read.All" },
 };
+const multiTenantOrganizationRead = {
+  select: { value: "comma-separated-properties", description: "Request server properties; multi-tenant-organization reads need MultiTenantOrganization.Read.All" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to MultiTenantOrganization.Read.All" },
+};
+const multiTenantOrganizationTenantRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter with no $count or ConsistencyLevel contract; unsupported combinations fail before credentials" },
+  select: multiTenantOrganizationRead.select,
+  fields: multiTenantOrganizationRead.fields,
+  full: multiTenantOrganizationRead.full,
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: multiTenantOrganizationRead.scopes,
+};
 const attributeSetRead = {
   select: { value: "comma-separated-properties", description: "Request server properties; attribute-set reads need CustomSecAttributeDefinition.Read.All" },
   fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
@@ -1087,6 +1101,35 @@ export const LEAVES: Leaf[] = [
     full: delegatedAdminRead.full,
     scopes: delegatedAdminRead.scopes,
   }, examples: ["mg-axi entra delegated-admin-relationship show --id <relationship-id> --profile soc", "mg-axi entra delegated-admin-relationship show --id <relationship-id> --profile soc --full"] },
+  { path: "entra multi-tenant-organization show", description: "Show the tenant multitenant organization with the full reviewed property set (createdDateTime, description, displayName, id, state); at most one exists per tenant and state inactive means no membership", operation: "GET:/tenantRelationships/multiTenantOrganization", flags: {
+    ...common,
+    select: multiTenantOrganizationRead.select,
+    fields: multiTenantOrganizationRead.fields,
+    full: multiTenantOrganizationRead.full,
+    scopes: multiTenantOrganizationRead.scopes,
+  }, examples: ["mg-axi entra multi-tenant-organization show --profile soc", "mg-axi entra multi-tenant-organization show --profile soc --full"] },
+  { path: "entra multi-tenant-organization join-request show", description: "Show the tenant join-request record with the full reviewed property set (addedByTenantId, id, memberState, role, transitionDetails)", operation: "GET:/tenantRelationships/multiTenantOrganization/joinRequest", flags: {
+    ...common,
+    select: multiTenantOrganizationRead.select,
+    fields: multiTenantOrganizationRead.fields,
+    full: multiTenantOrganizationRead.full,
+    scopes: multiTenantOrganizationRead.scopes,
+  }, examples: ["mg-axi entra multi-tenant-organization join-request show --profile soc", "mg-axi entra multi-tenant-organization join-request show --profile soc --full"] },
+  { path: "entra multi-tenant-organization tenant list", description: "List member tenants of the multitenant organization with compact properties (tenantId, displayName, role, state); --filter passes through as plain $filter", operation: "GET:/tenantRelationships/multiTenantOrganization/tenants", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: multiTenantOrganizationTenantRead.filter,
+    select: multiTenantOrganizationTenantRead.select,
+    fields: multiTenantOrganizationTenantRead.fields,
+    full: multiTenantOrganizationTenantRead.full,
+    cursor: multiTenantOrganizationTenantRead.cursor,
+    scopes: multiTenantOrganizationTenantRead.scopes,
+  }, examples: ["mg-axi entra multi-tenant-organization tenant list --profile soc", "mg-axi entra multi-tenant-organization tenant list --profile soc --limit 10", "mg-axi entra multi-tenant-organization tenant list --profile soc --filter \"state eq 'active'\""] },
+  { path: "entra multi-tenant-organization tenant count", description: "Count member tenants of the multitenant organization as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/tenantRelationships/multiTenantOrganization/tenants/$count", flags: {
+    ...common,
+    scopes: multiTenantOrganizationRead.scopes,
+  }, examples: ["mg-axi entra multi-tenant-organization tenant count --profile soc"] },
   { path: "entra sign-in list", description: "List sign-ins in a bounded time window (AuditLog.Read.All; delegated callers also need Global Reader, Reports Reader, Security Administrator, Security Operator or Security Reader; conservative P1/P2 deployment prerequisite)", operation: "GET:/auditLogs/signIns", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

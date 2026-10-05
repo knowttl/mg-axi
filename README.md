@@ -35,6 +35,7 @@ READ-06 executes Entra risky-user and risk-detection list/show through that sess
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
 EXT-04 (contracts) adds partner-tenant customer-contract list/show/count through the same session.
 EXT-04 (delegated-admin) adds partner-tenant delegated-admin customer and relationship list/show through the same session.
+EXT-04 (multi-tenant-organization) adds multitenant-organization show, join-request show and member-tenant list/count through the same session.
 EXT-01 (group lifecycle) adds group lifecycle-policy and group setting-template list/show/count reads through the same session.
 EXT-01 (custom security attributes) adds attribute-set, custom-security-attribute-definition and allowed-value list/show/count reads with attribute-role denial guidance through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
@@ -408,7 +409,28 @@ All four named reads support only `--api-version v1.0`; `--api-version beta` fai
 Delegated delegated-admin reads default to `https://graph.microsoft.com/DelegatedAdminRelationship.Read.All`, while application profiles use the configured `.default` audience.
 Personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for delegated-admin reads; denied reads name the scope, partner-tenant and licensing guidance instead of only the generic cause.
-No delegated-admin mutation lives here; the `$count` scalars, the container root, service-management details, relationship access-assignment/operation/request navigations, multi-tenant-organization reads and tenant-lookup functions belong to later pieces; see the [delegated-admin scope decisions](docs/coverage.md#ext-04-delegated-admin-scope-decisions) for deferred reads and later subfamilies.
+No delegated-admin mutation lives here; the `$count` scalars, the container root, service-management details and relationship access-assignment/operation/request navigations belong to later pieces, while the multi-tenant-organization reads shipped in the next section and tenant-lookup functions belong to a later follow-up; see the [delegated-admin scope decisions](docs/coverage.md#ext-04-delegated-admin-scope-decisions) for deferred reads and later subfamilies.
+
+Log in with `https://graph.microsoft.com/MultiTenantOrganization.Read.All`, then inspect the tenant multitenant organization:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/MultiTenantOrganization.Read.All
+mg-axi entra multi-tenant-organization show --profile soc
+mg-axi entra multi-tenant-organization join-request show --profile soc
+mg-axi entra multi-tenant-organization tenant list --profile soc
+mg-axi entra multi-tenant-organization tenant count --profile soc
+```
+
+At most one multitenant organization exists per tenant; a tenant outside any multitenant organization reads the container as state inactive with null properties and lists zero tenants, which is an answer rather than an error.
+`entra multi-tenant-organization tenant list` defaults to compact properties (`tenantId`, `displayName`, `role`, `state`); both show commands default to the full reviewed property set.
+`--select` requests properties from the reviewed multi-tenant-organization field sets; `--fields` projects locally and must be a subset of the fetched selection.
+The tenant list accepts `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`.
+The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to multi-tenant-organization reads.
+All four named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+Delegated multi-tenant-organization reads default to `https://graph.microsoft.com/MultiTenantOrganization.Read.All` (the lower-privileged delegated `MultiTenantOrganization.ReadBasic.All` returns displayName and tenantId only) and additionally need Security Reader or Global Reader, while application profiles use the configured `.default` audience.
+Personal Microsoft accounts are not supported, and these reads run in the commercial Global service only.
+Multi-tenant-organization participation needs Entra ID P1; denied reads name the scope, roles and licensing guidance instead of only the generic cause.
+No multi-tenant-organization mutation lives here; the single-member read stays scheduled because its documented least privilege is the write scope `MultiTenantOrganization.ReadWrite.All`, and tenant-lookup functions belong to a later follow-up; see the [multi-tenant-organization scope decisions](docs/coverage.md#ext-04-multi-tenant-organization-scope-decisions) for the deferred read.
 
 Log in with `https://graph.microsoft.com/Domain.Read.All`, then inspect tenant domains and their DNS records:
 

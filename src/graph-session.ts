@@ -49,6 +49,8 @@ const READ_SCOPES = new Set([
   "IdentityRiskyUser.Read.All",
   "LicenseAssignment.Read.All",
   "Member.Read.Hidden",
+  "MultiTenantOrganization.Read.All",
+  "MultiTenantOrganization.ReadBasic.All",
   "OnPremDirectorySynchronization.Read.All",
   "OrgContact.Read.All",
   "Organization.Read.All",

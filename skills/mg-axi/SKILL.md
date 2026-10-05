@@ -1,7 +1,7 @@
 ---
 name: mg-axi
 description: >
-  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, federation configurations, deleted directory items, data policy operations, access reviews, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
+  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, federation configurations, deleted directory items, data policy operations, access reviews, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
 user-invocable: false
 ---
 
@@ -125,6 +125,10 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra delegated-admin-customer show` | native | read |
 | `mg-axi entra delegated-admin-relationship list` | native | read |
 | `mg-axi entra delegated-admin-relationship show` | native | read |
+| `mg-axi entra multi-tenant-organization show` | native | read |
+| `mg-axi entra multi-tenant-organization join-request show` | native | read |
+| `mg-axi entra multi-tenant-organization tenant list` | native | read |
+| `mg-axi entra multi-tenant-organization tenant count` | native | read |
 | `mg-axi entra sign-in list` | native | read |
 | `mg-axi entra sign-in show` | native | read |
 | `mg-axi entra directory-audit list` | native | read |

@@ -278,14 +278,15 @@ export async function listSubscriptions(
       subscriptions,
       count: { returned: subscriptions.length, complete: false, reason: result.reason },
       cursor: result.cursor,
-      help: [...truncationHints, resumeHint(profileName), showHint, EMPTY_NOTE],
+      help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
   const count = { returned: subscriptions.length, complete: true };
   if (!subscriptions.length) {
-    return { subscriptions, count, help: [EMPTY_NOTE] };
+    const emptyHint = common.filter === undefined ? EMPTY_NOTE : "0 subscriptions matched; the absence of results is the answer, not an error";
+    return { subscriptions, count, help: [emptyHint] };
   }
-  return { subscriptions, count, help: [...truncationHints, showHint, EMPTY_NOTE] };
+  return { subscriptions, count, help: [...truncationHints, showHint] };
 }
 
 export async function showSubscription(
@@ -308,8 +309,8 @@ export async function showSubscription(
     scopes,
   }));
   const { row, truncated } = singleResult(raw, fields, full);
-  const helpHints: string[] = [...(truncated ? [fullHint("entra subscription show", flags, profileName)] : []), EMPTY_NOTE];
-  return { subscription: row, help: helpHints };
+  if (truncated) return { subscription: row, help: [fullHint("entra subscription show", flags, profileName)] };
+  return { subscription: row };
 }
 
 // The $count route returns a text/plain integer scalar rather than a JSON
@@ -332,5 +333,6 @@ export async function countSubscriptions(
       "Subscription counts carry one non-negative integer scalar; treat anything else as unknown, not empty",
     ]);
   }
-  return { count: { returned: raw, complete: true }, help: [EMPTY_NOTE] };
+  const count = { returned: raw, complete: true };
+  return raw === 0 ? { count, help: [EMPTY_NOTE] } : { count };
 }

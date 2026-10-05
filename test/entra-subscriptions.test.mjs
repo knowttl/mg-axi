@@ -239,8 +239,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "subscription", "count", "--profile", profile], overrides);
-      assert.deepEqual(result, { count: { returned: 3, complete: true },
-        help: ["An empty subscription list may mean the tenant holds no commercial subscriptions; the absence of rows is the answer, not an error"] });
+      assert.deepEqual(result, { count: { returned: 3, complete: true } });
       assert.equal(requests.length, 1);
       assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/directory/subscriptions/$count");
     } finally {
@@ -272,6 +271,19 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(listed.subscriptions, []);
       assert.deepEqual(listed.count, { returned: 0, complete: true });
       assert.ok(listed.help.some(hint => hint.includes("no commercial subscriptions")));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} filtered empty subscription lists report no match, not an empty tenant`, async () => {
+    const state = setupProfiles();
+    try {
+      const empty = transport(() => json(200, { value: [] }));
+      const { overrides } = overridesFor(mode, empty);
+      const listed = await executeArgv(["entra", "subscription", "list", "--profile", profile,
+        "--filter", "status eq 'Suspended'"], overrides);
+      assert.deepEqual(listed.help, ["0 subscriptions matched; the absence of results is the answer, not an error"]);
     } finally {
       teardownProfiles(state);
     }

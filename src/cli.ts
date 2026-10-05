@@ -38,6 +38,7 @@ import { listFederationConfigurations, showFederationConfiguration, countFederat
 import { listDataPolicyOperations, showDataPolicyOperation, countDataPolicyOperations } from "./entra-data-policy-operations.js";
 import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions, showDecision, listContactedReviewers, showContactedReviewer, listStages, showStage } from "./entra-access-reviews.js";
 import { listCatalogs, showCatalog, countCatalogs, listAccessPackages, showAccessPackage, countAccessPackages, listAssignmentPolicies, showAssignmentPolicy, countAssignmentPolicies, listResourceRoleScopes, showResourceRoleScope, countResourceRoleScopes, listAssignments, showAssignment, countAssignments, listAssignmentRequests, showAssignmentRequest, countAssignmentRequests } from "./entra-entitlement-management.js";
+import { listWorkflows, showWorkflow, countWorkflows, listWorkflowTemplates, showWorkflowTemplate, countWorkflowTemplates, listTaskDefinitions, showTaskDefinition, countTaskDefinitions, showLifecycleSettings } from "./entra-lifecycle-workflows.js";
 import { listAuthenticationMethods, listRegistrationDetails } from "./entra-auth-methods.js";
 import { addGroupMember } from "./entra-group-member-add.js";
 import { fetchTransport } from "./api.js";
@@ -238,6 +239,43 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra entitlement assignment-request show": return showAssignmentRequest(session, flags, selected.profile, operation, help, selected.name);
       case "entra entitlement assignment-request count": return countAssignmentRequests(session, flags, selected.profile, operation, help, selected.name);
       default: return countResourceRoleScopes(session, flags, selected.profile, operation, help, selected.name);
+    }
+  }
+  if (leaf.path === "entra lifecycle workflow list" || leaf.path === "entra lifecycle workflow show" || leaf.path === "entra lifecycle workflow count" || leaf.path === "entra lifecycle workflow-template list" || leaf.path === "entra lifecycle workflow-template show" || leaf.path === "entra lifecycle workflow-template count" || leaf.path === "entra lifecycle task-definition list" || leaf.path === "entra lifecycle task-definition show" || leaf.path === "entra lifecycle task-definition count" || leaf.path === "entra lifecycle settings show") {
+    if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
+      throw new AxiError("Lifecycle-workflow reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, "v1.0");
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra lifecycle workflow list": return listWorkflows(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle workflow show": return showWorkflow(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle workflow count": return countWorkflows(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle workflow-template list": return listWorkflowTemplates(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle workflow-template show": return showWorkflowTemplate(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle workflow-template count": return countWorkflowTemplates(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle task-definition list": return listTaskDefinitions(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle task-definition show": return showTaskDefinition(session, flags, selected.profile, operation, help, selected.name);
+      case "entra lifecycle task-definition count": return countTaskDefinitions(session, flags, selected.profile, operation, help, selected.name);
+      default: return showLifecycleSettings(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "api get") {

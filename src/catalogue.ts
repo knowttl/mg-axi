@@ -363,6 +363,22 @@ const entitlementRead = {
   cursor: { value: "opaque-cursor|-", description: "Resume a capped collection losslessly; - reads the token from stdin (16 MB ceiling for either input); repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to EntitlementManagement.Read.All" },
 };
+const lifecycleWorkflowRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter with no $count or ConsistencyLevel; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed workflow set; reads default to LifecycleWorkflows-Workflow.ReadBasic.All in both modes (richer detail may need LifecycleWorkflows-Workflow.Read.All or LifecycleWorkflows.Read.All) plus Global Reader or Lifecycle Workflows Administrator for delegated access" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor|-", description: "Resume a capped collection losslessly; - reads the token from stdin (16 MB ceiling for either input); repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to LifecycleWorkflows-Workflow.ReadBasic.All" },
+};
+const lifecycleGovernanceRead = {
+  filter: lifecycleWorkflowRead.filter,
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed lifecycle set; reads need LifecycleWorkflows.Read.All in both modes plus Global Reader or Lifecycle Workflows Administrator for delegated access" },
+  fields: lifecycleWorkflowRead.fields,
+  full: lifecycleWorkflowRead.full,
+  cursor: lifecycleWorkflowRead.cursor,
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to LifecycleWorkflows.Read.All" },
+};
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
   { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
@@ -1840,7 +1856,82 @@ export const LEAVES: Leaf[] = [
     ...common,
     scopes: entitlementRead.scopes,
   }, examples: ["mg-axi entra entitlement assignment-request count --profile soc"] },
-  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations, branding, access reviews, entitlement catalogs and access packages, and partner contracts; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+  { path: "entra lifecycle workflow list", description: "List lifecycle workflows with compact properties (id, displayName, category, isEnabled, isSchedulingEnabled); rows never carry tasks, runs or processing results", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: lifecycleWorkflowRead.filter,
+    select: lifecycleWorkflowRead.select,
+    fields: lifecycleWorkflowRead.fields,
+    full: lifecycleWorkflowRead.full,
+    cursor: lifecycleWorkflowRead.cursor,
+    scopes: lifecycleWorkflowRead.scopes,
+  }, examples: ["mg-axi entra lifecycle workflow list --profile soc", "mg-axi entra lifecycle workflow list --profile soc --limit 10", "mg-axi entra lifecycle workflow list --profile soc --filter \"category eq 'leaver'\""] },
+  { path: "entra lifecycle workflow show", description: "Show one lifecycle workflow with the full reviewed scalar set; tasks, runs and processing results belong to later slices", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}", flags: {
+    ...common,
+    id: { value: "workflow-id", required: true, description: "Lifecycle workflow ID" },
+    select: lifecycleWorkflowRead.select,
+    fields: lifecycleWorkflowRead.fields,
+    full: lifecycleWorkflowRead.full,
+    scopes: lifecycleWorkflowRead.scopes,
+  }, examples: ["mg-axi entra lifecycle workflow show --id <workflow-id> --profile soc"] },
+  { path: "entra lifecycle workflow count", description: "Count lifecycle workflows as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/$count", flags: {
+    ...common,
+    scopes: lifecycleWorkflowRead.scopes,
+  }, examples: ["mg-axi entra lifecycle workflow count --profile soc"] },
+  { path: "entra lifecycle workflow-template list", description: "List lifecycle workflow templates with compact properties (id, displayName, category); template tasks belong to a later slice", operation: "GET:/identityGovernance/lifecycleWorkflows/workflowTemplates", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: lifecycleGovernanceRead.filter,
+    select: lifecycleGovernanceRead.select,
+    fields: lifecycleGovernanceRead.fields,
+    full: lifecycleGovernanceRead.full,
+    cursor: lifecycleGovernanceRead.cursor,
+    scopes: lifecycleGovernanceRead.scopes,
+  }, examples: ["mg-axi entra lifecycle workflow-template list --profile soc", "mg-axi entra lifecycle workflow-template list --profile soc --limit 10", "mg-axi entra lifecycle workflow-template list --profile soc --filter \"category eq 'joiner'\""] },
+  { path: "entra lifecycle workflow-template show", description: "Show one lifecycle workflow template with the reviewed set; Graph documents no query parameters here so rows always arrive whole", operation: "GET:/identityGovernance/lifecycleWorkflows/workflowTemplates/{workflowTemplate-id}", flags: {
+    ...common,
+    id: { value: "template-id", required: true, description: "Workflow template ID" },
+    fields: lifecycleGovernanceRead.fields,
+    full: lifecycleGovernanceRead.full,
+    scopes: lifecycleGovernanceRead.scopes,
+  }, examples: ["mg-axi entra lifecycle workflow-template show --id <template-id> --profile soc"] },
+  { path: "entra lifecycle workflow-template count", description: "Count lifecycle workflow templates as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/identityGovernance/lifecycleWorkflows/workflowTemplates/$count", flags: {
+    ...common,
+    scopes: lifecycleGovernanceRead.scopes,
+  }, examples: ["mg-axi entra lifecycle workflow-template count --profile soc"] },
+  { path: "entra lifecycle task-definition list", description: "List lifecycle task definitions with compact properties (id, displayName, category, version); definitions carry no relationships", operation: "GET:/identityGovernance/lifecycleWorkflows/taskDefinitions", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: lifecycleGovernanceRead.filter,
+    select: lifecycleGovernanceRead.select,
+    fields: lifecycleGovernanceRead.fields,
+    full: lifecycleGovernanceRead.full,
+    cursor: lifecycleGovernanceRead.cursor,
+    scopes: lifecycleGovernanceRead.scopes,
+  }, examples: ["mg-axi entra lifecycle task-definition list --profile soc", "mg-axi entra lifecycle task-definition list --profile soc --limit 10", "mg-axi entra lifecycle task-definition list --profile soc --filter \"category eq 'joiner'\""] },
+  { path: "entra lifecycle task-definition show", description: "Show one lifecycle task definition with the full reviewed parameter set", operation: "GET:/identityGovernance/lifecycleWorkflows/taskDefinitions/{taskDefinition-id}", flags: {
+    ...common,
+    id: { value: "task-definition-id", required: true, description: "Task definition ID" },
+    select: lifecycleGovernanceRead.select,
+    fields: lifecycleGovernanceRead.fields,
+    full: lifecycleGovernanceRead.full,
+    scopes: lifecycleGovernanceRead.scopes,
+  }, examples: ["mg-axi entra lifecycle task-definition show --id <task-definition-id> --profile soc"] },
+  { path: "entra lifecycle task-definition count", description: "Count lifecycle task definitions as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/identityGovernance/lifecycleWorkflows/taskDefinitions/$count", flags: {
+    ...common,
+    scopes: lifecycleGovernanceRead.scopes,
+  }, examples: ["mg-axi entra lifecycle task-definition count --profile soc"] },
+  { path: "entra lifecycle settings show", description: "Show the lifecycle-workflows tenant settings (schedule interval, email and quarantine configuration); updating settings belongs to no read slice", operation: "GET:/identityGovernance/lifecycleWorkflows/settings", flags: {
+    ...common,
+    select: lifecycleGovernanceRead.select,
+    fields: lifecycleGovernanceRead.fields,
+    full: lifecycleGovernanceRead.full,
+    scopes: lifecycleGovernanceRead.scopes,
+  }, examples: ["mg-axi entra lifecycle settings show --profile soc"] },
+  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations, branding, access reviews, entitlement catalogs and access packages, lifecycle workflows, workflow templates, task definitions and lifecycle settings, and partner contracts; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
     cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --odata to reuse its query" },
@@ -1895,7 +1986,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (flag!.value) {
       const value = match![2] ?? argv[++i];
       if (!value?.trim() || (value.startsWith("-") && !(name === "cursor" && value === "-"
-        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra access-review definition list" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review decision list" || leaf.path === "entra access-review contacted-reviewer list" || leaf.path === "entra access-review stage list" || leaf.path === "entra entitlement catalog list" || leaf.path === "entra entitlement access-package list" || leaf.path === "entra entitlement assignment-policy list" || leaf.path === "entra entitlement resource-role-scope list" || leaf.path === "entra entitlement assignment list" || leaf.path === "entra entitlement assignment-request list")))) fail(`--${name} requires a non-empty value`);
+        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra access-review definition list" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review decision list" || leaf.path === "entra access-review contacted-reviewer list" || leaf.path === "entra access-review stage list" || leaf.path === "entra entitlement catalog list" || leaf.path === "entra entitlement access-package list" || leaf.path === "entra entitlement assignment-policy list" || leaf.path === "entra entitlement resource-role-scope list" || leaf.path === "entra entitlement assignment list" || leaf.path === "entra entitlement assignment-request list" || leaf.path === "entra lifecycle workflow list" || leaf.path === "entra lifecycle workflow-template list" || leaf.path === "entra lifecycle task-definition list")))) fail(`--${name} requires a non-empty value`);
       flags[name] = value!;
     } else {
       if (match![2] !== undefined) fail(`--${name} does not take a value`);

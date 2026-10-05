@@ -396,6 +396,46 @@ test("entitlement resource-role-scope list leaf help marks pairing scope with la
   assert.match(result.stdout, /--access-package.*required/);
 });
 
+test("lifecycle workflow list leaf help marks compact rows without tasks or runs", () => {
+  const result = run(["entra", "lifecycle", "workflow", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /rows never carry tasks, runs or processing results/);
+  assert.match(result.stdout, /--cursor/);
+  assert.match(result.stdout, /LifecycleWorkflows-Workflow\.ReadBasic\.All/);
+});
+
+test("lifecycle workflow show leaf help marks later-slice relationships", () => {
+  const result = run(["entra", "lifecycle", "workflow", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /tasks, runs and processing results belong to later slices/);
+  assert.match(result.stdout, /--id.*required/);
+});
+
+test("lifecycle workflow-template show leaf help marks whole rows with no select", () => {
+  const result = run(["entra", "lifecycle", "workflow-template", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /no query parameters.*rows always arrive whole/);
+  assert.match(result.stdout, /--id.*required/);
+});
+
+test("lifecycle task-definition list leaf help marks relationship-free rows", () => {
+  const result = run(["entra", "lifecycle", "task-definition", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /definitions carry no relationships/);
+  assert.match(result.stdout, /LifecycleWorkflows\.Read\.All/);
+});
+
+test("lifecycle settings show leaf help marks the read-only singleton", () => {
+  const result = run(["entra", "lifecycle", "settings", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /updating settings belongs to no read slice/);
+});
+
 test("administrative-unit member list leaf help advertises the relationship flags", () => {
   const result = run(["entra", "administrative-unit", "member", "list", "--help"]);
   assert.equal(result.status, 0);

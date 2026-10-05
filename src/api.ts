@@ -3,6 +3,7 @@ import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITION_FIELDS, KNOWN_INSTANCE_FIELDS, KNOWN_STAGE_FIELDS } from "./entra-access-reviews.js";
 import { KNOWN_ACCESS_PACKAGE_FIELDS, KNOWN_ASSIGNMENT_POLICY_FIELDS, KNOWN_CATALOG_FIELDS, KNOWN_RESOURCE_ROLE_SCOPE_FIELDS } from "./entra-entitlement-management.js";
+import { KNOWN_LIFECYCLE_SETTINGS_FIELDS, KNOWN_TASK_DEFINITION_FIELDS, KNOWN_WORKFLOW_FIELDS, KNOWN_WORKFLOW_TEMPLATE_FIELDS } from "./entra-lifecycle-workflows.js";
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { KNOWN_DELEGATED_ADMIN_CUSTOMER_FIELDS, KNOWN_DELEGATED_ADMIN_RELATIONSHIP_FIELDS, KNOWN_DELEGATED_ADMIN_ACCESS_ASSIGNMENT_FIELDS, KNOWN_DELEGATED_ADMIN_OPERATION_FIELDS, KNOWN_DELEGATED_ADMIN_REQUEST_FIELDS } from "./entra-delegated-admin.js";
@@ -650,6 +651,34 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A EntitlementManagement.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs a supported Entra role with catalog visibility (Global Reader and Identity Governance Administrator are among the supported roles); personal Microsoft accounts are not supported.",
     note: "No operation-level documentation page; access follows the parent access-package contract and the accessPackageResourceRoleScope resource reference. Entitlement management needs P2 or ID Governance depending on capability.",
     sources: ["https://learn.microsoft.com/graph/api/accesspackage-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/accesspackageresourcerolescope?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_WORKFLOW_FIELDS,
+    access: "D/A LifecycleWorkflows-Workflow.ReadBasic.All (LifecycleWorkflows-Workflow.Read.All or LifecycleWorkflows.Read.All for richer detail). Delegated callers pass one as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract ($search/$orderby/$expand stay unreviewed). Only scalar workflow properties are reviewed; tasks, runs, processing results, versions, scopes and createdBy/lastModifiedBy links stay out. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-lifecycleworkflowscontainer-list-workflows?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_WORKFLOW_FIELDS,
+    access: "D/A LifecycleWorkflows-Workflow.ReadBasic.All (LifecycleWorkflows-Workflow.Read.All or LifecycleWorkflows.Read.All for richer detail). Delegated callers pass one as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "Tasks ride expanded by default on the wire and are dropped in local projection; createdBy, lastModifiedBy and previewScope need $expand and stay out. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-workflow-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflowTemplates", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_WORKFLOW_TEMPLATE_FIELDS,
+    access: "D/A LifecycleWorkflows.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract ($orderby stays unreviewed). Only scalar template properties are reviewed; template tasks belong to a later slice. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-lifecycleworkflowscontainer-list-workflowtemplates?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflowTemplates/{workflowTemplate-id}", kind: "single", query: [], fields: KNOWN_WORKFLOW_TEMPLATE_FIELDS,
+    access: "D/A LifecycleWorkflows.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "Graph documents no query parameters on the template get, so only whole rows are reviewed here; template tasks belong to a later slice. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-workflowtemplate-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/taskDefinitions", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_TASK_DEFINITION_FIELDS,
+    access: "D/A LifecycleWorkflows.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract ($orderby stays unreviewed). Task definitions carry no relationships. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-lifecycleworkflowscontainer-list-taskdefinitions?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/taskDefinitions/{taskDefinition-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_TASK_DEFINITION_FIELDS,
+    access: "D/A LifecycleWorkflows.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "Only scalar definition properties are reviewed. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-taskdefinition-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/settings", kind: "single", query: SINGLE_QUERY, fields: KNOWN_LIFECYCLE_SETTINGS_FIELDS,
+    access: "D/A LifecycleWorkflows.Read.All. Delegated callers pass it as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "The tenant settings singleton carries no relationships; the update action belongs to no read slice. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-lifecyclemanagementsettings-get?view=graph-rest-1.0"] },
 ];
 
 function splitPath(path: string): string[] {

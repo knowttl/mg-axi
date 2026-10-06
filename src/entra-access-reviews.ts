@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-02 access-reviews subfamily: the read-only access-review mapping.
@@ -263,6 +264,7 @@ const ACCESS_REVIEW_DENIAL_HINTS = [
 interface CollectionShape {
   command: string;
   key: string;
+  noun: string;
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -274,6 +276,7 @@ interface CollectionShape {
 const DEFINITION_LIST: CollectionShape = {
   command: "entra access-review definition list",
   key: "definitions",
+  noun: "access-review definitions",
   known: DEFINITION_KNOWN,
   knownList: KNOWN_DEFINITION_FIELDS,
   defaultSelect: DEFAULT_DEFINITION_LIST_SELECT,
@@ -288,6 +291,7 @@ const DEFINITION_LIST: CollectionShape = {
 const INSTANCE_LIST: CollectionShape = {
   command: "entra access-review instance list",
   key: "instances",
+  noun: "access-review instances",
   known: INSTANCE_KNOWN,
   knownList: KNOWN_INSTANCE_FIELDS,
   defaultSelect: DEFAULT_INSTANCE_LIST_SELECT,
@@ -301,6 +305,7 @@ const INSTANCE_LIST: CollectionShape = {
 const DECISION_LIST: CollectionShape = {
   command: "entra access-review decision list",
   key: "decisions",
+  noun: "access-review decisions",
   known: DECISION_KNOWN,
   knownList: KNOWN_DECISION_FIELDS,
   defaultSelect: DEFAULT_DECISION_SELECT,
@@ -314,6 +319,7 @@ const DECISION_LIST: CollectionShape = {
 const CONTACTED_REVIEWER_LIST: CollectionShape = {
   command: "entra access-review contacted-reviewer list",
   key: "contactedReviewers",
+  noun: "contacted reviewers",
   known: CONTACTED_REVIEWER_KNOWN,
   knownList: KNOWN_CONTACTED_REVIEWER_FIELDS,
   defaultSelect: DEFAULT_CONTACTED_REVIEWER_LIST_SELECT,
@@ -328,6 +334,7 @@ const CONTACTED_REVIEWER_LIST: CollectionShape = {
 const STAGE_LIST: CollectionShape = {
   command: "entra access-review stage list",
   key: "stages",
+  noun: "access-review stages",
   known: STAGE_KNOWN,
   knownList: KNOWN_STAGE_FIELDS,
   defaultSelect: DEFAULT_STAGE_LIST_SELECT,
@@ -395,16 +402,17 @@ async function listCollection(
   if (!result.complete) {
     return {
       [shape.key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, shape.noun, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint, ...standing],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
-    return { [shape.key]: rows, count, help: [shape.emptyNote, ...standing] };
+    return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [shape.emptyNote, ...standing] };
   }
-  return { [shape.key]: rows, count, help: [...truncationHints, ...standing] };
+  return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [...truncationHints, ...standing] };
 }
 
 async function showOne(

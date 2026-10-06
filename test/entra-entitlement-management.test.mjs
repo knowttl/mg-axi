@@ -290,7 +290,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: cat2.id, displayName: "Service default", state: "published", catalogType: "serviceDefault", description: null },
         { id: cat3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 catalogs");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra entitlement catalog show --id <catalog-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identityGovernance/entitlementManagement/catalogs?"));
@@ -308,7 +310,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "entitlement", "catalog", "list", "--profile", profile,
         "--filter", "state eq 'published'"], overrides);
-      assert.equal(result.count.returned, 3);
+      assert.equal(result.catalogs.length, 3);
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$filter"), "state eq 'published'");
       assert.equal(requests[0].headers.ConsistencyLevel, undefined);
@@ -323,11 +325,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "entitlement", "catalog", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.catalogs.map(row => row.id), [cat1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "entitlement", "catalog", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.catalogs.map(row => row.id), [cat2.id, cat3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 catalogs");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -370,7 +374,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: pkg1.id, displayName: "Engineering bundle", isHidden: false },
         { id: pkg2.id, displayName: "Quiet bundle", isHidden: true },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 access packages");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra entitlement access-package show --id <access-package-id>")));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identityGovernance/entitlementManagement/accessPackages?"));
     } finally {
@@ -431,7 +437,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: pol1.id, displayName: "Engineering requests", allowedTargetScope: "specificDirectoryUsers" },
         { id: pol2.id, displayName: "Open requests", allowedTargetScope: "allMemberUsers" },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 assignment policies");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/identityGovernance/entitlementManagement/accessPackages/${pkg1.id}/assignmentPolicies?`));
     } finally {
       teardownProfiles(state);
@@ -497,7 +505,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = await executeArgv(["entra", "entitlement", "resource-role-scope", "list",
         "--access-package", pkg1.id, "--profile", profile], overrides);
       assert.deepEqual(result.resourceRoleScopes, [rs1, rs2]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 resource-role scopes");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/identityGovernance/entitlementManagement/accessPackages/${pkg1.id}/resourceRoleScopes?`));
     } finally {
       teardownProfiles(state);
@@ -543,7 +553,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           schedule: null,
         },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 assignments");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra entitlement assignment show --id <assignment-id>")));
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$expand"), "target,accessPackage");
@@ -562,7 +574,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "entitlement", "assignment", "list", "--profile", profile,
         "--filter", "state eq 'Delivered'"], overrides);
-      assert.equal(result.count.returned, 2);
+      assert.equal(result.assignments.length, 2);
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$filter"), "state eq 'Delivered'");
       assert.equal(sent.get("$expand"), "target,accessPackage");
@@ -579,13 +591,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const first = await executeArgv(["entra", "entitlement", "assignment", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.assignments.map(row => row.id), [asg1.id]);
       assert.equal(first.assignments[0].targetDisplayName, "Alice Example");
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "entitlement", "assignment", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.assignments.map(row => row.id), [asg2.id]);
       assert.equal(second.assignments[0].accessPackageId, pkg2.id);
       assert.ok(!Object.hasOwn(second.assignments[0], "targetId"));
-      assert.deepEqual(second.count, { returned: 1, complete: true });
+      assert.deepEqual(second.count, "1 assignments");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -652,7 +666,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           schedule: null,
         },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 assignment requests");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$expand"), "accessPackage,assignment");
       assert.ok(!JSON.stringify(result).includes(longJustification.slice(0, 50)));
@@ -771,7 +787,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const listed = await executeArgv(["entra", "entitlement", "assignment", "list", "--profile", profile], overrides);
       assert.deepEqual(listed.assignments, []);
-      assert.deepEqual(listed.count, { returned: 0, complete: true });
+      assert.deepEqual(listed.count, "0 assignments");
+      assert.equal(listed.total, null);
+      assert.equal(listed.complete, true);
       assert.ok(listed.help.some(hint => hint.includes("0 assignments matched")));
       const requested = await executeArgv(["entra", "entitlement", "assignment-request", "list", "--profile", profile], overrides);
       assert.deepEqual(requested.assignmentRequests, []);
@@ -827,7 +845,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const listed = await executeArgv(["entra", "entitlement", "catalog", "list", "--profile", profile], overrides);
       assert.deepEqual(listed.catalogs, []);
-      assert.deepEqual(listed.count, { returned: 0, complete: true });
+      assert.deepEqual(listed.count, "0 catalogs");
+      assert.equal(listed.total, null);
+      assert.equal(listed.complete, true);
       assert.ok(listed.help.some(hint => hint.includes("0 entitlement catalogs matched")));
     } finally {
       teardownProfiles(state);
@@ -842,7 +862,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const listOut = decode(listed.stdout);
       assert.deepEqual(listOut.catalogs.map(row => row.id), [cat1.id, cat2.id]);
-      assert.deepEqual(listOut.count, { returned: 2, complete: true });
+      assert.deepEqual(listOut.count, "2 catalogs");
+      assert.equal(listOut.total, null);
+      assert.equal(listOut.complete, true);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runEntitlementCli(["entra", "entitlement", "catalog", "show", "--id", cat1.id, "--profile", profile], state, mode);

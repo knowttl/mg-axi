@@ -185,7 +185,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: set2.id, description: `${longSetDescription.slice(0, 500)}... (truncated, ${longSetDescription.length} chars total)`, maxAttributesPerSet: 10 },
         { id: set3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 attribute sets");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra attribute-set show --id <set-id>")));
       assert.ok(result.help.some(hint => hint.includes("offer no --filter")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
@@ -203,11 +205,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "attribute-set", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.attributeSets.map(row => row.id), [set1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "attribute-set", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.attributeSets.map(row => row.id), [set2.id, set3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 attribute sets");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -253,7 +257,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           description: `${longDefinitionDescription.slice(0, 500)}... (truncated, ${longDefinitionDescription.length} chars total)` },
         { id: def3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 custom security attribute definitions");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra custom-security-attribute-definition show --id <definition-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com${base}/customSecurityAttributeDefinitions?`));
@@ -270,7 +276,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile,
         "--filter", "status eq 'Available'"], overrides);
-      assert.equal(result.count.returned, 3);
+      assert.equal(result.customSecurityAttributeDefinitions.length, 3);
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$filter"), "status eq 'Available'");
       assert.equal(requests[0].headers.ConsistencyLevel, undefined);
@@ -285,11 +291,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.customSecurityAttributeDefinitions.map(row => row.id), [def1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.customSecurityAttributeDefinitions.map(row => row.id), [def2.id, def3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 custom security attribute definitions");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -335,7 +343,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, calls, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile], overrides);
       assert.deepEqual(result.allowedValues, [val1, val2, { id: val3.id }]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 allowed values");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes(`entra allowed-value show --definition ${def1.id} --id <value-id>`)));
       assert.ok(result.help.some(hint => hint.includes("offer no --filter")));
       assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com${base}/customSecurityAttributeDefinitions/${def1.id}/allowedValues?`));
@@ -352,11 +362,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.allowedValues.map(row => row.id), [val1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.allowedValues.map(row => row.id), [val2.id, val3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 allowed values");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -398,15 +410,21 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const listed = await executeArgv(["entra", "attribute-set", "list", "--profile", profile], overrides);
       assert.deepEqual(listed.attributeSets, []);
-      assert.deepEqual(listed.count, { returned: 0, complete: true });
+      assert.deepEqual(listed.count, "0 attribute sets");
+      assert.equal(listed.total, null);
+      assert.equal(listed.complete, true);
       assert.ok(listed.help.some(hint => hint.includes("0 attribute sets matched")));
       const defined = await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile], overrides);
       assert.deepEqual(defined.customSecurityAttributeDefinitions, []);
-      assert.deepEqual(defined.count, { returned: 0, complete: true });
+      assert.deepEqual(defined.count, "0 custom security attribute definitions");
+      assert.equal(defined.total, null);
+      assert.equal(defined.complete, true);
       assert.ok(defined.help.some(hint => hint.includes("0 custom security attribute definitions matched")));
       const valued = await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile], overrides);
       assert.deepEqual(valued.allowedValues, []);
-      assert.deepEqual(valued.count, { returned: 0, complete: true });
+      assert.deepEqual(valued.count, "0 allowed values");
+      assert.equal(valued.total, null);
+      assert.equal(valued.complete, true);
       assert.ok(valued.help.some(hint => hint.includes("0 allowed values matched")));
     } finally {
       teardownProfiles(state);
@@ -478,7 +496,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const listOut = decode(listed.stdout);
       assert.deepEqual(listOut.attributeSets.map(row => row.id), [set1.id, set2.id]);
-      assert.deepEqual(listOut.count, { returned: 2, complete: true });
+      assert.deepEqual(listOut.count, "2 attribute sets");
+      assert.equal(listOut.total, null);
+      assert.equal(listOut.complete, true);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runCustomSecurityCli(["entra", "attribute-set", "show", "--id", set1.id, "--profile", profile], state, mode);
@@ -493,7 +513,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(defined.status, 0, defined.stdout);
       const definedOut = decode(defined.stdout);
       assert.deepEqual(definedOut.customSecurityAttributeDefinitions.map(row => row.id), [def1.id, def2.id]);
-      assert.deepEqual(definedOut.count, { returned: 2, complete: true });
+      assert.deepEqual(definedOut.count, "2 custom security attribute definitions");
+      assert.equal(definedOut.total, null);
+      assert.equal(definedOut.complete, true);
 
       const definitionShown = runCustomSecurityCli(["entra", "custom-security-attribute-definition", "show", "--id", def1.id, "--profile", profile], state, mode);
       assert.equal(definitionShown.status, 0, definitionShown.stdout);

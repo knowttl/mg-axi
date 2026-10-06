@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 certificate-auth subfamily: the read mapping behind
@@ -310,16 +311,17 @@ export async function listCertificateAuthPkis(
   if (!result.complete) {
     return {
       certificateAuthPkis: pkis,
-      count: { returned: pkis.length, complete: false, reason: result.reason },
+      ...listTotals(pkis.length, result.total, "PKI configurations", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, EMPTY_PKI_NOTE],
     };
   }
-  const count = { returned: pkis.length, complete: true };
   if (!pkis.length) {
-    return { certificateAuthPkis: pkis, count, help: [EMPTY_PKI_NOTE] };
+    return { certificateAuthPkis: pkis, ...listTotals(pkis.length, result.total, "PKI configurations", true), complete: true, help: [EMPTY_PKI_NOTE] };
   }
-  return { certificateAuthPkis: pkis, count, help: [...truncationHints, showHint, EMPTY_PKI_NOTE] };
+  return { certificateAuthPkis: pkis, ...listTotals(pkis.length, result.total, "PKI configurations", true), complete: true, help: [...truncationHints, showHint, EMPTY_PKI_NOTE] };
 }
 
 export async function showCertificateAuthPki(
@@ -416,20 +418,22 @@ export async function listCertificateAuthorities(
   if (!result.complete) {
     return {
       certificateAuthorities: authorities,
-      count: { returned: authorities.length, complete: false, reason: result.reason },
+      ...listTotals(authorities.length, result.total, "certificate authorities", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, CERT_BLOB_NOTE],
     };
   }
-  const count = { returned: authorities.length, complete: true };
   if (!authorities.length) {
     return {
       certificateAuthorities: authorities,
-      count,
+      ...listTotals(authorities.length, result.total, "certificate authorities", true),
+      complete: true,
       help: ["0 certificate authorities matched; the absence of results is the answer, not an error", CERT_BLOB_NOTE],
     };
   }
-  return { certificateAuthorities: authorities, count, help: [...truncationHints, showHint, CERT_BLOB_NOTE] };
+  return { certificateAuthorities: authorities, ...listTotals(authorities.length, result.total, "certificate authorities", true), complete: true, help: [...truncationHints, showHint, CERT_BLOB_NOTE] };
 }
 
 export async function showCertificateAuthority(

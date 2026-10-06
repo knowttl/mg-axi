@@ -254,7 +254,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: cu2.id, displayName: longName.slice(0, 500) + `... (truncated, ${longName.length} chars total)`, tenantId: cu2.tenantId },
         { id: cu3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 customers");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-customer show --id <customer-id>")));
       assert.ok(result.help.some(hint => hint.includes("partner tenant")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
@@ -278,7 +280,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: rel2.id, displayName: longName.slice(0, 500) + `... (truncated, ${longName.length} chars total)`, status: "approvalPending" },
         { id: rel3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 relationships");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-relationship show --id <relationship-id>")));
       assert.ok(result.help.some(hint => hint.includes("partner tenant")));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships?"));
@@ -293,7 +297,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile,
         "--filter", "displayName eq 'Contoso Inc'"], overrides);
-      assert.equal(result.count.returned, 3);
+      assert.equal(result.delegatedAdminCustomers.length, 3);
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$filter"), "displayName eq 'Contoso Inc'");
       assert.equal(requests[0].headers.ConsistencyLevel, undefined);
@@ -308,11 +312,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.delegatedAdminCustomers.map(row => row.id), [cu1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.delegatedAdminCustomers.map(row => row.id), [cu2.id, cu3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 customers");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -324,10 +330,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "delegated-admin-relationship", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.delegatedAdminRelationships.map(row => row.id), [rel1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       const second = await executeArgv(["entra", "delegated-admin-relationship", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.delegatedAdminRelationships.map(row => row.id), [rel2.id, rel3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 relationships");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -344,7 +352,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: aa2.id, status: "pending", accessContainer: aa2.accessContainer },
         { id: aa3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 access assignments");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-relationship show-access-assignment --id <relationship-id> --assignment-id <assignment-id>")));
       assert.ok(result.help.some(hint => hint.includes("partner tenant")));
       assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/accessAssignments?`));
@@ -363,7 +373,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.delegatedAdminRelationshipOperations.map(row => row.id), [op1.id, op2.id, op3.id]);
       assert.equal(result.delegatedAdminRelationshipOperations[0].data, op1.data);
       assert.match(result.delegatedAdminRelationshipOperations[1].data, /truncated, \d+ chars total/);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 relationship operations");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-relationship show-operation")));
       assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/operations?`));
       const full = await executeArgv(["entra", "delegated-admin-relationship", "list-operations", "--id", rel1.id, "--profile", profile, "--full",
@@ -385,7 +397,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: rq2.id, action: "terminate", status: "running" },
         { id: rq3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 relationship requests");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-relationship show-request")));
       assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/requests?`));
     } finally {
@@ -403,7 +417,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { ...smd2, serviceManagementUrl: smd2.serviceManagementUrl.slice(0, 500) + `... (truncated, ${smd2.serviceManagementUrl.length} chars total)` },
         smd3,
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 service-management details");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-customer show-service-management-detail --id <customer-id> --detail-id <detail-id>")));
       const sent = new URL(requests[0].url);
       assert.equal(sent.pathname, `/v1.0/tenantRelationships/delegatedAdminCustomers/${cu1.id}/serviceManagementDetails`);
@@ -419,7 +435,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile,
         "--filter", "status eq 'active'"], overrides);
-      assert.equal(result.count.returned, 3);
+      assert.equal(result.delegatedAdminAccessAssignments.length, 3);
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$filter"), "status eq 'active'");
       assert.equal(requests[0].headers.ConsistencyLevel, undefined);
@@ -434,11 +450,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.delegatedAdminAccessAssignments.map(row => row.id), [aa1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.delegatedAdminAccessAssignments.map(row => row.id), [aa2.id, aa3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 access assignments");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -450,10 +468,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.delegatedAdminServiceManagementDetails.map(row => row.id), [smd1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       const second = await executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.delegatedAdminServiceManagementDetails.map(row => row.id), [smd2.id, smd3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 service-management details");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
       // The only query state ever sent is the server's own $skiptoken from
       // its nextLink; $select/$filter never leave this client.
       assert.ok(requests.every(request => {
@@ -618,7 +638,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const result = await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile], overrides);
       assert.deepEqual(result.delegatedAdminCustomers, []);
-      assert.deepEqual(result.count, { returned: 0, complete: true });
+      assert.deepEqual(result.count, "0 customers");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("0 customers matched")));
       assert.ok(result.help.some(hint => hint.includes("partner tenant")));
     } finally {
@@ -759,7 +781,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const listOut = decode(listed.stdout);
       assert.deepEqual(listOut.delegatedAdminCustomers.map(row => row.id), [cu1.id, cu2.id]);
-      assert.deepEqual(listOut.count, { returned: 2, complete: true });
+      assert.deepEqual(listOut.count, "2 customers");
+      assert.equal(listOut.total, null);
+      assert.equal(listOut.complete, true);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runDelegatedAdminCli(["entra", "delegated-admin-customer", "show", "--id", cu1.id, "--profile", profile], state, mode);

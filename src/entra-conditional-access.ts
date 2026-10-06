@@ -322,6 +322,7 @@ interface CollectionShape {
   command: string;
   key: string;
   noun: string;
+  plural: string;
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -334,15 +335,13 @@ interface CollectionShape {
   // configurations hang under one strength policy): the flag is
   // re-validated on every call so resumes rebind the same resource.
   parent?: { param: string; flag: string; label: string };
-  // New lists render through the shared list-totals helper; shapes
-  // without it keep their historical count object untouched.
-  totalsNoun?: string;
 }
 
 const POLICY_LIST: CollectionShape = {
   command: "entra conditional-access policy list",
   key: "policies",
   noun: "policy",
+  plural: "policies",
   known: POLICY_KNOWN,
   knownList: KNOWN_POLICY_FIELDS,
   defaultSelect: DEFAULT_POLICY_LIST_SELECT,
@@ -357,6 +356,7 @@ const LOCATION_LIST: CollectionShape = {
   command: "entra conditional-access named-location list",
   key: "namedLocations",
   noun: "named-location",
+  plural: "named locations",
   known: LOCATION_KNOWN,
   knownList: KNOWN_LOCATION_FIELDS,
   defaultSelect: DEFAULT_LOCATION_LIST_SELECT,
@@ -413,57 +413,28 @@ async function listCollection(
   const showHint = `${shape.showHint} ${profileHint(profileName)}`;
   const truncationHints = truncated ? [fullHint(shape.command, effectiveFlags, profileName)] : [];
   if (truncated && cursor !== undefined) truncationHints.push("Supply the original input cursor on stdin to replay this result with --full");
-  // Totals lists share the uniform N-of-M line; historical shapes keep
-  // their count object byte-for-byte for the concurrent totals lane.
-  if (shape.totalsNoun !== undefined) {
-    if (!result.complete) {
-      return {
-        [shape.key]: rows,
-        ...listTotals(rows.length, result.total, shape.totalsNoun, false),
-        complete: false,
-        reason: result.reason,
-        cursor: result.cursor,
-        help: [...truncationHints, `Resume losslessly with the same flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`, showHint],
-      };
-    }
-    if (!rows.length) {
-      return {
-        [shape.key]: rows,
-        ...listTotals(rows.length, result.total, shape.totalsNoun, true),
-        complete: true,
-        help: [
-          `mg-axi ${shape.command} --filter <odata-filter> ${profileHint(profileName)}`,
-          shape.emptyHint,
-        ],
-      };
-    }
-    return {
-      [shape.key]: rows,
-      ...listTotals(rows.length, result.total, shape.totalsNoun, true),
-      complete: true,
-      help: [...truncationHints, showHint],
-    };
-  }
   if (!result.complete) {
     return {
       [shape.key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, shape.plural, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, `Resume losslessly with the same flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`, showHint],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
     return {
       [shape.key]: rows,
-      count,
+      ...listTotals(rows.length, result.total, shape.plural, true),
+      complete: true,
       help: [
         `mg-axi ${shape.command} --filter <odata-filter> ${profileHint(profileName)}`,
         shape.emptyHint,
       ],
     };
   }
-  return { [shape.key]: rows, count, help: [...truncationHints, showHint] };
+  return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.plural, true), complete: true, help: [...truncationHints, showHint] };
 }
 
 interface SingleShape {
@@ -599,7 +570,7 @@ const STRENGTH_LIST: CollectionShape = {
   showHint: "mg-axi entra conditional-access auth-strength-policy show --id <auth-strength-policy-id>",
   emptyHint: "0 authentication-strength policies matched; the absence of results is the answer, not an error",
   preserveType: false,
-  totalsNoun: "auth-strength policies",
+  plural: "auth-strength policies",
 };
 
 const COMBO_LIST: CollectionShape = {
@@ -615,7 +586,7 @@ const COMBO_LIST: CollectionShape = {
   emptyHint: "0 combination configurations matched; the absence of results is the answer, not an error",
   preserveType: true,
   parent: { param: "authenticationStrengthPolicy-id", flag: "policy", label: "authentication-strength policy ID owning the combination configurations" },
-  totalsNoun: "combination configurations",
+  plural: "combination configurations",
 };
 
 const MODE_LIST: CollectionShape = {
@@ -630,7 +601,7 @@ const MODE_LIST: CollectionShape = {
   showHint: "mg-axi entra conditional-access auth-method-mode show --id <auth-method-mode-id>",
   emptyHint: "0 authentication method modes matched; the absence of results is the answer, not an error",
   preserveType: false,
-  totalsNoun: "auth-method modes",
+  plural: "auth-method modes",
 };
 
 const TEMPLATE_LIST: CollectionShape = {
@@ -645,7 +616,7 @@ const TEMPLATE_LIST: CollectionShape = {
   showHint: "mg-axi entra conditional-access template show --id <template-id>",
   emptyHint: "0 Conditional Access templates matched; the absence of results is the answer, not an error",
   preserveType: false,
-  totalsNoun: "templates",
+  plural: "templates",
 };
 
 const STRENGTH_SHOW: SingleShape = {

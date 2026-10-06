@@ -188,7 +188,7 @@ Relationship rows default to `id` and `displayName`; `--select` accepts only `id
 Returned `@odata.type` stays visible alongside any `--fields` projection.
 Group lists return `groups`, member lists return `members`, parent-membership lists return `memberOf`, and single-group reads return `group`.
 Group and relationship lists report uniform totals through the shared list-totals helper: `total` holds the server-supplied `@odata.count` when the query carries `$count` (filtered reads) and `null` otherwise, beside a `count` line such as `3 of 10 groups`, `3 groups` or, when the total is unknown and more pages remain, `3 groups shown, more available`.
-The same helper covers the other wired core-directory lists: users, applications, service principals, owners, devices, administrative units and unit members, contacts, direct reports and memberships, directory roles, role assignments and PIM eligible/active assignments, directory objects, deleted items, domains and DNS records, contracts, organizations and branding localizations, and subscriptions. Remaining list families keep the previous `count: { returned, complete }` shape and follow the same helper in the next piece.
+The same helper covers the other wired core-directory lists: users, applications, service principals, owners, devices, administrative units and unit members, contacts, direct reports and memberships, directory roles, role assignments and PIM eligible/active assignments, group PIM assignment/eligibility schedules, instances and eligibility requests, directory objects, deleted items, domains and DNS records, contracts, organizations and branding localizations, and subscriptions. Remaining list families keep the previous `count: { returned, complete }` shape and follow the same helper in the next piece.
 `complete` names pagination state, with `reason` and an opaque `cursor` on partial reads.
 The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to group and relationship reads.
 Resume relationships with the same `--group` and direct or `--transitive` command, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
@@ -224,6 +224,36 @@ Delegated callers additionally need a supported directory role per operation (fo
 Denied reads name that role requirement instead of only the generic grant/role/licence cause.
 Built-in roles are base inventory and custom role assignments need P1; PIM reads need P2 or ID Governance.
 Role assignment, activation and every other PIM mutation belongs to later write slices, never to these reads.
+
+Read PIM-for-Groups assignment and eligibility through ten views; delegated profiles first need explicit login with the read scopes:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/PrivilegedAssignmentSchedule.Read.AzureADGroup,https://graph.microsoft.com/PrivilegedEligibilitySchedule.Read.AzureADGroup
+mg-axi entra pim group-assignment-schedule list --profile soc --filter "groupId eq '<group-id>'"
+mg-axi entra pim group-assignment-schedule show --profile soc --id <assignment-schedule-id>
+mg-axi entra pim group-assignment-instance list --profile soc --filter "principalId eq '<principal-id>'"
+mg-axi entra pim group-assignment-instance show --profile soc --id <assignment-instance-id>
+mg-axi entra pim group-eligibility-schedule list --profile soc --filter "groupId eq '<group-id>'"
+mg-axi entra pim group-eligibility-schedule show --profile soc --id <eligibility-schedule-id>
+mg-axi entra pim group-eligibility-instance list --profile soc --filter "groupId eq '<group-id>'"
+mg-axi entra pim group-eligibility-instance show --profile soc --id <eligibility-instance-id>
+mg-axi entra pim group-eligibility-request list --profile soc --filter "groupId eq '<group-id>'"
+mg-axi entra pim group-eligibility-request show --profile soc --id <eligibility-request-id>
+```
+
+Assignment schedules govern group membership or ownership over time and instances are the provisioned windows, never the schedule itself.
+Eligibility schedules govern who may activate and are not active grants, while eligibility instances are the provisioned eligibility windows and requests carry the ask plus its outcome.
+Every list requires `--filter` with an `eq` clause on `groupId` or `principalId` scoping the list to one group or principal, and the requirement fails validation before credentials.
+Assignment schedule and instance lists default to `id`, `principalId`, `groupId`, `accessId` and `assignmentType`; eligibility schedule and instance lists default to `id`, `principalId`, `groupId`, `accessId` and `memberType`; eligibility-request lists default to `id`, `action`, `status`, `principalId`, `groupId` and `accessId`.
+Every show defaults to its full reviewed property set, except eligibility-request show omits `justification` unless an explicit `--select` names it.
+`--select` requests properties from the [reviewed group PIM property sets](src/entra-group-pim.ts); `--fields` must be a subset of the fetched selection.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; these collections document no `$count`, so the uniform `count` totals name the returned rows with a `null` total unless a page carries a server total.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply; resume a list with the same `--filter`, profile, scopes and API version.
+Delegated assignment reads default to `https://graph.microsoft.com/PrivilegedAssignmentSchedule.Read.AzureADGroup` and eligibility reads to `https://graph.microsoft.com/PrivilegedEligibilitySchedule.Read.AzureADGroup`, while application profiles use the configured `.default` audience and reject `--scopes`.
+Delegated callers additionally need owner or member of the group or a supported directory role scoped at directory level (Global Reader or Privileged Role Administrator for role-assignable groups; otherwise Global Reader, Directory Writer, Groups Administrator, Identity Governance Administrator or User Administrator).
+Denied reads name that scope, role and licensing requirement instead of only the generic grant/role/licence cause.
+PIM for Groups needs P2 or ID Governance, and delegated personal Microsoft accounts are not supported.
+Assignment requests, approvals, `filterByCurrentUser` functions, group/principal navigation, resources, every count/ref/cast tail, beta and all mutations stay out; assignment requests stay out because their least privilege is the write scope `PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup`.
 
 Read access reviews through ten views; delegated profiles first need explicit login with the read scope:
 

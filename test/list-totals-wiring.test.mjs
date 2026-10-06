@@ -20,6 +20,7 @@ const ID_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const CONTACT_ID = "25caf6a2-d5cb-470d-8940-20ba795ef62d";
 const AU_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const ORG_ID = "84841066-274d-4ec0-a5c1-276be684bdd3";
+const GROUP_PIM_FILTER = `groupId eq '${ID_B}'`;
 
 function setupProfiles() {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-list-totals-"));
@@ -280,6 +281,56 @@ const wired = [
     rows: () => [
       { id: ID_A, skuPartNumber: "ENTERPRISEPACK", status: "Enabled" },
       { id: ID_B, skuPartNumber: "FLOW_FREE", status: "Suspended" },
+    ],
+  },
+  {
+    name: "pim group-assignment-schedule list",
+    argv: ["entra", "pim", "group-assignment-schedule", "list", "--profile", "soc", "--filter", GROUP_PIM_FILTER],
+    key: "assignmentSchedules",
+    noun: "assignment schedules",
+    rows: () => [
+      { id: ID_A, principalId: ID_A, groupId: ID_B, accessId: "member", assignmentType: "Assigned" },
+      { id: ID_B, principalId: ID_B, groupId: ID_B, accessId: "owner", assignmentType: "Activated" },
+    ],
+  },
+  {
+    name: "pim group-assignment-instance list",
+    argv: ["entra", "pim", "group-assignment-instance", "list", "--profile", "soc", "--filter", GROUP_PIM_FILTER],
+    key: "assignmentScheduleInstances",
+    noun: "assignment instances",
+    rows: () => [
+      { id: ID_A, principalId: ID_A, groupId: ID_B, accessId: "member", assignmentType: "Activated" },
+      { id: ID_B, principalId: ID_B, groupId: ID_B, accessId: "owner", assignmentType: "Activated" },
+    ],
+  },
+  {
+    name: "pim group-eligibility-schedule list",
+    argv: ["entra", "pim", "group-eligibility-schedule", "list", "--profile", "soc", "--filter", GROUP_PIM_FILTER],
+    key: "eligibilitySchedules",
+    noun: "eligibility schedules",
+    rows: () => [
+      { id: ID_A, principalId: ID_A, groupId: ID_B, accessId: "member", memberType: "Direct" },
+      { id: ID_B, principalId: ID_B, groupId: ID_B, accessId: "owner", memberType: "Direct" },
+    ],
+  },
+  {
+    name: "pim group-eligibility-instance list",
+    argv: ["entra", "pim", "group-eligibility-instance", "list", "--profile", "soc", "--filter", GROUP_PIM_FILTER],
+    key: "eligibilityScheduleInstances",
+    noun: "eligibility instances",
+    rows: () => [
+      { id: ID_A, principalId: ID_A, groupId: ID_B, accessId: "member", memberType: "Direct" },
+      { id: ID_B, principalId: ID_B, groupId: ID_B, accessId: "owner", memberType: "Direct" },
+    ],
+  },
+  {
+    name: "pim group-eligibility-request list",
+    argv: ["entra", "pim", "group-eligibility-request", "list", "--profile", "soc", "--filter", GROUP_PIM_FILTER],
+    key: "eligibilityScheduleRequests",
+    noun: "eligibility requests",
+    rows: () => [
+      { id: ID_A, action: "adminAssign", status: "Provisioned", principalId: ID_A, groupId: ID_B, accessId: "member" },
+      { id: ID_B, action: "adminAssign", status: "Provisioned", principalId: ID_B, groupId: ID_B, accessId: "member" },
     ],
   },
 ];

@@ -76,6 +76,8 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra service-principal ", "applications and consent grants"],
   ["entra risky-user ", "risk"],
   ["entra risk-detection ", "risk"],
+  ["entra risky-service-principal ", "risk"],
+  ["entra service-principal-risk-detection ", "risk"],
   ["entra conditional-access ", "Conditional Access"],
   ["entra identity-provider ", "identity providers"],
   ["entra federation-configuration ", "federation configurations"],

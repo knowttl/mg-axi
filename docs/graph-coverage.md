@@ -23,6 +23,8 @@ Detail, relationship, premium property, and write contracts require their own in
 | 1 Directory audits | [/auditLogs/directoryAudits](https://learn.microsoft.com/en-us/graph/api/directoryaudit-list?view=graph-rest-1.0) | D/A AuditLog.Read.All. |
 | 1 Risky users | [/identityProtection/riskyUsers](https://learn.microsoft.com/en-us/graph/api/riskyuser-list?view=graph-rest-1.0) | D/A IdentityRiskyUser.Read.All. |
 | 1 Risk detections | [/identityProtection/riskDetections](https://learn.microsoft.com/en-us/graph/api/riskdetection-list?view=graph-rest-1.0) | D/A IdentityRiskEvent.Read.All. |
+| 1 Risky service principals | [/identityProtection/riskyServicePrincipals](https://learn.microsoft.com/en-us/graph/api/identityprotectionroot-list-riskyserviceprincipals?view=graph-rest-1.0) | D/A IdentityRiskyServicePrincipal.Read.All. |
+| 1 Service-principal risk detections | [/identityProtection/servicePrincipalRiskDetections](https://learn.microsoft.com/en-us/graph/api/identityprotectionroot-list-serviceprincipalriskdetections?view=graph-rest-1.0) | D/A IdentityRiskEvent.Read.All. |
 | 2 Applications | [/applications](https://learn.microsoft.com/en-us/graph/api/application-list?view=graph-rest-1.0) | D/A Application.Read.All. |
 | 2 Service principals | [/servicePrincipals](https://learn.microsoft.com/en-us/graph/api/serviceprincipal-list?view=graph-rest-1.0) | D/A Application.Read.All. |
 | 2 Directory roles | [/roleManagement/directory/roleAssignments](https://learn.microsoft.com/en-us/graph/api/rbacapplication-list-roleassignments?view=graph-rest-1.0) | D/A RoleManagement.Read.Directory. |
@@ -66,6 +68,7 @@ All rows below are v1.0; D/A distinctions and field/role constraints still belon
 | Sign-in/audit Graph reporting | Conservative P1/P2 deployment prerequisite until the operation's documented access distinction is resolved; base logs and Graph access guidance differ. | [Activity log access](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-access-activity-logs). |
 | Risky users / full protection | The riskyUsers API requires P2; full Identity Protection investigation requires P2/Suite. | [Risky-user API requirement](https://learn.microsoft.com/en-us/graph/api/riskyuser-get?view=graph-rest-1.0), [Identity Protection](https://learn.microsoft.com/en-us/entra/id-protection/overview-identity-protection). |
 | Risk detections | API permits P1 or P2; full details need P2. | [Risk detections](https://learn.microsoft.com/en-us/graph/api/riskdetection-list?view=graph-rest-1.0). |
+| Workload risk | The riskyServicePrincipal and servicePrincipalRiskDetection APIs require Microsoft Entra Workload Identities Premium; service-principal detections report riskDetail and riskLevel hidden without it. | [Risky-service-principal list](https://learn.microsoft.com/en-us/graph/api/identityprotectionroot-list-riskyserviceprincipals?view=graph-rest-1.0), [service-principal detection list](https://learn.microsoft.com/en-us/graph/api/identityprotectionroot-list-serviceprincipalriskdetections?view=graph-rest-1.0). |
 | Directory roles / PIM | Built-in roles base, custom role assignments P1, PIM P2 or ID Governance. | [Licensing](https://learn.microsoft.com/en-us/entra/fundamentals/licensing), [Governance licensing](https://learn.microsoft.com/en-us/entra/id-governance/licensing-fundamentals). |
 | Administrative units | P1 scoped administrators, Free members; dynamic membership P1. | [Administrative units](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/administrative-units). |
 | Reviews, entitlements, lifecycle | P2 legacy capabilities versus ID Governance advanced features; not one uniform licence. | [Governance licensing](https://learn.microsoft.com/en-us/entra/id-governance/licensing-fundamentals). |
@@ -81,6 +84,7 @@ Administrative units use P1 for scoped administrators and Free for members; dyna
 These distinctions are supported by [Entra licensing](https://learn.microsoft.com/en-us/entra/fundamentals/licensing), [administrative-unit requirements](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/administrative-units), and [Governance licensing](https://learn.microsoft.com/en-us/entra/id-governance/licensing-fundamentals).
 
 The licence matrix above distinguishes risky-user API access from risk-detection detail access.
+Workload-identity reads follow the same pattern one level up: the risky-service-principal and service-principal-detection APIs require Workload Identities Premium, and hidden riskDetail/riskLevel values report that licence boundary rather than no risk.
 See [README.md](../README.md) for the implemented risk reads, limited/hidden-value handling and sign-in correlation workflow.
 
 The licensing overview makes base sign-in/audit logs available on Free, while [Graph access guidance](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-access-activity-logs) describes P1/P2 tenants.

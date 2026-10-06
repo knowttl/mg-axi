@@ -1054,43 +1054,9 @@ for (const entry of wired) {
 
 // Catalogue enumeration: every entra list leaf renders uniform totals. A
 // leaf counts as wired when its flag-free argv path appears in the table
-// above; the pending set names the leaves owned by the parallel
-// mg-list-totals-4 piece (federation configurations, grants, group
-// lifecycle, identity providers, lifecycle workflows, multi-tenant
-// organization, on-premises sync, risk, risk prevention, terms of use).
-// Any other unwired leaf - including lists added later, such as the
-// concurrent conditional-access piece's new commands - fails this test.
-const pendingTotals = new Set([
-  "entra federation-configuration list",
-  "entra fraud-protection-provider list",
-  "entra web-application-firewall-provider list",
-  "entra web-application-firewall-verification list",
-  "entra service-principal app-role-assignment list",
-  "entra service-principal oauth2-grant list",
-  "entra group-lifecycle-policy list",
-  "entra group-setting-template list",
-  "entra identity-provider list",
-  "entra lifecycle run list",
-  "entra lifecycle run subject-processing-result list",
-  "entra lifecycle run task-processing-result list",
-  "entra lifecycle run user-processing-result list",
-  "entra lifecycle subject-processing-result list",
-  "entra lifecycle task-definition list",
-  "entra lifecycle task-report list",
-  "entra lifecycle user-processing-result list",
-  "entra lifecycle workflow list",
-  "entra lifecycle workflow-template list",
-  "entra multi-tenant-organization tenant list",
-  "entra on-premises-synchronization list",
-  "entra risk-detection list",
-  "entra risky-service-principal history list",
-  "entra risky-service-principal list",
-  "entra risky-user list",
-  "entra service-principal-risk-detection list",
-  "entra agreement acceptance list",
-  "entra agreement-acceptance list",
-  "entra agreement list",
-]);
+// above; the pending set names unwired leaves owned by concurrent pieces.
+// Any other unwired leaf fails this test.
+const pendingTotals = new Set([]);
 
 test("catalogue list leaves are all wired or explicitly pending", () => {
   // No list argv carries positionals: every value rides behind a flag, so

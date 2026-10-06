@@ -38,8 +38,8 @@ import type { AnyProfile } from "./profiles.js";
 // --filter passes through as plain $filter with no $count or ConsistencyLevel
 // contract. serviceManagementDetails documents no query parameters, so both
 // service-management-detail reads run queryless and project locally. The
-// $count scalars and the tenantRelationship container root stay scheduled
-// for later EXT-04 subfamilies, as do the multi-tenant-organization reads
+// six $count scalars ship in this module; the tenantRelationship container
+// root stays scheduled for a later EXT-04 subfamily, as do the multi-tenant-organization reads
 // (shipped separately) and the tenant-lookup functions (shipped as
 // tenant-information show under mg-ext-04e). Beta stays out. No delegated-admin mutation exists in this slice:
 // relationship creation, approval and termination are writes.

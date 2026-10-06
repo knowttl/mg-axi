@@ -1184,8 +1184,17 @@ Missing profiles, an unknown selected profile or invalid configuration fail befo
 Read failures report per profile with rerun guidance and a nonzero exit.
 
 The installable skill lives at [skills/mg-axi/SKILL.md](skills/mg-axi/SKILL.md).
-Install it explicitly with `npx skills add knowttl/mg-axi --skill mg-axi`; the setup command only shows guidance and does not install skills.
-mg-axi ships no session hook, so the skill is the integration path.
+Agent discovery has two install paths, and either suffices alone.
+Install the skill explicitly with `npx skills add knowttl/mg-axi --skill mg-axi`; the setup command only shows guidance and does not install skills.
+For ambient context at every agent session start instead, install the CLI globally and opt into the session hook:
+```sh
+npm install --global @knowttl/mg-axi
+mg-axi setup hooks
+```
+This installs a `SessionStart` hook for Claude Code, Codex and OpenCode that prints a short local-only summary (configured profile names with tenant labels, auth-cache presence, write posture and version).
+The hook makes no network, Graph or sign-in call, and prints a short `not configured` record with exit 0 when unconfigured.
+Restart the agent session after running the installer.
+No other ordinary command installs hooks, plugins or configuration.
 The skill file is generated in full from the template in [src/docs.ts](src/docs.ts) and the command catalogue; [docs/coverage.md](docs/coverage.md) also uses the discovery inventory.
 After building, regenerate both with `corepack pnpm run docs:generate` and verify freshness with `corepack pnpm run docs:check`; CI runs the freshness check.
 Critical journeys stay packaged offline: `test/pack.test.mjs` drives setup, doctor and the user, group, Conditional Access and sign-in reads through the packaged executable with fixture credentials and blocked networking.

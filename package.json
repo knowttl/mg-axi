@@ -4,7 +4,8 @@
   "description": "Agent-facing Microsoft Graph CLI, read-only by default",
   "type": "module",
   "bin": {
-    "mg-axi": "dist/bin/mg-axi.js"
+    "mg-axi": "dist/bin/mg-axi.js",
+    "mg-axi-hook": "dist/bin/mg-axi-hook.js"
   },
   "publishConfig": {
     "access": "public"

@@ -4,8 +4,9 @@ import type { AnyProfile } from "./profiles.js";
 
 // EXT-02 lifecycle-workflows reads: the read-only workflow, workflow
 // template, task definition and tenant-settings first part, the
-// second-part top-level run and user/subject processing-result reads and
-// the third-part task-report reads. See
+// second-part top-level run and user/subject processing-result reads, the
+// third-part task-report reads and the fourth-part run-nested processing
+// results. See
 // README.md for the supported commands and usage. Operation construction
 // stays beside its command; the shared session owns URLs, credentials,
 // paging, retries and error translation, and the SDK owns TOON rendering.
@@ -17,11 +18,13 @@ import type { AnyProfile } from "./profiles.js";
 // workflowtemplate-get, lifecycleworkflowscontainer-list-taskdefinitions,
 // taskdefinition-get, lifecyclemanagementsettings-get, workflow-list-runs,
 // run-get, workflow-list-userprocessingresults, userprocessingresult-get,
-// run-list-subjectprocessingresults, subjectprocessingresult-get,
+// run-list-userprocessingresults, run-list-subjectprocessingresults,
+// subjectprocessingresult-get, run-list-taskprocessingresults,
 // workflow-list-taskreports and task-get operation documentation and the
 // reviewed resource property sets for workflow, workflowTemplate,
 // taskDefinition, lifecycleManagementSettings, run, userProcessingResult,
-// subjectProcessingResult, taskReport and task, on 2026-10-06.
+// subjectProcessingResult, taskProcessingResult, taskReport and task, on
+// 2026-10-06.
 // Workflow list/show take D/A
 // LifecycleWorkflows-Workflow.ReadBasic.All as the least privileged choice
 // (LifecycleWorkflows-Workflow.Read.All or LifecycleWorkflows.Read.All for
@@ -49,6 +52,15 @@ import type { AnyProfile } from "./profiles.js";
 // taskDefinition navigations return the related objects whole (task
 // arguments and definition parameters ride along as reviewed fields) while
 // taskProcessingResults, the subject link and every $expand stay out.
+// The run-nested user, subject and task processing-result singles share
+// their top-level query contracts: the userprocessingresult-get page covers
+// the run-nested user single and documents $select, the
+// subjectprocessingresult-get page covers the run-nested subject single
+// and documents $expand only (whole rows), and the run-nested task single
+// has no operation-level page (like the taskReport-nested singles), so it
+// arrives whole with --select refused. The taskProcessingResult subject,
+// task and workflowSubject navigations stay out with $expand: task results
+// are personal data and carry failure detail, never subject identity.
 // The taskReports list documents $select/$filter (with $orderby/$expand
 // unreviewed); the taskReport get and the taskReport-nested task and
 // taskDefinition singles have no operation-level page (the task-get page
@@ -56,14 +68,18 @@ import type { AnyProfile } from "./profiles.js";
 // there), so those three singles arrive whole and are projected locally
 // with --fields (--select is refused before credentials). Processing results
 // are personal data: user and subject defaults carry status and counts
-// only, never the subject link. Deeper execution detail (run-nested and
-// third-level processing results, reprocessed runs, subjects, workflow and
-// template tasks, createdBy, lastModifiedBy, previewScope, executionScope,
-// versions, insights, deleted items, custom task extensions) needs its own
+// only, never the subject link. Deeper execution detail (third-level
+// processing results under a user or subject result, reprocessed runs,
+// subjects, workflow and template tasks, createdBy, lastModifiedBy,
+// previewScope, executionScope, versions, insights, deleted items, custom
+// task extensions) needs its own
 // sub-read and stays out, as do the summary functions (bracketed start/end
 // arguments outside the session-guard function-binding allowlist).
 // Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra
-// Suite (every governed user, not only administrators). No mutation (no
+// Suite (every governed user, not only administrators). Run-nested results
+// scope one run's processing outcomes: user results aggregate one user's
+// execution, subject results mirror them for non-user subjects, and task
+// results carry one task's outcome with failure detail. No mutation (no
 // workflow create/update/delete/activate/run, no settings update) and no
 // beta.
 
@@ -167,6 +183,19 @@ export const KNOWN_SUBJECT_PROCESSING_FIELDS: readonly string[] = [
   "workflowExecutionType",
   "workflowVersion",
 ];
+// Task processing results carry one task's outcome within one run.
+// failureReason and processingInfo are human-readable outcome detail (not
+// identity); the subject, task and workflowSubject navigations carry the
+// targeted identity and need $expand, so they stay out with it.
+export const KNOWN_TASK_PROCESSING_FIELDS: readonly string[] = [
+  "id",
+  "completedDateTime",
+  "createdDateTime",
+  "failureReason",
+  "processingInfo",
+  "processingStatus",
+  "startedDateTime",
+];
 // Task reports aggregate one workflow task's processing results within one
 // run. runId names the owning run; the task, taskDefinition and
 // taskProcessingResults relationships need their own sub-reads ($expand
@@ -206,6 +235,7 @@ const RUN_KNOWN = new Set(KNOWN_RUN_FIELDS);
 const USER_PROCESSING_KNOWN = new Set(KNOWN_USER_PROCESSING_FIELDS);
 const SUBJECT_PROCESSING_KNOWN = new Set(KNOWN_SUBJECT_PROCESSING_FIELDS);
 const TASK_REPORT_KNOWN = new Set(KNOWN_TASK_REPORT_FIELDS);
+const TASK_PROCESSING_KNOWN = new Set(KNOWN_TASK_PROCESSING_FIELDS);
 const TASK_KNOWN = new Set(KNOWN_TASK_FIELDS);
 
 // Compact rows: identifiers plus category and enablement state.
@@ -226,6 +256,8 @@ const DEFAULT_USER_PROCESSING_LIST_SELECT = ["id", "processingStatus", "failedTa
 const DEFAULT_USER_PROCESSING_SHOW_SELECT = [...DEFAULT_USER_PROCESSING_LIST_SELECT];
 const DEFAULT_SUBJECT_PROCESSING_FIELDS = ["id", "subjectType", "processingStatus", "failedTasksCount", "totalTasksCount", "totalUnprocessedTasksCount"];
 // Compact task-report rows: identifiers plus the owning run and user counts.
+const DEFAULT_TASK_PROCESSING_LIST_SELECT = ["id", "processingStatus", "failureReason"];
+const DEFAULT_TASK_PROCESSING_SHOW_SELECT = [...KNOWN_TASK_PROCESSING_FIELDS];
 const DEFAULT_TASK_REPORT_LIST_SELECT = ["id", "runId", "processingStatus", "totalUsersCount", "failedUsersCount", "successfulUsersCount"];
 const DEFAULT_TASK_REPORT_SHOW_SELECT = [...KNOWN_TASK_REPORT_FIELDS];
 const DEFAULT_TASK_SHOW_SELECT = [...KNOWN_TASK_FIELDS];
@@ -392,6 +424,14 @@ function reportId(flags: LifecycleWorkflowsFlags, help: string): string {
   return report;
 }
 
+function runId(flags: LifecycleWorkflowsFlags, help: string): string {
+  const run = flags.run === undefined ? "" : String(flags.run);
+  if (!run.trim()) {
+    throw new AxiError("--run needs the parent lifecycle workflow run ID", "VALIDATION_ERROR", [help]);
+  }
+  return run;
+}
+
 interface CollectionShape {
   command: string;
   key: string;
@@ -511,6 +551,52 @@ const TASK_REPORT_LIST: CollectionShape = {
   standing: profileName => [
     "Task reports aggregate one workflow task's results within one run: a report row never carries its task, task definition or task processing results; those belong to later slices",
     `Show one task report: mg-axi entra lifecycle task-report show --workflow <workflow-id> --id <report-id> ${profileHint(profileName)}`,
+  ],
+};
+
+const RUN_USER_PROCESSING_LIST: CollectionShape = {
+  command: "entra lifecycle run user-processing-result list",
+  key: "userProcessingResults",
+  known: USER_PROCESSING_KNOWN,
+  knownList: KNOWN_USER_PROCESSING_FIELDS,
+  defaultSelect: DEFAULT_USER_PROCESSING_LIST_SELECT,
+  defaultScopes: DEFAULT_REPORTS_SCOPES,
+  hints: REPORTS_DENIAL_HINTS,
+  emptyNote: "0 run user processing results matched; the absence of results is the answer, not an error",
+  standing: profileName => [
+    "Run user processing results aggregate one user's execution within one run and carry personal data: defaults stay minimal and the subject link is never requested",
+    `Show one run user processing result: mg-axi entra lifecycle run user-processing-result show --workflow <workflow-id> --run <run-id> --id <result-id> ${profileHint(profileName)}`,
+  ],
+};
+
+const RUN_SUBJECT_PROCESSING_LIST: CollectionShape = {
+  command: "entra lifecycle run subject-processing-result list",
+  key: "subjectProcessingResults",
+  known: SUBJECT_PROCESSING_KNOWN,
+  knownList: KNOWN_SUBJECT_PROCESSING_FIELDS,
+  defaultSelect: DEFAULT_SUBJECT_PROCESSING_FIELDS,
+  defaultScopes: DEFAULT_REPORTS_SCOPES,
+  hints: REPORTS_DENIAL_HINTS,
+  emptyNote: "0 run subject processing results matched; the absence of results is the answer, not an error",
+  queryless: true,
+  standing: profileName => [
+    "Run subject processing results mirror user results for non-user subjects within one run and carry personal data: rows arrive whole (Graph documents no $select on the list and $expand only on the get) and defaults stay minimal",
+    `Show one run subject processing result: mg-axi entra lifecycle run subject-processing-result show --workflow <workflow-id> --run <run-id> --id <result-id> ${profileHint(profileName)}`,
+  ],
+};
+
+const RUN_TASK_PROCESSING_LIST: CollectionShape = {
+  command: "entra lifecycle run task-processing-result list",
+  key: "taskProcessingResults",
+  known: TASK_PROCESSING_KNOWN,
+  knownList: KNOWN_TASK_PROCESSING_FIELDS,
+  defaultSelect: DEFAULT_TASK_PROCESSING_LIST_SELECT,
+  defaultScopes: DEFAULT_REPORTS_SCOPES,
+  hints: REPORTS_DENIAL_HINTS,
+  emptyNote: "0 run task processing results matched; the absence of results is the answer, not an error",
+  standing: profileName => [
+    "Run task processing results carry one task's outcome within one run with failure detail: a task row never carries its subject, task or workflowSubject navigations; those belong to later slices",
+    `Show one run task processing result: mg-axi entra lifecycle run task-processing-result show --workflow <workflow-id> --run <run-id> --id <result-id> ${profileHint(profileName)}`,
   ],
 };
 
@@ -1019,4 +1105,147 @@ export async function showTaskReportTaskDefinition(
     { "workflow-id": workflow, "taskReport-id": report },
     "Graph returned a malformed task definition body",
     true);
+}
+
+export async function listRunUserProcessingResults(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  const run = runId(flags, help);
+  return listCollection(RUN_USER_PROCESSING_LIST, session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "run-id": run },
+    `Resume losslessly with the same --workflow --run and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
+}
+
+export async function showRunUserProcessingResult(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  const run = runId(flags, help);
+  return showOne("userProcessingResult", "entra lifecycle run user-processing-result show",
+    USER_PROCESSING_KNOWN, KNOWN_USER_PROCESSING_FIELDS, DEFAULT_USER_PROCESSING_SHOW_SELECT,
+    DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "run-id": run, "userProcessingResult-id": String(flags.id) },
+    "Graph returned a malformed user processing result body");
+}
+
+export async function countRunUserProcessingResults(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  const run = runId(flags, help);
+  return countCollection("run user processing result", RUN_USER_PROCESSING_LIST.emptyNote, DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName, { "workflow-id": workflow, "run-id": run });
+}
+
+export async function listRunSubjectProcessingResults(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  const run = runId(flags, help);
+  return listCollection(RUN_SUBJECT_PROCESSING_LIST, session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "run-id": run },
+    `Resume losslessly with the same --workflow --run and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
+}
+
+export async function showRunSubjectProcessingResult(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  const run = runId(flags, help);
+  return showOne("subjectProcessingResult", "entra lifecycle run subject-processing-result show",
+    SUBJECT_PROCESSING_KNOWN, KNOWN_SUBJECT_PROCESSING_FIELDS, DEFAULT_SUBJECT_PROCESSING_FIELDS,
+    DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "run-id": run, "subjectProcessingResult-id": String(flags.id) },
+    "Graph returned a malformed subject processing result body",
+    true);
+}
+
+export async function countRunSubjectProcessingResults(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  const run = runId(flags, help);
+  return countCollection("run subject processing result", RUN_SUBJECT_PROCESSING_LIST.emptyNote, DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName, { "workflow-id": workflow, "run-id": run });
+}
+
+export async function listRunTaskProcessingResults(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  const run = runId(flags, help);
+  return listCollection(RUN_TASK_PROCESSING_LIST, session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "run-id": run },
+    `Resume losslessly with the same --workflow --run and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
+}
+
+export async function showRunTaskProcessingResult(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  const run = runId(flags, help);
+  return showOne("taskProcessingResult", "entra lifecycle run task-processing-result show",
+    TASK_PROCESSING_KNOWN, KNOWN_TASK_PROCESSING_FIELDS, DEFAULT_TASK_PROCESSING_SHOW_SELECT,
+    DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "run-id": run, "taskProcessingResult-id": String(flags.id) },
+    "Graph returned a malformed task processing result body",
+    true);
+}
+
+export async function countRunTaskProcessingResults(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  const run = runId(flags, help);
+  return countCollection("run task processing result", RUN_TASK_PROCESSING_LIST.emptyNote, DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName, { "workflow-id": workflow, "run-id": run });
 }

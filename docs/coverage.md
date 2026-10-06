@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 192 (190 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 201 (199 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -215,6 +215,15 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra lifecycle task-report count` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/$count` | scheduled | EXT-02 |
 | `mg-axi entra lifecycle task-report task show` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/{taskReport-id}/task` | scheduled | EXT-02 |
 | `mg-axi entra lifecycle task-report task-definition show` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/{taskReport-id}/taskDefinition` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle run user-processing-result list` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/userProcessingResults` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle run user-processing-result show` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/userProcessingResults/{userProcessingResult-id}` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle run user-processing-result count` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/userProcessingResults/$count` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle run subject-processing-result list` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/subjectProcessingResults` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle run subject-processing-result show` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/subjectProcessingResults/{subjectProcessingResult-id}` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle run subject-processing-result count` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/subjectProcessingResults/$count` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle run task-processing-result list` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle run task-processing-result show` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults/{taskProcessingResult-id}` | scheduled | EXT-02 |
+| `mg-axi entra lifecycle run task-processing-result count` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults/$count` | scheduled | EXT-02 |
 | `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |
 | `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |
 
@@ -1006,9 +1015,9 @@ Approval and subject reads carry personal data and stay scheduled for later part
 
 ## EXT-02 lifecycle-workflows scope decisions
 
-This change covers the twenty-four v1.0 lifecycle-workflows first-, second- and third-part reads above (workflow, workflow-template and task-definition list/show/count reads, the tenant settings show, top-level run and user/subject processing-result list/show/count reads, plus task-report list/show/count reads with the task and taskDefinition singles).
-Run-nested and third-level processing results, taskProcessingResults sub-reads, reprocessed runs, subject sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay scheduled for follow-up parts with no new commands or raw access approved; so do the six top-level summary functions, which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard cannot change beyond READ_SCOPES additions. Every beta operation and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.
-No new commands or raw access are approved for any lifecycle-workflows row outside the twenty-four above.
+This change covers the thirty-three v1.0 lifecycle-workflows first-, second-, third- and fourth-part reads above (workflow, workflow-template and task-definition list/show/count reads, the tenant settings show, top-level run and user/subject processing-result list/show/count reads, task-report list/show/count reads with the task and taskDefinition singles, plus run-nested user/subject/task processing-result list/show/count reads).
+Third-level processing results, taskProcessingResults sub-reads under a user or subject result, reprocessed runs, subject sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay scheduled for follow-up parts with no new commands or raw access approved; so do the six summary functions (the run user/subject summaries plus the four top-level ones), which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard cannot change beyond READ_SCOPES additions. Every beta operation and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.
+No new commands or raw access are approved for any lifecycle-workflows row outside the thirty-three above.
 
 ## Named writes
 

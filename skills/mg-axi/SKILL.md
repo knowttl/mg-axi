@@ -234,6 +234,15 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra lifecycle task-report count` | native | read |
 | `mg-axi entra lifecycle task-report task show` | native | read |
 | `mg-axi entra lifecycle task-report task-definition show` | native | read |
+| `mg-axi entra lifecycle run user-processing-result list` | native | read |
+| `mg-axi entra lifecycle run user-processing-result show` | native | read |
+| `mg-axi entra lifecycle run user-processing-result count` | native | read |
+| `mg-axi entra lifecycle run subject-processing-result list` | native | read |
+| `mg-axi entra lifecycle run subject-processing-result show` | native | read |
+| `mg-axi entra lifecycle run subject-processing-result count` | native | read |
+| `mg-axi entra lifecycle run task-processing-result list` | native | read |
+| `mg-axi entra lifecycle run task-processing-result show` | native | read |
+| `mg-axi entra lifecycle run task-processing-result count` | native | read |
 | `mg-axi api get` | native | read |
 <!-- command-registry:end -->
 

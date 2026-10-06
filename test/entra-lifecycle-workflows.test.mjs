@@ -163,6 +163,71 @@ const tr2 = {
   successfulUsersCount: 0,
 };
 const taskReports = [tr1, tr2];
+const longFailureReason = `Access denied for the target group${" with considerable detail".repeat(30)}`;
+const rupr1 = {
+  id: "a1b2c3d4-1111-4111-8111-111111111111",
+  completedDateTime: "2022-08-24T23:28:11.1348863Z",
+  failedTasksCount: 1,
+  processingStatus: "failed",
+  scheduledDateTime: "2022-08-24T23:28:01.6476553Z",
+  startedDateTime: "2022-08-24T23:28:04.490313Z",
+  totalTasksCount: 2,
+  totalUnprocessedTasksCount: 0,
+  workflowExecutionType: "scheduled",
+  workflowVersion: 12,
+  subject: { id: "ea09ac2e-77e3-4134-85f2-25ccf3c33387" },
+  taskProcessingResults: [{ id: "run-user-task-nav-expanded" }],
+};
+const rupr2 = {
+  id: "b2c3d4e5-2222-4222-8222-222222222222",
+  processingStatus: "completed",
+  failedTasksCount: 0,
+  totalTasksCount: 1,
+  totalUnprocessedTasksCount: 0,
+};
+const runUserProcessingResults = [rupr1, rupr2];
+const rspr1 = {
+  id: "c3d4e5f6-3333-4333-8333-333333333333",
+  completedDateTime: "2026-05-15T10:35:00Z",
+  failedTasksCount: 0,
+  processingStatus: "completed",
+  scheduledDateTime: "2026-05-15T10:30:00Z",
+  startedDateTime: "2026-05-15T10:30:15Z",
+  totalTasksCount: 2,
+  totalUnprocessedTasksCount: 0,
+  workflowExecutionType: "scheduled",
+  workflowVersion: 12,
+  subjectType: "user",
+  subject: { id: "d4e5f6a7-4444-4222-8222-444444444444" },
+  taskProcessingResults: [{ id: "run-subject-task-nav-expanded" }],
+};
+const rspr2 = {
+  id: "e5f6a7b8-5555-4222-8222-555555555555",
+  subjectType: "provisioningObject",
+  processingStatus: "queued",
+  failedTasksCount: 0,
+  totalTasksCount: 1,
+  totalUnprocessedTasksCount: 1,
+};
+const runSubjectProcessingResults = [rspr1, rspr2];
+const rtpr1 = {
+  id: "f6a7b8c9-6666-4222-8222-666666666666",
+  completedDateTime: "2023-01-20T17:16:03.4863553Z",
+  createdDateTime: "2023-01-20T17:16:00.9095011Z",
+  failureReason: longFailureReason,
+  processingInfo: "User was already a member of all requested groups",
+  processingStatus: "failed",
+  startedDateTime: "2023-01-20T17:16:02.8025169Z",
+  workflowSubject: { id: "a7b8c9d0-7777-4222-8222-777777777777" },
+  subject: { id: "1baa57fa-3c4e-4526-ba5a-db47a9df95f0" },
+  task: { id: "c8dbaed8-3d23-4e5a-8f65-130767639667" },
+};
+const rtpr2 = {
+  id: "a7b8c9d0-8888-4222-8222-888888888888",
+  processingStatus: "completed",
+  failureReason: null,
+};
+const runTaskProcessingResults = [rtpr1, rtpr2];
 const reportTask = {
   id: "fafa2189-cd62-4643-a825-06cab8817086",
   arguments: [{ name: "groupID", value: "e5659cb0-bcbb-4a9f-9092-90f72bd19028" }],
@@ -257,6 +322,16 @@ function lifecycleTransport() {
     if (path === `${nestedBase}/taskReports/$count`) {
       return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(taskReports.length) };
     }
+    const runNestedBase = `${nestedBase}/runs/${run1.id}`;
+    if (path === `${runNestedBase}/userProcessingResults/$count`) {
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(runUserProcessingResults.length) };
+    }
+    if (path === `${runNestedBase}/subjectProcessingResults/$count`) {
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(runSubjectProcessingResults.length) };
+    }
+    if (path === `${runNestedBase}/taskProcessingResults/$count`) {
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(runTaskProcessingResults.length) };
+    }
     if (path === `${nestedBase}/runs`) {
       if (url.searchParams.has("$skiptoken")) return json(200, { value: [run2] });
       return json(200, {
@@ -273,10 +348,23 @@ function lifecycleTransport() {
         "@odata.nextLink": `https://graph.microsoft.com${nestedBase}/taskReports?%24skiptoken=page2`,
       });
     }
+    if (path === `${runNestedBase}/userProcessingResults`) {
+      if (url.searchParams.has("$skiptoken")) return json(200, { value: [rupr2] });
+      return json(200, {
+        value: [rupr1],
+        "@odata.nextLink": `https://graph.microsoft.com${runNestedBase}/userProcessingResults?%24skiptoken=page2`,
+      });
+    }
+    if (path === `${runNestedBase}/subjectProcessingResults`) return json(200, { value: runSubjectProcessingResults });
+    if (path === `${runNestedBase}/taskProcessingResults`) return json(200, { value: runTaskProcessingResults });
     for (const report of taskReports) {
       if (path === `${nestedBase}/taskReports/${report.id}`) return json(200, report);
       if (path === `${nestedBase}/taskReports/${report.id}/task`) return json(200, reportTask);
       if (path === `${nestedBase}/taskReports/${report.id}/taskDefinition`) return json(200, td1);
+    }
+    for (const [rows, base] of [[runUserProcessingResults, `${runNestedBase}/userProcessingResults`], [runSubjectProcessingResults, `${runNestedBase}/subjectProcessingResults`], [runTaskProcessingResults, `${runNestedBase}/taskProcessingResults`]]) {
+      const nested = rows.find(row => path === `${base}/${row.id}`);
+      if (nested) return json(200, nested);
     }
     for (const [rows, base] of [[runs, `${nestedBase}/runs`], [userProcessingResults, `${nestedBase}/userProcessingResults`], [subjectProcessingResults, `${nestedBase}/subjectProcessingResults`]]) {
       const found = rows.find(row => path === `${base}/${row.id}`);
@@ -313,7 +401,7 @@ function runLifecycleCli(args, state, mode, denied = false) {
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
-      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, workflows, workflowTemplates, taskDefinitions, settings, runs, userProcessingResults, subjectProcessingResults, taskReports, reportTask, denied }),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, workflows, workflowTemplates, taskDefinitions, settings, runs, userProcessingResults, subjectProcessingResults, taskReports, reportTask, runUserProcessingResults, runSubjectProcessingResults, runTaskProcessingResults, denied }),
     },
   });
 }
@@ -640,6 +728,325 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         `https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/userProcessingResults/$count`,
         `https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/subjectProcessingResults/$count`,
       ]);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists run user processing results with minimal personal-data defaults`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "run", "user-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.userProcessingResults, [
+        { id: rupr1.id, processingStatus: "failed", failedTasksCount: 1, totalTasksCount: 2, totalUnprocessedTasksCount: 0 },
+        { id: rupr2.id, processingStatus: "completed", failedTasksCount: 0, totalTasksCount: 1, totalUnprocessedTasksCount: 0 },
+      ]);
+      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("entra lifecycle run user-processing-result show --workflow <workflow-id> --run <run-id> --id <result-id>")));
+      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/runs/${run1.id}/userProcessingResults?`));
+      if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(reportsScopes)));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists run user processing results with a plain documented $filter`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "run", "user-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile,
+        "--filter", "processingStatus eq 'failed'"], overrides);
+      assert.equal(result.count.returned, 2);
+      const sent = new URL(requests[0].url).searchParams;
+      assert.equal(sent.get("$filter"), "processingStatus eq 'failed'");
+      assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} resumes a capped run user list through its opaque cursor`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const first = await executeArgv(["entra", "lifecycle", "run", "user-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile, "--limit", "1"], overrides);
+      assert.deepEqual(first.userProcessingResults.map(row => row.id), [rupr1.id]);
+      assert.equal(first.count.complete, false);
+      assert.equal(typeof first.cursor, "string");
+      const second = await executeArgv(["entra", "lifecycle", "run", "user-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile, "--cursor", first.cursor], overrides);
+      assert.deepEqual(second.userProcessingResults.map(row => row.id), [rupr2.id]);
+      assert.deepEqual(second.count, { returned: 1, complete: true });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one run user processing result without the subject link`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "run", "user-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--id", rupr1.id, "--profile", profile], overrides);
+      assert.ok(!Object.hasOwn(result.userProcessingResult, "subject"));
+      assert.ok(!Object.hasOwn(result.userProcessingResult, "taskProcessingResults"));
+      assert.deepEqual(result.userProcessingResult, {
+        id: rupr1.id,
+        processingStatus: "failed",
+        failedTasksCount: 1,
+        totalTasksCount: 2,
+        totalUnprocessedTasksCount: 0,
+      });
+      assert.ok(new URL(requests[0].url).searchParams.has("$select"));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} unknown run user processing result ids report absence, not emptiness`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      await assert.rejects(executeArgv(["entra", "lifecycle", "run", "user-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--id", "result-missing", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists run subject processing results whole with local field projection`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "run", "subject-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], overrides);
+      assert.ok(!new URL(requests[0].url).searchParams.has("$select"));
+      assert.equal(requests[0].url, `https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/runs/${run1.id}/subjectProcessingResults`);
+      assert.deepEqual(result.subjectProcessingResults, [
+        { id: rspr1.id, subjectType: "user", processingStatus: "completed", failedTasksCount: 0, totalTasksCount: 2, totalUnprocessedTasksCount: 0 },
+        { id: rspr2.id, subjectType: "provisioningObject", processingStatus: "queued", failedTasksCount: 0, totalTasksCount: 1, totalUnprocessedTasksCount: 1 },
+      ]);
+      assert.deepEqual(result.count, { returned: 2, complete: true });
+      const narrowed = await executeArgv(["entra", "lifecycle", "run", "subject-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile,
+        "--fields", "id,subjectType"], overrides);
+      assert.deepEqual(narrowed.subjectProcessingResults, [
+        { id: rspr1.id, subjectType: "user" },
+        { id: rspr2.id, subjectType: "provisioningObject" },
+      ]);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one run subject processing result whole with no $select`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "run", "subject-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--id", rspr1.id, "--profile", profile], overrides);
+      assert.ok(!new URL(requests[0].url).searchParams.has("$select"));
+      assert.ok(!Object.hasOwn(result.subjectProcessingResult, "subject"));
+      assert.deepEqual(result.subjectProcessingResult, {
+        id: rspr1.id,
+        subjectType: "user",
+        processingStatus: "completed",
+        failedTasksCount: 0,
+        totalTasksCount: 2,
+        totalUnprocessedTasksCount: 0,
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} run subject reads refuse --select before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "run", "subject-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile, "--select", "id"], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "run", "subject-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--id", rspr1.id, "--profile", profile, "--select", "id"], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists run task processing results with compact rows and the reports scope`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "run", "task-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.taskProcessingResults, [
+        { id: rtpr1.id, processingStatus: "failed", failureReason: `${longFailureReason.slice(0, 500)}... (truncated, ${longFailureReason.length} chars total)` },
+        { id: rtpr2.id, processingStatus: "completed", failureReason: null },
+      ]);
+      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("entra lifecycle run task-processing-result show --workflow <workflow-id> --run <run-id> --id <result-id>")));
+      assert.ok(result.help.some(hint => hint.includes("--full")));
+      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/runs/${run1.id}/taskProcessingResults?`));
+      if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(reportsScopes)));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists run task processing results with a plain documented $filter`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "run", "task-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile,
+        "--filter", "processingStatus eq 'failed'"], overrides);
+      assert.equal(result.count.returned, 2);
+      const sent = new URL(requests[0].url).searchParams;
+      assert.equal(sent.get("$filter"), "processingStatus eq 'failed'");
+      assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one run task processing result whole with failure detail`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "run", "task-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--id", rtpr1.id, "--profile", profile, "--full"], overrides);
+      assert.ok(!new URL(requests[0].url).searchParams.has("$select"));
+      assert.ok(!Object.hasOwn(result.taskProcessingResult, "subject"));
+      assert.ok(!Object.hasOwn(result.taskProcessingResult, "task"));
+      assert.ok(!Object.hasOwn(result.taskProcessingResult, "workflowSubject"));
+      assert.deepEqual(result.taskProcessingResult, {
+        id: rtpr1.id,
+        completedDateTime: "2023-01-20T17:16:03.4863553Z",
+        createdDateTime: "2023-01-20T17:16:00.9095011Z",
+        failureReason: longFailureReason,
+        processingInfo: "User was already a member of all requested groups",
+        processingStatus: "failed",
+        startedDateTime: "2023-01-20T17:16:02.8025169Z",
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} run task reads refuse --select before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "run", "task-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--id", rtpr1.id, "--profile", profile, "--select", "id"], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} run-nested reads require --workflow and --run before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "run", "user-processing-result", "list", "--run", run1.id, "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /--workflow/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "run", "user-processing-result", "list", "--workflow", wf1.id, "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /--run/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "run", "subject-processing-result", "count", "--workflow", wf1.id, "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /--run/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "run", "task-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /--id/.test(error.message),
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} counts run-nested processing results as scalars`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const userCount = await executeArgv(["entra", "lifecycle", "run", "user-processing-result", "count", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], overrides);
+      assert.deepEqual(userCount, { count: { returned: 2, complete: true } });
+      const subjectCount = await executeArgv(["entra", "lifecycle", "run", "subject-processing-result", "count", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], overrides);
+      assert.deepEqual(subjectCount, { count: { returned: 2, complete: true } });
+      const taskCount = await executeArgv(["entra", "lifecycle", "run", "task-processing-result", "count", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], overrides);
+      assert.deepEqual(taskCount, { count: { returned: 2, complete: true } });
+      assert.deepEqual(requests.map(request => request.url), [
+        `https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/runs/${run1.id}/userProcessingResults/$count`,
+        `https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/runs/${run1.id}/subjectProcessingResults/$count`,
+        `https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/runs/${run1.id}/taskProcessingResults/$count`,
+      ]);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} denied run-nested reads surface scope, role and licensing`, async () => {
+    const state = setupProfiles();
+    try {
+      const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
+      const { overrides } = overridesFor(mode, denied);
+      await assert.rejects(executeArgv(["entra", "lifecycle", "run", "task-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        assert.ok(error.suggestions.some(hint => hint.includes("LifecycleWorkflows-Reports.Read.All")));
+        assert.ok(error.suggestions.some(hint => hint.includes("Lifecycle Workflows Administrator")));
+        assert.ok(error.suggestions.some(hint => hint.includes("Entra ID Governance or Microsoft Entra Suite")));
+        return /grant, role, licence/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} navigation names fail as unknown properties on run-nested reads`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "run", "user-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile, "--select", "id,subject"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /Unknown property subject/.test(error.message)
+          && error.suggestions.join("\n").includes("Known properties: "),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "run", "task-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--id", rtpr1.id, "--profile", profile, "--fields", "id,task"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /Unknown property task/.test(error.message),
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} run-nested reads refuse beta before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "run", "user-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile, "--api-version", "beta"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /v1\.0 only/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "run", "task-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--id", rtpr1.id, "--profile", profile, "--api-version", "beta"], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
     } finally {
       teardownProfiles(state);
     }
@@ -1222,6 +1629,53 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const subjectsCounted = runLifecycleCli(["entra", "lifecycle", "subject-processing-result", "count", "--workflow", wf1.id, "--profile", profile], state, mode);
       assert.equal(subjectsCounted.status, 0, subjectsCounted.stdout);
       assert.deepEqual(decode(subjectsCounted.stdout).count, { returned: 2, complete: true });
+
+      const runUsersListed = runLifecycleCli(["entra", "lifecycle", "run", "user-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], state, mode);
+      assert.equal(runUsersListed.status, 0, runUsersListed.stdout);
+      assert.deepEqual(decode(runUsersListed.stdout).userProcessingResults.map(row => row.id), [rupr1.id, rupr2.id]);
+      assert.ok(!Object.hasOwn(decode(runUsersListed.stdout).userProcessingResults[0], "subject"));
+
+      const runUserShown = runLifecycleCli(["entra", "lifecycle", "run", "user-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--id", rupr1.id, "--profile", profile], state, mode);
+      assert.equal(runUserShown.status, 0, runUserShown.stdout);
+      assert.deepEqual(decode(runUserShown.stdout).userProcessingResult.id, rupr1.id);
+
+      const runUsersCounted = runLifecycleCli(["entra", "lifecycle", "run", "user-processing-result", "count", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], state, mode);
+      assert.equal(runUsersCounted.status, 0, runUsersCounted.stdout);
+      assert.deepEqual(decode(runUsersCounted.stdout).count, { returned: 2, complete: true });
+
+      const runSubjectsListed = runLifecycleCli(["entra", "lifecycle", "run", "subject-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], state, mode);
+      assert.equal(runSubjectsListed.status, 0, runSubjectsListed.stdout);
+      assert.deepEqual(decode(runSubjectsListed.stdout).subjectProcessingResults.map(row => row.id), [rspr1.id, rspr2.id]);
+
+      const runSubjectShown = runLifecycleCli(["entra", "lifecycle", "run", "subject-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--id", rspr1.id, "--profile", profile], state, mode);
+      assert.equal(runSubjectShown.status, 0, runSubjectShown.stdout);
+      assert.deepEqual(decode(runSubjectShown.stdout).subjectProcessingResult, {
+        id: rspr1.id,
+        subjectType: "user",
+        processingStatus: "completed",
+        failedTasksCount: 0,
+        totalTasksCount: 2,
+        totalUnprocessedTasksCount: 0,
+      });
+
+      const runSubjectsCounted = runLifecycleCli(["entra", "lifecycle", "run", "subject-processing-result", "count", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], state, mode);
+      assert.equal(runSubjectsCounted.status, 0, runSubjectsCounted.stdout);
+      assert.deepEqual(decode(runSubjectsCounted.stdout).count, { returned: 2, complete: true });
+
+      const runTasksListed = runLifecycleCli(["entra", "lifecycle", "run", "task-processing-result", "list", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], state, mode);
+      assert.equal(runTasksListed.status, 0, runTasksListed.stdout);
+      assert.deepEqual(decode(runTasksListed.stdout).taskProcessingResults.map(row => row.id), [rtpr1.id, rtpr2.id]);
+      assert.ok(!Object.hasOwn(decode(runTasksListed.stdout).taskProcessingResults[0], "subject"));
+      assert.ok(!Object.hasOwn(decode(runTasksListed.stdout).taskProcessingResults[0], "task"));
+
+      const runTaskShown = runLifecycleCli(["entra", "lifecycle", "run", "task-processing-result", "show", "--workflow", wf1.id, "--run", run1.id, "--id", rtpr1.id, "--profile", profile, "--full"], state, mode);
+      assert.equal(runTaskShown.status, 0, runTaskShown.stdout);
+      assert.deepEqual(decode(runTaskShown.stdout).taskProcessingResult.failureReason, longFailureReason);
+      assert.ok(!Object.hasOwn(decode(runTaskShown.stdout).taskProcessingResult, "workflowSubject"));
+
+      const runTasksCounted = runLifecycleCli(["entra", "lifecycle", "run", "task-processing-result", "count", "--workflow", wf1.id, "--run", run1.id, "--profile", profile], state, mode);
+      assert.equal(runTasksCounted.status, 0, runTasksCounted.stdout);
+      assert.deepEqual(decode(runTasksCounted.stdout).count, { returned: 2, complete: true });
 
       const reportsListed = runLifecycleCli(["entra", "lifecycle", "task-report", "list", "--workflow", wf1.id, "--profile", profile], state, mode);
       assert.equal(reportsListed.status, 0, reportsListed.stdout);

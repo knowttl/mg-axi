@@ -771,6 +771,15 @@ The single-member read below remains scheduled with an explicit deferred disposi
 |---|---|---|---|
 | `v1.0:GET:/tenantRelationships/multiTenantOrganization/tenants/{multiTenantOrganizationMember-id}` | scheduled (deferred) | EXT-04 | Deferred by firstmate multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for the single-member read. |
 
+## EXT-04 reports scope decisions
+
+Firstmate scope: approve deferring the v1.0 relying-party summary read below; no named command or raw access is approved for it.
+The relying-party summary read below remains scheduled with an explicit deferred disposition: its period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for it until its own guard review lands.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|
+| `v1.0:GET:/reports/getRelyingPartyDetailedSummary(period='{period}')` | scheduled (deferred) | EXT-04 | Deferred by firstmate reports scope to a later EXT-04 reports subfamily: the period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for the relying-party summary read. |
+
 ## EXT-04 tenant-lookup scope decisions
 
 Firstmate scope: approve the mg-ext-04e function-argument contract with the three v1.0 reads it unblocks (tenant-information show by domain name or tenant ID, subscription show by commerce subscription ID).

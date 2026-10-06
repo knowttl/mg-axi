@@ -36,22 +36,22 @@ export async function runDoctor(args: {
   session: GraphSession;
 }): Promise<DoctorResult> {
   if (!args.names.length) {
-    throw new AxiError("No profiles are configured", "AUTH_REQUIRED", ["mg-axi profile create --help", "mg-axi setup"]);
+    throw new AxiError("No profiles are configured", "AUTH_REQUIRED", ["npx -y @knowttl/mg-axi profile create --help", "npx -y @knowttl/mg-axi setup"]);
   }
   const leaf = LEAVES.find(item => item.path === "entra user list");
   const operation = leaf === undefined ? undefined : operationFor(leaf, DOCTOR_VERSION);
   if (!operation || operation.method !== "GET") {
-    throw new AxiError(`Unknown catalogued Graph operation for ${DOCTOR_CHECK}`, "VALIDATION_ERROR", ["mg-axi entra user list --help"]);
+    throw new AxiError(`Unknown catalogued Graph operation for ${DOCTOR_CHECK}`, "VALIDATION_ERROR", ["npx -y @knowttl/mg-axi entra user list --help"]);
   }
   const profiles: Record<string, unknown>[] = [];
   for (const name of args.names) {
-    const rerun = `mg-axi doctor --profile ${name}`;
+    const rerun = `npx -y @knowttl/mg-axi doctor --profile ${name}`;
     try {
       const selected = args.store.resolve(name);
       // The same bounded read the named leaf serves: one fetched page, one
       // surfaced row, remainder buffered in a discarded cursor. Doctor keeps
       // no cursor and accepts none; recovery reruns doctor, not the read.
-      const result = (await listUsers(args.session, { limit: "1" }, selected.profile, operation, `mg-axi ${DOCTOR_CHECK} --help`, name)) as {
+      const result = (await listUsers(args.session, { limit: "1" }, selected.profile, operation, `npx -y @knowttl/mg-axi ${DOCTOR_CHECK} --help`, name)) as {
         users: unknown[];
         count: { complete: boolean; reason?: string };
       };
@@ -63,7 +63,7 @@ export async function runDoctor(args: {
     } catch (error) {
       const failure = error instanceof AxiError
         ? error
-        : new AxiError("Unable to run the doctor check", "GRAPH_ERROR", ["mg-axi entra user list --help"]);
+        : new AxiError("Unable to run the doctor check", "GRAPH_ERROR", ["npx -y @knowttl/mg-axi entra user list --help"]);
       profiles.push({ name, check: DOCTOR_CHECK, status: "failed", code: failure.code, error: failure.message });
     }
   }
@@ -77,8 +77,8 @@ export async function runDoctor(args: {
       profiles,
       complete: failed.length === 0,
       help: failed.length
-        ? failed.map(row => `[${String(row.name)}] Check the reported failure, then rerun \`mg-axi doctor --profile ${String(row.name)}\``)
-        : [`Run \`mg-axi entra user list --profile ${String(ok[0]!.name)} --limit 1\` to start reading`],
+        ? failed.map(row => `[${String(row.name)}] Check the reported failure, then rerun \`npx -y @knowttl/mg-axi doctor --profile ${String(row.name)}\``)
+        : [`Run \`npx -y @knowttl/mg-axi entra user list --profile ${String(ok[0]!.name)} --limit 1\` to start reading`],
     },
     failed: failed.length > 0,
   };

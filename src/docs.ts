@@ -133,7 +133,7 @@ export function skillDescription(): string {
 // profile/login hints localHome() in cli.ts prepends to HOME_HELP; the
 // rest is HOME_HELP verbatim, so skill and home view cannot drift apart.
 export function skillHomeHints(): string[] {
-  return ["mg-axi profile list", "mg-axi login --help", ...HOME_HELP];
+  return ["npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi login --help", ...HOME_HELP];
 }
 
 // The full installable skill. Durable guidance only: read-only by default,
@@ -158,9 +158,9 @@ export function skillDocument(): string {
     "The generated [command table](#orientation) lists supported named writes through the gated mutation coordinator; raw API remains read-only and every other mutation is refused.",
     "See [README.md](../../README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.",
     "",
-    "Build and link the local checkout as documented in [README.md](../../README.md#mg-axi), then run commands non-interactively with `mg-axi <command>`.",
-    "Once the package is published, `npx -y @knowttl/mg-axi <command>` also applies.",
-    "Run `mg-axi doctor` first.",
+    "Run commands non-interactively as `npx -y @knowttl/mg-axi ...`: no global install needed and no interactive prompts.",
+    "Version pinning is the installer's choice: use `npx -y @knowttl/mg-axi@<version> ...` to select a specific release.",
+    "Run `npx -y @knowttl/mg-axi doctor` first.",
     "See [README.md](../../README.md#release) for doctor profile selection, checks and failure behavior.",
     "",
     "## Orientation",
@@ -177,7 +177,7 @@ export function skillDocument(): string {
     skillCommandTable(),
     "<!-- command-registry:end -->",
     "",
-    "Run `mg-axi <leaf-path> --help` for that leaf's accepted flags and reference.",
+    "Run `npx -y @knowttl/mg-axi <leaf-path> --help` for that leaf's accepted flags and reference.",
     "Unknown flags fail before any credential or HTTP work.",
     "",
     "## Next steps",
@@ -190,15 +190,15 @@ export function skillDocument(): string {
     "",
     "## Setup (explicit only)",
     "",
-    "Follow [README.md](../../README.md#mg-axi) for checkout builds and binary linking, and [release guidance](../../README.md#release) for explicit skill installation.",
+    "Follow [release guidance](../../README.md#release) for npm installation and explicit skill installation; [README.md](../../README.md#mg-axi) also documents checkout builds.",
     "Create profiles explicitly and keep secrets out of argv and config files:",
     "",
     "```sh",
-    "mg-axi setup                    # build steps, config path and capabilities; writes nothing",
-    "mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial",
-    "mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
-    "mg-axi doctor                   # one bounded read per selected profile",
-    "mg-axi entra user list --profile soc --limit 10",
+    "npx -y @knowttl/mg-axi setup                    # build steps, config path and capabilities; writes nothing",
+    "npx -y @knowttl/mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial",
+    "npx -y @knowttl/mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
+    "npx -y @knowttl/mg-axi doctor                   # one bounded read per selected profile",
+    "npx -y @knowttl/mg-axi entra user list --profile soc --limit 10",
     "```",
     "",
     "Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate file.",

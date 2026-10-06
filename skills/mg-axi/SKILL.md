@@ -14,9 +14,9 @@ Entra SOC reads through token-efficient TOON output.
 The generated [command table](#orientation) lists supported named writes through the gated mutation coordinator; raw API remains read-only and every other mutation is refused.
 See [README.md](../../README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.
 
-Build and link the local checkout as documented in [README.md](../../README.md#mg-axi), then run commands non-interactively with `mg-axi <command>`.
-Once the package is published, `npx -y @knowttl/mg-axi <command>` also applies.
-Run `mg-axi doctor` first.
+Run commands non-interactively as `npx -y @knowttl/mg-axi ...`: no global install needed and no interactive prompts.
+Version pinning is the installer's choice: use `npx -y @knowttl/mg-axi@<version> ...` to select a specific release.
+Run `npx -y @knowttl/mg-axi doctor` first.
 See [README.md](../../README.md#release) for doctor profile selection, checks and failure behavior.
 
 ## Orientation
@@ -232,7 +232,7 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi api get` | native | read |
 <!-- command-registry:end -->
 
-Run `mg-axi <leaf-path> --help` for that leaf's accepted flags and reference.
+Run `npx -y @knowttl/mg-axi <leaf-path> --help` for that leaf's accepted flags and reference.
 Unknown flags fail before any credential or HTTP work.
 
 ## Next steps
@@ -240,31 +240,31 @@ Unknown flags fail before any credential or HTTP work.
 The no-args home view prints these hints alongside live profile status:
 
 ```sh
-mg-axi profile list
-mg-axi login --help
-mg-axi setup
-mg-axi doctor
-mg-axi entra user list --help
-mg-axi entra user show --help
-mg-axi entra group list --help
-mg-axi entra group member list --help
-mg-axi entra application list --help
-mg-axi entra service-principal list --help
-mg-axi entra conditional-access policy list --help
-mg-axi api get --help
+npx -y @knowttl/mg-axi profile list
+npx -y @knowttl/mg-axi login --help
+npx -y @knowttl/mg-axi setup
+npx -y @knowttl/mg-axi doctor
+npx -y @knowttl/mg-axi entra user list --help
+npx -y @knowttl/mg-axi entra user show --help
+npx -y @knowttl/mg-axi entra group list --help
+npx -y @knowttl/mg-axi entra group member list --help
+npx -y @knowttl/mg-axi entra application list --help
+npx -y @knowttl/mg-axi entra service-principal list --help
+npx -y @knowttl/mg-axi entra conditional-access policy list --help
+npx -y @knowttl/mg-axi api get --help
 ```
 
 ## Setup (explicit only)
 
-Follow [README.md](../../README.md#mg-axi) for checkout builds and binary linking, and [release guidance](../../README.md#release) for explicit skill installation.
+Follow [release guidance](../../README.md#release) for npm installation and explicit skill installation; [README.md](../../README.md#mg-axi) also documents checkout builds.
 Create profiles explicitly and keep secrets out of argv and config files:
 
 ```sh
-mg-axi setup                    # build steps, config path and capabilities; writes nothing
-mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
-mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All
-mg-axi doctor                   # one bounded read per selected profile
-mg-axi entra user list --profile soc --limit 10
+npx -y @knowttl/mg-axi setup                    # build steps, config path and capabilities; writes nothing
+npx -y @knowttl/mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
+npx -y @knowttl/mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All
+npx -y @knowttl/mg-axi doctor                   # one bounded read per selected profile
+npx -y @knowttl/mg-axi entra user list --profile soc --limit 10
 ```
 
 Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate file.

@@ -224,6 +224,36 @@ Denied reads name that role requirement instead of only the generic grant/role/l
 Built-in roles are base inventory and custom role assignments need P1; PIM reads need P2 or ID Governance.
 Role assignment, activation and every other PIM mutation belongs to later write slices, never to these reads.
 
+Read PIM-for-Groups assignment and eligibility through ten views; delegated profiles first need explicit login with the read scopes:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/PrivilegedAssignmentSchedule.Read.AzureADGroup,https://graph.microsoft.com/PrivilegedEligibilitySchedule.Read.AzureADGroup
+mg-axi entra pim group-assignment-schedule list --profile soc --filter "groupId eq '<group-id>'"
+mg-axi entra pim group-assignment-schedule show --profile soc --id <assignment-schedule-id>
+mg-axi entra pim group-assignment-instance list --profile soc --filter "principalId eq '<principal-id>'"
+mg-axi entra pim group-assignment-instance show --profile soc --id <assignment-instance-id>
+mg-axi entra pim group-eligibility-schedule list --profile soc --filter "groupId eq '<group-id>'"
+mg-axi entra pim group-eligibility-schedule show --profile soc --id <eligibility-schedule-id>
+mg-axi entra pim group-eligibility-instance list --profile soc --filter "groupId eq '<group-id>'"
+mg-axi entra pim group-eligibility-instance show --profile soc --id <eligibility-instance-id>
+mg-axi entra pim group-eligibility-request list --profile soc --filter "groupId eq '<group-id>'"
+mg-axi entra pim group-eligibility-request show --profile soc --id <eligibility-request-id>
+```
+
+Assignment schedules govern group membership or ownership over time and instances are the provisioned windows, never the schedule itself.
+Eligibility schedules govern who may activate and are not active grants, while eligibility instances are the provisioned eligibility windows and requests carry the ask plus its outcome.
+Every list requires `--filter` with an `eq` clause on `groupId` or `principalId` scoping the list to one group or principal, and the requirement fails validation before credentials.
+Assignment schedule and instance lists default to `id`, `principalId`, `groupId`, `accessId` and `assignmentType`; eligibility schedule and instance lists default to `id`, `principalId`, `groupId`, `accessId` and `memberType`; eligibility-request lists default to `id`, `action`, `status`, `principalId`, `groupId` and `accessId`.
+Every show defaults to its full reviewed property set, except eligibility-request show omits `justification` unless an explicit `--select` names it.
+`--select` requests properties from the [reviewed group PIM property sets](src/entra-group-pim.ts); `--fields` must be a subset of the fetched selection.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; these collections document no `$count`, so `count` reports `{ returned, complete }` rather than server totals.
+The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply; resume a list with the same `--filter`, profile, scopes and API version.
+Delegated assignment reads default to `https://graph.microsoft.com/PrivilegedAssignmentSchedule.Read.AzureADGroup` and eligibility reads to `https://graph.microsoft.com/PrivilegedEligibilitySchedule.Read.AzureADGroup`, while application profiles use the configured `.default` audience and reject `--scopes`.
+Delegated callers additionally need owner or member of the group or a supported directory role scoped at directory level (Global Reader or Privileged Role Administrator for role-assignable groups; otherwise Global Reader, Directory Writer, Groups Administrator, Identity Governance Administrator or User Administrator).
+Denied reads name that scope, role and licensing requirement instead of only the generic grant/role/licence cause.
+PIM for Groups needs P2 or ID Governance, and delegated personal Microsoft accounts are not supported.
+Assignment requests, approvals, `filterByCurrentUser` functions, group/principal navigation, resources, every count/ref/cast tail, beta and all mutations stay out; assignment requests stay out because their least privilege is the write scope `PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup`.
+
 Read access reviews through ten views; delegated profiles first need explicit login with the read scope:
 
 ```sh

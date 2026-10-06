@@ -254,7 +254,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: u2.id, userPrincipalName: u2.userPrincipalName, riskLevel: u2.riskLevel, riskState: u2.riskState },
         { id: u3.id, userPrincipalName: u3.userPrincipalName, riskLevel: u3.riskLevel, riskState: u3.riskState },
       ]);
-      assert.deepEqual(output.count, { returned: 3, complete: true });
+      assert.deepEqual(output.count, "3 risky users");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
       assert.ok(output.help.some(hint => hint.includes("entra risky-user show --id <risky-user-id>")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -272,7 +274,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: d2.id, detectedDateTime: d2.detectedDateTime, userPrincipalName: d2.userPrincipalName, riskLevel: d2.riskLevel },
         { id: d3.id, detectedDateTime: d3.detectedDateTime, userPrincipalName: d3.userPrincipalName, riskLevel: d3.riskLevel },
       ]);
-      assert.deepEqual(output.count, { returned: 3, complete: true });
+      assert.deepEqual(output.count, "3 risk detections");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
       assert.ok(output.help.some(hint => hint.includes("entra risk-detection show --id <risk-detection-id>")));
       assert.ok(output.help.some(hint => hint.includes("entra sign-in list")));
       assert.ok(output.help.some(hint => hint.includes("riskySignIns")));
@@ -346,14 +350,16 @@ test("delegated executable resumes a capped detection list through a stdin curso
     const first = await executeArgv(["entra", "risk-detection", "list", "--profile", "soc",
       "--since", SINCE, "--limit", "2"], overrides);
     assert.deepEqual(first.riskDetections.map(row => row.id), [d1.id, d2.id]);
-    assert.equal(first.count.complete, false);
+    assert.equal(first.complete, false);
     const resumed = runReadCli(["entra", "risk-detection", "list", "--profile", "soc", "--cursor", "-"],
       state, "delegated", false, first.cursor);
     assert.equal(resumed.status, 0, resumed.stdout);
     assert.equal(resumed.stderr, "");
     const output = decode(resumed.stdout);
     assert.deepEqual(output.riskDetections.map(row => row.id), [d3.id]);
-    assert.deepEqual(output.count, { returned: 1, complete: true });
+    assert.deepEqual(output.count, "1 risk detections");
+    assert.equal(output.total, null);
+    assert.equal(output.complete, true);
   } finally { teardownProfiles(state); }
 });
 
@@ -363,13 +369,15 @@ test("delegated executable resumes a capped risky-user list through a stdin curs
     const { overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "risky-user", "list", "--profile", "soc", "--limit", "1"], overrides);
     assert.deepEqual(first.riskyUsers.map(row => row.id), [u1.id]);
-    assert.equal(first.count.complete, false);
+    assert.equal(first.complete, false);
     const resumed = runReadCli(["entra", "risky-user", "list", "--profile", "soc", "--cursor", "-"],
       state, "delegated", false, first.cursor);
     assert.equal(resumed.status, 0, resumed.stdout);
     const output = decode(resumed.stdout);
     assert.deepEqual(output.riskyUsers.map(row => row.id), [u2.id, u3.id]);
-    assert.deepEqual(output.count, { returned: 2, complete: true });
+    assert.deepEqual(output.count, "2 risky users");
+    assert.equal(output.total, null);
+    assert.equal(output.complete, true);
   } finally { teardownProfiles(state); }
 });
 
@@ -412,7 +420,9 @@ test("delegated detection list composes since, until and filter into one bounded
       "--since", SINCE, "--until", UNTIL, "--filter", "riskState eq 'atRisk'", "--all"], overrides);
     assert.equal(new URL(requests[0].url).searchParams.get("$filter"),
       "detectedDateTime ge 2026-09-01T00:00:00.000Z and detectedDateTime le 2026-09-08T00:00:00.000Z and (riskState eq 'atRisk')");
-    assert.deepEqual(result.count, { returned: 3, complete: true });
+    assert.deepEqual(result.count, "3 risk detections");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.equal(requests.length, 2);
   } finally { teardownProfiles(state); }
 });
@@ -424,7 +434,9 @@ test("delegated risky-user list passes a plain filter with no time bound", async
     const result = await executeArgv(["entra", "risky-user", "list", "--profile", "soc",
       "--filter", "riskState eq 'atRisk'"], overrides);
     assert.equal(new URL(requests[0].url).searchParams.get("$filter"), "riskState eq 'atRisk'");
-    assert.deepEqual(result.count, { returned: 3, complete: true });
+    assert.deepEqual(result.count, "3 risky users");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
   } finally { teardownProfiles(state); }
 });
 
@@ -500,10 +512,12 @@ test("a capped risky-user list resumes losslessly through its opaque cursor", as
     const { overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "risky-user", "list", "--profile", "soc", "--limit", "2"], overrides);
     assert.deepEqual(first.riskyUsers.map(row => row.id), [u1.id, u2.id]);
-    assert.equal(first.count.complete, false);
+    assert.equal(first.complete, false);
     const resumed = await executeArgv(["entra", "risky-user", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(resumed.riskyUsers.map(row => row.id), [u3.id]);
-    assert.deepEqual(resumed.count, { returned: 1, complete: true });
+    assert.deepEqual(resumed.count, "1 risky users");
+    assert.equal(resumed.total, null);
+    assert.equal(resumed.complete, true);
   } finally { teardownProfiles(state); }
 });
 
@@ -524,11 +538,15 @@ test("an empty risk list is a definitive zero with honest guidance", async () =>
     const { overrides } = overridesFor("delegated", empty);
     const users = await executeArgv(["entra", "risky-user", "list", "--profile", "soc"], overrides);
     assert.deepEqual(users.riskyUsers, []);
-    assert.deepEqual(users.count, { returned: 0, complete: true });
+    assert.deepEqual(users.count, "0 risky users");
+    assert.equal(users.total, null);
+    assert.equal(users.complete, true);
     assert.ok(users.help.some(hint => hint.includes("0 risky users matched")));
     assert.ok(users.help.some(hint => hint.includes("Limited results stay limited")));
     const detections = await executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE], overrides);
-    assert.deepEqual(detections.count, { returned: 0, complete: true });
+    assert.deepEqual(detections.count, "0 risk detections");
+    assert.equal(detections.total, null);
+    assert.equal(detections.complete, true);
     assert.ok(detections.help.some(hint => hint.includes("0 risk detections matched")));
   } finally { teardownProfiles(state); }
 });
@@ -619,7 +637,7 @@ test("application mode lists and shows risk without delegated scopes", async () 
   try {
     const { calls, overrides } = overridesFor("application");
     const users = await executeArgv(["entra", "risky-user", "list", "--profile", "batch"], overrides);
-    assert.equal(users.count.returned, 3);
+    assert.equal(users.riskyUsers.length, 3);
     const shown = await executeArgv(["entra", "risk-detection", "show", "--profile", "batch", "--id", d2.id,
       "--fields", "id,riskEventType"], overrides);
     assert.deepEqual(shown.riskDetection, { id: d2.id, riskEventType: "generic" });

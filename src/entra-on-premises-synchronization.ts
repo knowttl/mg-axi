@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 on-premises-synchronization subfamily: the read mapping behind
@@ -259,16 +260,17 @@ export async function listSynchronizations(
   if (!result.complete) {
     return {
       synchronizations,
-      count: { returned: synchronizations.length, complete: false, reason: result.reason },
+      ...listTotals(synchronizations.length, result.total, "synchronizations", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: synchronizations.length, complete: true };
   if (!synchronizations.length) {
-    return { synchronizations, count, help: [EMPTY_NOTE] };
+    return { synchronizations, ...listTotals(synchronizations.length, result.total, "synchronizations", true), complete: true, help: [EMPTY_NOTE] };
   }
-  return { synchronizations, count, help: [...truncationHints, showHint] };
+  return { synchronizations, ...listTotals(synchronizations.length, result.total, "synchronizations", true), complete: true, help: [...truncationHints, showHint] };
 }
 
 export async function showSynchronization(

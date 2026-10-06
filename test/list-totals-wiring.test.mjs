@@ -333,6 +333,296 @@ const wired = [
       { id: ID_B, action: "adminAssign", status: "Provisioned", principalId: ID_B, groupId: ID_B, accessId: "member" },
     ],
   },
+  {
+    name: "federation-configuration list",
+    argv: ["entra", "federation-configuration", "list", "--profile", "soc"],
+    key: "federationConfigurations",
+    noun: "federation configurations",
+    rows: () => [
+      { id: ID_A, displayName: "Contoso" },
+      { id: ID_B, displayName: "Fabrikam" },
+    ],
+  },
+  {
+    name: "service-principal oauth2-grant list",
+    argv: ["entra", "service-principal", "oauth2-grant", "list", "--service-principal", ID_A, "--profile", "soc"],
+    key: "oauth2PermissionGrants",
+    noun: "oauth2 grants",
+    rows: () => [
+      { id: ID_A, consentType: "AllPrincipals", principalId: null, resourceId: ID_B, scope: "User.Read" },
+      { id: ID_B, consentType: "Principal", principalId: ID_A, resourceId: ID_B, scope: "Mail.Read" },
+    ],
+  },
+  {
+    name: "service-principal app-role-assignment list",
+    argv: ["entra", "service-principal", "app-role-assignment", "list", "--service-principal", ID_A, "--profile", "soc"],
+    key: "appRoleAssignments",
+    noun: "app role assignments",
+    rows: () => [
+      { id: ID_A, appRoleId: ID_B, resourceDisplayName: "Graph", resourceId: ID_B },
+      { id: ID_B, appRoleId: ID_A, resourceDisplayName: "Exchange", resourceId: ID_A },
+    ],
+  },
+  {
+    name: "group-lifecycle-policy list",
+    argv: ["entra", "group-lifecycle-policy", "list", "--profile", "soc"],
+    key: "groupLifecyclePolicies",
+    noun: "lifecycle policies",
+    rows: () => [
+      { id: ID_A, groupLifetimeInDays: 365, managedGroupTypes: "All" },
+      { id: ID_B, groupLifetimeInDays: 180, managedGroupTypes: "Selected" },
+    ],
+  },
+  {
+    name: "group-setting-template list",
+    argv: ["entra", "group-setting-template", "list", "--profile", "soc"],
+    key: "groupSettingTemplates",
+    noun: "setting templates",
+    rows: () => [
+      { id: ID_A, displayName: "Group.Unified", description: "Unified" },
+      { id: ID_B, displayName: "Group.Unified.Guest", description: "Guest" },
+    ],
+  },
+  {
+    name: "identity-provider list",
+    argv: ["entra", "identity-provider", "list", "--profile", "soc"],
+    key: "identityProviders",
+    noun: "identity providers",
+    rows: () => [
+      { id: ID_A, displayName: "Google" },
+      { id: ID_B, displayName: "Facebook" },
+    ],
+  },
+  {
+    name: "lifecycle workflow list",
+    argv: ["entra", "lifecycle", "workflow", "list", "--profile", "soc"],
+    key: "workflows",
+    noun: "workflows",
+    rows: () => [
+      { id: ID_A, displayName: "Joiner", category: "joiner", isEnabled: true, isSchedulingEnabled: true },
+      { id: ID_B, displayName: "Leaver", category: "leaver", isEnabled: false, isSchedulingEnabled: false },
+    ],
+  },
+  {
+    name: "lifecycle workflow-template list",
+    argv: ["entra", "lifecycle", "workflow-template", "list", "--profile", "soc"],
+    key: "workflowTemplates",
+    noun: "workflow templates",
+    rows: () => [
+      { id: ID_A, displayName: "Joiner", category: "joiner" },
+      { id: ID_B, displayName: "Leaver", category: "leaver" },
+    ],
+  },
+  {
+    name: "lifecycle task-definition list",
+    argv: ["entra", "lifecycle", "task-definition", "list", "--profile", "soc"],
+    key: "taskDefinitions",
+    noun: "task definitions",
+    rows: () => [
+      { id: ID_A, displayName: "Enable account", category: "joiner", version: 1 },
+      { id: ID_B, displayName: "Disable account", category: "leaver", version: 2 },
+    ],
+  },
+  {
+    name: "lifecycle run list",
+    argv: ["entra", "lifecycle", "run", "list", "--workflow", ID_A, "--profile", "soc"],
+    key: "runs",
+    noun: "runs",
+    rows: () => [
+      { id: ID_A, processingStatus: "completed", totalUsersCount: 2, failedUsersCount: 0, successfulUsersCount: 2 },
+      { id: ID_B, processingStatus: "inProgress", totalUsersCount: 1, failedUsersCount: 1, successfulUsersCount: 0 },
+    ],
+  },
+  {
+    name: "lifecycle user-processing-result list",
+    argv: ["entra", "lifecycle", "user-processing-result", "list", "--workflow", ID_A, "--profile", "soc"],
+    key: "userProcessingResults",
+    noun: "user processing results",
+    rows: () => [
+      { id: ID_A, processingStatus: "completed", failedTasksCount: 0, totalTasksCount: 3, totalUnprocessedTasksCount: 0 },
+      { id: ID_B, processingStatus: "failed", failedTasksCount: 1, totalTasksCount: 3, totalUnprocessedTasksCount: 0 },
+    ],
+  },
+  {
+    name: "lifecycle subject-processing-result list",
+    argv: ["entra", "lifecycle", "subject-processing-result", "list", "--workflow", ID_A, "--profile", "soc"],
+    key: "subjectProcessingResults",
+    noun: "subject processing results",
+    rows: () => [
+      { id: ID_A, subjectType: "user", processingStatus: "completed", failedTasksCount: 0, totalTasksCount: 3, totalUnprocessedTasksCount: 0 },
+      { id: ID_B, subjectType: "provisioningObject", processingStatus: "failed", failedTasksCount: 1, totalTasksCount: 2, totalUnprocessedTasksCount: 0 },
+    ],
+  },
+  {
+    name: "lifecycle task-report list",
+    argv: ["entra", "lifecycle", "task-report", "list", "--workflow", ID_A, "--profile", "soc"],
+    key: "taskReports",
+    noun: "task reports",
+    rows: () => [
+      { id: ID_A, runId: ID_B, processingStatus: "completed", totalUsersCount: 2, failedUsersCount: 0, successfulUsersCount: 2 },
+      { id: ID_B, runId: ID_A, processingStatus: "inProgress", totalUsersCount: 1, failedUsersCount: 1, successfulUsersCount: 0 },
+    ],
+  },
+  {
+    name: "lifecycle run user-processing-result list",
+    argv: ["entra", "lifecycle", "run", "user-processing-result", "list", "--workflow", ID_A, "--run", ID_B, "--profile", "soc"],
+    key: "userProcessingResults",
+    noun: "user processing results",
+    rows: () => [
+      { id: ID_A, processingStatus: "completed", failedTasksCount: 0, totalTasksCount: 3, totalUnprocessedTasksCount: 0 },
+      { id: ID_B, processingStatus: "failed", failedTasksCount: 1, totalTasksCount: 3, totalUnprocessedTasksCount: 0 },
+    ],
+  },
+  {
+    name: "lifecycle run subject-processing-result list",
+    argv: ["entra", "lifecycle", "run", "subject-processing-result", "list", "--workflow", ID_A, "--run", ID_B, "--profile", "soc"],
+    key: "subjectProcessingResults",
+    noun: "subject processing results",
+    rows: () => [
+      { id: ID_A, subjectType: "user", processingStatus: "completed", failedTasksCount: 0, totalTasksCount: 3, totalUnprocessedTasksCount: 0 },
+      { id: ID_B, subjectType: "provisioningObject", processingStatus: "failed", failedTasksCount: 1, totalTasksCount: 2, totalUnprocessedTasksCount: 0 },
+    ],
+  },
+  {
+    name: "lifecycle run task-processing-result list",
+    argv: ["entra", "lifecycle", "run", "task-processing-result", "list", "--workflow", ID_A, "--run", ID_B, "--profile", "soc"],
+    key: "taskProcessingResults",
+    noun: "task processing results",
+    rows: () => [
+      { id: ID_A, processingStatus: "completed", failureReason: null },
+      { id: ID_B, processingStatus: "failed", failureReason: "Timeout" },
+    ],
+  },
+  {
+    name: "multi-tenant-organization tenant list",
+    argv: ["entra", "multi-tenant-organization", "tenant", "list", "--profile", "soc"],
+    key: "multiTenantOrganizationTenants",
+    noun: "tenants",
+    rows: () => [
+      { tenantId: tenant, displayName: "Contoso", role: "owner", state: "active" },
+      { tenantId: client, displayName: "Fabrikam", role: "member", state: "active" },
+    ],
+  },
+  {
+    name: "on-premises-synchronization list",
+    argv: ["entra", "on-premises-synchronization", "list", "--profile", "soc"],
+    key: "synchronizations",
+    noun: "synchronizations",
+    rows: () => [
+      { id: tenant, configuration: { synchronizationInterval: "PT30M" }, features: { passwordHashSyncEnabled: true } },
+      { id: client, configuration: { synchronizationInterval: "PT2H" }, features: { passwordHashSyncEnabled: false } },
+    ],
+  },
+  {
+    name: "risky-user list",
+    argv: ["entra", "risky-user", "list", "--profile", "soc"],
+    key: "riskyUsers",
+    noun: "risky users",
+    rows: () => [
+      { id: ID_A, userPrincipalName: "AdeleV@contoso.com", riskLevel: "high", riskState: "atRisk" },
+      { id: ID_B, userPrincipalName: "AlexW@contoso.com", riskLevel: "medium", riskState: "confirmedCompromised" },
+    ],
+  },
+  {
+    name: "risk-detection list",
+    argv: ["entra", "risk-detection", "list", "--since", "2026-09-01T00:00:00Z", "--profile", "soc"],
+    key: "riskDetections",
+    noun: "risk detections",
+    rows: () => [
+      { id: ID_A, detectedDateTime: "2026-09-02T00:00:00Z", userPrincipalName: "AdeleV@contoso.com", riskLevel: "high" },
+      { id: ID_B, detectedDateTime: "2026-09-03T00:00:00Z", userPrincipalName: "AlexW@contoso.com", riskLevel: "medium" },
+    ],
+  },
+  {
+    name: "risky-service-principal list",
+    argv: ["entra", "risky-service-principal", "list", "--profile", "soc"],
+    key: "riskyServicePrincipals",
+    noun: "risky service principals",
+    rows: () => [
+      { id: ID_A, displayName: "Daemon Batch", riskLevel: "high", riskState: "atRisk" },
+      { id: ID_B, displayName: "Contoso Web", riskLevel: "medium", riskState: "confirmedCompromised" },
+    ],
+  },
+  {
+    name: "risky-service-principal history list",
+    argv: ["entra", "risky-service-principal", "history", "list", "--service-principal", ID_A, "--profile", "soc"],
+    key: "riskyServicePrincipalHistory",
+    noun: "history items",
+    rows: () => [
+      { id: ID_A, displayName: "Daemon Batch", riskLevel: "high", riskState: "atRisk" },
+      { id: ID_B, displayName: "Daemon Batch", riskLevel: "medium", riskState: "dismissed" },
+    ],
+  },
+  {
+    name: "service-principal-risk-detection list",
+    argv: ["entra", "service-principal-risk-detection", "list", "--since", "2026-09-01T00:00:00Z", "--profile", "soc"],
+    key: "servicePrincipalRiskDetections",
+    noun: "service principal risk detections",
+    rows: () => [
+      { id: ID_A, detectedDateTime: "2026-09-02T00:00:00Z", servicePrincipalDisplayName: "Daemon Batch", riskLevel: "high" },
+      { id: ID_B, detectedDateTime: "2026-09-03T00:00:00Z", servicePrincipalDisplayName: "Contoso Web", riskLevel: "medium" },
+    ],
+  },
+  {
+    name: "fraud-protection-provider list",
+    argv: ["entra", "fraud-protection-provider", "list", "--profile", "soc"],
+    key: "fraudProtectionProviders",
+    noun: "fraud protection providers",
+    rows: () => [
+      { id: ID_A, displayName: "Contoso Fraud" },
+      { id: ID_B, displayName: "Fabrikam Fraud" },
+    ],
+  },
+  {
+    name: "web-application-firewall-provider list",
+    argv: ["entra", "web-application-firewall-provider", "list", "--profile", "soc"],
+    key: "webApplicationFirewallProviders",
+    noun: "web application firewall providers",
+    rows: () => [
+      { id: ID_A, displayName: "Contoso WAF" },
+      { id: ID_B, displayName: "Fabrikam WAF" },
+    ],
+  },
+  {
+    name: "web-application-firewall-verification list",
+    argv: ["entra", "web-application-firewall-verification", "list", "--profile", "soc"],
+    key: "webApplicationFirewallVerifications",
+    noun: "web application firewall verifications",
+    rows: () => [
+      { id: ID_A, verifiedHost: "a.example", providerType: "waf" },
+      { id: ID_B, verifiedHost: "b.example", providerType: "waf" },
+    ],
+  },
+  {
+    name: "agreement list",
+    argv: ["entra", "agreement", "list", "--profile", "soc"],
+    key: "agreements",
+    noun: "agreements",
+    rows: () => [
+      { id: ID_A, displayName: "Contoso ToU" },
+      { id: ID_B, displayName: "Fabrikam ToU" },
+    ],
+  },
+  {
+    name: "agreement acceptance list",
+    argv: ["entra", "agreement", "acceptance", "list", "--agreement", ID_A, "--profile", "soc"],
+    key: "agreementAcceptances",
+    noun: "agreement acceptances",
+    rows: () => [
+      { id: ID_A, agreementId: ID_A, state: "accepted", recordedDateTime: "2026-09-02T00:00:00Z" },
+      { id: ID_B, agreementId: ID_A, state: "declined", recordedDateTime: "2026-09-03T00:00:00Z" },
+    ],
+  },
+  {
+    name: "agreement-acceptance list",
+    argv: ["entra", "agreement-acceptance", "list", "--profile", "soc"],
+    key: "agreementAcceptances",
+    noun: "agreement acceptances",
+    rows: () => [
+      { id: ID_A, agreementId: ID_A, state: "accepted", recordedDateTime: "2026-09-02T00:00:00Z" },
+      { id: ID_B, agreementId: ID_B, state: "declined", recordedDateTime: "2026-09-03T00:00:00Z" },
+    ],
+  },
 ];
 
 for (const entry of wired) {

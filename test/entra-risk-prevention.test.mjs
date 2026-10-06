@@ -199,7 +199,9 @@ test("delegated lists fraud providers with compact rows and scrubbed key materia
       { id: human.id, displayName: "HUMAN Sign-Up Protection", "@odata.type": "#microsoft.graph.humanSecurityFraudProtectionProvider" },
       { id: fraudBare.id },
     ]);
-    assert.deepEqual(result.count, { returned: 3, complete: true });
+    assert.deepEqual(result.count, "3 fraud protection providers");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(result.help.some(hint => hint.includes("entra fraud-protection-provider show --id <fraud-protection-provider-id>")));
     assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
     for (const secret of SECRET_VALUES) assert.ok(!JSON.stringify(result).includes(secret), `leaked ${secret}`);
@@ -253,7 +255,9 @@ test("delegated lists WAF providers with compact rows, filter support and scrubb
       { id: akamai.id, displayName: "Akamai Provider Example", "@odata.type": "#microsoft.graph.akamaiWebApplicationFirewallProvider" },
       { id: wafBare.id },
     ]);
-    assert.deepEqual(result.count, { returned: 3, complete: true });
+    assert.deepEqual(result.count, "3 web application firewall providers");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(result.help.some(hint => hint.includes("entra web-application-firewall-provider show --id <web-application-firewall-provider-id>")));
     for (const secret of SECRET_VALUES) assert.ok(!JSON.stringify(result).includes(secret), `leaked ${secret}`);
     const seen = requests.length;
@@ -301,7 +305,9 @@ test("delegated lists verifications with compact rows and whole complex detail o
       { id: verification1.id, verifiedHost: "www.contoso.com", providerType: "cloudflare" },
       { id: verificationBare.id },
     ]);
-    assert.deepEqual(result.count, { returned: 2, complete: true });
+    assert.deepEqual(result.count, "2 web application firewall verifications");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(result.help.some(hint => hint.includes("entra web-application-firewall-verification show --id <web-application-firewall-verification-id>")));
     assert.ok(!("provider" in result.webApplicationFirewallVerifications[0]));
     const sent = new URL(requests[0].url).searchParams;
@@ -340,11 +346,13 @@ test("delegated resumes a capped fraud list through its opaque cursor", async ()
     const { overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "fraud-protection-provider", "list", "--profile", "soc", "--limit", "1"], overrides);
     assert.deepEqual(first.fraudProtectionProviders.map(row => row.id), [arkose.id]);
-    assert.equal(first.count.complete, false);
+    assert.equal(first.complete, false);
     assert.equal(typeof first.cursor, "string");
     const second = await executeArgv(["entra", "fraud-protection-provider", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(second.fraudProtectionProviders.map(row => row.id), [human.id, fraudBare.id]);
-    assert.deepEqual(second.count, { returned: 2, complete: true });
+    assert.deepEqual(second.count, "2 fraud protection providers");
+    assert.equal(second.total, null);
+    assert.equal(second.complete, true);
   } finally {
     teardownProfiles(state);
   }

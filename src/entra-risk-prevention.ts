@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-03 risk-prevention subfamily: the read mapping behind
@@ -138,6 +139,7 @@ export type RiskPreventionFlags = Record<string, string | boolean>;
 
 interface RiskKind {
   noun: string;
+  totalsNoun: string;
   known: Set<string>;
   knownList: readonly string[];
   listSelect: string[];
@@ -149,6 +151,7 @@ interface RiskKind {
 
 const FRAUD_KIND: RiskKind = {
   noun: "fraud-protection-provider",
+  totalsNoun: "fraud protection providers",
   known: KNOWN_FRAUD,
   knownList: KNOWN_FRAUD_FIELDS,
   listSelect: DEFAULT_FRAUD_LIST_SELECT,
@@ -160,6 +163,7 @@ const FRAUD_KIND: RiskKind = {
 
 const WAF_KIND: RiskKind = {
   noun: "web-application-firewall-provider",
+  totalsNoun: "web application firewall providers",
   known: KNOWN_WAF,
   knownList: KNOWN_WAF_FIELDS,
   listSelect: DEFAULT_WAF_LIST_SELECT,
@@ -171,6 +175,7 @@ const WAF_KIND: RiskKind = {
 
 const VERIFICATION_KIND: RiskKind = {
   noun: "web-application-firewall-verification",
+  totalsNoun: "web application firewall verifications",
   known: KNOWN_VERIFICATIONS,
   knownList: KNOWN_VERIFICATION_FIELDS,
   listSelect: DEFAULT_VERIFICATION_LIST_SELECT,
@@ -424,20 +429,22 @@ async function collectKind(
   if (!result.complete) {
     return {
       [kind.collectionKey]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, kind.totalsNoun, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, WORKFORCE_NOTE],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
     return {
       [kind.collectionKey]: rows,
-      count,
+      ...listTotals(rows.length, result.total, kind.totalsNoun, true),
+      complete: true,
       help: [`0 ${kind.noun}s matched; the absence of results is the answer, not an error`, WORKFORCE_NOTE],
     };
   }
-  return { [kind.collectionKey]: rows, count, help: [...truncationHints, showHint, WORKFORCE_NOTE] };
+  return { [kind.collectionKey]: rows, ...listTotals(rows.length, result.total, kind.totalsNoun, true), complete: true, help: [...truncationHints, showHint, WORKFORCE_NOTE] };
 }
 
 async function showKind(

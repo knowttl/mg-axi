@@ -16,7 +16,7 @@ import { listAdministrativeUnitMembers, listAdministrativeUnits, listDevices, sh
 import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from "./entra-audit-logs.js";
 import { listApplicationOwners, listApplications, listServicePrincipalOwners, listServicePrincipals, showApplication, showServicePrincipal } from "./entra-apps.js";
 import { listAppRoleAssignments, listOAuth2Grants } from "./entra-grants.js";
-import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection } from "./entra-risk.js";
+import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection, listRiskyServicePrincipals, showRiskyServicePrincipal, listRiskyServicePrincipalHistory, showRiskyServicePrincipalHistory, listServicePrincipalRiskDetections, showServicePrincipalRiskDetection } from "./entra-risk.js";
 import { dismissRiskyUser } from "./entra-risk-dismiss.js";
 import { listPolicies, showPolicy, listNamedLocations, showNamedLocation } from "./entra-conditional-access.js";
 import { listBrandingLocalizations, listOrganizations, showBranding, showBrandingLocalization, showOrganization } from "./entra-organization.js";
@@ -745,7 +745,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       help: leafHelp(leaf),
     });
   }
-  if (leaf.path === "entra risky-user list" || leaf.path === "entra risky-user show" || leaf.path === "entra risk-detection list" || leaf.path === "entra risk-detection show") {
+  if (leaf.path === "entra risky-user list" || leaf.path === "entra risky-user show" || leaf.path === "entra risk-detection list" || leaf.path === "entra risk-detection show" || leaf.path === "entra risky-service-principal list" || leaf.path === "entra risky-service-principal show" || leaf.path === "entra risky-service-principal history list" || leaf.path === "entra risky-service-principal history show" || leaf.path === "entra service-principal-risk-detection list" || leaf.path === "entra service-principal-risk-detection show") {
     const selected = profiles.resolve(flags.profile as string | undefined);
     const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
     if (!operation || operation.method !== "GET") {
@@ -770,7 +770,13 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra risky-user list": return listRiskyUsers(session, flags, selected.profile, operation, help, selected.name);
       case "entra risky-user show": return showRiskyUser(session, flags, selected.profile, operation, help, selected.name);
       case "entra risk-detection list": return listRiskDetections(session, flags, selected.profile, operation, help, selected.name);
-      default: return showRiskDetection(session, flags, selected.profile, operation, help, selected.name);
+      case "entra risk-detection show": return showRiskDetection(session, flags, selected.profile, operation, help, selected.name);
+      case "entra risky-service-principal list": return listRiskyServicePrincipals(session, flags, selected.profile, operation, help, selected.name);
+      case "entra risky-service-principal show": return showRiskyServicePrincipal(session, flags, selected.profile, operation, help, selected.name);
+      case "entra risky-service-principal history list": return listRiskyServicePrincipalHistory(session, flags, selected.profile, operation, help, selected.name);
+      case "entra risky-service-principal history show": return showRiskyServicePrincipalHistory(session, flags, selected.profile, operation, help, selected.name);
+      case "entra service-principal-risk-detection list": return listServicePrincipalRiskDetections(session, flags, selected.profile, operation, help, selected.name);
+      default: return showServicePrincipalRiskDetection(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   if (leaf.path === "entra domain list" || leaf.path === "entra domain show"

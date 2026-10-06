@@ -156,6 +156,12 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra risky-user dismiss` | native | write |
 | `mg-axi entra risk-detection list` | native | read |
 | `mg-axi entra risk-detection show` | native | read |
+| `mg-axi entra risky-service-principal list` | native | read |
+| `mg-axi entra risky-service-principal show` | native | read |
+| `mg-axi entra risky-service-principal history list` | native | read |
+| `mg-axi entra risky-service-principal history show` | native | read |
+| `mg-axi entra service-principal-risk-detection list` | native | read |
+| `mg-axi entra service-principal-risk-detection show` | native | read |
 | `mg-axi entra conditional-access policy list` | native | read |
 | `mg-axi entra conditional-access policy show` | native | read |
 | `mg-axi entra conditional-access policy update` | native | write |

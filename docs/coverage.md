@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 211 (209 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 217 (215 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 7 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -137,6 +137,12 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra risky-user show` | `GET:/identityProtection/riskyUsers/{riskyUser-id}` | scheduled | READ-06 |
 | `mg-axi entra risk-detection list` | `GET:/identityProtection/riskDetections` | scheduled | READ-06 |
 | `mg-axi entra risk-detection show` | `GET:/identityProtection/riskDetections/{riskDetection-id}` | scheduled | READ-06 |
+| `mg-axi entra risky-service-principal list` | `GET:/identityProtection/riskyServicePrincipals` | scheduled | READ-06 |
+| `mg-axi entra risky-service-principal show` | `GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}` | scheduled | READ-06 |
+| `mg-axi entra risky-service-principal history list` | `GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}/history` | scheduled | READ-06 |
+| `mg-axi entra risky-service-principal history show` | `GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}/history/{riskyServicePrincipalHistoryItem-id}` | scheduled | READ-06 |
+| `mg-axi entra service-principal-risk-detection list` | `GET:/identityProtection/servicePrincipalRiskDetections` | scheduled | READ-06 |
+| `mg-axi entra service-principal-risk-detection show` | `GET:/identityProtection/servicePrincipalRiskDetections/{servicePrincipalRiskDetection-id}` | scheduled | READ-06 |
 | `mg-axi entra conditional-access policy list` | `GET:/identity/conditionalAccess/policies` | scheduled | READ-03 |
 | `mg-axi entra conditional-access policy show` | `GET:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}` | scheduled | READ-03 |
 | `mg-axi entra conditional-access named-location list` | `GET:/identity/conditionalAccess/namedLocations` | scheduled | READ-03 |

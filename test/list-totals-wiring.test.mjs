@@ -571,6 +571,46 @@ const wired = [
     ],
   },
   {
+    name: "conditional-access auth-strength-policy list",
+    argv: ["entra", "conditional-access", "auth-strength-policy", "list", "--profile", "soc"],
+    key: "authStrengthPolicies",
+    noun: "auth-strength policies",
+    rows: () => [
+      { id: ID_A, displayName: "Multifactor authentication strength", policyType: "builtIn" },
+      { id: ID_B, displayName: "Phishing-resistant MFA", policyType: "custom" },
+    ],
+  },
+  {
+    name: "conditional-access combination-configuration list",
+    argv: ["entra", "conditional-access", "combination-configuration", "list", "--policy", ID_A, "--profile", "soc"],
+    key: "combinationConfigurations",
+    noun: "combination configurations",
+    rows: () => [
+      { id: ID_A, appliesToCombinations: ["fido2"], "@odata.type": "#microsoft.graph.fido2CombinationConfiguration" },
+      { id: ID_B, appliesToCombinations: ["x509CertificateMultiFactor"], "@odata.type": "#microsoft.graph.x509CertificateCombinationConfiguration" },
+    ],
+  },
+  {
+    name: "conditional-access auth-method-mode list",
+    argv: ["entra", "conditional-access", "auth-method-mode", "list", "--profile", "soc"],
+    key: "authMethodModes",
+    noun: "auth-method modes",
+    rows: () => [
+      { id: ID_A, displayName: "FIDO2 security key" },
+      { id: ID_B, displayName: "Certificate-based authentication" },
+    ],
+  },
+  {
+    name: "conditional-access template list",
+    argv: ["entra", "conditional-access", "template", "list", "--profile", "soc"],
+    key: "templates",
+    noun: "templates",
+    rows: () => [
+      { id: ID_A, name: "Block legacy authentication" },
+      { id: ID_B, name: "Require compliant devices for admins" },
+    ],
+  },
+  {
     name: "attribute-set list",
     argv: ["entra", "attribute-set", "list", "--profile", "soc"],
     key: "attributeSets",

@@ -13,6 +13,7 @@ import { KNOWN_DATA_POLICY_FIELDS } from "./entra-data-policy-operations.js";
 import { KNOWN_FRAUD_FIELDS, KNOWN_WAF_FIELDS, KNOWN_VERIFICATION_FIELDS } from "./entra-risk-prevention.js";
 import { KNOWN_FEDERATION_FIELDS } from "./entra-federation-configurations.js";
 import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
+import { KNOWN_COMBO_FIELDS, KNOWN_MODE_FIELDS, KNOWN_STRENGTH_FIELDS, KNOWN_TEMPLATE_FIELDS as KNOWN_CA_TEMPLATE_FIELDS } from "./entra-conditional-access.js";
 import { KNOWN_SUBSCRIPTION_FIELDS } from "./entra-subscriptions.js";
 import { KNOWN_ASSIGNMENT_INSTANCE_FIELDS, KNOWN_ASSIGNMENT_SCHEDULE_FIELDS, KNOWN_ELIGIBILITY_INSTANCE_FIELDS, KNOWN_ELIGIBILITY_REQUEST_FIELDS, KNOWN_ELIGIBILITY_SCHEDULE_FIELDS } from "./entra-group-pim.js";
 import { KNOWN_SYNC_FIELDS } from "./entra-on-premises-synchronization.js";
@@ -138,6 +139,38 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
   { id: "v1.0:GET:/identity/conditionalAccess/namedLocations/{namedLocation-id}", kind: "single", query: SINGLE_QUERY, fields: NAMED_LOCATION_FIELDS,
     access: "D/A Policy.Read.All. Delegated callers pass it as --scopes; a supported administrator role (for example Security Reader) is also required.",
     sources: ["https://learn.microsoft.com/graph/api/countrynamedlocation-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/authenticationStrength/policies", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_STRENGTH_FIELDS,
+    access: "D/A Policy.Read.AuthenticationMethod. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/authenticationstrengthroot-list-policies?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_STRENGTH_FIELDS,
+    access: "D/A Policy.Read.AuthenticationMethod. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/authenticationstrengthpolicy-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}/combinationConfigurations", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_COMBO_FIELDS, keepODataType: true,
+    access: "D/A Policy.Read.AuthenticationMethod. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "Conditional Access needs P1. Rows are polymorphic: the @odata.type discriminator rides along automatically to name the configuration kind.",
+    sources: ["https://learn.microsoft.com/graph/api/authenticationstrengthpolicy-list-combinationconfigurations?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}/combinationConfigurations/{authenticationCombinationConfiguration-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_COMBO_FIELDS, keepODataType: true,
+    access: "D/A Policy.Read.AuthenticationMethod. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "Conditional Access needs P1. Rows are polymorphic: the @odata.type discriminator rides along automatically to name the configuration kind.",
+    sources: ["https://learn.microsoft.com/graph/api/authenticationcombinationconfiguration-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/authenticationStrength/authenticationMethodModes", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_MODE_FIELDS,
+    access: "D/A Policy.Read.AuthenticationMethod. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/graph/api/authenticationstrengthroot-list-authenticationmethodmodes?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/authenticationStrength/authenticationMethodModes/{authenticationMethodModeDetail-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_MODE_FIELDS,
+    access: "D/A Policy.Read.AuthenticationMethod. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/authenticationmethodmodedetail-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/templates", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_CA_TEMPLATE_FIELDS,
+    access: "D/A Policy.Read.All. Delegated callers pass it as --scopes; a supported administrator role (for example Security Reader) is also required.",
+    note: "Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/conditionalaccessroot-list-templates?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/templates/{conditionalAccessTemplate-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_CA_TEMPLATE_FIELDS,
+    access: "D/A Policy.Read.All. Delegated callers pass it as --scopes; a supported administrator role (for example Security Reader) is also required.",
+    note: "Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/conditionalaccesstemplate-get?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/users/{user-id}/authentication/methods", kind: "collection", query: ["$select"], fields: AUTH_METHOD_FIELDS,
     access: "D/A UserAuthenticationMethod.Read.All for other users; delegated self UserAuthenticationMethod.Read. Dedicated administrator roles also apply.",
     note: "Targeted per-user inspection only; aggregate coverage belongs to the registration report, never to a scan across users.",

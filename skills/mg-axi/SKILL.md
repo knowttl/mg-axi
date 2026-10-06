@@ -183,6 +183,14 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra conditional-access policy update` | native | write |
 | `mg-axi entra conditional-access named-location list` | native | read |
 | `mg-axi entra conditional-access named-location show` | native | read |
+| `mg-axi entra conditional-access auth-strength-policy list` | native | read |
+| `mg-axi entra conditional-access auth-strength-policy show` | native | read |
+| `mg-axi entra conditional-access combination-configuration list` | native | read |
+| `mg-axi entra conditional-access combination-configuration show` | native | read |
+| `mg-axi entra conditional-access auth-method-mode list` | native | read |
+| `mg-axi entra conditional-access auth-method-mode show` | native | read |
+| `mg-axi entra conditional-access template list` | native | read |
+| `mg-axi entra conditional-access template show` | native | read |
 | `mg-axi entra identity-provider list` | native | read |
 | `mg-axi entra identity-provider show` | native | read |
 | `mg-axi entra identity-provider count` | native | read |

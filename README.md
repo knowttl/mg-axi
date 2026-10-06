@@ -13,7 +13,7 @@ READ-01 executes Entra user list/show through that session in both delegated and
 READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
 READ-04 adds targeted per-user authentication-method reads and the tenant registration report through the same session, with phone numbers redacted.
 READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
-READ-03 adds Conditional Access policy and named-location list/show as separate grammar through the same session; Conditional Access usage follows the device and administrative-unit usage below.
+READ-03 adds Conditional Access policy, named-location, authentication-strength-policy, combination-configuration, authentication-method-mode and template list/show as separate grammar through the same session; Conditional Access usage follows the device and administrative-unit usage below.
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the Conditional Access usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
@@ -188,7 +188,7 @@ Relationship rows default to `id` and `displayName`; `--select` accepts only `id
 Returned `@odata.type` stays visible alongside any `--fields` projection.
 Group lists return `groups`, member lists return `members`, parent-membership lists return `memberOf`, and single-group reads return `group`.
 Group and relationship lists report uniform totals through the shared list-totals helper: `total` holds the server-supplied `@odata.count` when the query carries `$count` (filtered reads) and `null` otherwise, beside a `count` line such as `3 of 10 groups`, `3 groups` or, when the total is unknown and more pages remain, `3 groups shown, more available`.
-The same helper covers the other wired core-directory lists: users, applications, service principals, owners, devices, administrative units and unit members, contacts, direct reports and memberships, directory roles, role assignments and PIM eligible/active assignments, group PIM assignment/eligibility schedules, instances and eligibility requests, directory objects, deleted items, domains and DNS records, contracts, organizations and branding localizations, subscriptions, access-review definitions, instances, decisions, contacted reviewers and stages, sign-ins and directory audits, authentication methods and registration reports, PKI configurations and certificate authorities, Conditional Access policies and named locations, attribute sets, custom-security-attribute definitions and allowed values, data-policy operations, delegated-admin customers, relationships and navigation lists, and entitlement catalogs, access packages, assignment policies, resource-role scopes, assignments and assignment requests. Remaining list families keep the previous `count: { returned, complete }` shape and follow the same helper in the next piece.
+The same helper covers the other wired lists: users, applications, service principals, owners, devices, administrative units and unit members, contacts, direct reports and memberships, directory roles, role assignments and PIM eligible/active assignments, group PIM assignment/eligibility schedules, instances and eligibility requests, directory objects, deleted items, domains and DNS records, contracts, organizations and branding localizations, subscriptions, access-review definitions, instances, decisions, contacted reviewers and stages, sign-ins and directory audits, authentication methods and registration reports, PKI configurations and certificate authorities, Conditional Access policies, named locations, authentication-strength policies, combination configurations, authentication method modes and templates, attribute sets, custom-security-attribute definitions and allowed values, data-policy operations, delegated-admin customers, relationships and navigation lists, and entitlement catalogs, access packages, assignment policies, resource-role scopes, assignments and assignment requests. Remaining list families keep the previous `count: { returned, complete }` shape and follow the same helper in the next piece.
 `complete` names pagination state, with `reason` and an opaque `cursor` on partial reads.
 The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to group and relationship reads.
 Resume relationships with the same `--group` and direct or `--transitive` command, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
@@ -952,7 +952,7 @@ Delegated callers additionally need a directory role that can read risk-preventi
 No per-operation licence prerequisite is stated for these reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
 No provider create/update/delete and no verification submission live here; beta operations stay scheduled (see the [risk-prevention scope decisions](docs/coverage.md#ext-03-risk-prevention-scope-decisions)).
 
-Log in with `https://graph.microsoft.com/Policy.Read.All`, then read Conditional Access policies and named locations as separate grammar:
+Log in with `https://graph.microsoft.com/Policy.Read.All`, then read Conditional Access policies, named locations and templates as separate grammar:
 
 ```sh
 mg-axi login --profile soc --scopes https://graph.microsoft.com/Policy.Read.All
@@ -961,21 +961,43 @@ mg-axi entra conditional-access policy list --profile soc --filter "state eq 'en
 mg-axi entra conditional-access policy show --profile soc --id <policy-id>
 mg-axi entra conditional-access named-location list --profile soc
 mg-axi entra conditional-access named-location show --profile soc --id <named-location-id>
+mg-axi entra conditional-access template list --profile soc --limit 10
+mg-axi entra conditional-access template show --profile soc --id <template-id>
+```
+
+Log in with `https://graph.microsoft.com/Policy.Read.AuthenticationMethod`, then read the authentication-strength family through the same session:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/Policy.Read.AuthenticationMethod
+mg-axi entra conditional-access auth-strength-policy list --profile soc --limit 10
+mg-axi entra conditional-access auth-strength-policy show --profile soc --id <auth-strength-policy-id>
+mg-axi entra conditional-access combination-configuration list --policy <auth-strength-policy-id> --profile soc
+mg-axi entra conditional-access combination-configuration show --policy <auth-strength-policy-id> --id <combination-configuration-id> --profile soc
+mg-axi entra conditional-access auth-method-mode list --profile soc --limit 10
+mg-axi entra conditional-access auth-method-mode show --profile soc --id <auth-method-mode-id>
 ```
 
 `entra conditional-access policy list` defaults to compact properties (`id`, `displayName`, `state`); `policy show --id <policy-id>` defaults to the full reviewed condition and control property set.
 `entra conditional-access named-location list` defaults to `id` and `displayName`; `named-location show --id <named-location-id>` defaults to the full reviewed location set.
-Policy `--select` accepts the [reviewed policy property set](src/entra-conditional-access.ts) and location `--select` accepts the [reviewed location property set](src/entra-conditional-access.ts); `--fields` must be a subset of the fetched selection in each family.
+`entra conditional-access auth-strength-policy list` defaults to compact properties (`id`, `displayName`, `policyType`); `auth-strength-policy show --id <auth-strength-policy-id>` defaults to the full reviewed strength set.
+`entra conditional-access combination-configuration list --policy <auth-strength-policy-id>` defaults to `id`; `combination-configuration show` takes `--policy` plus `--id` and defaults to the full reviewed base set.
+`entra conditional-access auth-method-mode list` defaults to `id` and `displayName`; `auth-method-mode show --id <auth-method-mode-id>` defaults to the full reviewed mode set.
+`entra conditional-access template list` defaults to `id` and `name`; `template show --id <template-id>` defaults to the full reviewed template set.
+Policy `--select` accepts the [reviewed policy property set](src/entra-conditional-access.ts) and location `--select` accepts the [reviewed location property set](src/entra-conditional-access.ts); strength, combination-configuration, method-mode and template `--select` accept their own [reviewed property sets](src/entra-conditional-access.ts); `--fields` must be a subset of the fetched selection in each family.
 Returned `@odata.type` stays visible on named-location rows so IP and country locations stay distinguishable alongside any `--fields` projection.
+Returned `@odata.type` also stays visible on combination-configuration rows so configuration kinds stay distinguishable alongside any `--fields` projection.
 Policy lists return `policies`, location lists return `namedLocations`, single-policy reads return `policy` and single-location reads return `namedLocation`.
+Strength lists return `authStrengthPolicies`, combination lists return `combinationConfigurations`, mode lists return `authMethodModes`, template lists return `templates`; single reads return `authStrengthPolicy`, `combinationConfiguration`, `authMethodMode` and `template`.
 Successful empty collections return an empty list with a uniform `count` line (`0 policies` or `0 named locations`, `total: null`) and absence guidance.
+The four new lists report uniform totals through the shared list-totals helper beside a `count` line such as `2 auth-strength policies` or `2 templates` (`0 ...` with absence guidance on empty results).
 The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to Conditional Access reads, including nested condition values; every truncated value carries a `--full` hint.
-Resume either Conditional Access list with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra conditional-access policy list --profile soc --cursor - < cursor.txt`.
+Resume any Conditional Access list with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra conditional-access policy list --profile soc --cursor - < cursor.txt`.
+Resume combination-configuration lists with the same `--policy`, profile, scopes and API version.
 Small cursors can also use `--cursor <token>`; both forms enforce a 16 MB size ceiling.
 Use `--full` when reasoning from complete condition or control text; `--select` and `--fields` still determine which properties are visible, and missing properties remain unknown.
 To replay a resumed result with `--full`, reuse the original input cursor; the returned cursor continues after that result.
-Delegated policy and location reads default to `https://graph.microsoft.com/Policy.Read.All`; application profiles require admin-consented `Policy.Read.All`, use the configured Graph `.default` audience and reject `--scopes`.
-HTTP 403 policy and location errors name the operation's supported directory roles (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access) and include guidance from the [licensing contract](docs/graph-coverage.md#licence-matrix-by-area); the response alone does not identify the missing prerequisite.
+Delegated policy, named-location and template reads default to `https://graph.microsoft.com/Policy.Read.All`; delegated authentication-strength-policy, combination-configuration and authentication-method-mode reads default to `https://graph.microsoft.com/Policy.Read.AuthenticationMethod`; application profiles require the admin-consented scope for the family, use the configured Graph `.default` audience and reject `--scopes`.
+HTTP 403 policy, location and template errors name the operation's supported directory roles (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access); HTTP 403 authentication-strength errors name the narrower role set (Conditional Access Administrator, Security Administrator or Security Reader) with `Policy.Read.AuthenticationMethod`; all include guidance from the [licensing contract](docs/graph-coverage.md#licence-matrix-by-area), and Conditional Access reads need P1; the response alone does not identify the missing prerequisite.
 WRITE-04 adds a named write: `mg-axi entra conditional-access policy update --id <policy-id>` PATCHes one policy with only the reviewed fields `--display-name`, `--state`, `--conditions`, `--grant-controls` and `--session-controls` (JSON objects for the last three); any other property has no flag and is refused before credentials.
 At least one reviewed field flag is required.
 The command supports only `--api-version v1.0`; `--state` accepts `enabled`, `enabledForReportingButNotEnforced` or `disabled`, and each JSON flag supplies the full corresponding block.

@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-03: the Conditional Access read mapping behind
@@ -223,6 +224,7 @@ interface CollectionShape {
   command: string;
   key: string;
   noun: string;
+  plural: string;
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -236,6 +238,7 @@ const POLICY_LIST: CollectionShape = {
   command: "entra conditional-access policy list",
   key: "policies",
   noun: "policy",
+  plural: "policies",
   known: POLICY_KNOWN,
   knownList: KNOWN_POLICY_FIELDS,
   defaultSelect: DEFAULT_POLICY_LIST_SELECT,
@@ -249,6 +252,7 @@ const LOCATION_LIST: CollectionShape = {
   command: "entra conditional-access named-location list",
   key: "namedLocations",
   noun: "named-location",
+  plural: "named locations",
   known: LOCATION_KNOWN,
   knownList: KNOWN_LOCATION_FIELDS,
   defaultSelect: DEFAULT_LOCATION_LIST_SELECT,
@@ -300,23 +304,25 @@ async function listCollection(
   if (!result.complete) {
     return {
       [shape.key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, shape.plural, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, `Resume losslessly with the same flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`, showHint],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
     return {
       [shape.key]: rows,
-      count,
+      ...listTotals(rows.length, result.total, shape.plural, true),
+      complete: true,
       help: [
         `mg-axi ${shape.command} --filter <odata-filter> ${profileHint(profileName)}`,
         shape.emptyHint,
       ],
     };
   }
-  return { [shape.key]: rows, count, help: [...truncationHints, showHint] };
+  return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.plural, true), complete: true, help: [...truncationHints, showHint] };
 }
 
 interface SingleShape {

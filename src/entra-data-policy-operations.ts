@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import { REDACTED } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
@@ -282,20 +283,22 @@ export async function listDataPolicyOperations(
   if (!result.complete) {
     return {
       dataPolicyOperations: operations,
-      count: { returned: operations.length, complete: false, reason: result.reason },
+      ...listTotals(operations.length, result.total, "data-policy operations", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, WORKFORCE_NOTE],
     };
   }
-  const count = { returned: operations.length, complete: true };
   if (!operations.length) {
     return {
       dataPolicyOperations: operations,
-      count,
+      ...listTotals(operations.length, result.total, "data-policy operations", true),
+      complete: true,
       help: ["0 data-policy operations matched; the absence of results is the answer, not an error", WORKFORCE_NOTE],
     };
   }
-  return { dataPolicyOperations: operations, count, help: [...truncationHints, showHint, WORKFORCE_NOTE] };
+  return { dataPolicyOperations: operations, ...listTotals(operations.length, result.total, "data-policy operations", true), complete: true, help: [...truncationHints, showHint, WORKFORCE_NOTE] };
 }
 
 export async function showDataPolicyOperation(

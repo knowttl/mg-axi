@@ -231,9 +231,9 @@ function runReadCli(args, state, mode, denied = false, input) {
   });
 }
 
-for (const [noun, key, field] of [
-  ["sign-in", "signIns", "userPrincipalName"],
-  ["directory-audit", "directoryAudits", "activityDisplayName"],
+for (const [noun, key, field, plural] of [
+  ["sign-in", "signIns", "userPrincipalName", "sign-ins"],
+  ["directory-audit", "directoryAudits", "activityDisplayName", "directory audits"],
 ]) {
   for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
     test(`${mode} executable resumes large ${noun} cursors and recovers full text through stdin`, async () => {
@@ -244,8 +244,8 @@ for (const [noun, key, field] of [
         const { overrides } = overridesFor(mode, fixture);
         const first = await executeArgv(["entra", noun, "list", "--profile", profile,
           "--since", SINCE, "--select", `id,${field}`], overrides);
-        assert.equal(first.count.returned, 100);
-        assert.equal(first.count.complete, false);
+        assert.equal(first[key].length, 100);
+        assert.equal(first.complete, false);
         assert.ok(Buffer.byteLength(first.cursor) > 128 * 1024);
         assert.match(first.help.join("\n"), /--cursor -.*stdin/);
         const second = runReadCli(["entra", noun, "list", "--profile", profile, "--cursor", "-"],
@@ -267,7 +267,9 @@ for (const [noun, key, field] of [
         assert.equal(last.status, 0, last.stdout);
         const complete = decode(last.stdout);
         assert.deepEqual(complete[key], rows.slice(200));
-        assert.deepEqual(complete.count, { returned: 800, complete: true });
+        assert.deepEqual(complete.count, `800 ${plural}`);
+        assert.equal(complete.total, null);
+        assert.equal(complete.complete, true);
       } finally { teardownProfiles(state); }
     });
   }
@@ -353,7 +355,7 @@ for (const [noun, path, dateField, key, filterField] of [
       const resumed = await executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", first.cursor], overrides);
       const expected = noun === "sign-in" ? signIns : audits;
       assert.deepEqual(resumed[key].map(row => row.id), expected.slice(1).map(row => row.id));
-      assert.equal(resumed.count.complete, true);
+      assert.equal(resumed.complete, true);
     } finally { teardownProfiles(state); }
   });
 
@@ -384,7 +386,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: s2.id, createdDateTime: s2.createdDateTime, userPrincipalName: s2.userPrincipalName, appDisplayName: s2.appDisplayName },
         { id: s3.id, createdDateTime: s3.createdDateTime, userPrincipalName: s3.userPrincipalName, appDisplayName: s3.appDisplayName },
       ]);
-      assert.deepEqual(output.count, { returned: 3, complete: true });
+      assert.deepEqual(output.count, "3 sign-ins");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
       assert.ok(output.help.some(hint => hint.includes("entra sign-in show --id <sign-in-id>")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -416,7 +420,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: a1.id, activityDateTime: a1.activityDateTime, activityDisplayName: a1.activityDisplayName, result: a1.result },
         { id: a2.id, activityDateTime: a2.activityDateTime, activityDisplayName: a2.activityDisplayName, result: a2.result },
       ]);
-      assert.deepEqual(output.count, { returned: 2, complete: true });
+      assert.deepEqual(output.count, "2 directory audits");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -449,7 +455,9 @@ test("delegated sign-in list composes since, until and filter into one bounded $
       "createdDateTime ge 2026-09-01T00:00:00.000Z and createdDateTime le 2026-09-08T00:00:00.000Z and (status/errorCode ne 0)");
     assert.equal(params.get("$select"), "id,createdDateTime,userPrincipalName,appDisplayName");
     assert.deepEqual(result.signIns.map(row => row.id), [s1.id, s2.id, s3.id]);
-    assert.deepEqual(result.count, { returned: 3, complete: true });
+    assert.deepEqual(result.count, "3 sign-ins");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(!JSON.stringify(result).includes("opaque-fixture-delegated-token"));
   } finally {
     teardownProfiles(state);
@@ -467,7 +475,9 @@ test("directory-audit list bounds activityDateTime and returns compact rows", as
       { id: a1.id, activityDateTime: a1.activityDateTime, activityDisplayName: a1.activityDisplayName, result: a1.result },
       { id: a2.id, activityDateTime: a2.activityDateTime, activityDisplayName: a2.activityDisplayName, result: a2.result },
     ]);
-    assert.deepEqual(result.count, { returned: 2, complete: true });
+    assert.deepEqual(result.count, "2 directory audits");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(result.help.some(hint => hint.includes("entra directory-audit show --id <directory-audit-id>")));
   } finally {
     teardownProfiles(state);
@@ -483,7 +493,7 @@ for (const [noun, dateField] of [["sign-in", "createdDateTime"], ["directory-aud
         "--since", "2026-09-10T21:20:02.7215374Z", "--limit", "1"], overrides);
       const resumed = await executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", first.cursor,
         "--since", "2026-09-10T23:20:02.721537400+02:00"], overrides);
-      assert.equal(resumed.count.complete, true);
+      assert.equal(resumed.complete, true);
       await assert.rejects(executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", first.cursor,
         "--since", "2026-09-10T21:20:02.7215375Z"], overrides), { code: "VALIDATION_ERROR" });
     } finally { teardownProfiles(state); }
@@ -698,7 +708,9 @@ test("list truncation recovery replays time bounds with --full", async () => {
     assert.deepEqual(recovery, [...argv, "--full"]);
     const full = await executeArgv(recovery, overrides);
     assert.equal(full.signIns[0].userPrincipalName, long);
-    assert.deepEqual(full.count, { returned: 1, complete: true });
+    assert.deepEqual(full.count, "1 sign-ins");
+    assert.equal(full.total, null);
+    assert.equal(full.complete, true);
   } finally {
     teardownProfiles(state);
   }
@@ -755,13 +767,15 @@ test("a capped sign-in list resumes losslessly through its opaque cursor", async
     const { requests, overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE, "--limit", "2"], overrides);
     assert.deepEqual(first.signIns.map(row => row.id), [s1.id, s2.id]);
-    assert.equal(first.count.complete, false);
-    assert.match(first.count.reason, /row limit/);
+    assert.equal(first.complete, false);
+    assert.match(first.reason, /row limit/);
     assert.equal(typeof first.cursor, "string");
     assert.ok(!first.cursor.includes(s1.id));
     const second = await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(second.signIns.map(row => row.id), [s3.id]);
-    assert.deepEqual(second.count, { returned: 1, complete: true });
+    assert.deepEqual(second.count, "1 sign-ins");
+    assert.equal(second.total, null);
+    assert.equal(second.complete, true);
     assert.ok(!JSON.stringify(second).includes("opaque-fixture-delegated-token"));
     assert.ok(requests.length >= 2);
   } finally {
@@ -774,7 +788,7 @@ test("resume repeats identical time bounds but rejects a conflicting --since", a
   try {
     const { overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE, "--limit", "1"], overrides);
-    assert.equal(first.count.complete, false);
+    assert.equal(first.complete, false);
     const resumed = await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--cursor", first.cursor, "--since", SINCE], overrides);
     assert.deepEqual(resumed.signIns.map(row => row.id), [s2.id, s3.id]);
     await assert.rejects(
@@ -794,7 +808,9 @@ test("an empty log list is a definitive zero with widening guidance", async () =
     const overrides = { transport: fixture.send, delegated: credential, application: credentialService("application", []) };
     const result = await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE], overrides);
     assert.deepEqual(result.signIns, []);
-    assert.deepEqual(result.count, { returned: 0, complete: true });
+    assert.deepEqual(result.count, "0 sign-ins");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(result.help.some(hint => hint.includes("0 sign-ins matched in this window")));
   } finally {
     teardownProfiles(state);

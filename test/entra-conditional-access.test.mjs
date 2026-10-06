@@ -201,9 +201,9 @@ function runCaCli(args, state, mode, denied = false, input = "") {
 }
 
 for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
-  for (const [family, key, field, detail] of [
-    ["policy", "policies", "conditions", { applications: { applicationFilter: { mode: "include", rule: "x".repeat(4096) } } }],
-    ["named-location", "namedLocations", "ipRanges", [{ cidrAddress: "x".repeat(4096) }]],
+  for (const [family, key, field, detail, plural] of [
+    ["policy", "policies", "conditions", { applications: { applicationFilter: { mode: "include", rule: "x".repeat(4096) } } }, "policies"],
+    ["named-location", "namedLocations", "ipRanges", [{ cidrAddress: "x".repeat(4096) }], "named locations"],
   ]) {
     test(`${mode} executable resumes large ${family} cursors through stdin`, async () => {
       const state = setupProfiles();
@@ -220,7 +220,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         assert.equal(resumed.stderr, "");
         const output = decode(resumed.stdout);
         assert.deepEqual(output[key], rows.slice(1));
-        assert.deepEqual(output.count, { returned: 39, complete: true });
+        assert.deepEqual(output.count, `39 ${plural}`);
+        assert.equal(output.total, null);
+        assert.equal(output.complete, true);
 
         const truncated = runCaCli([...command, "--cursor", "-", "--limit", "1"], state, mode, false, first.cursor);
         assert.equal(truncated.status, 0, truncated.stdout);
@@ -245,7 +247,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: p2.id, displayName: p2.displayName, state: "enabledForReportingButNotEnforced" },
         { id: p3.id, displayName: p3.displayName, state: "disabled" },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 policies");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("conditional-access policy show --id <policy-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies?"));
@@ -293,7 +297,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: l1.id, displayName: "Corporate HQ", "@odata.type": "#microsoft.graph.ipNamedLocation" },
         { id: l2.id, displayName: "Blocked countries", "@odata.type": "#microsoft.graph.countryNamedLocation" },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 named locations");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("conditional-access named-location show --id <named-location-id>")));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identity/conditionalAccess/namedLocations?"));
     } finally {
@@ -323,11 +329,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.policies.map(row => row.id), [p1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.policies.map(row => row.id), [p2.id, p3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 policies");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -341,14 +349,16 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(first.namedLocations, [
         { id: l1.id, displayName: l1.displayName, "@odata.type": l1["@odata.type"] },
       ]);
-      assert.equal(first.count.returned, 1);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.namedLocations.length, 1);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.namedLocations, [
         { id: l2.id, displayName: l2.displayName, "@odata.type": l2["@odata.type"] },
       ]);
-      assert.deepEqual(second.count, { returned: 1, complete: true });
+      assert.deepEqual(second.count, "1 named locations");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -397,7 +407,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const result = await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile], overrides);
       assert.deepEqual(result.policies, []);
-      assert.deepEqual(result.count, { returned: 0, complete: true });
+      assert.deepEqual(result.count, "0 policies");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("0 conditional-access policies matched")));
     } finally {
       teardownProfiles(state);
@@ -411,7 +423,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const result = await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile], overrides);
       assert.deepEqual(result.namedLocations, []);
-      assert.deepEqual(result.count, { returned: 0, complete: true });
+      assert.deepEqual(result.count, "0 named locations");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("0 named locations matched")));
     } finally {
       teardownProfiles(state);
@@ -426,7 +440,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const policiesOut = decode(listed.stdout);
       assert.deepEqual(policiesOut.policies.map(policy => policy.id), [p1.id, p2.id, p3.id]);
-      assert.deepEqual(policiesOut.count, { returned: 3, complete: true });
+      assert.deepEqual(policiesOut.count, "3 policies");
+      assert.equal(policiesOut.total, null);
+      assert.equal(policiesOut.complete, true);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runCaCli(["entra", "conditional-access", "policy", "show", "--id", p1.id, "--profile", profile], state, mode);

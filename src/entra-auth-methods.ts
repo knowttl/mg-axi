@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-04: the Entra authentication-method and registration-report read
@@ -239,6 +240,7 @@ const REPORT_DENIAL_HINTS = [
 interface CollectionShape {
   command: string;
   key: string;
+  noun: string;
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -252,6 +254,7 @@ interface CollectionShape {
 const METHOD_LIST: CollectionShape = {
   command: "entra user authentication-method list",
   key: "authenticationMethods",
+  noun: "authentication methods",
   known: KNOWN_METHODS,
   knownList: KNOWN_METHOD_FIELDS,
   defaultSelect: DEFAULT_METHOD_SELECT,
@@ -268,6 +271,7 @@ const METHOD_LIST: CollectionShape = {
 const REPORT_LIST: CollectionShape = {
   command: "entra registration list",
   key: "registrationDetails",
+  noun: "registration rows",
   known: KNOWN_REPORT,
   knownList: KNOWN_REPORT_FIELDS,
   defaultSelect: DEFAULT_REPORT_SELECT,
@@ -328,16 +332,17 @@ async function listCollection(
   if (!result.complete) {
     return {
       [shape.key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, shape.noun, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, `Resume losslessly with the same flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`, ...standing],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
-    return { [shape.key]: rows, count, help: [shape.emptyNote, ...standing] };
+    return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [shape.emptyNote, ...standing] };
   }
-  return { [shape.key]: rows, count, help: [...truncationHints, ...standing] };
+  return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [...truncationHints, ...standing] };
 }
 
 export async function listAuthenticationMethods(

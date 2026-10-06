@@ -188,7 +188,7 @@ Relationship rows default to `id` and `displayName`; `--select` accepts only `id
 Returned `@odata.type` stays visible alongside any `--fields` projection.
 Group lists return `groups`, member lists return `members`, parent-membership lists return `memberOf`, and single-group reads return `group`.
 Group and relationship lists report uniform totals through the shared list-totals helper: `total` holds the server-supplied `@odata.count` when the query carries `$count` (filtered reads) and `null` otherwise, beside a `count` line such as `3 of 10 groups`, `3 groups` or, when the total is unknown and more pages remain, `3 groups shown, more available`.
-The same helper covers the other wired core-directory lists: users, applications, service principals, owners, devices, administrative units and unit members, contacts, direct reports and memberships, directory roles, role assignments and PIM eligible/active assignments, group PIM assignment/eligibility schedules, instances and eligibility requests, directory objects, deleted items, domains and DNS records, contracts, organizations and branding localizations, and subscriptions. Remaining list families keep the previous `count: { returned, complete }` shape and follow the same helper in the next piece.
+The same helper covers the other wired core-directory lists: users, applications, service principals, owners, devices, administrative units and unit members, contacts, direct reports and memberships, directory roles, role assignments and PIM eligible/active assignments, group PIM assignment/eligibility schedules, instances and eligibility requests, directory objects, deleted items, domains and DNS records, contracts, organizations and branding localizations, subscriptions, access-review definitions, instances, decisions, contacted reviewers and stages, sign-ins and directory audits, authentication methods and registration reports, PKI configurations and certificate authorities, Conditional Access policies and named locations, attribute sets, custom-security-attribute definitions and allowed values, data-policy operations, delegated-admin customers, relationships and navigation lists, and entitlement catalogs, access packages, assignment policies, resource-role scopes, assignments and assignment requests. Remaining list families keep the previous `count: { returned, complete }` shape and follow the same helper in the next piece.
 `complete` names pagination state, with `reason` and an opaque `cursor` on partial reads.
 The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to group and relationship reads.
 Resume relationships with the same `--group` and direct or `--transitive` command, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
@@ -284,7 +284,7 @@ Contacted-reviewer and stage `show` commands take `--definition`, `--instance` a
 Decision reads are read-only: listing never approves, denies or applies anything, and submitting or stopping a review belongs to a later slice, never to these reads.
 `--select` requests properties from the [reviewed access-review property sets](src/entra-access-reviews.ts); `--fields` must be a subset of the fetched selection.
 `--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; on definitions only `contains()` over the scope query and `eq` on status are documented, on stages only `eq` is documented.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to access-review reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to access-review reads.
 Resume any access-review list with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra access-review definition list --profile soc --cursor - < cursor.txt`; small cursors can also use `--cursor <token>`.
 Resume instance, decision, contacted-reviewer and stage lists with the same `--definition` (and `--instance`), profile, scopes and API version; a cursor from another definition or instance fails validation instead of returning foreign rows.
 To replay a resumed result with `--full`, supply the original input cursor on stdin; the returned cursor continues after that result.
@@ -320,7 +320,7 @@ Access packages are the assignable bundles: `entra entitlement access-package li
 Approval and subject reads carry personal data and belong to later parts, never to these reads; questions, custom-extension stages and the linked role/scope detail need `$expand` and belong to later slices.
 `--select` requests properties from the [reviewed entitlement property sets](src/entra-entitlement-management.ts); `--fields` must be a subset of the fetched selection.
 `--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to entitlement reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to entitlement reads.
 Resume any entitlement list with `--cursor -` and supply the returned cursor on stdin; resume policy and role-scope lists with the same `--access-package`, profile, scopes and API version.
 Delegated reads default to `https://graph.microsoft.com/EntitlementManagement.Read.All`, while application profiles use the configured `.default` audience.
 See the [entitlement-management scope decisions](docs/coverage.md#ext-02-entitlement-management-scope-decisions) for the scheduled personal-data part and deferred beta reads.
@@ -546,7 +546,7 @@ Allowed-value lists and shows take `--definition <definition-id>`; definition li
 Each `count` returns `count: { returned: <total>, complete: true }` from its text/plain `$count` route; only the definition count accepts `--filter` to narrow the total server-side, and no count takes `--select`, `--limit` or `--cursor`.
 Raw `api get` supports `/directory/attributeSets`, `/directory/attributeSets/<set-id>`, `/directory/customSecurityAttributeDefinitions`, `/directory/customSecurityAttributeDefinitions/<definition-id>`, `/directory/customSecurityAttributeDefinitions/<definition-id>/allowedValues` and the single allowed-value route; the `$count` routes are available only through the named count commands.
 Attribute-set lists return `attributeSets` and single-set reads return `attributeSet`; definition lists return `customSecurityAttributeDefinitions` and single-definition reads return `customSecurityAttributeDefinition`; allowed-value lists return `allowedValues` and single-value reads return `allowedValue`.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to these reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to these reads.
 All nine named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
 Delegated reads default to `https://graph.microsoft.com/CustomSecAttributeDefinition.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need a custom-security-attribute role even for Global Administrators (Attribute Definition Reader or Attribute Definition Administrator work for every read; some reads also accept Attribute Assignment Reader or Attribute Assignment Administrator); personal Microsoft accounts are not supported.
@@ -604,7 +604,7 @@ Delegated-admin reads run in the partner tenant; customer objects are created by
 `entra delegated-admin-customer list` defaults to compact properties (`id`, `displayName`, `tenantId`); `entra delegated-admin-relationship list` defaults to (`id`, `displayName`, `status`, `customer`, `endDateTime`); both top-level show commands default to the full reviewed property set.
 `--select` requests properties from the reviewed delegated-admin field sets; `--fields` projects locally and must be a subset of the fetched selection.
 Both top-level lists accept `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to delegated-admin reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to delegated-admin reads.
 The access-assignment, operation and request navigation lists bind their parent relationship through `--id` and take `--assignment-id`, `--operation-id` and `--request-id` on their shows; the service-management-detail reads bind their parent customer through `--id` and take `--detail-id` on the show.
 The navigation lists default to compact properties (`id`, `status`, `accessContainer`, `accessDetails` for assignments; `id`, `operationType`, `status`, `lastModifiedDateTime` for operations; `id`, `action`, `status`, `lastModifiedDateTime` for requests) while the service-management-detail reads always carry (`id`, `serviceName`, `serviceManagementUrl`); every show defaults to its full reviewed property set.
 The access-assignment, operation and request lists accept `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`; Graph documents no query parameters for service-management details, so those two reads take no `--select` or `--filter` and project `--fields` locally.
@@ -703,7 +703,7 @@ Authority show commands also take `--pki <pki-id>` and require `--id <authority-
 Authority entries carry public certificates only, but the base64 `certificate` blob (up to 8 KB per CA file) is omitted from every default select and needs an explicit `--select certificate`; explicitly selected blobs still truncate at 500 characters unless `--full` is passed.
 PKI lists return `certificateAuthPkis` and single-PKI reads return `certificateAuthPki`; authority lists return `certificateAuthorities` with single-authority reads returning `certificateAuthority`.
 Count commands return `count: { returned: <total>, complete: true }` and accept no `--select`, `--fields`, `--limit` or `--cursor`.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to certificate-auth reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to certificate-auth reads.
 Delegated certificate-auth reads default to `https://graph.microsoft.com/PublicKeyInfrastructure.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need Privileged Authentication Administrator or Authentication Administrator; personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for certificate-auth reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
@@ -913,7 +913,7 @@ List and show accept `--select` from the [reviewed operation property set](src/e
 The list documents `$select` only, so no `--filter`; the `$count` route takes no `--filter`, `--select`, `--limit` or `--cursor`.
 Operation lists return `dataPolicyOperations`, single-operation reads return `dataPolicyOperation`, and counts return `count` with the scalar total.
 `storageLocation` always renders as `***redacted***`: export blob URLs and signed links never reach output, errors or logs.
-Operation lists use the named-list caps, `count` aggregate and cursors described above.
+Operation lists use the named-list caps, uniform `count` totals and cursors described above.
 List and show preserve null/missing properties and truncate text longer than 500 characters; `--full` restores complete text without lifting redaction or row caps.
 Delegated operation reads default to `https://graph.microsoft.com/User.Export.All,https://graph.microsoft.com/User.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need Company Administrator, the privileged role documented for export reads; personal Microsoft accounts are not supported.
@@ -968,8 +968,8 @@ mg-axi entra conditional-access named-location show --profile soc --id <named-lo
 Policy `--select` accepts the [reviewed policy property set](src/entra-conditional-access.ts) and location `--select` accepts the [reviewed location property set](src/entra-conditional-access.ts); `--fields` must be a subset of the fetched selection in each family.
 Returned `@odata.type` stays visible on named-location rows so IP and country locations stay distinguishable alongside any `--fields` projection.
 Policy lists return `policies`, location lists return `namedLocations`, single-policy reads return `policy` and single-location reads return `namedLocation`.
-Successful empty collections return an empty list with `count.returned: 0`, `count.complete: true` and absence guidance.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to Conditional Access reads, including nested condition values; every truncated value carries a `--full` hint.
+Successful empty collections return an empty list with a uniform `count` line (`0 policies` or `0 named locations`, `total: null`) and absence guidance.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to Conditional Access reads, including nested condition values; every truncated value carries a `--full` hint.
 Resume either Conditional Access list with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra conditional-access policy list --profile soc --cursor - < cursor.txt`.
 Small cursors can also use `--cursor <token>`; both forms enforce a 16 MB size ceiling.
 Use `--full` when reasoning from complete condition or control text; `--select` and `--fields` still determine which properties are visible, and missing properties remain unknown.
@@ -1016,7 +1016,7 @@ Method registration and deletion belong to no read slice and are never construct
 For methods, `--select` selects output properties locally from the [reviewed authentication property sets](src/entra-auth-methods.ts); no `$select` is sent to Graph.
 For the registration report, `--select` requests server properties; `--fields` must be a subset of the default or explicit selection for either command.
 Only the registration report supports `--filter`, passed through as plain `$filter` with no `$count` or `ConsistencyLevel` contract.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply.
 Resume method lists with the same `--user` ID or UPN, profile, scopes and API version; omit or repeat the original `--select`, and repeat local `--fields` and `--full` when wanted.
 Delegated method reads default to `https://graph.microsoft.com/UserAuthenticationMethod.Read.All` (delegated self-reads may use `UserAuthenticationMethod.Read`) and registration reads default to `https://graph.microsoft.com/AuditLog.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers acting on another user additionally need Global Reader, Authentication Administrator or Privileged Authentication Administrator for methods, and Reports Reader, Security Reader, Security Administrator or Global Reader for the report.
@@ -1206,7 +1206,7 @@ The service requests only `https://graph.microsoft.com/.default`, representing t
 Ask an administrator to grant those permissions on the configured app registration; per-command delegated scopes cannot narrow the application token.
 Acquisition failures return `AUTH_REQUIRED` with consent and certificate/federation guidance, without user or device-code fallback.
 
-Run `corepack pnpm build`, `corepack pnpm test` and `corepack pnpm lint` for shell validation.
+Run `corepack pnpm build`, `corepack pnpm test` (test files run at most 4 at a time via `--test-concurrency=4` in the `test` script) and `corepack pnpm lint` for shell validation.
 The [CI workflow](.github/workflows/ci.yml) defines the platform/runtime matrix for shell build, test and lint checks, validates the Python inventory tooling separately, and rejects stale generated docs.
 The [implementation plan](PLAN.md) remains the design authority.
 

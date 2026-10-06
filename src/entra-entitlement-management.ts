@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-02 entitlement-management reads: the read-only catalog and
@@ -377,6 +378,7 @@ function flattenRequestLinks(source: Record<string, unknown>): Record<string, un
 interface CollectionShape {
   command: string;
   key: string;
+  noun: string;
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -393,6 +395,7 @@ interface CollectionShape {
 const CATALOG_LIST: CollectionShape = {
   command: "entra entitlement catalog list",
   key: "catalogs",
+  noun: "catalogs",
   known: CATALOG_KNOWN,
   knownList: KNOWN_CATALOG_FIELDS,
   defaultSelect: DEFAULT_CATALOG_LIST_SELECT,
@@ -406,6 +409,7 @@ const CATALOG_LIST: CollectionShape = {
 const ACCESS_PACKAGE_LIST: CollectionShape = {
   command: "entra entitlement access-package list",
   key: "accessPackages",
+  noun: "access packages",
   known: ACCESS_PACKAGE_KNOWN,
   knownList: KNOWN_ACCESS_PACKAGE_FIELDS,
   defaultSelect: DEFAULT_ACCESS_PACKAGE_LIST_SELECT,
@@ -419,6 +423,7 @@ const ACCESS_PACKAGE_LIST: CollectionShape = {
 const ASSIGNMENT_POLICY_LIST: CollectionShape = {
   command: "entra entitlement assignment-policy list",
   key: "assignmentPolicies",
+  noun: "assignment policies",
   known: ASSIGNMENT_POLICY_KNOWN,
   knownList: KNOWN_ASSIGNMENT_POLICY_FIELDS,
   defaultSelect: DEFAULT_ASSIGNMENT_POLICY_LIST_SELECT,
@@ -432,6 +437,7 @@ const ASSIGNMENT_POLICY_LIST: CollectionShape = {
 const RESOURCE_ROLE_SCOPE_LIST: CollectionShape = {
   command: "entra entitlement resource-role-scope list",
   key: "resourceRoleScopes",
+  noun: "resource-role scopes",
   known: RESOURCE_ROLE_SCOPE_KNOWN,
   knownList: KNOWN_RESOURCE_ROLE_SCOPE_FIELDS,
   defaultSelect: DEFAULT_RESOURCE_ROLE_SCOPE_LIST_SELECT,
@@ -445,6 +451,7 @@ const RESOURCE_ROLE_SCOPE_LIST: CollectionShape = {
 const ASSIGNMENT_LIST: CollectionShape = {
   command: "entra entitlement assignment list",
   key: "assignments",
+  noun: "assignments",
   known: ASSIGNMENT_KNOWN,
   knownList: KNOWN_ASSIGNMENT_FIELDS,
   defaultSelect: DEFAULT_ASSIGNMENT_LIST_SELECT,
@@ -463,6 +470,7 @@ const ASSIGNMENT_LIST: CollectionShape = {
 const ASSIGNMENT_REQUEST_LIST: CollectionShape = {
   command: "entra entitlement assignment-request list",
   key: "assignmentRequests",
+  noun: "assignment requests",
   known: ASSIGNMENT_REQUEST_KNOWN,
   knownList: KNOWN_ASSIGNMENT_REQUEST_FIELDS,
   defaultSelect: DEFAULT_ASSIGNMENT_REQUEST_LIST_SELECT,
@@ -552,16 +560,17 @@ async function listCollection(
   if (!result.complete) {
     return {
       [shape.key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, shape.noun, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint, ...standing],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
-    return { [shape.key]: rows, count, help: [shape.emptyNote, ...standing] };
+    return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [shape.emptyNote, ...standing] };
   }
-  return { [shape.key]: rows, count, help: [...truncationHints, ...standing] };
+  return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [...truncationHints, ...standing] };
 }
 
 async function showOne(

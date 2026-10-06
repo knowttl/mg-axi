@@ -156,7 +156,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           createdDateTime: m2.createdDateTime, "@odata.type": m2["@odata.type"] },
         { id: m3.id, createdDateTime: null, "@odata.type": m3["@odata.type"] },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 authentication methods");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("never a scan across users")));
       assert.ok(result.help.some(hint => hint.includes("entra registration list")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
@@ -178,14 +180,18 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(first.authenticationMethods.length, 2);
       assert.equal(first.authenticationMethods[0].phoneNumber, "***redacted***");
       assert.equal(first.authenticationMethods[0].phoneType, "mobile");
-      assert.deepEqual(first.count, { returned: 2, complete: false, reason: first.count.reason });
+      assert.deepEqual(first.count, "2 authentication methods shown, more available");
+      assert.equal(first.total, null);
+      assert.equal(first.complete, false);
       assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
       assert.ok(!JSON.stringify(first).includes("+1 5550100"));
       assert.equal(new URL(requests[0].url).searchParams.has("$select"), false);
       const second = await executeArgv(["entra", "user", "authentication-method", "list",
         "--user", userId, "--profile", profile, "--cursor", first.cursor], overrides);
       assert.ok(!JSON.stringify(second).includes("+1 5550100"));
-      assert.deepEqual(second.count, { returned: 1, complete: true });
+      assert.deepEqual(second.count, "1 authentication methods");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
       assert.deepEqual(second.authenticationMethods, [{ id: m3.id, "@odata.type": m3["@odata.type"] }]);
     } finally {
       teardownProfiles(state);
@@ -210,7 +216,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         "--user", userId, "--profile", profile, "--cursor", first.cursor], overrides);
       assert.equal(requests.length, 2);
       assert.deepEqual(second.authenticationMethods, [{ id: m3.id, emailAddress: m3.emailAddress, "@odata.type": m3["@odata.type"] }]);
-      assert.deepEqual(second.count, { returned: 1, complete: true });
+      assert.deepEqual(second.count, "1 authentication methods");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -239,7 +247,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: d1.id, userPrincipalName: d1.userPrincipalName, userDisplayName: d1.userDisplayName, isMfaRegistered: true },
         { id: d2.id, userPrincipalName: d2.userPrincipalName },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 registration rows");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("does not cover disabled users")));
       assert.ok(result.help.some(hint => hint.includes("not proof of no MFA")));
       const url = new URL(requests[0].url);
@@ -299,7 +309,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.stderr, "");
       const output = decode(result.stdout);
       assert.equal(output.authenticationMethods.length, 3);
-      assert.deepEqual(output.count, { returned: 3, complete: true });
+      assert.deepEqual(output.count, "3 authentication methods");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
       assert.ok(!result.stdout.includes("+1 5550100"));
     } finally {
       teardownProfiles(state);
@@ -320,7 +332,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: d1.id, userPrincipalName: d1.userPrincipalName, userDisplayName: d1.userDisplayName, isMfaRegistered: true },
         { id: d2.id, userPrincipalName: d2.userPrincipalName },
       ]);
-      assert.deepEqual(output.count, { returned: 2, complete: true });
+      assert.deepEqual(output.count, "2 registration rows");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
       assert.ok(JSON.stringify(output.help).includes("disabled users"));
     } finally {
       teardownProfiles(state);
@@ -407,11 +421,15 @@ test("delegated registration reads resume a capped list through its opaque curso
     const { overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "registration", "list", "--profile", "soc", "--limit", "1"], overrides);
     assert.equal(first.registrationDetails.length, 1);
-    assert.deepEqual(first.count, { returned: 1, complete: false, reason: first.count.reason });
+    assert.deepEqual(first.count, "1 registration rows shown, more available");
+    assert.equal(first.total, null);
+    assert.equal(first.complete, false);
     assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
     const second = await executeArgv(["entra", "registration", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(second.registrationDetails, [{ id: d2.id, userPrincipalName: d2.userPrincipalName }]);
-    assert.deepEqual(second.count, { returned: 1, complete: true });
+    assert.deepEqual(second.count, "1 registration rows");
+    assert.equal(second.total, null);
+    assert.equal(second.complete, true);
     assert.ok(second.help.some(hint => hint.includes("does not cover disabled users")));
   } finally {
     teardownProfiles(state);

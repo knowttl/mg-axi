@@ -132,7 +132,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: op2.id, status: "running", userId: "user-2", submittedDateTime: "2026-10-02T00:00:00Z" },
         { id: op3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 data-policy operations");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra data-policy-operation show --id <operation-id>")));
       assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
       assert.ok(!JSON.stringify(result).includes("contoso.blob.core.windows.net"));
@@ -199,11 +201,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "data-policy-operation", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.dataPolicyOperations.map(row => row.id), [op1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "data-policy-operation", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.dataPolicyOperations.map(row => row.id), [op2.id, op3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 data-policy operations");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }

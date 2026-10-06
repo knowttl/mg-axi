@@ -255,7 +255,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: d1.id, displayName: `${d1.displayName.slice(0, 500)}... (truncated, ${d1.displayName.length} chars total)`, status: "InProgress" },
         { id: d2.id, displayName: "Monthly role review", status: "Completed" },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 access-review definitions");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("review schedules (a series)")));
       assert.ok(result.help.some(hint => hint.includes("entra access-review definition show --id <definition-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
@@ -289,7 +291,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: i1.id, status: "InProgress", startDateTime: i1.startDateTime, endDateTime: i1.endDateTime },
         { id: i2.id, status: "Completed", startDateTime: i2.startDateTime, endDateTime: i2.endDateTime },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 access-review instances");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("never schedules themselves")));
       assert.ok(new URL(requests[0].url).pathname.endsWith(`/definitions/${definitionId}/instances`));
       assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,status,startDateTime,endDateTime");
@@ -322,7 +326,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: dec1.id, accessReviewId: instanceId, decision: "NotReviewed", recommendation: "Deny" },
         { id: dec2.id, accessReviewId: instanceId, decision: "Approve", recommendation: "Approve" },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 access-review decisions");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("never approves, denies or applies anything")));
       assert.ok(new URL(requests[0].url).pathname.endsWith(`/instances/${instanceId}/decisions`));
       assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,accessReviewId,decision,recommendation");
@@ -357,7 +363,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: r1.id, displayName: "Adele Vance", userPrincipalName: "AdeleV@contoso.com" },
         { id: r2.id, displayName: "Diego Siciliani", userPrincipalName: "DiegoS@contoso.com" },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 contacted reviewers");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("whether or not they were notified")));
       assert.ok(result.help.some(hint => hint.includes("entra access-review contacted-reviewer show --definition <definition-id>")));
       assert.ok(new URL(requests[0].url).pathname.endsWith(`/instances/${instanceId}/contactedReviewers`));
@@ -391,7 +399,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: s1.id, status: "InProgress", startDateTime: s1.startDateTime, endDateTime: s1.endDateTime },
         { id: s2.id, status: "NotStarted", startDateTime: s2.startDateTime, endDateTime: s2.endDateTime },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 access-review stages");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("sequential phases")));
       assert.ok(result.help.some(hint => hint.includes("entra access-review stage show --definition <definition-id>")));
       assert.ok(new URL(requests[0].url).pathname.endsWith(`/instances/${instanceId}/stages`));
@@ -446,7 +456,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.stderr, "");
       const output = decode(result.stdout);
       assert.equal(output.definitions.length, 2);
-      assert.deepEqual(output.count, { returned: 2, complete: true });
+      assert.deepEqual(output.count, "2 access-review definitions");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -466,7 +478,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: dec1.id, accessReviewId: instanceId, decision: "NotReviewed", recommendation: "Deny" },
         { id: dec2.id, accessReviewId: instanceId, decision: "Approve", recommendation: "Approve" },
       ]);
-      assert.deepEqual(output.count, { returned: 2, complete: true });
+      assert.deepEqual(output.count, "2 access-review decisions");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -486,7 +500,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: r1.id, displayName: "Adele Vance", userPrincipalName: "AdeleV@contoso.com" },
         { id: r2.id, displayName: "Diego Siciliani", userPrincipalName: "DiegoS@contoso.com" },
       ]);
-      assert.deepEqual(output.count, { returned: 2, complete: true });
+      assert.deepEqual(output.count, "2 contacted reviewers");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -591,11 +607,15 @@ test("delegated definition reads resume a capped list through its opaque cursor"
     const { overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "access-review", "definition", "list", "--profile", "soc", "--limit", "1"], overrides);
     assert.equal(first.definitions.length, 1);
-    assert.deepEqual(first.count, { returned: 1, complete: false, reason: first.count.reason });
+    assert.deepEqual(first.count, "1 access-review definitions shown, more available");
+    assert.equal(first.total, null);
+    assert.equal(first.complete, false);
     assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
     const second = await executeArgv(["entra", "access-review", "definition", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(second.definitions, [{ id: d2.id, displayName: "Monthly role review", status: "Completed" }]);
-    assert.deepEqual(second.count, { returned: 1, complete: true });
+    assert.deepEqual(second.count, "1 access-review definitions");
+    assert.equal(second.total, null);
+    assert.equal(second.complete, true);
   } finally {
     teardownProfiles(state);
   }
@@ -617,7 +637,9 @@ test("delegated instance reads resume under the same definition binding", async 
     }));
     const first = await executeArgv(["entra", "access-review", "instance", "list",
       "--definition", definitionId, "--profile", "soc", "--limit", "1"], overrides);
-    assert.deepEqual(first.count, { returned: 1, complete: false, reason: first.count.reason });
+    assert.deepEqual(first.count, "1 access-review instances shown, more available");
+    assert.equal(first.total, null);
+    assert.equal(first.complete, false);
     const second = await executeArgv(["entra", "access-review", "instance", "list",
       "--definition", definitionId, "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(second.instances, [
@@ -721,7 +743,9 @@ test("delegated contacted-reviewer reads resume under the same instance binding"
     }));
     const first = await executeArgv(["entra", "access-review", "contacted-reviewer", "list",
       "--definition", definitionId, "--instance", instanceId, "--profile", "soc", "--limit", "1"], overrides);
-    assert.deepEqual(first.count, { returned: 1, complete: false, reason: first.count.reason });
+    assert.deepEqual(first.count, "1 contacted reviewers shown, more available");
+    assert.equal(first.total, null);
+    assert.equal(first.complete, false);
     const second = await executeArgv(["entra", "access-review", "contacted-reviewer", "list",
       "--definition", definitionId, "--instance", instanceId, "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(second.contactedReviewers, [
@@ -842,9 +866,9 @@ test("application access-review reads reject delegated scopes", async () => {
   }
 });
 
-for (const [noun, key, rows] of [
-  ["contacted-reviewer", "contactedReviewers", reviewers],
-  ["stage", "stages", stages],
+for (const [noun, key, rows, plural] of [
+  ["contacted-reviewer", "contactedReviewers", reviewers, "contacted reviewers"],
+  ["stage", "stages", stages, "access-review stages"],
 ]) {
   for (const cursorArgs of [["--cursor", "-"], ["--cursor=-"]]) {
     test(`${noun} list resumes from stdin with ${cursorArgs.join(" ")}`, async () => {
@@ -855,14 +879,16 @@ for (const [noun, key, rows] of [
           "--instance", instanceId, "--profile", "soc", "--limit", "1", "--select", "id"];
         const first = await executeArgv(args, overrides);
         assert.deepEqual(first[key], [{ id: rows[0].id }]);
-        assert.equal(first.count.complete, false);
+        assert.equal(first.complete, false);
         assert.ok(first.help.some(hint => hint.includes("--cursor -") && hint.includes("stdin")));
         const resumed = runAccessReviewCli([...args, ...cursorArgs], state, "delegated", undefined, first.cursor);
         assert.equal(resumed.error, undefined);
         assert.equal(resumed.status, 0, resumed.stdout);
         const output = decode(resumed.stdout);
         assert.deepEqual(output[key], [{ id: rows[1].id }]);
-        assert.deepEqual(output.count, { returned: 1, complete: true });
+        assert.deepEqual(output.count, `1 ${plural}`);
+        assert.equal(output.total, null);
+        assert.equal(output.complete, true);
       } finally {
         teardownProfiles(state);
       }
@@ -890,7 +916,7 @@ for (const [noun, parents, key, field] of [
       assert.equal(resumed.status, 0, resumed.stdout);
       const output = decode(resumed.stdout);
       assert.deepEqual(output[key], [{ id: "second", [field]: { query: `${"x".repeat(500)}... (truncated, 140000 chars total)` } }]);
-      assert.equal(output.count.complete, false);
+      assert.equal(output.complete, false);
       assert.ok(output.help.some(hint => hint.includes("--full") && hint.includes("--cursor -")));
       assert.ok(output.help.some(hint => hint.includes("original input cursor on stdin")));
       assert.ok(output.help.every(hint => !hint.includes(first.cursor) && !hint.includes(output.cursor)));

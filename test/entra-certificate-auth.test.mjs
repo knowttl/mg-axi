@@ -162,7 +162,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           statusDetails: `${longStatus.slice(0, 500)}... (truncated, ${longStatus.length} chars total)` },
         { id: pki2.id },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 PKI configurations");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra certificate-auth-pki show --id <pki-id>")));
       assert.ok(result.help.some(hint => hint.includes("not configured")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
@@ -181,7 +183,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile,
         "--filter", "displayName eq 'Contoso PKI'"], overrides);
-      assert.equal(result.count.returned, 2);
+      assert.equal(result.certificateAuthPkis.length, 2);
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$filter"), "displayName eq 'Contoso PKI'");
       assert.equal(requests[0].headers.ConsistencyLevel, undefined);
@@ -196,11 +198,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.certificateAuthPkis.map(row => row.id), [pki1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.certificateAuthPkis.map(row => row.id), [pki2.id]);
-      assert.deepEqual(second.count, { returned: 1, complete: true });
+      assert.deepEqual(second.count, "1 PKI configurations");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -252,7 +256,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: ca2.id },
       ]);
       assert.ok(!("certificate" in result.certificateAuthorities[0]));
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 certificate authorities");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes(`entra certificate-authority show --pki ${pki1.id} --id <authority-id>`)));
       assert.ok(result.help.some(hint => hint.includes("--select certificate")));
       assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com${base}/${pki1.id}/certificateAuthorities?`));

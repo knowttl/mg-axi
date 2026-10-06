@@ -4,13 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { executeArgv } from "../dist/cli.js";
+import { LEAVES } from "../dist/catalogue.js";
 import { Profiles } from "../dist/profiles.js";
 
-// Uniform "N of M" wiring: every remaining core-directory list renders its
-// server-supplied total through the shared list-totals helper. One table row
-// per wired list command covers the three honest shapes (complete unknown
-// total, complete known total, partial unknown total) through the real
-// executeArgv path with fake transports only.
+// Uniform "N of M" wiring: every list command renders its server-supplied
+// total through the shared list-totals helper. One table row per wired list
+// command covers the three honest shapes (complete unknown total, complete
+// known total, partial unknown total) through the real executeArgv path with
+// fake transports only. The catalogue-enumeration test at the end fails on
+// any list leaf that is neither wired above nor explicitly pending.
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
@@ -21,6 +23,15 @@ const CONTACT_ID = "25caf6a2-d5cb-470d-8940-20ba795ef62d";
 const AU_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const ORG_ID = "84841066-274d-4ec0-a5c1-276be684bdd3";
 const GROUP_PIM_FILTER = `groupId eq '${ID_B}'`;
+const REVIEW_DEF_ID = "98dcebed-c7f6-46f4-bcf3-4a3fccdb3e2a";
+const REVIEW_INST_ID = "7bc18cf4-3d70-4009-bc8e-a7c5adb30849";
+const AUTH_USER_ID = "aaaaaaaa-1111-4111-8111-111111111111";
+const PKI_ID = "bbbbbbbb-2222-4222-8222-222222222222";
+const REL_ID = "cccccccc-3333-4333-8333-333333333333";
+const CUST_ID = "dddddddd-4444-4434-8434-444444444444";
+const PKG_ID = "eeeeeeee-5555-4555-8555-555555555555";
+const CSA_DEF_ID = "ffffffff-6666-4666-8666-666666666666";
+const SINCE = "2026-09-01T00:00:00Z";
 
 function setupProfiles() {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-list-totals-"));
@@ -623,6 +634,392 @@ const wired = [
       { id: ID_B, agreementId: ID_B, state: "declined", recordedDateTime: "2026-09-03T00:00:00Z" },
     ],
   },
+  // Already-wired lists with no table row yet: group/member/memberOf (PR 64),
+  // the deleted-* siblings of deleted-user, and the DNS-record siblings of
+  // verification-dns-record. Same helper, same three shapes.
+  {
+    name: "group list",
+    argv: ["entra", "group", "list", "--profile", "soc"],
+    key: "groups",
+    noun: "groups",
+    rows: () => [
+      { id: ID_A, displayName: "All Staff", mail: "allstaff@contoso.com" },
+      { id: ID_B, displayName: "Security Enabled", mail: null },
+    ],
+  },
+  {
+    name: "group member list",
+    argv: ["entra", "group", "member", "list", "--group", ID_A, "--profile", "soc"],
+    key: "members",
+    noun: "members",
+    rows: () => [
+      { "@odata.type": "#microsoft.graph.user", id: ID_A, displayName: "Adele Vance" },
+      { "@odata.type": "#microsoft.graph.user", id: ID_B, displayName: "Alex Wilber" },
+    ],
+  },
+  {
+    name: "group member-of list",
+    argv: ["entra", "group", "member-of", "list", "--group", ID_A, "--profile", "soc"],
+    key: "memberOf",
+    noun: "memberships",
+    rows: () => [
+      { "@odata.type": "#microsoft.graph.group", id: ID_A, displayName: "All Staff" },
+      { "@odata.type": "#microsoft.graph.group", id: ID_B, displayName: "Security Enabled" },
+    ],
+  },
+  {
+    name: "deleted-group list",
+    argv: ["entra", "deleted-group", "list", "--profile", "soc"],
+    key: "deletedItems",
+    noun: "deleted items",
+    rows: () => [
+      { "@odata.type": "#microsoft.graph.group", id: ID_A, displayName: "All Staff" },
+      { "@odata.type": "#microsoft.graph.group", id: ID_B, displayName: "Security Enabled" },
+    ],
+  },
+  {
+    name: "deleted-application list",
+    argv: ["entra", "deleted-application", "list", "--profile", "soc"],
+    key: "deletedItems",
+    noun: "deleted items",
+    rows: () => [
+      { "@odata.type": "#microsoft.graph.application", id: ID_A, displayName: "Contoso Web" },
+      { "@odata.type": "#microsoft.graph.application", id: ID_B, displayName: "Daemon Batch" },
+    ],
+  },
+  {
+    name: "deleted-service-principal list",
+    argv: ["entra", "deleted-service-principal", "list", "--profile", "soc"],
+    key: "deletedItems",
+    noun: "deleted items",
+    rows: () => [
+      { "@odata.type": "#microsoft.graph.servicePrincipal", id: ID_A, displayName: "Contoso Web" },
+      { "@odata.type": "#microsoft.graph.servicePrincipal", id: ID_B, displayName: "Daemon Batch" },
+    ],
+  },
+  {
+    name: "deleted-administrative-unit list",
+    argv: ["entra", "deleted-administrative-unit", "list", "--profile", "soc"],
+    key: "deletedItems",
+    noun: "deleted items",
+    rows: () => [
+      { "@odata.type": "#microsoft.graph.administrativeUnit", id: ID_A, displayName: "Seattle Schools" },
+      { "@odata.type": "#microsoft.graph.administrativeUnit", id: ID_B, displayName: "US Sales" },
+    ],
+  },
+  {
+    name: "domain service-configuration-record list",
+    argv: ["entra", "domain", "service-configuration-record", "list", "--domain", "contoso.com", "--profile", "soc"],
+    key: "serviceConfigurationRecords",
+    noun: "DNS records",
+    rows: () => [
+      { "@odata.type": "#microsoft.graph.domainDnsTxtRecord", id: "rec1" },
+      { "@odata.type": "#microsoft.graph.domainDnsTxtRecord", id: "rec2" },
+    ],
+  },
+  {
+    name: "domain-dns-record list",
+    argv: ["entra", "domain-dns-record", "list", "--profile", "soc"],
+    key: "domainDnsRecords",
+    noun: "DNS records",
+    rows: () => [
+      { "@odata.type": "#microsoft.graph.domainDnsTxtRecord", id: "rec1" },
+      { "@odata.type": "#microsoft.graph.domainDnsTxtRecord", id: "rec2" },
+    ],
+  },
+  // Governance slice: access reviews, audit logs, authentication methods,
+  // certificate auth, conditional access, custom security attributes, data
+  // policy operations, delegated admin, entitlement management.
+  {
+    name: "access-review definition list",
+    argv: ["entra", "access-review", "definition", "list", "--profile", "soc"],
+    key: "definitions",
+    noun: "access-review definitions",
+    rows: () => [
+      { id: ID_A, displayName: "Q1 access review", status: "InProgress" },
+      { id: ID_B, displayName: "Monthly role review", status: "Completed" },
+    ],
+  },
+  {
+    name: "access-review instance list",
+    argv: ["entra", "access-review", "instance", "list", "--definition", REVIEW_DEF_ID, "--profile", "soc"],
+    key: "instances",
+    noun: "access-review instances",
+    rows: () => [
+      { id: ID_A, status: "InProgress", startDateTime: "2026-09-01T00:00:00Z", endDateTime: "2026-09-30T00:00:00Z" },
+      { id: ID_B, status: "Completed", startDateTime: "2026-08-01T00:00:00Z", endDateTime: "2026-08-31T00:00:00Z" },
+    ],
+  },
+  {
+    name: "access-review decision list",
+    argv: ["entra", "access-review", "decision", "list", "--definition", REVIEW_DEF_ID, "--instance", REVIEW_INST_ID, "--profile", "soc"],
+    key: "decisions",
+    noun: "access-review decisions",
+    rows: () => [
+      { id: ID_A, accessReviewId: REVIEW_INST_ID, decision: "NotReviewed", recommendation: "Deny" },
+      { id: ID_B, accessReviewId: REVIEW_INST_ID, decision: "Approve", recommendation: "Approve" },
+    ],
+  },
+  {
+    name: "access-review contacted-reviewer list",
+    argv: ["entra", "access-review", "contacted-reviewer", "list", "--definition", REVIEW_DEF_ID, "--instance", REVIEW_INST_ID, "--profile", "soc"],
+    key: "contactedReviewers",
+    noun: "contacted reviewers",
+    rows: () => [
+      { id: ID_A, displayName: "Adele Vance", userPrincipalName: "AdeleV@contoso.com" },
+      { id: ID_B, displayName: "Diego Siciliani", userPrincipalName: "DiegoS@contoso.com" },
+    ],
+  },
+  {
+    name: "access-review stage list",
+    argv: ["entra", "access-review", "stage", "list", "--definition", REVIEW_DEF_ID, "--instance", REVIEW_INST_ID, "--profile", "soc"],
+    key: "stages",
+    noun: "access-review stages",
+    rows: () => [
+      { id: ID_A, status: "InProgress", startDateTime: "2026-09-01T00:00:00Z", endDateTime: "2026-09-10T00:00:00Z" },
+      { id: ID_B, status: "NotStarted", startDateTime: "2026-09-11T00:00:00Z", endDateTime: "2026-09-20T00:00:00Z" },
+    ],
+  },
+  {
+    name: "sign-in list",
+    argv: ["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE],
+    key: "signIns",
+    noun: "sign-ins",
+    rows: () => [
+      { id: ID_A, createdDateTime: "2026-09-10T12:00:00Z", userPrincipalName: "AdeleV@contoso.com", appDisplayName: "Azure Portal" },
+      { id: ID_B, createdDateTime: "2026-09-10T12:05:00Z", userPrincipalName: "AlexW@contoso.com", appDisplayName: "Azure Portal" },
+    ],
+  },
+  {
+    name: "directory-audit list",
+    argv: ["entra", "directory-audit", "list", "--profile", "soc", "--since", SINCE],
+    key: "directoryAudits",
+    noun: "directory audits",
+    rows: () => [
+      { id: ID_A, activityDateTime: "2026-09-10T12:00:00Z", activityDisplayName: "Add member to group", result: "success" },
+      { id: ID_B, activityDateTime: "2026-09-10T12:05:00Z", activityDisplayName: "Remove member from group", result: "success" },
+    ],
+  },
+  {
+    name: "user authentication-method list",
+    argv: ["entra", "user", "authentication-method", "list", "--user", AUTH_USER_ID, "--profile", "soc"],
+    key: "authenticationMethods",
+    noun: "authentication methods",
+    rows: () => [
+      { id: ID_A, displayName: "Mobile phone", createdDateTime: "2024-01-01T00:00:00Z", "@odata.type": "#microsoft.graph.phoneAuthenticationMethod" },
+      { id: ID_B, displayName: "Authenticator app", createdDateTime: null, "@odata.type": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod" },
+    ],
+  },
+  {
+    name: "registration list",
+    argv: ["entra", "registration", "list", "--profile", "soc"],
+    key: "registrationDetails",
+    noun: "registration rows",
+    rows: () => [
+      { id: ID_A, userPrincipalName: "AdeleV@contoso.com", userDisplayName: "Adele Vance", isMfaRegistered: true },
+      { id: ID_B, userPrincipalName: "AlexW@contoso.com", userDisplayName: "Alex Wilber" },
+    ],
+  },
+  {
+    name: "certificate-auth-pki list",
+    argv: ["entra", "certificate-auth-pki", "list", "--profile", "soc"],
+    key: "certificateAuthPkis",
+    noun: "PKI configurations",
+    rows: () => [
+      { id: ID_A, displayName: "Contoso PKI", status: "succeeded" },
+      { id: ID_B, displayName: "Fabrikam PKI" },
+    ],
+  },
+  {
+    name: "certificate-authority list",
+    argv: ["entra", "certificate-authority", "list", "--pki", PKI_ID, "--profile", "soc"],
+    key: "certificateAuthorities",
+    noun: "certificate authorities",
+    rows: () => [
+      { id: ID_A, displayName: "Contoso Root CA", certificateAuthorityType: "root", expirationDateTime: "2027-08-29T02:05:57Z" },
+      { id: ID_B, displayName: "Contoso Issuing CA", certificateAuthorityType: "unknown" },
+    ],
+  },
+  {
+    name: "conditional-access policy list",
+    argv: ["entra", "conditional-access", "policy", "list", "--profile", "soc"],
+    key: "policies",
+    noun: "policies",
+    rows: () => [
+      { id: ID_A, displayName: "Require MFA for admins", state: "enabled" },
+      { id: ID_B, displayName: "Block legacy auth", state: "disabled" },
+    ],
+  },
+  {
+    name: "conditional-access named-location list",
+    argv: ["entra", "conditional-access", "named-location", "list", "--profile", "soc"],
+    key: "namedLocations",
+    noun: "named locations",
+    rows: () => [
+      { id: ID_A, displayName: "Corporate HQ", "@odata.type": "#microsoft.graph.ipNamedLocation" },
+      { id: ID_B, displayName: "Blocked countries", "@odata.type": "#microsoft.graph.countryNamedLocation" },
+    ],
+  },
+  {
+    name: "attribute-set list",
+    argv: ["entra", "attribute-set", "list", "--profile", "soc"],
+    key: "attributeSets",
+    noun: "attribute sets",
+    rows: () => [
+      { id: "Engineering", description: "Attributes for engineering team", maxAttributesPerSet: 25 },
+      { id: "Marketing", description: "Attributes for marketing team", maxAttributesPerSet: 10 },
+    ],
+  },
+  {
+    name: "custom-security-attribute-definition list",
+    argv: ["entra", "custom-security-attribute-definition", "list", "--profile", "soc"],
+    key: "customSecurityAttributeDefinitions",
+    noun: "custom security attribute definitions",
+    rows: () => [
+      { id: ID_A, attributeSet: "Engineering", name: "Project", status: "Available", type: "String" },
+      { id: ID_B, attributeSet: "Engineering", name: "CostCenter", status: "Available", type: "Integer" },
+    ],
+  },
+  {
+    name: "allowed-value list",
+    argv: ["entra", "allowed-value", "list", "--definition", CSA_DEF_ID, "--profile", "soc"],
+    key: "allowedValues",
+    noun: "allowed values",
+    rows: () => [
+      { id: ID_A, isActive: true },
+      { id: ID_B, isActive: false },
+    ],
+  },
+  {
+    name: "data-policy-operation list",
+    argv: ["entra", "data-policy-operation", "list", "--profile", "soc"],
+    key: "dataPolicyOperations",
+    noun: "data-policy operations",
+    rows: () => [
+      { id: ID_A, status: "complete", userId: "user-1", submittedDateTime: "2026-09-30T00:00:00Z" },
+      { id: ID_B, status: "running", userId: "user-2", submittedDateTime: "2026-10-02T00:00:00Z" },
+    ],
+  },
+  {
+    name: "delegated-admin-customer list",
+    argv: ["entra", "delegated-admin-customer", "list", "--profile", "soc"],
+    key: "delegatedAdminCustomers",
+    noun: "customers",
+    rows: () => [
+      { id: ID_A, displayName: "Contoso Inc", tenantId: ID_B },
+      { id: ID_B, displayName: "Fabrikam Inc", tenantId: ID_A },
+    ],
+  },
+  {
+    name: "delegated-admin-relationship list",
+    argv: ["entra", "delegated-admin-relationship", "list", "--profile", "soc"],
+    key: "delegatedAdminRelationships",
+    noun: "relationships",
+    rows: () => [
+      { id: ID_A, displayName: "Contoso admin relationship", status: "active" },
+      { id: ID_B, displayName: "Fabrikam admin relationship", status: "approvalPending" },
+    ],
+  },
+  {
+    name: "delegated-admin-relationship list-access-assignments",
+    argv: ["entra", "delegated-admin-relationship", "list-access-assignments", "--id", REL_ID, "--profile", "soc"],
+    key: "delegatedAdminAccessAssignments",
+    noun: "access assignments",
+    rows: () => [
+      { id: ID_A, status: "active" },
+      { id: ID_B, status: "pending" },
+    ],
+  },
+  {
+    name: "delegated-admin-relationship list-operations",
+    argv: ["entra", "delegated-admin-relationship", "list-operations", "--id", REL_ID, "--profile", "soc"],
+    key: "delegatedAdminRelationshipOperations",
+    noun: "relationship operations",
+    rows: () => [
+      { id: ID_A, operationType: "delegatedAdminAccessAssignmentUpdate", status: "succeeded", lastModifiedDateTime: "2022-02-09T22:17:43Z" },
+      { id: ID_B, operationType: "delegatedAdminAccessAssignmentUpdate", status: "running", lastModifiedDateTime: "2022-02-10T22:17:43Z" },
+    ],
+  },
+  {
+    name: "delegated-admin-relationship list-requests",
+    argv: ["entra", "delegated-admin-relationship", "list-requests", "--id", REL_ID, "--profile", "soc"],
+    key: "delegatedAdminRelationshipRequests",
+    noun: "relationship requests",
+    rows: () => [
+      { id: ID_A, action: "lockForApproval", status: "succeeded", lastModifiedDateTime: "2022-02-09T22:17:43Z" },
+      { id: ID_B, action: "terminate", status: "running", lastModifiedDateTime: "2022-02-10T22:17:43Z" },
+    ],
+  },
+  {
+    name: "delegated-admin-customer list-service-management-details",
+    argv: ["entra", "delegated-admin-customer", "list-service-management-details", "--id", CUST_ID, "--profile", "soc"],
+    key: "delegatedAdminServiceManagementDetails",
+    noun: "service-management details",
+    rows: () => [
+      { id: ID_A, serviceManagementUrl: "https://lighthouse.microsoft.com", serviceName: "Microsoft 365 Lighthouse" },
+      { id: ID_B, serviceName: "Teams" },
+    ],
+  },
+  {
+    name: "entitlement catalog list",
+    argv: ["entra", "entitlement", "catalog", "list", "--profile", "soc"],
+    key: "catalogs",
+    noun: "catalogs",
+    rows: () => [
+      { id: ID_A, displayName: "General", state: "published", catalogType: "userManaged" },
+      { id: ID_B, displayName: "Service default", state: "published", catalogType: "serviceDefault" },
+    ],
+  },
+  {
+    name: "entitlement access-package list",
+    argv: ["entra", "entitlement", "access-package", "list", "--profile", "soc"],
+    key: "accessPackages",
+    noun: "access packages",
+    rows: () => [
+      { id: ID_A, displayName: "Engineering bundle", isHidden: false },
+      { id: ID_B, displayName: "Quiet bundle", isHidden: true },
+    ],
+  },
+  {
+    name: "entitlement assignment-policy list",
+    argv: ["entra", "entitlement", "assignment-policy", "list", "--access-package", PKG_ID, "--profile", "soc"],
+    key: "assignmentPolicies",
+    noun: "assignment policies",
+    rows: () => [
+      { id: ID_A, displayName: "Engineering requests", allowedTargetScope: "specificDirectoryUsers" },
+      { id: ID_B, displayName: "Open requests", allowedTargetScope: "allMemberUsers" },
+    ],
+  },
+  {
+    name: "entitlement resource-role-scope list",
+    argv: ["entra", "entitlement", "resource-role-scope", "list", "--access-package", PKG_ID, "--profile", "soc"],
+    key: "resourceRoleScopes",
+    noun: "resource-role scopes",
+    rows: () => [
+      { id: ID_A },
+      { id: ID_B },
+    ],
+  },
+  {
+    name: "entitlement assignment list",
+    argv: ["entra", "entitlement", "assignment", "list", "--profile", "soc"],
+    key: "assignments",
+    noun: "assignments",
+    rows: () => [
+      { id: ID_A, state: "delivered" },
+      { id: ID_B, state: "expired" },
+    ],
+  },
+  {
+    name: "entitlement assignment-request list",
+    argv: ["entra", "entitlement", "assignment-request", "list", "--profile", "soc"],
+    key: "assignmentRequests",
+    noun: "assignment requests",
+    rows: () => [
+      { id: ID_A, requestType: "userAdd", state: "delivered" },
+      { id: ID_B, requestType: "adminAdd", state: "pendingApproval" },
+    ],
+  },
 ];
 
 for (const entry of wired) {
@@ -654,3 +1051,59 @@ for (const entry of wired) {
     }
   });
 }
+
+// Catalogue enumeration: every entra list leaf renders uniform totals. A
+// leaf counts as wired when its flag-free argv path appears in the table
+// above; the pending set names the leaves owned by the parallel
+// mg-list-totals-4 piece (federation configurations, grants, group
+// lifecycle, identity providers, lifecycle workflows, multi-tenant
+// organization, on-premises sync, risk, risk prevention, terms of use).
+// Any other unwired leaf - including lists added later, such as the
+// concurrent conditional-access piece's new commands - fails this test.
+const pendingTotals = new Set([
+  "entra federation-configuration list",
+  "entra fraud-protection-provider list",
+  "entra web-application-firewall-provider list",
+  "entra web-application-firewall-verification list",
+  "entra service-principal app-role-assignment list",
+  "entra service-principal oauth2-grant list",
+  "entra group-lifecycle-policy list",
+  "entra group-setting-template list",
+  "entra identity-provider list",
+  "entra lifecycle run list",
+  "entra lifecycle run subject-processing-result list",
+  "entra lifecycle run task-processing-result list",
+  "entra lifecycle run user-processing-result list",
+  "entra lifecycle subject-processing-result list",
+  "entra lifecycle task-definition list",
+  "entra lifecycle task-report list",
+  "entra lifecycle user-processing-result list",
+  "entra lifecycle workflow list",
+  "entra lifecycle workflow-template list",
+  "entra multi-tenant-organization tenant list",
+  "entra on-premises-synchronization list",
+  "entra risk-detection list",
+  "entra risky-service-principal history list",
+  "entra risky-service-principal list",
+  "entra risky-user list",
+  "entra service-principal-risk-detection list",
+  "entra agreement acceptance list",
+  "entra agreement-acceptance list",
+  "entra agreement list",
+]);
+
+test("catalogue list leaves are all wired or explicitly pending", () => {
+  // No list argv carries positionals: every value rides behind a flag, so
+  // the catalogue path is the flag-free argv prefix.
+  const wiredPaths = new Set(wired.map(entry => {
+    const flagAt = entry.argv.findIndex(token => token.startsWith("--"));
+    return entry.argv.slice(0, flagAt === -1 ? entry.argv.length : flagAt).join(" ");
+  }));
+  const listPaths = LEAVES.map(leaf => leaf.path)
+    .filter(path => path.startsWith("entra ") && path.split(" ").at(-1).startsWith("list"));
+  const covered = new Set([...wiredPaths, ...pendingTotals]);
+  const missing = listPaths.filter(path => !covered.has(path));
+  const extra = [...covered].filter(path => !listPaths.includes(path));
+  assert.deepEqual(missing, [], `unwired list leaves: ${missing.join(", ")}`);
+  assert.deepEqual(extra, [], `stale wiring-test paths: ${extra.join(", ")}`);
+});

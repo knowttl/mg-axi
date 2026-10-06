@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 organization subfamily: the read mapping behind
@@ -367,20 +368,22 @@ export async function listOrganizations(
   if (!result.complete) {
     return {
       organizations,
-      count: { returned: organizations.length, complete: false, reason: result.reason },
+      ...listTotals(organizations.length, result.total, "organizations", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, filterNote],
     };
   }
-  const count = { returned: organizations.length, complete: true };
   if (!organizations.length) {
     return {
       organizations,
-      count,
+      ...listTotals(organizations.length, result.total, "organizations", true),
+      complete: true,
       help: [filterNote, "0 organizations matched; the absence of results is the answer, not an error"],
     };
   }
-  return { organizations, count, help: [...truncationHints, showHint, filterNote] };
+  return { organizations, ...listTotals(organizations.length, result.total, "organizations", true), complete: true, help: [...truncationHints, showHint, filterNote] };
 }
 
 export async function showOrganization(
@@ -462,20 +465,22 @@ export async function listBrandingLocalizations(
   if (!result.complete) {
     return {
       brandingLocalizations: localizations,
-      count: { returned: localizations.length, complete: false, reason: result.reason },
+      ...listTotals(localizations.length, result.total, "branding localizations", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, filterNote],
     };
   }
-  const count = { returned: localizations.length, complete: true };
   if (!localizations.length) {
     return {
       brandingLocalizations: localizations,
-      count,
+      ...listTotals(localizations.length, result.total, "branding localizations", true),
+      complete: true,
       help: [filterNote, "0 branding localizations matched; the absence of results is the answer, not an error"],
     };
   }
-  return { brandingLocalizations: localizations, count, help: [...truncationHints, showHint, filterNote] };
+  return { brandingLocalizations: localizations, ...listTotals(localizations.length, result.total, "branding localizations", true), complete: true, help: [...truncationHints, showHint, filterNote] };
 }
 
 export async function showBrandingLocalization(

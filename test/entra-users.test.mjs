@@ -188,7 +188,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: u2.id, displayName: u2.displayName, userPrincipalName: u2.userPrincipalName, mail: null },
         { id: u3.id, displayName: u3.displayName, userPrincipalName: u3.userPrincipalName },
       ]);
-      assert.deepEqual(output.count, { returned: 3, complete: true });
+      assert.deepEqual(output.count, "3 users");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
       assert.ok(output.help.length);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -250,14 +252,16 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(first.status, 0, first.stdout);
       assert.equal(first.stderr, "");
       const partial = decode(first.stdout);
-      assert.equal(partial.count.complete, false);
+      assert.equal(partial.complete, false);
       assert.equal(typeof partial.cursor, "string");
       const second = runReadCli(["entra", "user", "list", "--profile", profile, "--cursor", partial.cursor], state, mode);
       assert.equal(second.status, 0, second.stdout);
       assert.equal(second.stderr, "");
       const resumed = decode(second.stdout);
       assert.deepEqual([...partial.users, ...resumed.users].map(user => user.id), [u1.id, u2.id, u3.id]);
-      assert.deepEqual(resumed.count, { returned: 2, complete: true });
+      assert.deepEqual(resumed.count, "2 users");
+      assert.equal(resumed.total, null);
+      assert.equal(resumed.complete, true);
       assert.ok(!second.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -306,7 +310,9 @@ test("delegated list returns compact basic rows with a complete count and show h
       { id: u2.id, displayName: "Alex Wilber", userPrincipalName: "AlexW@contoso.com", mail: null },
       { id: u3.id, displayName: "Grady Archie", userPrincipalName: "GradyA@contoso.com" },
     ]);
-    assert.deepEqual(result.count, { returned: 3, complete: true });
+    assert.deepEqual(result.count, "3 users");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(result.help.some(hint => hint.includes("entra user show --id <user-id-or-upn> --profile soc")));
     assert.equal(requests.length, 2);
     assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-delegated-token"));
@@ -322,7 +328,7 @@ test("delegated show returns the suggested user with richer properties", async (
   try {
     const { overrides } = overridesFor("delegated");
     const listed = await executeArgv(["entra", "user", "list", "--profile", "soc", "--limit", "1"], overrides);
-    assert.equal(listed.count.complete, false);
+    assert.equal(listed.complete, false);
     assert.equal(typeof listed.cursor, "string");
     const result = await executeArgv(["entra", "user", "show", "--id", u1.id, "--profile", "soc"], overrides);
     assert.equal(result.user.id, u1.id);
@@ -375,7 +381,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         const second = await executeArgv(["entra", "user", "list", "--profile", profile,
           "--cursor", first.cursor, ...repeated], overrides);
         assert.deepEqual(second.users, [{ id: "b", department: null }, { id: "c", department: "R&D" }]);
-        assert.equal(second.count.complete, true);
+        assert.equal(second.complete, true);
         assert.equal(fixture.requests[1].url, "https://graph.microsoft.com/v1.0/users?$skiptoken=next");
         await assert.rejects(executeArgv(["entra", "user", "list", "--profile", profile,
           "--cursor", first.cursor, "--select", "id"], overrides), { code: "VALIDATION_ERROR" });
@@ -401,7 +407,7 @@ for (const cap of [["--all"], ["--limit", "1"]]) {
       assert.deepEqual(recovery, [...argv, "--full"]);
       const full = await executeArgv(recovery, overrides);
       assert.deepEqual(full.users, cap[0] === "--all" ? [{ department: long }, { department: long }] : [{ department: long }]);
-      assert.equal(full.count.complete, compact.count.complete);
+      assert.equal(full.complete, compact.complete);
       if (compact.cursor) {
         const resumed = await executeArgv(["entra", "user", "list", "--profile", "soc", "--cursor", compact.cursor], overrides);
         const recovered = await executeArgv(hintArgv(resumed.help[0]), overrides);
@@ -419,13 +425,17 @@ test("a capped delegated list resumes losslessly through its opaque cursor", asy
     const { requests, overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "user", "list", "--profile", "soc", "--limit", "2"], overrides);
     assert.deepEqual(first.users.map(user => user.id), [u1.id, u2.id]);
-    assert.deepEqual(first.count, { returned: 2, complete: false, reason: first.count.reason });
-    assert.match(first.count.reason, /row limit/);
+    assert.deepEqual(first.count, "2 users shown, more available");
+    assert.equal(first.total, null);
+    assert.equal(first.complete, false);
+    assert.match(first.reason, /row limit/);
     assert.equal(typeof first.cursor, "string");
     assert.ok(!first.cursor.includes(u1.id));
     const second = await executeArgv(["entra", "user", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(second.users.map(user => user.id), [u3.id]);
-    assert.deepEqual(second.count, { returned: 1, complete: true });
+    assert.deepEqual(second.count, "1 users");
+    assert.equal(second.total, null);
+    assert.equal(second.complete, true);
     assert.deepEqual([...first.users, ...second.users].map(user => user.id), [u1.id, u2.id, u3.id]);
     assert.ok(!JSON.stringify(second).includes("opaque-fixture-delegated-token"));
     assert.ok(requests.length >= 2);
@@ -440,7 +450,8 @@ test("list --all follows pages within budget", async () => {
     const { overrides } = overridesFor("delegated");
     const result = await executeArgv(["entra", "user", "list", "--profile", "soc", "--all"], overrides);
     assert.deepEqual(result.users.map(user => user.id), [u1.id, u2.id, u3.id]);
-    assert.deepEqual(result.count, { returned: 3, complete: true });
+    assert.deepEqual(result.count, "3 users");
+    assert.equal(result.total, null);
   } finally {
     teardownProfiles(state);
   }
@@ -454,7 +465,9 @@ test("an empty list is a definitive zero, not an error", async () => {
     const overrides = { transport: fixture.send, delegated: credential, application: credentialService("application", []) };
     const result = await executeArgv(["entra", "user", "list", "--profile", "soc"], overrides);
     assert.deepEqual(result.users, []);
-    assert.deepEqual(result.count, { returned: 0, complete: true });
+    assert.deepEqual(result.count, "0 users");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(result.help.some(hint => hint.includes("0 users matched")));
   } finally {
     teardownProfiles(state);
@@ -540,7 +553,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         const { calls, requests, overrides } = overridesFor(mode, fixture);
         const first = await executeArgv(["entra", "user", "list", "--profile", profile,
           "--select", "id", "--limit", "1"], overrides);
-        assert.equal(first.count.complete, false);
+        assert.equal(first.complete, false);
         overrides[mode] = { credential: async (...args) => {
           calls.push(args);
           throw new Error("Authentication is unavailable");
@@ -568,7 +581,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         const resumed = await executeArgv(["entra", "user", "list", "--profile", profile,
           "--cursor", first.cursor, "--fields", "department"], overrides);
         assert.deepEqual(resumed.users, [{ department: "R&D" }]);
-        assert.deepEqual(resumed.count, { returned: 1, complete: true });
+        assert.deepEqual(resumed.count, "1 users");
+        assert.equal(resumed.total, null);
         assert.equal(calls.length, 2);
         assert.equal(requests.length, expectedRequests);
       } finally { teardownProfiles(state); }

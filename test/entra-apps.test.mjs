@@ -218,8 +218,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: a2.id, appId: a2.appId, displayName: "Daemon Batch" },
         { id: a3.id, appId: a3.appId, displayName: "Niche Tool" },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
-      for (const row of result.applications) assert.notEqual(row.id, row.appId);
+      assert.deepEqual(result.count, "3 applications");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra application show --id <application-object-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/applications?"));
@@ -268,8 +269,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: s2.id, appId: s2.appId, displayName: "Daemon Batch" },
         { id: s3.id, appId: s3.appId, displayName: "Niche Tool" },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
-      for (const row of result.servicePrincipals) assert.notEqual(row.id, row.appId);
+      assert.deepEqual(result.count, "3 service principals");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/servicePrincipals?"));
     } finally {
       teardownProfiles(state);
@@ -296,7 +298,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "application", "owner", "list", "--application", a1.id, "--profile", profile], overrides);
       assert.deepEqual(result.owners, appOwners);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 owners");
+      assert.equal(result.total, null);
       assert.ok(new URL(requests[0].url).pathname.endsWith(`/applications/${a1.id}/owners`));
     } finally {
       teardownProfiles(state);
@@ -309,7 +312,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "service-principal", "owner", "list", "--service-principal", s1.id, "--profile", profile], overrides);
       assert.deepEqual(result.owners, spOwners);
-      assert.deepEqual(result.count, { returned: 1, complete: true });
+      assert.deepEqual(result.count, "1 owners");
+      assert.equal(result.total, null);
       assert.ok(new URL(requests[0].url).pathname.endsWith(`/servicePrincipals/${s1.id}/owners`));
     } finally {
       teardownProfiles(state);
@@ -322,11 +326,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "application", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.applications.map(row => row.id), [a1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "application", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.applications.map(row => row.id), [a2.id, a3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 applications");
+      assert.equal(second.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -356,7 +361,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
             [{ id: a3.id, [field]: [metadata] }]);
           const third = await executeArgv([...args, "--cursor", second.cursor], overrides);
           assert.deepEqual(third[key], [{ id: a3.id, [field]: [metadata] }]);
-          assert.deepEqual(third.count, { returned: 1, complete: true });
+          assert.deepEqual(third.count, key === "applications" ? "1 applications" : "1 service principals");
+          assert.equal(third.total, null);
           assert.equal(fixture.requests.length, 1);
         } finally {
           teardownProfiles(state);
@@ -397,7 +403,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const listedOut = decode(listed.stdout);
       assert.deepEqual(listedOut.applications.map(row => row.id), [a1.id, a2.id, a3.id]);
-      assert.deepEqual(listedOut.count, { returned: 3, complete: true });
+      assert.deepEqual(listedOut.count, "3 applications");
+      assert.equal(listedOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runAppCli(["entra", "application", "show", "--id", a1.id, "--profile", profile], state, mode);
@@ -459,11 +466,11 @@ test("application list $filter carries count and consistency through resume", as
     const filtered = await executeArgv(["entra", "application", "list",
       "--profile", "soc", "--filter", "startswith(displayName,'C')", "--limit", "1"], overrides);
     assert.equal(seen[0].headers.ConsistencyLevel, "eventual");
-    assert.equal(filtered.count.complete, false);
+    assert.equal(filtered.complete, false);
     const resumed = await executeArgv(["entra", "application", "list",
       "--profile", "soc", "--cursor", filtered.cursor], overrides);
     assert.equal(seen[1].headers.ConsistencyLevel, "eventual");
-    assert.deepEqual(resumed.count.complete, true);
+    assert.deepEqual(resumed.complete, true);
     await assert.rejects(executeArgv(["entra", "application", "list",
       "--profile", "soc", "--cursor", filtered.cursor, "--filter", "startswith(displayName,'D')"], overrides),
     { code: "VALIDATION_ERROR" });

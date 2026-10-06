@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import { resolveSessionOperation, type CollectArgs, type GraphSession, type SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 directory-subscriptions subfamily: the read mapping behind
@@ -297,17 +298,18 @@ export async function listSubscriptions(
   if (!result.complete) {
     return {
       subscriptions,
-      count: { returned: subscriptions.length, complete: false, reason: result.reason },
+      ...listTotals(subscriptions.length, result.total, "subscriptions", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: subscriptions.length, complete: true };
   if (!subscriptions.length) {
     const emptyHint = common.filter === undefined ? EMPTY_NOTE : "0 subscriptions matched; the absence of results is the answer, not an error";
-    return { subscriptions, count, help: [emptyHint] };
+    return { subscriptions, ...listTotals(subscriptions.length, result.total, "subscriptions", true), complete: true, help: [emptyHint] };
   }
-  return { subscriptions, count, help: [...truncationHints, showHint] };
+  return { subscriptions, ...listTotals(subscriptions.length, result.total, "subscriptions", true), complete: true, help: [...truncationHints, showHint] };
 }
 
 export async function showSubscription(

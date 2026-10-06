@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-10: the directory-device and administrative-unit read mapping behind
@@ -329,16 +330,18 @@ export async function listDevices(
   if (!result.complete) {
     return {
       devices,
-      count: { returned: devices.length, complete: false, reason: result.reason },
+      ...listTotals(devices.length, result.total, "devices", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, scopeHint],
     };
   }
-  const count = { returned: devices.length, complete: true };
   if (!devices.length) {
     return {
       devices,
-      count,
+      ...listTotals(devices.length, result.total, "devices", true),
+      complete: true,
       help: [
         `mg-axi entra device list --filter <odata-filter> ${profileHint(profileName)}`,
         "0 devices matched; the absence of results is the answer, not an error",
@@ -346,7 +349,7 @@ export async function listDevices(
       ],
     };
   }
-  return { devices, count, help: [...truncationHints, showHint, scopeHint] };
+  return { devices, ...listTotals(devices.length, result.total, "devices", true), complete: true, help: [...truncationHints, showHint, scopeHint] };
 }
 
 export async function showDevice(
@@ -402,23 +405,25 @@ export async function listAdministrativeUnits(
   if (!result.complete) {
     return {
       administrativeUnits: units,
-      count: { returned: units.length, complete: false, reason: result.reason },
+      ...listTotals(units.length, result.total, "administrative units", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: units.length, complete: true };
   if (!units.length) {
     return {
       administrativeUnits: units,
-      count,
+      ...listTotals(units.length, result.total, "administrative units", true),
+      complete: true,
       help: [
         `mg-axi entra administrative-unit list --filter <odata-filter> ${profileHint(profileName)}`,
         "0 administrative units matched; the absence of results is the answer, not an error",
       ],
     };
   }
-  return { administrativeUnits: units, count, help: [...truncationHints, showHint] };
+  return { administrativeUnits: units, ...listTotals(units.length, result.total, "administrative units", true), complete: true, help: [...truncationHints, showHint] };
 }
 
 export async function showAdministrativeUnit(
@@ -487,16 +492,18 @@ export async function listAdministrativeUnitMembers(
   if (!result.complete) {
     return {
       members: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, "members", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, ...limitedHints, hiddenHint, resumeHint(profileName)],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
     return {
       members: rows,
-      count,
+      ...listTotals(rows.length, result.total, "members", true),
+      complete: true,
       help: [
         ...limitedHints,
         hiddenHint,
@@ -504,5 +511,5 @@ export async function listAdministrativeUnitMembers(
       ],
     };
   }
-  return { members: rows, count, help: [...truncationHints, ...limitedHints, hiddenHint] };
+  return { members: rows, ...listTotals(rows.length, result.total, "members", true), complete: true, help: [...truncationHints, ...limitedHints, hiddenHint] };
 }

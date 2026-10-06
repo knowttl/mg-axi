@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 domains subfamily: the read mapping behind `mg-axi entra domain
@@ -320,20 +321,22 @@ export async function listDomains(
   if (!result.complete) {
     return {
       domains,
-      count: { returned: domains.length, complete: false, reason: result.reason },
+      ...listTotals(domains.length, result.total, "domains", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, filterNote],
     };
   }
-  const count = { returned: domains.length, complete: true };
   if (!domains.length) {
     return {
       domains,
-      count,
+      ...listTotals(domains.length, result.total, "domains", true),
+      complete: true,
       help: [filterNote, "0 domains matched; the absence of results is the answer, not an error"],
     };
   }
-  return { domains, count, help: [...truncationHints, showHint, filterNote] };
+  return { domains, ...listTotals(domains.length, result.total, "domains", true), complete: true, help: [...truncationHints, showHint, filterNote] };
 }
 
 export async function showDomain(
@@ -411,20 +414,22 @@ async function listDnsRecords(
   if (!result.complete) {
     return {
       [command.collectionKey]: records,
-      count: { returned: records.length, complete: false, reason: result.reason },
+      ...listTotals(records.length, result.total, "DNS records", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, kindHint],
     };
   }
-  const count = { returned: records.length, complete: true };
   if (!records.length) {
     return {
       [command.collectionKey]: records,
-      count,
+      ...listTotals(records.length, result.total, "DNS records", true),
+      complete: true,
       help: [kindHint, "0 DNS records matched; the absence of results is the answer, not an error"],
     };
   }
-  return { [command.collectionKey]: records, count, help: [...truncationHints, showHint, kindHint] };
+  return { [command.collectionKey]: records, ...listTotals(records.length, result.total, "DNS records", true), complete: true, help: [...truncationHints, showHint, kindHint] };
 }
 
 async function showDnsRecord(

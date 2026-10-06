@@ -80,7 +80,7 @@ The home view reports unavailable tenant summaries explicitly.
 Text values longer than 500 characters are truncated, including strings in `businessPhones`; `--full` removes text truncation without lifting redaction or row caps.
 Explicit null values stay null, missing properties stay absent, and denied reads return structured errors rather than empty results.
 User lists accept `--filter` for an OData filter and default to a 100-row cap; `--limit` changes the cap, while the incompatible `--all` follows pages within request, byte and deadline budgets.
-Partial lists report `count.complete: false`, a reason and an opaque `cursor` preserving unreturned rows.
+Partial lists report `complete: false` with a uniform `count` line (`1 users shown, more available`), a reason and an opaque `cursor` preserving unreturned rows.
 Resume with `--cursor <cursor-from-output>` using the same profile, authentication scopes and API version; original `--select` and `--filter` values may be repeated or omitted, and conflicting values fail validation.
 Repeat `--fields` and `--full` when the same local view is wanted; these are not saved in the cursor.
 Delegated user reads default to `https://graph.microsoft.com/User.Read.All` with `--scopes` available for least-privilege basics; application profiles use the configured Graph `.default` audience and reject delegated scopes.
@@ -188,8 +188,9 @@ Relationship rows default to `id` and `displayName`; `--select` accepts only `id
 Returned `@odata.type` stays visible alongside any `--fields` projection.
 Group lists return `groups`, member lists return `members`, parent-membership lists return `memberOf`, and single-group reads return `group`.
 Group and relationship lists report uniform totals through the shared list-totals helper: `total` holds the server-supplied `@odata.count` when the query carries `$count` (filtered reads) and `null` otherwise, beside a `count` line such as `3 of 10 groups`, `3 groups` or, when the total is unknown and more pages remain, `3 groups shown, more available`.
+The same helper covers the other wired core-directory lists: users, applications, service principals, owners, devices, administrative units and unit members, contacts, direct reports and memberships, directory roles, role assignments and PIM eligible/active assignments, group PIM assignment/eligibility schedules, instances and eligibility requests, directory objects, deleted items, domains and DNS records, contracts, organizations and branding localizations, and subscriptions. Remaining list families keep the previous `count: { returned, complete }` shape and follow the same helper in the next piece.
 `complete` names pagination state, with `reason` and an opaque `cursor` on partial reads.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to group and relationship reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to group and relationship reads.
 Resume relationships with the same `--group` and direct or `--transitive` command, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
 Help warns that hidden members are omitted without `Member.Read.Hidden`; completion describes pagination, not visibility.
 Rows without non-null selected descriptive properties are preserved and reported as possibly limited by consent or unset properties; null properties stay null.
@@ -217,7 +218,7 @@ Use `entra pim active list` to classify those assignments as described below.
 `entra pim active list` defaults to those properties plus `assignmentType` and covers both directly assigned (`assignmentType` Assigned) and activated eligible (`assignmentType` Activated) assignments; `memberType` names how the instance reaches the principal.
 For built-in roles the unified `roleDefinitionId` matches the directory-role `roleTemplateId`.
 `--select` requests properties from the [reviewed role property sets](src/entra-roles.ts); `--fields` must be a subset of the fetched selection.
-`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; the named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; the named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply.
 Delegated directory-role and role-assignment reads default to `https://graph.microsoft.com/RoleManagement.Read.Directory`; eligible PIM reads default to `https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory` and active PIM reads to `https://graph.microsoft.com/RoleAssignmentSchedule.Read.Directory`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need a supported directory role per operation (for example Privileged Role Administrator, Global Reader or Security Reader for role reads, Directory Readers for assignments, Security Operator for PIM reads).
 Denied reads name that role requirement instead of only the generic grant/role/licence cause.
@@ -246,8 +247,8 @@ Every list requires `--filter` with an `eq` clause on `groupId` or `principalId`
 Assignment schedule and instance lists default to `id`, `principalId`, `groupId`, `accessId` and `assignmentType`; eligibility schedule and instance lists default to `id`, `principalId`, `groupId`, `accessId` and `memberType`; eligibility-request lists default to `id`, `action`, `status`, `principalId`, `groupId` and `accessId`.
 Every show defaults to its full reviewed property set, except eligibility-request show omits `justification` unless an explicit `--select` names it.
 `--select` requests properties from the [reviewed group PIM property sets](src/entra-group-pim.ts); `--fields` must be a subset of the fetched selection.
-`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; these collections document no `$count`, so `count` reports `{ returned, complete }` rather than server totals.
-The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply; resume a list with the same `--filter`, profile, scopes and API version.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; these collections document no `$count`, so the uniform `count` totals name the returned rows with a `null` total unless a page carries a server total.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply; resume a list with the same `--filter`, profile, scopes and API version.
 Delegated assignment reads default to `https://graph.microsoft.com/PrivilegedAssignmentSchedule.Read.AzureADGroup` and eligibility reads to `https://graph.microsoft.com/PrivilegedEligibilitySchedule.Read.AzureADGroup`, while application profiles use the configured `.default` audience and reject `--scopes`.
 Delegated callers additionally need owner or member of the group or a supported directory role scoped at directory level (Global Reader or Privileged Role Administrator for role-assignable groups; otherwise Global Reader, Directory Writer, Groups Administrator, Identity Governance Administrator or User Administrator).
 Denied reads name that scope, role and licensing requirement instead of only the generic grant/role/licence cause.
@@ -455,7 +456,7 @@ Unit show adds a licensing hint when the projected `membershipType` is `Dynamic`
 See the [licence matrix](docs/graph-coverage.md#licence-matrix-by-area) for device and administrative-unit licensing requirements.
 `entra administrative-unit member list --administrative-unit <administrative-unit-id>` lists member users, groups and devices with the same `id`/`displayName`/`mail` selection, `@odata.type` preservation, hidden-membership and limited-information behavior as group relationships.
 Device and unit lists return `devices` and `administrativeUnits`, member lists return `members`, and single-object reads return `device` and `administrativeUnit`.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to device and administrative-unit reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to device and administrative-unit reads.
 Resume unit-member lists with the same `--administrative-unit`, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
 Delegated device reads default to `https://graph.microsoft.com/Device.Read.All` and unit reads to `https://graph.microsoft.com/AdministrativeUnit.Read.All`, while application profiles use the configured `.default` audience; hidden unit memberships need `Member.Read.Hidden`.
 Denied directory reads return operation-specific permission, delegated-role and licensing guidance rather than empty results; HTTP 403 alone does not identify which prerequisite is missing.
@@ -484,7 +485,7 @@ A branding 404 may indicate unconfigured branding, a missing locale, or a missin
 Delegated callers additionally need a supported Entra role (Directory Readers or Global Reader for organizations; Global Reader or Organizational Branding Administrator for branding); personal Microsoft accounts are not supported.
 Organization and localization lists return `organizations` and `brandingLocalizations`, single-object reads return `organization`, `branding` and `brandingLocalization`.
 Localization lists default to `id`, `signInPageText`, `usernameHintText` and `backgroundColor`; branding and localization show commands default to the full reviewed non-Stream field set.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to organization and branding reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to organization and branding reads.
 All five named reads default to `--api-version v1.0`; explicit `--api-version beta` requires a preview-enabled profile, with no automatic fallback.
 Organization and localization lists offer no `--filter`: Graph documents `$select` only on these routes, so the flag is refused before credentials.
 Denied organization and branding reads name the scope, role and licensing guidance instead of only the generic cause.
@@ -568,7 +569,7 @@ Contract lists accept `--filter` as plain `$filter` without adding `$count=true`
 `entra contract count` returns one scalar (`contractCount`) from the text/plain `$count` route and takes no `--filter`, `--select`, `--limit` or `--cursor`.
 Raw `api get` supports `/contracts` and `/contracts/<contract-id>`; `/contracts/$count` is available only through the named count command.
 Contract lists return `contracts` and single-contract reads return `contract`.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to contract reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to contract reads.
 All three named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
 Delegated contract reads default to `https://graph.microsoft.com/Directory.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need a supported Entra role (Directory Readers is the least-privileged role); personal Microsoft accounts are not supported.
@@ -675,7 +676,7 @@ DNS record lists accept `--filter` as plain `$filter`, without adding `$count=tr
 Record rows carry `@odata.type` naming the derived record kind; derived-type detail (`mailExchange`, `preference`, `canonicalName`, SRV fields, `text`) needs an explicit `--select` naming the derived property.
 Domain and record `--select` accept their [reviewed property sets](src/entra-domains.ts); `--fields` must be a subset of the fetched selection.
 Domain lists return `domains` and single-domain reads return `domain`; record lists return `verificationDnsRecords`, `serviceConfigurationRecords` and `domainDnsRecords`, with single-record reads returning the singular key.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to domain and DNS record reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to domain and DNS record reads.
 Resume record lists with the same `--domain` where applicable, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
 Delegated domain and DNS record reads default to `https://graph.microsoft.com/Domain.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need a supported Entra role (Domain Name Administrator or Global Reader are least-privileged); personal Microsoft accounts are not supported.
@@ -723,7 +724,7 @@ All three subscription commands support only `--api-version v1.0`; `--api-versio
 Subscription lists accept `--filter` as plain `$filter`, without adding `$count=true` or `ConsistencyLevel`; the show command documents `$select` only and the count command takes no `--filter`, `--select`, `--limit` or `--cursor`.
 `entra subscription show --id <subscription-id>` defaults to the full reviewed companySubscription set; `entra subscription show --commerce-subscription-id <commerce-subscription-id>` serves the same object through the commerce-system alternate key, binding it only through the allowlisted session function-argument contract (validated, OData-quoted, encoded).
 Subscription lists return `subscriptions` and single-subscription reads return `subscription`; count commands return `count: { returned: <total>, complete: true }`.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to subscription reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to subscription reads.
 Delegated subscription reads default to `https://graph.microsoft.com/Organization.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need Global Reader, Directory Readers, or Dynamics 365 Business Central Administrator for read-only standard properties; personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for subscription reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
@@ -790,7 +791,7 @@ All three commands support only `--api-version v1.0`; `--api-version beta` fails
 Neither list nor show offers `--filter`: Graph documents no List operation page for the collection, so strict input validation refuses the flag before credentials.
 Lists return `directoryObjects`, single reads return `directoryObject`, and counts return `count` with the scalar total.
 Rows are polymorphic: only the base-type properties are ever requested or projected (`$expand` is not offered), the discriminator rides along automatically without being selectable, and subtype secrets or credentials can never appear; subtype detail needs the subtype's named reads.
-The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to directory-object reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to directory-object reads.
 Reads default to `https://graph.microsoft.com/Directory.Read.All` for delegated access, while application profiles use the configured `.default` audience.
 No delegated role or P1/P2 prerequisite is stated for directory-object reads; personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
 No directory-object mutation lives here; the delta sync, the POST lookup/validation actions and beta operations stay scheduled; see the [directory-objects scope decisions](docs/coverage.md#ext-01-directory-objects-scope-decisions).
@@ -814,7 +815,7 @@ Upstream requires the OData cast as part of the list URI, so untyped list/count 
 Rows are polymorphic: only the reviewed per-type properties are ever requested or projected, the discriminator rides along automatically without being selectable, and credential collections (`keyCredentials`, `passwordCredentials`) are never selectable, so secret values can never appear.
 `appId` (client ID) is distinct from the object `id` on applications and service principals.
 Soft-deleted security groups report `securityEnabled` false through a known upstream limitation; read `groupTypes` to name the real kind.
-The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to deleted-item reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to deleted-item reads.
 List and count reads default to the type's least-privileged scope for delegated access (`User.Read.All`, `Group.Read.All`, `Application.Read.All` or `AdministrativeUnit.Read.All`, all read scopes already allowlisted), while application profiles use the configured `.default` audience.
 No delegated role or P1/P2 prerequisite is stated for deleted-item reads; personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
 No deleted-item mutation lives here; restore and permanent delete stay out entirely, and the POST lookup/validation actions and beta operations stay scheduled; see the [deleted-items scope decisions](docs/coverage.md#ext-01-deleted-items-scope-decisions).
@@ -841,7 +842,7 @@ All ten contact commands support only `--api-version v1.0`; `--api-version beta`
 Direct-report reads take `$select` only; `$filter`, `$search` and `$top` stay unreviewed there.
 Top-level `list` returns `contacts` and `show` returns `contact`; `show-manager` returns `manager`, `list-direct-reports` returns `directReports` and `show-direct-report` returns `directReport`, `list-member-of` returns `memberOf` and `show-member-of` returns `memberOf`, and counts return `count` with the scalar total; each count sends `ConsistencyLevel eventual` like the documented `$count` example.
 Top-level list and show request and project only flat scalar properties (`$expand` is not offered, so navigation objects never appear there); navigation reads return directory objects through their own routes, and the nested phones/addresses collections need their own projection review.
-The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to contact reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to contact reads.
 Reads default to `https://graph.microsoft.com/OrgContact.Read.All` for delegated access, while application profiles use the configured `.default` audience; transitive member-of reads additionally need `https://graph.microsoft.com/Group.Read.All`.
 Delegated callers additionally need a supported Entra role (Directory Readers reads basic properties; Global Reader, Directory Writers, Intune Administrator or User Administrator also work); personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
 No contact mutation lives here; the delta sync, the POST lookup actions and beta operations stay scheduled, and the error/sync navigation reads stay unavailable with no documented permission contract; see the [contacts scope decisions](docs/coverage.md#ext-01-contacts-scope-decisions).
@@ -1057,7 +1058,7 @@ For consent grants, use the service-principal grant commands described above.
 Application lists return `applications`, service-principal lists return `servicePrincipals`, owner lists return `owners`, and single-object reads return `application` or `servicePrincipal`.
 App and service-principal `--select` accepts the [reviewed property sets](src/entra-apps.ts); `--fields` must be a subset of the fetched selection.
 Owner rows default to `id`, `displayName` and `mail`, the only selectable owner properties; rows without non-null descriptive properties are preserved with a hint about limited consent or unset properties.
-The named-list caps, `count`, cursor resume rules and 500-character text truncation described above also apply to these reads; resume owner lists with the same `--application` or `--service-principal` object ID.
+The named-list caps, uniform `count` totals, cursor resume rules and 500-character text truncation described above also apply to these reads; resume owner lists with the same `--application` or `--service-principal` object ID.
 Delegated application reads default to `https://graph.microsoft.com/Application.Read.All`, while application profiles use the configured `.default` audience.
 
 Log in with `https://graph.microsoft.com/IdentityRiskyUser.Read.All`, `https://graph.microsoft.com/IdentityRiskEvent.Read.All` and `https://graph.microsoft.com/IdentityRiskyServicePrincipal.Read.All`, then triage risky users, risk detections, risky service principals and service-principal risk detections:

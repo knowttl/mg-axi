@@ -199,8 +199,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: org1.id, displayName: "Contoso", tenantType: "AAD", verifiedDomains: org1.verifiedDomains },
         { id: org2.id, displayName: org2.displayName },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("entra organization show --id <organization-id>")));
+      assert.deepEqual(result.count, "2 organizations");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("no --filter")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/organization?"));
@@ -235,11 +236,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "organization", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.organizations.map(row => row.id), [org1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "organization", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.organizations.map(row => row.id), [org2.id]);
-      assert.deepEqual(second.count, { returned: 1, complete: true });
+      assert.deepEqual(second.count, "1 organizations");
+      assert.equal(second.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -286,8 +288,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: locDefault.id, signInPageText: "Contoso", usernameHintText: "", backgroundColor: "" },
         { id: locFr.id, signInPageText: longWelcome.slice(0, 500) + `... (truncated, ${longWelcome.length} chars total)`, usernameHintText: locFr.usernameHintText, backgroundColor: locFr.backgroundColor },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("entra organization branding-localization show")));
+      assert.deepEqual(result.count, "2 branding localizations");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("--full")));
     } finally {
       teardownProfiles(state);
@@ -370,7 +373,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const organizationsOut = decode(listed.stdout);
       assert.deepEqual(organizationsOut.organizations.map(row => row.id), [org1.id, org2.id]);
-      assert.deepEqual(organizationsOut.count, { returned: 2, complete: true });
+      assert.deepEqual(organizationsOut.count, "2 organizations");
+      assert.equal(organizationsOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runOrganizationCli(["entra", "organization", "show", "--id", orgId, "--profile", profile], state, mode);

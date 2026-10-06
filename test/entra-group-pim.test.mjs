@@ -258,7 +258,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: as1.id, principalId, groupId, accessId: "member", assignmentType: "Assigned" },
         { id: as2.id, principalId: otherPrincipalId, groupId, accessId: "owner", assignmentType: "Activated" },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 assignment schedules");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("never the schedule itself") || hint.includes("govern group membership")));
       assert.ok(new URL(requests[0].url).pathname.endsWith("/privilegedAccess/group/assignmentSchedules"));
       assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,principalId,groupId,accessId,assignmentType");
@@ -289,8 +291,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.assignmentScheduleInstances, [
         { id: ai1.id, principalId, groupId, accessId: "member", assignmentType: "Activated" },
       ]);
-      assert.deepEqual(result.count, { returned: 1, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("provisioned membership or ownership windows")));
+      assert.deepEqual(result.count, "1 assignment instances");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(new URL(requests[0].url).pathname.endsWith("/privilegedAccess/group/assignmentScheduleInstances"));
     } finally {
       teardownProfiles(state);
@@ -319,8 +322,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.eligibilitySchedules, [
         { id: es1.id, principalId, groupId, accessId: "member", memberType: "Direct" },
       ]);
-      assert.deepEqual(result.count, { returned: 1, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("not active grants") || hint.includes("may activate")));
+      assert.deepEqual(result.count, "1 eligibility schedules");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(new URL(requests[0].url).pathname.endsWith("/privilegedAccess/group/eligibilitySchedules"));
     } finally {
       teardownProfiles(state);
@@ -349,8 +353,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.eligibilityScheduleInstances, [
         { id: ei1.id, principalId, groupId, accessId: "member", memberType: "Direct" },
       ]);
-      assert.deepEqual(result.count, { returned: 1, complete: true });
-      assert.ok(new URL(requests[0].url).pathname.endsWith("/privilegedAccess/group/eligibilityScheduleInstances"));
+      assert.deepEqual(result.count, "1 eligibility instances");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -378,8 +383,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.eligibilityScheduleRequests, [
         { id: er1.id, action: "adminAssign", status: "Provisioned", principalId, groupId, accessId: "member" },
       ]);
-      assert.deepEqual(result.count, { returned: 1, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("explicit --select")));
+      assert.deepEqual(result.count, "1 eligibility requests");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(!new URL(requests[0].url).searchParams.get("$select")?.split(",").includes("justification"));
     } finally {
       teardownProfiles(state);
@@ -450,7 +456,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.stderr, "");
       const output = decode(result.stdout);
       assert.ok(output.assignmentSchedules.length >= 1);
-      assert.deepEqual(output.count, { returned: output.assignmentSchedules.length, complete: true });
+      assert.deepEqual(output.count, `${output.assignmentSchedules.length} assignment schedules`);
+      assert.equal(output.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -466,8 +473,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
       const output = decode(result.stdout);
-      assert.equal(output.eligibilityScheduleRequests.length, 1);
-      assert.deepEqual(output.count, { returned: 1, complete: true });
+      assert.deepEqual(output.count, "1 eligibility requests");
+      assert.equal(output.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -536,7 +543,9 @@ test("delegated group PIM reads resume a capped list through its opaque cursor",
     const first = await executeArgv(["entra", "pim", "group-assignment-schedule", "list",
       "--profile", "soc", "--filter", filter, "--limit", "1"], overrides);
     assert.equal(first.assignmentSchedules.length, 1);
-    assert.deepEqual(first.count, { returned: 1, complete: false, reason: first.count.reason });
+    assert.deepEqual(first.count, "1 assignment schedules shown, more available");
+    assert.equal(first.total, null);
+    assert.equal(first.complete, false);
     assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
     assert.ok(first.help.some(hint => hint.includes("--filter")));
     const second = await executeArgv(["entra", "pim", "group-assignment-schedule", "list",
@@ -544,7 +553,8 @@ test("delegated group PIM reads resume a capped list through its opaque cursor",
     assert.deepEqual(second.assignmentSchedules, [
       { id: as2.id, principalId: otherPrincipalId, groupId, accessId: "owner", assignmentType: "Activated" },
     ]);
-    assert.deepEqual(second.count, { returned: 1, complete: true });
+    assert.deepEqual(second.count, "1 assignment schedules");
+    assert.equal(second.total, null);
   } finally {
     teardownProfiles(state);
   }

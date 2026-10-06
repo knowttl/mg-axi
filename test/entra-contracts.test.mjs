@@ -138,7 +138,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: ct2.id, displayName: longName.slice(0, 500) + `... (truncated, ${longName.length} chars total)`, contractType: "BreadthPartner", defaultDomainName: "contoso.com" },
         { id: ct3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 contracts");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra contract show --id <contract-id>")));
       assert.ok(result.help.some(hint => hint.includes("partner tenants only")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
@@ -157,7 +159,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "contract", "list", "--profile", profile,
         "--filter", "contractType eq 'ResellerPartner'"], overrides);
-      assert.equal(result.count.returned, 3);
+      assert.deepEqual(result.count, "3 contracts");
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$filter"), "contractType eq 'ResellerPartner'");
       assert.equal(requests[0].headers.ConsistencyLevel, undefined);
@@ -172,11 +174,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "contract", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.contracts.map(row => row.id), [ct1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "contract", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.contracts.map(row => row.id), [ct2.id, ct3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 contracts");
+      assert.equal(second.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -235,7 +238,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const result = await executeArgv(["entra", "contract", "list", "--profile", profile], overrides);
       assert.deepEqual(result.contracts, []);
-      assert.deepEqual(result.count, { returned: 0, complete: true });
+      assert.deepEqual(result.count, "0 contracts");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("0 contracts matched")));
       assert.ok(result.help.some(hint => hint.includes("partner tenants only")));
     } finally {
@@ -293,7 +298,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const listOut = decode(listed.stdout);
       assert.deepEqual(listOut.contracts.map(row => row.id), [ct1.id, ct2.id]);
-      assert.deepEqual(listOut.count, { returned: 2, complete: true });
+      assert.deepEqual(listOut.count, "2 contracts");
+      assert.equal(listOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runContractCli(["entra", "contract", "show", "--id", ct1.id, "--profile", profile], state, mode);

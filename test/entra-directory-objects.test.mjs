@@ -142,7 +142,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: obj2.id, "@odata.type": "#microsoft.graph.servicePrincipal" },
         { id: obj3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 directory objects");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra directory-object show --id <object-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/directoryObjects?"));
@@ -176,11 +178,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "directory-object", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.directoryObjects.map(row => row.id), [obj1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "directory-object", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.directoryObjects.map(row => row.id), [obj2.id, obj3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 directory objects");
+      assert.equal(second.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -254,7 +257,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const listed = await executeArgv(["entra", "directory-object", "list", "--profile", profile], overrides);
       assert.deepEqual(listed.directoryObjects, []);
-      assert.deepEqual(listed.count, { returned: 0, complete: true });
+      assert.deepEqual(listed.count, "0 directory objects");
+      assert.equal(listed.total, null);
+      assert.equal(listed.complete, true);
       assert.ok(listed.help.some(hint => hint.includes("verify the profile tenant")));
     } finally {
       teardownProfiles(state);
@@ -306,7 +311,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listOut = decode(listed.stdout);
       assert.deepEqual(listOut.directoryObjects.map(row => row.id), [obj1.id, obj2.id]);
       assert.deepEqual(listOut.directoryObjects.map(row => row["@odata.type"]), ["#microsoft.graph.user", "#microsoft.graph.servicePrincipal"]);
-      assert.deepEqual(listOut.count, { returned: 2, complete: true });
+      assert.deepEqual(listOut.count, "2 directory objects");
+      assert.equal(listOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runDirectoryObjectCli(["entra", "directory-object", "show", "--id", obj1.id, "--profile", profile], state, mode);

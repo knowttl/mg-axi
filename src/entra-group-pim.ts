@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-02 group PIM schedule reads: the read-only schedule and instance
@@ -282,6 +283,7 @@ const ELIGIBILITY_DENIAL_HINTS = [
 interface CollectionShape {
   command: string;
   key: string;
+  noun: string;
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -294,6 +296,7 @@ interface CollectionShape {
 const ASSIGNMENT_SCHEDULE_LIST: CollectionShape = {
   command: "entra pim group-assignment-schedule list",
   key: "assignmentSchedules",
+  noun: "assignment schedules",
   known: ASSIGNMENT_SCHEDULE_KNOWN,
   knownList: KNOWN_ASSIGNMENT_SCHEDULE_FIELDS,
   defaultSelect: DEFAULT_ASSIGNMENT_SCHEDULE_LIST_SELECT,
@@ -306,6 +309,7 @@ const ASSIGNMENT_SCHEDULE_LIST: CollectionShape = {
 const ASSIGNMENT_INSTANCE_LIST: CollectionShape = {
   command: "entra pim group-assignment-instance list",
   key: "assignmentScheduleInstances",
+  noun: "assignment instances",
   known: ASSIGNMENT_INSTANCE_KNOWN,
   knownList: KNOWN_ASSIGNMENT_INSTANCE_FIELDS,
   defaultSelect: DEFAULT_ASSIGNMENT_INSTANCE_LIST_SELECT,
@@ -318,6 +322,7 @@ const ASSIGNMENT_INSTANCE_LIST: CollectionShape = {
 const ELIGIBILITY_SCHEDULE_LIST: CollectionShape = {
   command: "entra pim group-eligibility-schedule list",
   key: "eligibilitySchedules",
+  noun: "eligibility schedules",
   known: ELIGIBILITY_SCHEDULE_KNOWN,
   knownList: KNOWN_ELIGIBILITY_SCHEDULE_FIELDS,
   defaultSelect: DEFAULT_ELIGIBILITY_SCHEDULE_LIST_SELECT,
@@ -330,6 +335,7 @@ const ELIGIBILITY_SCHEDULE_LIST: CollectionShape = {
 const ELIGIBILITY_INSTANCE_LIST: CollectionShape = {
   command: "entra pim group-eligibility-instance list",
   key: "eligibilityScheduleInstances",
+  noun: "eligibility instances",
   known: ELIGIBILITY_INSTANCE_KNOWN,
   knownList: KNOWN_ELIGIBILITY_INSTANCE_FIELDS,
   defaultSelect: DEFAULT_ELIGIBILITY_INSTANCE_LIST_SELECT,
@@ -342,6 +348,7 @@ const ELIGIBILITY_INSTANCE_LIST: CollectionShape = {
 const ELIGIBILITY_REQUEST_LIST: CollectionShape = {
   command: "entra pim group-eligibility-request list",
   key: "eligibilityScheduleRequests",
+  noun: "eligibility requests",
   known: ELIGIBILITY_REQUEST_KNOWN,
   knownList: KNOWN_ELIGIBILITY_REQUEST_FIELDS,
   defaultSelect: DEFAULT_ELIGIBILITY_REQUEST_LIST_SELECT,
@@ -411,16 +418,17 @@ async function listCollection(
   if (!result.complete) {
     return {
       [shape.key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, shape.noun, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, `Resume losslessly with the same --filter and flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`, ...standing],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
-    return { [shape.key]: rows, count, help: [shape.emptyNote, ...standing] };
+    return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [shape.emptyNote, ...standing] };
   }
-  return { [shape.key]: rows, count, help: [...truncationHints, ...standing] };
+  return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [...truncationHints, ...standing] };
 }
 
 async function showOne(

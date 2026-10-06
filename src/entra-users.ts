@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-01: the Entra user read mapping behind `mg-axi entra user list/show`.
@@ -190,16 +191,18 @@ export async function listUsers(
   if (!result.complete) {
     return {
       users,
-      count: { returned: users.length, complete: false, reason: result.reason },
+      ...listTotals(users.length, result.total, "users", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, `Resume losslessly with the same flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`, showHint],
     };
   }
-  const count = { returned: users.length, complete: true };
   if (!users.length) {
     return {
       users,
-      count,
+      ...listTotals(users.length, result.total, "users", true),
+      complete: true,
       help: [
         `mg-axi entra user list --filter <odata-filter> ${profileHint(profileName)}`,
         "0 users matched; the absence of results is the answer, not an error",
@@ -207,7 +210,7 @@ export async function listUsers(
     };
   }
   const helpHints = [...truncationHints, showHint];
-  return { users, count, help: helpHints };
+  return { users, ...listTotals(users.length, result.total, "users", true), complete: true, help: helpHints };
 }
 
 export async function showUser(

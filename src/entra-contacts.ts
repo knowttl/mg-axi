@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 contacts subfamily plus EXT-01m/EXT-01n navigation: the read mapping
@@ -349,23 +350,25 @@ export async function listContacts(
   if (!result.complete) {
     return {
       contacts,
-      count: { returned: contacts.length, complete: false, reason: result.reason },
+      ...listTotals(contacts.length, result.total, "contacts", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: contacts.length, complete: true };
   if (!contacts.length) {
     return {
       contacts,
-      count,
+      ...listTotals(contacts.length, result.total, "contacts", true),
+      complete: true,
       help: [
         `mg-axi entra contact list --filter <odata-filter> ${profileHint(profileName)}`,
         "0 contacts matched; the absence of results is the answer, not an error",
       ],
     };
   }
-  return { contacts, count, help: [...truncationHints, showHint] };
+  return { contacts, ...listTotals(contacts.length, result.total, "contacts", true), complete: true, help: [...truncationHints, showHint] };
 }
 
 export async function showContact(
@@ -633,20 +636,22 @@ export async function listContactDirectReports(
   if (!result.complete) {
     return {
       directReports,
-      count: { returned: directReports.length, complete: false, reason: result.reason },
+      ...listTotals(directReports.length, result.total, "direct reports", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, ...limitedHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: directReports.length, complete: true };
   if (!directReports.length) {
     return {
       directReports,
-      count,
+      ...listTotals(directReports.length, result.total, "direct reports", true),
+      complete: true,
       help: [...limitedHints, "0 direct reports matched; the absence of results is the answer, not an error", showHint],
     };
   }
-  return { directReports, count, help: [...truncationHints, ...limitedHints, showHint] };
+  return { directReports, ...listTotals(directReports.length, result.total, "direct reports", true), complete: true, help: [...truncationHints, ...limitedHints, showHint] };
 }
 
 export async function showContactDirectReport(
@@ -931,20 +936,22 @@ export async function listContactMemberOf(
   if (!result.complete) {
     return {
       memberOf,
-      count: { returned: memberOf.length, complete: false, reason: result.reason },
+      ...listTotals(memberOf.length, result.total, "memberships", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, ...limitedHints, resumeHint(profileName), scopeHint, showHint],
     };
   }
-  const count = { returned: memberOf.length, complete: true };
   if (!memberOf.length) {
     return {
       memberOf,
-      count,
+      ...listTotals(memberOf.length, result.total, "memberships", true),
+      complete: true,
       help: [...limitedHints, `0 ${noun} matched; the absence of results is the answer, not an error`, scopeHint, showHint],
     };
   }
-  return { memberOf, count, help: [...truncationHints, ...limitedHints, scopeHint, showHint] };
+  return { memberOf, ...listTotals(memberOf.length, result.total, "memberships", true), complete: true, help: [...truncationHints, ...limitedHints, scopeHint, showHint] };
 }
 
 export async function showContactMemberOf(

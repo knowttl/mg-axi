@@ -203,8 +203,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: dom2.id, authenticationType: "Managed", isVerified: false, isDefault: false },
         { id: dom3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("entra domain show --id <domain-name>")));
+      assert.deepEqual(result.count, "3 domains");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("no --filter")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/domains?"));
@@ -238,11 +239,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "domain", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.domains.map(row => row.id), [dom1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "domain", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.domains.map(row => row.id), [dom2.id, dom3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 domains");
+      assert.equal(second.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -273,8 +275,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.verificationDnsRecords, [
         { "@odata.type": "#microsoft.graph.domainDnsTxtRecord", id: v1.id, label: "contoso.com", recordType: "Txt", supportedService: "Email" },
       ]);
-      assert.deepEqual(result.count, { returned: 1, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("entra domain verification-dns-record show --domain contoso.com --id <record-id>")));
+      assert.deepEqual(result.count, "1 DNS records");
+      assert.equal(result.total, null);
       assert.ok(result.help.some(hint => hint.includes("@odata.type")));
       assert.ok(new URL(requests[0].url).pathname.endsWith(`/domains/${dom1.id}/verificationDnsRecords`));
     } finally {
@@ -308,8 +310,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(mx.mailExchange, s1.mailExchange);
       assert.equal(mx.preference, 0);
       assert.equal(mx["@odata.type"], s1["@odata.type"]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("entra domain service-configuration-record show --domain contoso.com --id <record-id>")));
+      assert.deepEqual(result.count, "2 DNS records");
+      assert.equal(result.total, null);
       assert.ok(new URL(requests[0].url).searchParams.get("$select").includes("mailExchange"));
     } finally {
       teardownProfiles(state);
@@ -331,7 +333,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(listed.domainDnsRecords, [
         { "@odata.type": "#microsoft.graph.domainDnsCnameRecord", id: t1.id, label: t1.label, recordType: "CName", supportedService: "Email" },
       ]);
-      assert.deepEqual(listed.count, { returned: 1, complete: true });
+      assert.deepEqual(listed.count, "1 DNS records");
+      assert.equal(listed.total, null);
       const top = await executeArgv(["entra", "domain-dns-record", "show", "--id", t1.id, "--profile", profile,
         "--select", "id,canonicalName"], overrides);
       assert.deepEqual(top.domainDnsRecord, {
@@ -352,7 +355,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = await executeArgv(["entra", "domain", "service-configuration-record", "list",
         "--domain", dom1.id, "--profile", profile], overrides);
       assert.deepEqual(result.serviceConfigurationRecords, []);
-      assert.deepEqual(result.count, { returned: 0, complete: true });
+      assert.deepEqual(result.count, "0 DNS records");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("0 DNS records matched; the absence of results is the answer, not an error")));
     } finally {
       teardownProfiles(state);
@@ -400,7 +405,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const domainsOut = decode(listed.stdout);
       assert.deepEqual(domainsOut.domains.map(row => row.id), [dom1.id, dom2.id, dom3.id]);
-      assert.deepEqual(domainsOut.count, { returned: 3, complete: true });
+      assert.deepEqual(domainsOut.count, "3 domains");
+      assert.equal(domainsOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runDomainCli(["entra", "domain", "show", "--id", dom1.id, "--profile", profile], state, mode);

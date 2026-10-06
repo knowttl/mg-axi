@@ -192,7 +192,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           roleTemplateId: r2.roleTemplateId },
         { id: r3.id, displayName: "Directory Readers" },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 directory roles");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("activated roles only")));
       assert.ok(result.help.some(hint => hint.includes("entra directory-role show --id <role-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
@@ -230,8 +232,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: a1.id, principalId: a1.principalId, roleDefinitionId: a1.roleDefinitionId, directoryScopeId: "/" },
         { id: vActivated.id, principalId: vActivated.principalId, roleDefinitionId: vActivated.roleDefinitionId, directoryScopeId: "/" },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("inventory includes direct and PIM-activated assignments")));
+      assert.deepEqual(result.count, "2 role assignments");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("pim active list for assignmentType Assigned versus Activated")));
       assert.ok(result.help.some(hint => hint.includes("roleTemplateId")));
       assert.ok(new URL(requests[0].url).pathname.endsWith("/roleManagement/directory/roleAssignments"));
@@ -248,8 +251,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.eligibleAssignments, [
         { id: e1.id, principalId: e1.principalId, roleDefinitionId: e1.roleDefinitionId, memberType: "Direct" },
       ]);
-      assert.deepEqual(result.count, { returned: 1, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("not active")));
+      assert.deepEqual(result.count, "1 eligible assignments");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(new URL(requests[0].url).pathname.endsWith("/roleManagement/directory/roleEligibilityScheduleInstances"));
       assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,principalId,roleDefinitionId,memberType");
     } finally {
@@ -266,8 +270,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: vAssigned.id, principalId: vAssigned.principalId, roleDefinitionId: vAssigned.roleDefinitionId, assignmentType: "Assigned", memberType: "Direct" },
         { id: vActivated.id, principalId: vActivated.principalId, roleDefinitionId: vActivated.roleDefinitionId, assignmentType: "Activated", memberType: "Direct" },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("assignmentType Assigned")));
+      assert.deepEqual(result.count, "2 active assignments");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("assignmentType Activated")));
       assert.ok(new URL(requests[0].url).pathname.endsWith("/roleManagement/directory/roleAssignmentScheduleInstances"));
     } finally {
@@ -306,7 +311,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.stderr, "");
       const output = decode(result.stdout);
       assert.equal(output.activeAssignments.length, 2);
-      assert.deepEqual(output.count, { returned: 2, complete: true });
+      assert.deepEqual(output.count, "2 active assignments");
+      assert.equal(output.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -325,7 +331,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(output.eligibleAssignments, [
         { id: e1.id, principalId: e1.principalId, roleDefinitionId: e1.roleDefinitionId, memberType: "Direct" },
       ]);
-      assert.deepEqual(output.count, { returned: 1, complete: true });
+      assert.deepEqual(output.count, "1 eligible assignments");
+      assert.equal(output.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -396,11 +403,14 @@ test("delegated role reads resume a capped list through its opaque cursor", asyn
     const { overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "directory-role", "list", "--profile", "soc", "--limit", "2"], overrides);
     assert.equal(first.directoryRoles.length, 2);
-    assert.deepEqual(first.count, { returned: 2, complete: false, reason: first.count.reason });
+    assert.deepEqual(first.count, "2 directory roles shown, more available");
+    assert.equal(first.total, null);
+    assert.equal(first.complete, false);
     assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
     const second = await executeArgv(["entra", "directory-role", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(second.directoryRoles, [{ id: r3.id, displayName: "Directory Readers" }]);
-    assert.deepEqual(second.count, { returned: 1, complete: true });
+    assert.deepEqual(second.count, "1 directory roles");
+    assert.equal(second.total, null);
   } finally {
     teardownProfiles(state);
   }

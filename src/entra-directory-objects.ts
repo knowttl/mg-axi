@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 directory-objects subfamily: the read mapping behind
@@ -284,16 +285,17 @@ export async function listDirectoryObjects(
   if (!result.complete) {
     return {
       directoryObjects,
-      count: { returned: directoryObjects.length, complete: false, reason: result.reason },
+      ...listTotals(directoryObjects.length, result.total, "directory objects", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: directoryObjects.length, complete: true };
   if (!directoryObjects.length) {
-    return { directoryObjects, count, help: [EMPTY_NOTE] };
+    return { directoryObjects, ...listTotals(directoryObjects.length, result.total, "directory objects", true), complete: true, help: [EMPTY_NOTE] };
   }
-  return { directoryObjects, count, help: [...truncationHints, showHint] };
+  return { directoryObjects, ...listTotals(directoryObjects.length, result.total, "directory objects", true), complete: true, help: [...truncationHints, showHint] };
 }
 
 export async function showDirectoryObject(

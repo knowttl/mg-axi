@@ -190,7 +190,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           assert.ok(typeof row["@odata.type"] === "string", "rows name their kind");
           assert.ok(!JSON.stringify(row).includes("super-secret-value"), "secret values never reach output");
         }
-        assert.deepEqual(result.count, { returned: entry.rows.length, complete: true });
+        assert.deepEqual(result.count, `${entry.rows.length} deleted items`);
+        assert.equal(result.total, null);
+        assert.equal(result.complete, true);
         assert.ok(result.help.some(hint => hint.includes("entra deleted-item show --id <object-id>")));
         assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
         assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com${entry.listPath}?`));
@@ -340,11 +342,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, paged);
       const first = await executeArgv(["entra", "deleted-group", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.deletedItems.map(row => row.id), [deletedGroup.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "deleted-group", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.deletedItems, []);
-      assert.deepEqual(second.count, { returned: 0, complete: true });
+      assert.deepEqual(second.count, "0 deleted items");
+      assert.equal(second.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -357,7 +360,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const listed = await executeArgv(["entra", "deleted-user", "list", "--profile", profile], overrides);
       assert.deepEqual(listed.deletedItems, []);
-      assert.deepEqual(listed.count, { returned: 0, complete: true });
+      assert.deepEqual(listed.count, "0 deleted items");
+      assert.equal(listed.total, null);
+      assert.equal(listed.complete, true);
       assert.ok(listed.help.some(hint => hint.includes("absence of results is the answer")));
     } finally {
       teardownProfiles(state);
@@ -411,7 +416,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listOut = decode(listed.stdout);
       assert.deepEqual(listOut.deletedItems.map(row => row.id), [deletedGroup.id]);
       assert.deepEqual(listOut.deletedItems.map(row => row["@odata.type"]), ["#microsoft.graph.group"]);
-      assert.deepEqual(listOut.count, { returned: 1, complete: true });
+      assert.deepEqual(listOut.count, "1 deleted items");
+      assert.equal(listOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const showArgs = ["entra", "deleted-item", "show", "--id", deletedUser.id, "--profile", profile];

@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 deleted-items subfamily: the read mapping behind
@@ -471,16 +472,17 @@ export async function listDeletedItems(
   if (!result.complete) {
     return {
       deletedItems: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, "deleted items", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, ...groupNote, ...appNote],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
-    return { deletedItems: rows, count, help: [emptyNote, ...groupNote, ...appNote] };
+    return { deletedItems: rows, ...listTotals(rows.length, result.total, "deleted items", true), complete: true, help: [emptyNote, ...groupNote, ...appNote] };
   }
-  return { deletedItems: rows, count, help: [...truncationHints, showHint, ...groupNote, ...appNote] };
+  return { deletedItems: rows, ...listTotals(rows.length, result.total, "deleted items", true), complete: true, help: [...truncationHints, showHint, ...groupNote, ...appNote] };
 }
 
 export async function showDeletedItem(

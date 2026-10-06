@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 217 (215 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 223 (221 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 7 (home, profile, login and setup views)
 - inventory named-command: 0

@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 201 (199 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 211 (209 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 6 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -163,6 +163,16 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra data-policy-operation list` | `GET:/dataPolicyOperations` | scheduled | EXT-03 |
 | `mg-axi entra data-policy-operation show` | `GET:/dataPolicyOperations/{dataPolicyOperation-id}` | scheduled | EXT-03 |
 | `mg-axi entra data-policy-operation count` | `GET:/dataPolicyOperations/$count` | scheduled | EXT-03 |
+| `mg-axi entra fraud-protection-provider list` | `GET:/identity/riskPrevention/fraudProtectionProviders` | scheduled | EXT-03 |
+| `mg-axi entra fraud-protection-provider show` | `GET:/identity/riskPrevention/fraudProtectionProviders/{fraudProtectionProvider-id}` | scheduled | EXT-03 |
+| `mg-axi entra fraud-protection-provider count` | `GET:/identity/riskPrevention/fraudProtectionProviders/$count` | scheduled | EXT-03 |
+| `mg-axi entra web-application-firewall-provider list` | `GET:/identity/riskPrevention/webApplicationFirewallProviders` | scheduled | EXT-03 |
+| `mg-axi entra web-application-firewall-provider show` | `GET:/identity/riskPrevention/webApplicationFirewallProviders/{webApplicationFirewallProvider-id}` | scheduled | EXT-03 |
+| `mg-axi entra web-application-firewall-provider count` | `GET:/identity/riskPrevention/webApplicationFirewallProviders/$count` | scheduled | EXT-03 |
+| `mg-axi entra web-application-firewall-verification list` | `GET:/identity/riskPrevention/webApplicationFirewallVerifications` | scheduled | EXT-03 |
+| `mg-axi entra web-application-firewall-verification show` | `GET:/identity/riskPrevention/webApplicationFirewallVerifications/{webApplicationFirewallVerificationModel-id}` | scheduled | EXT-03 |
+| `mg-axi entra web-application-firewall-verification count` | `GET:/identity/riskPrevention/webApplicationFirewallVerifications/$count` | scheduled | EXT-03 |
+| `mg-axi entra web-application-firewall-verification provider show` | `GET:/identity/riskPrevention/webApplicationFirewallVerifications/{webApplicationFirewallVerificationModel-id}/provider` | scheduled | EXT-03 |
 | `mg-axi entra access-review definition list` | `GET:/identityGovernance/accessReviews/definitions` | scheduled | EXT-02 |
 | `mg-axi entra access-review definition show` | `GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}` | scheduled | EXT-02 |
 | `mg-axi entra access-review instance list` | `GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances` | scheduled | EXT-02 |
@@ -313,6 +323,28 @@ Workforce context only; no external-customer support is claimed.
 | `beta:GET:/dataPolicyOperations` | scheduled (deferred) | EXT-03 | Deferred by firstmate data-policy-operations scope to a later EXT-03 data-policy-operations beta subfamily: the three approved reads cover v1.0 only; beta data-policy operations need separate review. |
 | `beta:GET:/dataPolicyOperations/$count` | scheduled (deferred) | EXT-03 | Deferred by firstmate data-policy-operations scope to a later EXT-03 data-policy-operations beta subfamily: the three approved reads cover v1.0 only; beta data-policy operations need separate review. |
 | `beta:GET:/dataPolicyOperations/{dataPolicyOperation-id}` | scheduled (deferred) | EXT-03 | Deferred by firstmate data-policy-operations scope to a later EXT-03 data-policy-operations beta subfamily: the three approved reads cover v1.0 only; beta data-policy operations need separate review. |
+
+## EXT-03 risk-prevention scope decisions
+
+This change covers the ten v1.0 workforce risk-prevention reads above (fraud-protection-provider list, show and count; web-application-firewall-provider list, show and count; web-application-firewall-verification list, show, count and provider show).
+The eleven beta operations below remain scheduled with an explicit deferred disposition to a later EXT-03 subfamily; no new commands or raw access are approved.
+Risk-prevention reads support v1.0 only; beta needs its own review.
+API keys, client secrets and other key material (Arkose privateKey/publicKey, HUMAN serverToken, Akamai clientSecret/clientToken/accessToken, Cloudflare apiToken) are never selectable and never projected; application profiles are refused before credentials because Graph documents no supported application permission.
+Workforce context only; no external-customer support is claimed.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `beta:GET:/identity/riskPrevention` | scheduled (deferred) | EXT-03 | Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review. |
+| `beta:GET:/identity/riskPrevention/fraudProtectionProviders` | scheduled (deferred) | EXT-03 | Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review. |
+| `beta:GET:/identity/riskPrevention/fraudProtectionProviders/$count` | scheduled (deferred) | EXT-03 | Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review. |
+| `beta:GET:/identity/riskPrevention/fraudProtectionProviders/{fraudProtectionProvider-id}` | scheduled (deferred) | EXT-03 | Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review. |
+| `beta:GET:/identity/riskPrevention/webApplicationFirewallProviders` | scheduled (deferred) | EXT-03 | Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review. |
+| `beta:GET:/identity/riskPrevention/webApplicationFirewallProviders/$count` | scheduled (deferred) | EXT-03 | Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review. |
+| `beta:GET:/identity/riskPrevention/webApplicationFirewallProviders/{webApplicationFirewallProvider-id}` | scheduled (deferred) | EXT-03 | Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review. |
+| `beta:GET:/identity/riskPrevention/webApplicationFirewallVerifications` | scheduled (deferred) | EXT-03 | Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review. |
+| `beta:GET:/identity/riskPrevention/webApplicationFirewallVerifications/$count` | scheduled (deferred) | EXT-03 | Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review. |
+| `beta:GET:/identity/riskPrevention/webApplicationFirewallVerifications/{webApplicationFirewallVerificationModel-id}` | scheduled (deferred) | EXT-03 | Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review. |
+| `beta:GET:/identity/riskPrevention/webApplicationFirewallVerifications/{webApplicationFirewallVerificationModel-id}/provider` | scheduled (deferred) | EXT-03 | Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review. |
 
 ## EXT-03 invitations scope decisions
 

@@ -31,6 +31,7 @@ EXT-01n (contact membership) adds per-contact memberOf and transitiveMemberOf re
 EXT-03 (identity providers) adds workforce identity-provider list/show/count/available-types reads with secret scrubbing through the same session.
 EXT-01 (federation configurations) adds workforce directory federation-configuration list/show/count/available-types reads with default signing-certificate omission through the same session.
 EXT-03 (data policy operations) adds workforce data-policy-operation list/show/count reads with storage-location redaction through the same session.
+EXT-03 (risk prevention) adds workforce fraud-protection-provider, web-application-firewall-provider and web-application-firewall-verification list/show/count reads plus verification provider show with key-material scrubbing through the same delegated session.
 READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
 EXT-04 (contracts) adds partner-tenant customer-contract list/show/count through the same session.
@@ -878,6 +879,38 @@ Delegated operation reads default to `https://graph.microsoft.com/User.Export.Al
 Delegated callers additionally need Company Administrator, the privileged role documented for export reads; personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for these reads; denied reads name the scopes, role and licensing guidance instead of only the generic cause.
 No export submission lives here; the `$count` scalar aside, beta operations stay scheduled (see the [data-policy-operations scope decisions](docs/coverage.md#ext-03-data-policy-operations-scope-decisions)).
+
+Log in with `https://graph.microsoft.com/RiskPreventionProviders.Read.All`, then read workforce risk-prevention providers and verifications (delegated profiles only):
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/RiskPreventionProviders.Read.All
+mg-axi entra fraud-protection-provider list --profile soc
+mg-axi entra fraud-protection-provider show --profile soc --id <provider-id>
+mg-axi entra fraud-protection-provider count --profile soc
+mg-axi entra web-application-firewall-provider list --profile soc
+mg-axi entra web-application-firewall-provider show --profile soc --id <provider-id>
+mg-axi entra web-application-firewall-provider count --profile soc
+mg-axi entra web-application-firewall-verification list --profile soc
+mg-axi entra web-application-firewall-verification show --profile soc --id <verification-id>
+mg-axi entra web-application-firewall-verification count --profile soc
+mg-axi entra web-application-firewall-verification provider show --profile soc --id <verification-id>
+```
+
+`entra fraud-protection-provider list` and `entra web-application-firewall-provider list` default to compact properties (`id`, `displayName`); `entra web-application-firewall-verification list` defaults to (`id`, `verifiedHost`, `providerType`); every `show` defaults to its full reviewed set.
+All ten risk-prevention commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+List and show accept `--select` from the [reviewed risk-prevention property sets](src/entra-risk-prevention.ts); `--fields` must be a subset of the fetched selection.
+The fraud list documents `$select` only, so no `--filter`; the WAF and verification lists accept `--filter` as plain `$filter`; every `$count` route takes no `--filter`, `--select`, `--limit` or `--cursor`.
+Fraud lists return `fraudProtectionProviders`, WAF lists return `webApplicationFirewallProviders`, verification lists return `webApplicationFirewallVerifications`; single reads return `fraudProtectionProvider`, `webApplicationFirewallProvider` or `webApplicationFirewallVerification`; counts return `count` with the scalar total.
+Verification rows never carry provider detail; `provider show --id <verification-id>` returns the owning `webApplicationFirewallProvider`.
+Fraud and WAF rows carry `@odata.type` naming the provider kind (Arkose or HUMAN; Akamai or Cloudflare).
+The reviewed fraud fields are `id`, `displayName`, `clientSubDomain`, `verifySubDomain` and `appId`; the reviewed WAF fields are `id`, `displayName`, `hostPrefix` and `zoneId`; the reviewed verification fields are `id`, `verifiedHost`, `providerType`, `verificationResult` and `verifiedDetails`.
+Arkose `privateKey`/`publicKey`, HUMAN `serverToken`, Akamai `clientSecret`/`clientToken`/`accessToken` and Cloudflare `apiToken` are never selectable and any row carrying them is scrubbed before output, so key material can never reach stdout, errors or logs.
+Risk-prevention lists use the named-list caps, `count` aggregate and cursors described above.
+List and show preserve null/missing properties and truncate text longer than 500 characters; `--full` restores complete text without lifting redaction or row caps.
+Delegated risk-prevention reads default to `https://graph.microsoft.com/RiskPreventionProviders.Read.All`; Graph documents no supported application permission, so application profiles are refused before credentials.
+Delegated callers additionally need a directory role that can read risk-prevention configuration (Security Reader is the least-privileged read-only role); personal Microsoft accounts are not supported.
+No per-operation licence prerequisite is stated for these reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
+No provider create/update/delete and no verification submission live here; beta operations stay scheduled (see the [risk-prevention scope decisions](docs/coverage.md#ext-03-risk-prevention-scope-decisions)).
 
 Log in with `https://graph.microsoft.com/Policy.Read.All`, then read Conditional Access policies and named locations as separate grammar:
 

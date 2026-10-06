@@ -536,6 +536,33 @@ test("administrative-unit member list leaf help advertises the relationship flag
   assert.match(result.stdout, /Member\.Read\.Hidden/);
 });
 
+test("fraud-protection-provider list leaf help marks compact rows with no filter", () => {
+  const result = run(["entra", "fraud-protection-provider", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /compact properties \(id, displayName\)/);
+  assert.match(result.stdout, /never returned/);
+  assert.match(result.stdout, /RiskPreventionProviders\.Read\.All/);
+});
+
+test("web-application-firewall-provider list leaf help advertises the filter flag", () => {
+  const result = run(["entra", "web-application-firewall-provider", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /--filter/);
+  assert.match(result.stdout, /never returned/);
+  assert.match(result.stdout, /RiskPreventionProviders\.Read\.All/);
+});
+
+test("web-application-firewall-verification provider show leaf help marks the provider sub-read", () => {
+  const result = run(["entra", "web-application-firewall-verification", "provider", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /--id.*required/);
+  assert.match(result.stdout, /never returned/);
+  assert.match(result.stdout, /RiskPreventionProviders\.Read\.All/);
+});
+
 test("oauth2-grant list leaf help marks rows as granted consent with read-only scopes", () => {
   const result = run(["entra", "service-principal", "oauth2-grant", "list", "--help"]);
   assert.equal(result.status, 0);

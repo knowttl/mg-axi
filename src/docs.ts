@@ -80,6 +80,9 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra identity-provider ", "identity providers"],
   ["entra federation-configuration ", "federation configurations"],
   ["entra data-policy-operation ", "data policy operations"],
+  ["entra fraud-protection-provider ", "risk prevention"],
+  ["entra web-application-firewall-provider ", "risk prevention"],
+  ["entra web-application-firewall-verification ", "risk prevention"],
   ["entra access-review ", "access reviews"],
   ["entra entitlement catalog ", "entitlement catalogs and access packages"],
   ["entra entitlement access-package ", "entitlement catalogs and access packages"],
@@ -285,6 +288,7 @@ export function capabilityDocument(): string {
   const deferredProviderRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred to a later EXT-03 "));
   const deferredFederationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate federation-configuration scope "));
   const deferredDataPolicyRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred by firstmate data-policy-operations scope "));
+  const deferredRiskPreventionRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred by firstmate risk-prevention scope "));
   const unavailableInvitationRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Marked unavailable by firstmate EXT-03b decision: "));
   const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
   const unavailableCertAuthRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01d decision: "));
@@ -375,6 +379,18 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredDataPolicyRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
+    "",
+    "## EXT-03 risk-prevention scope decisions",
+    "",
+    "This change covers the ten v1.0 workforce risk-prevention reads above (fraud-protection-provider list, show and count; web-application-firewall-provider list, show and count; web-application-firewall-verification list, show, count and provider show).",
+    "The eleven beta operations below remain scheduled with an explicit deferred disposition to a later EXT-03 subfamily; no new commands or raw access are approved.",
+    "Risk-prevention reads support v1.0 only; beta needs its own review.",
+    "API keys, client secrets and other key material (Arkose privateKey/publicKey, HUMAN serverToken, Akamai clientSecret/clientToken/accessToken, Cloudflare apiToken) are never selectable and never projected; application profiles are refused before credentials because Graph documents no supported application permission.",
+    "Workforce context only; no external-customer support is claimed.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredRiskPreventionRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## EXT-03 invitations scope decisions",
     "",

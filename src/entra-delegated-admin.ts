@@ -38,8 +38,8 @@ import type { AnyProfile } from "./profiles.js";
 // --filter passes through as plain $filter with no $count or ConsistencyLevel
 // contract. serviceManagementDetails documents no query parameters, so both
 // service-management-detail reads run queryless and project locally. The
-// $count scalars and the tenantRelationship container root stay scheduled
-// for later EXT-04 subfamilies, as do the multi-tenant-organization reads
+// six $count scalars ship in this module; the tenantRelationship container
+// root stays scheduled for a later EXT-04 subfamily, as do the multi-tenant-organization reads
 // (shipped separately) and the tenant-lookup functions (shipped as
 // tenant-information show under mg-ext-04e). Beta stays out. No delegated-admin mutation exists in this slice:
 // relationship creation, approval and termination are writes.
@@ -669,4 +669,113 @@ export async function showDelegatedAdminServiceManagementDetail(
 ): Promise<Record<string, unknown>> {
   return showResource(session, flags, profile, operation, help, profileName,
     SERVICE_MANAGEMENT_DETAIL, "delegatedAdminServiceManagementDetail", "entra delegated-admin-customer show-service-management-detail");
+}
+
+// The $count routes return a text/plain integer scalar rather than a JSON
+// collection, so each leaf reads it through session.execute and accepts only
+// a non-negative integer. There is no --filter/--select/--limit contract on
+// the counts: the catalogue declares no such flags and strict input
+// validation refuses them before credentials. All six share the parent
+// list/show read scope DelegatedAdminRelationship.Read.All, so no new
+// consent is needed.
+function countParentId(flags: DelegatedAdminFlags, label: string, help: string): string {
+  const id = String(flags.id);
+  if (!id.trim()) throw new AxiError(`--id needs the delegated-admin ${label} identifier`, "VALIDATION_ERROR", [help]);
+  return id;
+}
+
+async function countScalar(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+  params: Record<string, string>,
+  rowKey: string,
+  noun: string,
+): Promise<Record<string, unknown>> {
+  void profileName;
+  const scopes = scopesFor(flags, DEFAULT_DELEGATED_ADMIN_SCOPES, profile, help);
+  const raw = await withGuidance(DELEGATED_ADMIN_DENIAL_HINTS, () => session.execute({ profile, operation, params, scopes }));
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) {
+    throw new AxiError(`Graph returned a malformed delegated-admin ${noun} count body`, "GRAPH_ERROR", [
+      "Delegated-admin counts carry one non-negative integer scalar; treat anything else as unknown, not empty",
+    ]);
+  }
+  return { [rowKey]: raw };
+}
+
+export async function countDelegatedAdminCustomers(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return countScalar(session, flags, profile, operation, help, profileName, {}, "delegatedAdminCustomerCount", "customer");
+}
+
+export async function countDelegatedAdminServiceManagementDetails(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const customer = countParentId(flags, "customer", help);
+  return countScalar(session, flags, profile, operation, help, profileName,
+    { "delegatedAdminCustomer-id": customer }, "delegatedAdminServiceManagementDetailCount", "service-management detail");
+}
+
+export async function countDelegatedAdminRelationships(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return countScalar(session, flags, profile, operation, help, profileName, {}, "delegatedAdminRelationshipCount", "relationship");
+}
+
+export async function countDelegatedAdminAccessAssignments(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const relationship = countParentId(flags, "relationship", help);
+  return countScalar(session, flags, profile, operation, help, profileName,
+    { "delegatedAdminRelationship-id": relationship }, "delegatedAdminAccessAssignmentCount", "access assignment");
+}
+
+export async function countDelegatedAdminOperations(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const relationship = countParentId(flags, "relationship", help);
+  return countScalar(session, flags, profile, operation, help, profileName,
+    { "delegatedAdminRelationship-id": relationship }, "delegatedAdminRelationshipOperationCount", "relationship operation");
+}
+
+export async function countDelegatedAdminRequests(
+  session: GraphSession,
+  flags: DelegatedAdminFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const relationship = countParentId(flags, "relationship", help);
+  return countScalar(session, flags, profile, operation, help, profileName,
+    { "delegatedAdminRelationship-id": relationship }, "delegatedAdminRelationshipRequestCount", "relationship request");
 }

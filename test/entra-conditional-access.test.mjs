@@ -512,3 +512,359 @@ for (const [family, noun, known] of [
     }
   });
 }
+
+// READ-03 leftover collections: authentication-strength policies, each
+// policy's combination configurations, authentication method modes and
+// templates. Fixtures mirror the reviewed v1.0 resource shapes; the fake
+// transport below serves only these routes.
+const strengthScopes = ["https://graph.microsoft.com/Policy.Read.AuthenticationMethod"];
+const s1 = {
+  id: "66666666-6666-4666-8666-ffffffffffff",
+  displayName: "Multifactor authentication strength",
+  description: "Built-in multifactor authentication strength.",
+  policyType: "builtIn",
+  requirementsSatisfied: "mfa",
+  allowedCombinations: ["fido2", "x509CertificateMultiFactor"],
+  createdDateTime: "2022-01-01T00:00:00Z",
+  modifiedDateTime: "2022-01-01T00:00:00Z",
+};
+const longStrengthDescription = `${"Custom strength requiring phishing-resistant combinations. ".repeat(12)}Applies to all privileged roles.`;
+assert.ok(longStrengthDescription.length > 500, "The strength description must exceed the truncation ceiling");
+const s2 = {
+  id: "77777777-7777-4777-8777-000000000000",
+  displayName: "Phishing-resistant MFA",
+  description: longStrengthDescription,
+  policyType: "custom",
+  requirementsSatisfied: "mfa",
+  allowedCombinations: ["fido2"],
+  createdDateTime: "2023-03-01T00:00:00Z",
+  modifiedDateTime: "2024-04-01T00:00:00Z",
+};
+const strengths = [s1, s2];
+const c1 = {
+  "@odata.type": "#microsoft.graph.fido2CombinationConfiguration",
+  id: "88888888-8888-4888-8888-111111111111",
+  appliesToCombinations: ["fido2"],
+};
+const c2 = {
+  "@odata.type": "#microsoft.graph.x509CertificateCombinationConfiguration",
+  id: "99999999-9999-4999-8999-222222222222",
+  appliesToCombinations: ["x509CertificateSingleFactor", "x509CertificateMultiFactor"],
+};
+const combos = [c1, c2];
+const m1 = { id: "aaaaaaaa-aaaa-4aaa-8aaa-333333333333", displayName: "FIDO2 security key", authenticationMethod: "fido2" };
+const m2 = { id: "bbbbbbbb-bbbb-4bbb-8bbb-444444444444", displayName: "Certificate-based authentication", authenticationMethod: "x509Certificate" };
+const modes = [m1, m2];
+const t1 = {
+  id: "cccccccc-cccc-4ccc-8ccc-555555555555",
+  name: "Block legacy authentication",
+  description: "Block legacy authentication endpoints that bypass Conditional Access.",
+  scenarios: ["secureFoundation", "zeroTrust"],
+  details: { conditions: { clientAppTypes: ["exchangeActiveSync", "other"] }, grantControls: { builtInControls: ["block"] } },
+};
+const longTemplateDescription = `${"Template for requiring compliant devices on privileged access. ".repeat(10)}Review before creating a policy.`;
+assert.ok(longTemplateDescription.length > 500, "The template description must exceed the truncation ceiling");
+const t2 = {
+  id: "dddddddd-dddd-4ddd-8ddd-666666666666",
+  name: "Require compliant devices for admins",
+  description: longTemplateDescription,
+  scenarios: ["protectAdmins"],
+  details: { conditions: { users: { includeRoles: ["62e90394-69f5-4237-9190-012177145e10"] } }, grantControls: { builtInControls: ["compliantDevice"] } },
+};
+const templates = [t1, t2];
+
+function caLeftoverTransport() {
+  return transport(request => {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (path === "/v1.0/identity/conditionalAccess/authenticationStrength/policies") {
+      if (url.searchParams.has("$skiptoken")) return json(200, { value: [s2] });
+      return json(200, {
+        value: [s1],
+        "@odata.nextLink": "https://graph.microsoft.com/v1.0/identity/conditionalAccess/authenticationStrength/policies?%24skiptoken=page2",
+      });
+    }
+    if (path === `/v1.0/identity/conditionalAccess/authenticationStrength/policies/${s1.id}/combinationConfigurations`) {
+      return json(200, { value: combos });
+    }
+    if (path === "/v1.0/identity/conditionalAccess/authenticationStrength/authenticationMethodModes") {
+      return json(200, { value: modes });
+    }
+    if (path === "/v1.0/identity/conditionalAccess/templates") {
+      return json(200, { value: templates });
+    }
+    const strength = strengths.find(row => path === `/v1.0/identity/conditionalAccess/authenticationStrength/policies/${row.id}`);
+    if (strength) return json(200, strength);
+    const combo = combos.find(row => path === `/v1.0/identity/conditionalAccess/authenticationStrength/policies/${s1.id}/combinationConfigurations/${row.id}`);
+    if (combo) return json(200, combo);
+    const mode = modes.find(row => path === `/v1.0/identity/conditionalAccess/authenticationStrength/authenticationMethodModes/${row.id}`);
+    if (mode) return json(200, mode);
+    const template = templates.find(row => path === `/v1.0/identity/conditionalAccess/templates/${row.id}`);
+    if (template) return json(200, template);
+    return json(404, { error: { code: "Request_ResourceNotFound", message: "no such object" } });
+  });
+}
+
+function leftoverOverrides(mode) {
+  return overridesFor(mode, caLeftoverTransport());
+}
+
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+  test(`${mode} lists auth-strength policies with compact rows and totals`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = leftoverOverrides(mode);
+      const result = await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", profile, "--all"], overrides);
+      assert.deepEqual(result.authStrengthPolicies, [
+        { id: s1.id, displayName: s1.displayName, policyType: "builtIn" },
+        { id: s2.id, displayName: s2.displayName, policyType: "custom" },
+      ]);
+      assert.equal(result.total, null);
+      assert.equal(result.count, "2 auth-strength policies");
+      assert.equal(result.complete, true);
+      assert.ok(result.help.some(hint => hint.includes("conditional-access auth-strength-policy show --id <auth-strength-policy-id>")));
+      assert.ok(requests[0].url.includes("%24select=id%2CdisplayName%2CpolicyType"));
+      assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows an auth-strength policy with the full reviewed set`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = leftoverOverrides(mode);
+      const result = await executeArgv(["entra", "conditional-access", "auth-strength-policy", "show", "--id", s1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.authStrengthPolicy, s1);
+      assert.equal(result.help, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists combination configurations under a policy preserving kind`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = leftoverOverrides(mode);
+      const result = await executeArgv(["entra", "conditional-access", "combination-configuration", "list",
+        "--policy", s1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.combinationConfigurations, [
+        { id: c1.id, "@odata.type": "#microsoft.graph.fido2CombinationConfiguration" },
+        { id: c2.id, "@odata.type": "#microsoft.graph.x509CertificateCombinationConfiguration" },
+      ]);
+      assert.equal(result.count, "2 combination configurations");
+      assert.equal(result.complete, true);
+      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/identity/conditionalAccess/authenticationStrength/policies/${s1.id}/combinationConfigurations?`));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} combination reads without a policy fail before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = leftoverOverrides(mode);
+      await assert.rejects(executeArgv(["entra", "conditional-access", "combination-configuration", "list", "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /--policy is required/.test(error.message));
+      await assert.rejects(executeArgv(["entra", "conditional-access", "combination-configuration", "show",
+        "--id", c1.id, "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /--policy is required/.test(error.message));
+      assert.equal(requests.length, 0);
+      assert.equal(calls.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows a combination configuration with its combinations`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = leftoverOverrides(mode);
+      const result = await executeArgv(["entra", "conditional-access", "combination-configuration", "show",
+        "--policy", s1.id, "--id", c2.id, "--profile", profile], overrides);
+      assert.deepEqual(result.combinationConfiguration, c2);
+      assert.equal(result.help, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists auth-method modes with compact rows and totals`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = leftoverOverrides(mode);
+      const result = await executeArgv(["entra", "conditional-access", "auth-method-mode", "list", "--profile", profile], overrides);
+      assert.deepEqual(result.authMethodModes, [
+        { id: m1.id, displayName: m1.displayName },
+        { id: m2.id, displayName: m2.displayName },
+      ]);
+      assert.equal(result.count, "2 auth-method modes");
+      assert.equal(result.complete, true);
+      assert.ok(result.help.some(hint => hint.includes("conditional-access auth-method-mode show --id <auth-method-mode-id>")));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows an auth-method mode with its method`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = leftoverOverrides(mode);
+      const result = await executeArgv(["entra", "conditional-access", "auth-method-mode", "show", "--id", m1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.authMethodMode, m1);
+      assert.equal(result.help, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists templates with compact rows and totals`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = leftoverOverrides(mode);
+      const result = await executeArgv(["entra", "conditional-access", "template", "list", "--profile", profile], overrides);
+      assert.deepEqual(result.templates, [
+        { id: t1.id, name: t1.name },
+        { id: t2.id, name: t2.name },
+      ]);
+      assert.equal(result.count, "2 templates");
+      assert.equal(result.complete, true);
+      assert.ok(result.help.some(hint => hint.includes("conditional-access template show --id <template-id>")));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} truncated template detail carries a --full hint that restores it`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = leftoverOverrides(mode);
+      const truncated = await executeArgv(["entra", "conditional-access", "template", "show", "--id", t2.id, "--profile", profile], overrides);
+      assert.match(truncated.template.description, /\.\.\. \(truncated, \d+ chars total\)/);
+      assert.ok(truncated.help.some(hint => hint.includes("--full")));
+      assert.ok(truncated.help.every(hint => !hint.includes(longTemplateDescription)));
+      const full = await executeArgv(["entra", "conditional-access", "template", "show", "--id", t2.id, "--profile", profile, "--full"], overrides);
+      assert.deepEqual(full.template, t2);
+      assert.equal(full.help, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} resumes a capped auth-strength-policy list through its cursor`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = leftoverOverrides(mode);
+      const first = await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", profile, "--limit", "1"], overrides);
+      assert.deepEqual(first.authStrengthPolicies.map(row => row.id), [s1.id]);
+      assert.equal(first.count, "1 auth-strength policies shown, more available");
+      assert.equal(first.complete, false);
+      assert.equal(typeof first.cursor, "string");
+      const second = await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list",
+        "--profile", profile, "--cursor", first.cursor], overrides);
+      assert.deepEqual(second.authStrengthPolicies.map(row => row.id), [s2.id]);
+      assert.equal(second.count, "1 auth-strength policies");
+      assert.equal(second.complete, true);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} denied strength reads surface role and scope guidance`, async () => {
+    const state = setupProfiles();
+    try {
+      const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
+      const overrides = {
+        transport: denied.send,
+        delegated: credentialService("delegated", []),
+        application: credentialService("application", []),
+      };
+      await assert.rejects(executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        const guidance = error.suggestions.join("\n");
+        assert.match(guidance, /Policy\.Read\.AuthenticationMethod/);
+        assert.match(guidance, /Conditional Access Administrator/);
+        assert.match(guidance, /P1/);
+        return true;
+      });
+      await assert.rejects(executeArgv(["entra", "conditional-access", "template", "list", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        const guidance = error.suggestions.join("\n");
+        assert.match(guidance, /Policy\.Read\.All/);
+        assert.match(guidance, /P1/);
+        return true;
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} empty auth-strength results report absence instead of an error`, async () => {
+    const state = setupProfiles();
+    try {
+      const empty = transport(() => json(200, { value: [] }));
+      const { overrides } = overridesFor(mode, empty);
+      const result = await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", profile], overrides);
+      assert.deepEqual(result.authStrengthPolicies, []);
+      assert.equal(result.count, "0 auth-strength policies");
+      assert.ok(result.help.some(hint => hint.includes("0 authentication-strength policies matched")));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+}
+
+test("delegated strength reads default to Policy.Read.AuthenticationMethod without extra scopes", async () => {
+  const state = setupProfiles();
+  try {
+    const calls = [];
+    const { overrides } = overridesFor("delegated", caLeftoverTransport(), calls);
+    await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", "soc"], overrides);
+    assert.deepEqual(calls[0][1], strengthScopes);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
+test("application profiles reject delegated scopes on leftover conditional-access reads", async () => {
+  const state = setupProfiles();
+  try {
+    const { requests, calls, overrides } = leftoverOverrides("application");
+    await assert.rejects(executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", "batch",
+      "--scopes", strengthScopes[0]], overrides), { code: "VALIDATION_ERROR" });
+    await assert.rejects(executeArgv(["entra", "conditional-access", "template", "show", "--id", t1.id,
+      "--profile", "batch", "--scopes", caScopes[0]], overrides), { code: "VALIDATION_ERROR" });
+    assert.equal(requests.length, 0);
+    assert.equal(calls.length, 0);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
+for (const [family, noun, known, showId] of [
+  ["auth-strength-policy", "auth-strength-policy", "id,displayName,description,policyType,requirementsSatisfied,allowedCombinations,createdDateTime,modifiedDateTime", s1.id],
+  ["combination-configuration", "combination-configuration", "id,appliesToCombinations", c1.id],
+  ["auth-method-mode", "auth-method-mode", "id,displayName,authenticationMethod", m1.id],
+  ["template", "template", "id,name,description,scenarios,details", t1.id],
+]) {
+  test(`unknown ${noun} properties fail before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = leftoverOverrides("delegated");
+      const extra = family === "combination-configuration" ? ["--policy", s1.id] : [];
+      await assert.rejects(executeArgv(["entra", "conditional-access", family, "list", "--profile", "soc",
+        "--select", "id,templateId", ...extra], overrides), error => {
+        assert.equal(error.code, "VALIDATION_ERROR");
+        assert.match(error.message, new RegExp(`Unknown ${noun} property`));
+        assert.ok(error.suggestions.join("\n").includes(known.split(",")[0]));
+        return true;
+      });
+      await assert.rejects(executeArgv(["entra", "conditional-access", family, "show", "--id", showId,
+        "--profile", "soc", "--select", "id", "--fields", "id,templateId", ...extra], overrides), { code: "VALIDATION_ERROR" });
+      assert.equal(requests.length, 0);
+      assert.equal(calls.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+}

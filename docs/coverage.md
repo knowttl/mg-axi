@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 233 (231 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 241 (239 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 7 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -163,6 +163,14 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra conditional-access policy show` | `GET:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}` | scheduled | READ-03 |
 | `mg-axi entra conditional-access named-location list` | `GET:/identity/conditionalAccess/namedLocations` | scheduled | READ-03 |
 | `mg-axi entra conditional-access named-location show` | `GET:/identity/conditionalAccess/namedLocations/{namedLocation-id}` | scheduled | READ-03 |
+| `mg-axi entra conditional-access auth-strength-policy list` | `GET:/identity/conditionalAccess/authenticationStrength/policies` | scheduled | READ-03 |
+| `mg-axi entra conditional-access auth-strength-policy show` | `GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}` | scheduled | READ-03 |
+| `mg-axi entra conditional-access combination-configuration list` | `GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}/combinationConfigurations` | scheduled | READ-03 |
+| `mg-axi entra conditional-access combination-configuration show` | `GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}/combinationConfigurations/{authenticationCombinationConfiguration-id}` | scheduled | READ-03 |
+| `mg-axi entra conditional-access auth-method-mode list` | `GET:/identity/conditionalAccess/authenticationStrength/authenticationMethodModes` | scheduled | READ-03 |
+| `mg-axi entra conditional-access auth-method-mode show` | `GET:/identity/conditionalAccess/authenticationStrength/authenticationMethodModes/{authenticationMethodModeDetail-id}` | scheduled | READ-03 |
+| `mg-axi entra conditional-access template list` | `GET:/identity/conditionalAccess/templates` | scheduled | READ-03 |
+| `mg-axi entra conditional-access template show` | `GET:/identity/conditionalAccess/templates/{conditionalAccessTemplate-id}` | scheduled | READ-03 |
 | `mg-axi entra identity-provider list` | `GET:/identity/identityProviders` | scheduled | EXT-03 |
 | `mg-axi entra identity-provider show` | `GET:/identity/identityProviders/{identityProviderBase-id}` | scheduled | EXT-03 |
 | `mg-axi entra identity-provider count` | `GET:/identity/identityProviders/$count` | scheduled | EXT-03 |

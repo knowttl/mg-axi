@@ -1,11 +1,15 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-03: the Conditional Access read mapping behind
 // `mg-axi entra conditional-access policy list/show` and
 // `mg-axi entra conditional-access named-location list/show` as separate
-// az-style grammar. Operation construction stays beside its command; the
+// az-style grammar, plus the remaining v1.0 named collections under
+// `identity/conditionalAccess`: authentication-strength policies, each
+// policy's combination configurations, authentication method modes and
+// templates. Operation construction stays beside its command; the
 // shared session owns URLs, credentials, paging, retries and error
 // translation, and the SDK owns TOON rendering. This module only maps flags
 // to session calls and projects rows for compact output. No policy mutation
@@ -13,13 +17,35 @@ import type { AnyProfile } from "./profiles.js";
 //
 // Reviewed against the v1.0 conditionalaccessroot-list-policies,
 // conditionalaccesspolicy-get, conditionalaccessroot-list-namedlocations and
-// countrynamedlocation-get operation documentation on 2026-10-04. All four
-// read D/A Policy.Read.All; delegated callers additionally need a supported
-// directory role (Conditional Access Administrator, Global Reader, Global
-// Secure Access Administrator, Security Administrator or Security Reader).
+// countrynamedlocation-get operation documentation on 2026-10-04, and the
+// authenticationstrengthroot-list-policies,
+// authenticationstrengthpolicy-get,
+// authenticationstrengthpolicy-list-combinationconfigurations,
+// authenticationcombinationconfiguration-get,
+// authenticationstrengthroot-list-authenticationmethodmodes,
+// authenticationmethodmodedetail-get, conditionalaccessroot-list-templates
+// and conditionalaccesstemplate-get operation documentation on 2026-10-06.
+// Policy and named-location reads need D/A Policy.Read.All; the
+// authentication-strength family (policies, combination configurations and
+// authentication method modes) reads D/A Policy.Read.AuthenticationMethod
+// instead, and template reads D/A Policy.Read.All. Delegated callers
+// additionally need a supported directory role (Conditional Access
+// Administrator, Security Administrator or Security Reader for the
+// strength family; those plus Global Reader and Global Secure Access
+// Administrator for policies, named locations and templates).
 // Conditional Access needs P1; risk-based Conditional Access needs P2. The
 // reviewed raw surface in src/api.ts carries exactly these routes, fields
 // and access choices; the named commands below reuse that contract.
+//
+// Deferred with reason: the parameterless
+// `authenticationStrength/policies/{id}/usage()` binds no placeholder, so
+// it never passes through the session's validated function-argument
+// binding (FUNCTION_ARGUMENT_BINDINGS covers only named-parameter
+// segments); widening the request-path guard for one function is out of
+// scope. Authentication context class references and the deleted
+// policy/named-location collections land as the follow-up split: the
+// former needs an AuthenticationContext.Read.All allowlist addition and
+// the latter its own sourced review.
 
 // Every policy property this slice may request or display, matching the
 // reviewed raw surface. Anything else fails before credentials.
@@ -47,6 +73,45 @@ export const KNOWN_LOCATION_FIELDS: readonly string[] = [
 ];
 const POLICY_KNOWN = new Set(KNOWN_POLICY_FIELDS);
 const LOCATION_KNOWN = new Set(KNOWN_LOCATION_FIELDS);
+// Every authentication-strength policy property this slice may request or
+// display, matching the reviewed raw surface.
+export const KNOWN_STRENGTH_FIELDS: readonly string[] = [
+  "id",
+  "displayName",
+  "description",
+  "policyType",
+  "requirementsSatisfied",
+  "allowedCombinations",
+  "createdDateTime",
+  "modifiedDateTime",
+];
+// Every combination-configuration property this slice may request or
+// display: the base type carries only an identifier and the combinations
+// it applies to; subtype detail rides on @odata.type instead.
+export const KNOWN_COMBO_FIELDS: readonly string[] = [
+  "id",
+  "appliesToCombinations",
+];
+// Every authentication method mode property this slice may request or
+// display, matching the reviewed raw surface.
+export const KNOWN_MODE_FIELDS: readonly string[] = [
+  "id",
+  "displayName",
+  "authenticationMethod",
+];
+// Every Conditional Access template property this slice may request or
+// display, matching the reviewed raw surface.
+export const KNOWN_TEMPLATE_FIELDS: readonly string[] = [
+  "id",
+  "name",
+  "description",
+  "scenarios",
+  "details",
+];
+const STRENGTH_KNOWN = new Set(KNOWN_STRENGTH_FIELDS);
+const COMBO_KNOWN = new Set(KNOWN_COMBO_FIELDS);
+const MODE_KNOWN = new Set(KNOWN_MODE_FIELDS);
+const TEMPLATE_KNOWN = new Set(KNOWN_TEMPLATE_FIELDS);
 // @odata.type is preserved on named-location rows without being selectable:
 // it names the location kind (ipNamedLocation versus countryNamedLocation).
 const LOCATION_TYPE_PROPERTY = "@odata.type";
@@ -62,8 +127,27 @@ const DEFAULT_POLICY_SHOW_SELECT = [...KNOWN_POLICY_FIELDS];
 const DEFAULT_LOCATION_LIST_SELECT = ["id", "displayName"];
 // Show rows: the full reviewed location set.
 const DEFAULT_LOCATION_SHOW_SELECT = [...KNOWN_LOCATION_FIELDS];
-// Policy.Read.All covers both families in both modes.
+// Compact strength rows: identifier, name and the built-in/custom kind.
+const DEFAULT_STRENGTH_LIST_SELECT = ["id", "displayName", "policyType"];
+// Fetch the full reviewed strength set for inspection.
+const DEFAULT_STRENGTH_SHOW_SELECT = [...KNOWN_STRENGTH_FIELDS];
+// Compact combination rows: the identifier; the kind rides as @odata.type.
+const DEFAULT_COMBO_LIST_SELECT = ["id"];
+// Show rows: the full reviewed base set.
+const DEFAULT_COMBO_SHOW_SELECT = [...KNOWN_COMBO_FIELDS];
+// Compact mode rows: identifier and name.
+const DEFAULT_MODE_LIST_SELECT = ["id", "displayName"];
+// Show rows: the full reviewed mode set.
+const DEFAULT_MODE_SHOW_SELECT = [...KNOWN_MODE_FIELDS];
+// Compact template rows: identifier and name.
+const DEFAULT_TEMPLATE_LIST_SELECT = ["id", "name"];
+// Show rows: the full reviewed template set.
+const DEFAULT_TEMPLATE_SHOW_SELECT = [...KNOWN_TEMPLATE_FIELDS];
+// Policy.Read.All covers policies, named locations and templates in both modes.
 export const DEFAULT_DELEGATED_SCOPES = ["https://graph.microsoft.com/Policy.Read.All"];
+// Policy.Read.AuthenticationMethod is the least-privileged read for the
+// authentication-strength family in both modes.
+export const DEFAULT_STRENGTH_SCOPES = ["https://graph.microsoft.com/Policy.Read.AuthenticationMethod"];
 const TRUNCATE_AT = 500;
 
 export type ConditionalAccessFlags = Record<string, string | boolean>;
@@ -94,7 +178,7 @@ function fieldList(
   return fields;
 }
 
-function scopesFor(flags: ConditionalAccessFlags, profile: AnyProfile, help: string): string[] | undefined {
+function scopesFor(flags: ConditionalAccessFlags, profile: AnyProfile, help: string, defaults: readonly string[] = DEFAULT_DELEGATED_SCOPES): string[] | undefined {
   if (profile.mode === "application") {
     if (flags.scopes !== undefined) {
       throw new AxiError(
@@ -105,7 +189,7 @@ function scopesFor(flags: ConditionalAccessFlags, profile: AnyProfile, help: str
     }
     return undefined;
   }
-  if (flags.scopes === undefined) return [...DEFAULT_DELEGATED_SCOPES];
+  if (flags.scopes === undefined) return [...defaults];
   const scopes = String(flags.scopes)
     .split(",")
     .map(scope => scope.trim())
@@ -219,6 +303,21 @@ const LOCATION_DENIAL_HINTS = [
   "Conditional Access and named locations need P1; risk-based Conditional Access needs P2",
 ];
 
+// The authentication-strength family (strength policies, combination
+// configurations, authentication method modes) reads the least-privileged
+// Policy.Read.AuthenticationMethod instead of Policy.Read.All, with the
+// narrower Conditional Access Administrator / Security Administrator /
+// Security Reader role set.
+const STRENGTH_DENIAL_HINTS = [
+  "Authentication-strength reads need Policy.Read.AuthenticationMethod plus a supported directory role: Conditional Access Administrator, Security Administrator or Security Reader for delegated access, or admin-consented Policy.Read.AuthenticationMethod for application access",
+  "Conditional Access needs P1",
+];
+
+const TEMPLATE_DENIAL_HINTS = [
+  "Conditional Access template reads need Policy.Read.All plus a supported directory role: Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access, or admin-consented Policy.Read.All for application access",
+  "Conditional Access needs P1",
+];
+
 interface CollectionShape {
   command: string;
   key: string;
@@ -226,10 +325,18 @@ interface CollectionShape {
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
+  defaultScopes: readonly string[];
   denialHints: string[];
   showHint: string;
   emptyHint: string;
   preserveType: boolean;
+  // Parent placeholder binding for nested collections (combination
+  // configurations hang under one strength policy): the flag is
+  // re-validated on every call so resumes rebind the same resource.
+  parent?: { param: string; flag: string; label: string };
+  // New lists render through the shared list-totals helper; shapes
+  // without it keep their historical count object untouched.
+  totalsNoun?: string;
 }
 
 const POLICY_LIST: CollectionShape = {
@@ -239,6 +346,7 @@ const POLICY_LIST: CollectionShape = {
   known: POLICY_KNOWN,
   knownList: KNOWN_POLICY_FIELDS,
   defaultSelect: DEFAULT_POLICY_LIST_SELECT,
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
   denialHints: POLICY_DENIAL_HINTS,
   showHint: "mg-axi entra conditional-access policy show --id <policy-id>",
   emptyHint: "0 conditional-access policies matched; the absence of results is the answer, not an error",
@@ -252,6 +360,7 @@ const LOCATION_LIST: CollectionShape = {
   known: LOCATION_KNOWN,
   knownList: KNOWN_LOCATION_FIELDS,
   defaultSelect: DEFAULT_LOCATION_LIST_SELECT,
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
   denialHints: LOCATION_DENIAL_HINTS,
   showHint: "mg-axi entra conditional-access named-location show --id <named-location-id>",
   emptyHint: "0 named locations matched; the absence of results is the answer, not an error",
@@ -273,11 +382,18 @@ async function listCollection(
   const { select, fields } = selectedFields(flags,
     savedSelect === undefined ? shape.defaultSelect : fieldList(savedSelect, "select", shape.known, shape.knownList, shape.noun, help),
     shape.known, shape.knownList, shape.noun, help);
-  const scopes = scopesFor(flags, profile, help);
+  const scopes = scopesFor(flags, profile, help, shape.defaultScopes);
   const full = flags.full === true;
   const query: Record<string, string> = { $select: select.join(",") };
   if (flags.filter !== undefined) query.$filter = String(flags.filter);
   const args: CollectArgs = { profile, operation, query, scopes };
+  if (shape.parent !== undefined) {
+    const raw = flags[shape.parent.flag];
+    if (raw === undefined || !String(raw).trim()) {
+      throw new AxiError(`--${shape.parent.flag} needs the ${shape.parent.label}`, "VALIDATION_ERROR", [help]);
+    }
+    args.params = { [shape.parent.param]: String(raw) };
+  }
   if (cursor !== undefined) args.cursor = cursor;
   if (flags.all === true) {
     if (flags.limit !== undefined) throw new AxiError("--limit and --all cannot be combined", "VALIDATION_ERROR", [help]);
@@ -297,6 +413,37 @@ async function listCollection(
   const showHint = `${shape.showHint} ${profileHint(profileName)}`;
   const truncationHints = truncated ? [fullHint(shape.command, effectiveFlags, profileName)] : [];
   if (truncated && cursor !== undefined) truncationHints.push("Supply the original input cursor on stdin to replay this result with --full");
+  // Totals lists share the uniform N-of-M line; historical shapes keep
+  // their count object byte-for-byte for the concurrent totals lane.
+  if (shape.totalsNoun !== undefined) {
+    if (!result.complete) {
+      return {
+        [shape.key]: rows,
+        ...listTotals(rows.length, result.total, shape.totalsNoun, false),
+        complete: false,
+        reason: result.reason,
+        cursor: result.cursor,
+        help: [...truncationHints, `Resume losslessly with the same flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`, showHint],
+      };
+    }
+    if (!rows.length) {
+      return {
+        [shape.key]: rows,
+        ...listTotals(rows.length, result.total, shape.totalsNoun, true),
+        complete: true,
+        help: [
+          `mg-axi ${shape.command} --filter <odata-filter> ${profileHint(profileName)}`,
+          shape.emptyHint,
+        ],
+      };
+    }
+    return {
+      [shape.key]: rows,
+      ...listTotals(rows.length, result.total, shape.totalsNoun, true),
+      complete: true,
+      help: [...truncationHints, showHint],
+    };
+  }
   if (!result.complete) {
     return {
       [shape.key]: rows,
@@ -327,8 +474,10 @@ interface SingleShape {
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
+  defaultScopes: readonly string[];
   denialHints: string[];
   preserveType: boolean;
+  parent?: { param: string; flag: string; label: string };
 }
 
 const POLICY_SHOW: SingleShape = {
@@ -339,6 +488,7 @@ const POLICY_SHOW: SingleShape = {
   known: POLICY_KNOWN,
   knownList: KNOWN_POLICY_FIELDS,
   defaultSelect: DEFAULT_POLICY_SHOW_SELECT,
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
   denialHints: POLICY_DENIAL_HINTS,
   preserveType: false,
 };
@@ -351,6 +501,7 @@ const LOCATION_SHOW: SingleShape = {
   known: LOCATION_KNOWN,
   knownList: KNOWN_LOCATION_FIELDS,
   defaultSelect: DEFAULT_LOCATION_SHOW_SELECT,
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
   denialHints: LOCATION_DENIAL_HINTS,
   preserveType: true,
 };
@@ -365,12 +516,20 @@ async function showSingle(
   profileName: string,
 ): Promise<Record<string, unknown>> {
   const { select, fields } = selectedFields(flags, shape.defaultSelect, shape.known, shape.knownList, shape.noun, help);
-  const scopes = scopesFor(flags, profile, help);
+  const scopes = scopesFor(flags, profile, help, shape.defaultScopes);
   const full = flags.full === true;
+  const params: Record<string, string> = { [shape.param]: String(flags.id) };
+  if (shape.parent !== undefined) {
+    const raw = flags[shape.parent.flag];
+    if (raw === undefined || !String(raw).trim()) {
+      throw new AxiError(`--${shape.parent.flag} needs the ${shape.parent.label}`, "VALIDATION_ERROR", [help]);
+    }
+    params[shape.parent.param] = String(raw);
+  }
   const raw = await withGuidance(shape.denialHints, () => session.execute({
     profile,
     operation,
-    params: { [shape.param]: String(flags.id) },
+    params,
     query: { $select: select.join(",") },
     scopes,
   }));
@@ -426,4 +585,206 @@ export async function showNamedLocation(
   profileName: string,
 ): Promise<Record<string, unknown>> {
   return showSingle(LOCATION_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+const STRENGTH_LIST: CollectionShape = {
+  command: "entra conditional-access auth-strength-policy list",
+  key: "authStrengthPolicies",
+  noun: "auth-strength-policy",
+  known: STRENGTH_KNOWN,
+  knownList: KNOWN_STRENGTH_FIELDS,
+  defaultSelect: DEFAULT_STRENGTH_LIST_SELECT,
+  defaultScopes: DEFAULT_STRENGTH_SCOPES,
+  denialHints: STRENGTH_DENIAL_HINTS,
+  showHint: "mg-axi entra conditional-access auth-strength-policy show --id <auth-strength-policy-id>",
+  emptyHint: "0 authentication-strength policies matched; the absence of results is the answer, not an error",
+  preserveType: false,
+  totalsNoun: "auth-strength policies",
+};
+
+const COMBO_LIST: CollectionShape = {
+  command: "entra conditional-access combination-configuration list",
+  key: "combinationConfigurations",
+  noun: "combination-configuration",
+  known: COMBO_KNOWN,
+  knownList: KNOWN_COMBO_FIELDS,
+  defaultSelect: DEFAULT_COMBO_LIST_SELECT,
+  defaultScopes: DEFAULT_STRENGTH_SCOPES,
+  denialHints: STRENGTH_DENIAL_HINTS,
+  showHint: "mg-axi entra conditional-access combination-configuration show --policy <auth-strength-policy-id> --id <combination-configuration-id>",
+  emptyHint: "0 combination configurations matched; the absence of results is the answer, not an error",
+  preserveType: true,
+  parent: { param: "authenticationStrengthPolicy-id", flag: "policy", label: "authentication-strength policy ID owning the combination configurations" },
+  totalsNoun: "combination configurations",
+};
+
+const MODE_LIST: CollectionShape = {
+  command: "entra conditional-access auth-method-mode list",
+  key: "authMethodModes",
+  noun: "auth-method-mode",
+  known: MODE_KNOWN,
+  knownList: KNOWN_MODE_FIELDS,
+  defaultSelect: DEFAULT_MODE_LIST_SELECT,
+  defaultScopes: DEFAULT_STRENGTH_SCOPES,
+  denialHints: STRENGTH_DENIAL_HINTS,
+  showHint: "mg-axi entra conditional-access auth-method-mode show --id <auth-method-mode-id>",
+  emptyHint: "0 authentication method modes matched; the absence of results is the answer, not an error",
+  preserveType: false,
+  totalsNoun: "auth-method modes",
+};
+
+const TEMPLATE_LIST: CollectionShape = {
+  command: "entra conditional-access template list",
+  key: "templates",
+  noun: "template",
+  known: TEMPLATE_KNOWN,
+  knownList: KNOWN_TEMPLATE_FIELDS,
+  defaultSelect: DEFAULT_TEMPLATE_LIST_SELECT,
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
+  denialHints: TEMPLATE_DENIAL_HINTS,
+  showHint: "mg-axi entra conditional-access template show --id <template-id>",
+  emptyHint: "0 Conditional Access templates matched; the absence of results is the answer, not an error",
+  preserveType: false,
+  totalsNoun: "templates",
+};
+
+const STRENGTH_SHOW: SingleShape = {
+  command: "entra conditional-access auth-strength-policy show",
+  key: "authStrengthPolicy",
+  param: "authenticationStrengthPolicy-id",
+  noun: "auth-strength-policy",
+  known: STRENGTH_KNOWN,
+  knownList: KNOWN_STRENGTH_FIELDS,
+  defaultSelect: DEFAULT_STRENGTH_SHOW_SELECT,
+  defaultScopes: DEFAULT_STRENGTH_SCOPES,
+  denialHints: STRENGTH_DENIAL_HINTS,
+  preserveType: false,
+};
+
+const COMBO_SHOW: SingleShape = {
+  command: "entra conditional-access combination-configuration show",
+  key: "combinationConfiguration",
+  param: "authenticationCombinationConfiguration-id",
+  noun: "combination-configuration",
+  known: COMBO_KNOWN,
+  knownList: KNOWN_COMBO_FIELDS,
+  defaultSelect: DEFAULT_COMBO_SHOW_SELECT,
+  defaultScopes: DEFAULT_STRENGTH_SCOPES,
+  denialHints: STRENGTH_DENIAL_HINTS,
+  preserveType: true,
+  parent: { param: "authenticationStrengthPolicy-id", flag: "policy", label: "authentication-strength policy ID owning the combination configuration" },
+};
+
+const MODE_SHOW: SingleShape = {
+  command: "entra conditional-access auth-method-mode show",
+  key: "authMethodMode",
+  param: "authenticationMethodModeDetail-id",
+  noun: "auth-method-mode",
+  known: MODE_KNOWN,
+  knownList: KNOWN_MODE_FIELDS,
+  defaultSelect: DEFAULT_MODE_SHOW_SELECT,
+  defaultScopes: DEFAULT_STRENGTH_SCOPES,
+  denialHints: STRENGTH_DENIAL_HINTS,
+  preserveType: false,
+};
+
+const TEMPLATE_SHOW: SingleShape = {
+  command: "entra conditional-access template show",
+  key: "template",
+  param: "conditionalAccessTemplate-id",
+  noun: "template",
+  known: TEMPLATE_KNOWN,
+  knownList: KNOWN_TEMPLATE_FIELDS,
+  defaultSelect: DEFAULT_TEMPLATE_SHOW_SELECT,
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
+  denialHints: TEMPLATE_DENIAL_HINTS,
+  preserveType: false,
+};
+
+export async function listAuthStrengthPolicies(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listCollection(STRENGTH_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showAuthStrengthPolicy(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showSingle(STRENGTH_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+export async function listCombinationConfigurations(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listCollection(COMBO_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showCombinationConfiguration(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showSingle(COMBO_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+export async function listAuthMethodModes(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listCollection(MODE_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showAuthMethodMode(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showSingle(MODE_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+export async function listTemplates(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listCollection(TEMPLATE_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showTemplate(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showSingle(TEMPLATE_SHOW, session, flags, profile, operation, help, profileName);
 }

@@ -89,6 +89,9 @@ const SIGNIN_FIELDS = ["id", "createdDateTime", "userId", "userPrincipalName", "
 const AUDIT_FIELDS = ["id", "activityDateTime", "activityDisplayName", "category", "loggedByService", "operationType", "result", "resultReason", "correlationId", "initiatedBy", "targetResources"];
 const RISKY_USER_FIELDS = ["id", "userPrincipalName", "userDisplayName", "riskDetail", "riskLastUpdatedDateTime", "riskLevel", "riskState"];
 const RISK_DETECTION_FIELDS = ["id", "detectedDateTime", "activityDateTime", "userId", "userPrincipalName", "userDisplayName", "ipAddress", "location", "riskDetail", "riskLevel", "riskState", "riskEventType", "detectionTimingType", "lastUpdatedDateTime", "source"];
+const RISKY_SP_FIELDS = ["id", "displayName", "appId", "servicePrincipalType", "riskDetail", "riskLastUpdatedDateTime", "riskLevel", "riskState", "isEnabled", "isProcessing"];
+const RISKY_SP_HISTORY_FIELDS = ["id", "displayName", "appId", "servicePrincipalType", "servicePrincipalId", "riskDetail", "riskLastUpdatedDateTime", "riskLevel", "riskState", "isEnabled", "isProcessing", "initiatedBy", "activity"];
+const SP_DETECTION_FIELDS = ["id", "detectedDateTime", "activityDateTime", "servicePrincipalId", "servicePrincipalDisplayName", "appId", "keyIds", "ipAddress", "location", "riskDetail", "riskLevel", "riskState", "riskEventType", "detectionTimingType", "lastUpdatedDateTime", "source", "additionalInfo"];
 const APP_FIELDS = ["id", "appId", "displayName", "createdDateTime", "signInAudience", "publisherDomain", "keyCredentials", "passwordCredentials", "requiredResourceAccess", "web", "spa", "publicClient"];
 const SP_FIELDS = ["id", "appId", "displayName", "servicePrincipalType", "accountEnabled", "appOwnerOrganizationId", "appRoleAssignmentRequired", "preferredSingleSignOnMode", "loginUrl"];
 const GRANT_FIELDS = ["id", "clientId", "consentType", "principalId", "resourceId", "scope", "startTime", "expiryTime"];
@@ -167,6 +170,28 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
   { id: "v1.0:GET:/identityProtection/riskDetections/{riskDetection-id}", kind: "single", query: SINGLE_QUERY, fields: RISK_DETECTION_FIELDS,
     access: "D/A IdentityRiskEvent.Read.All. Delegated callers pass it as --scopes.",
     sources: ["https://learn.microsoft.com/graph/api/riskdetection-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityProtection/riskyServicePrincipals", kind: "collection", query: COLLECTION_QUERY, fields: RISKY_SP_FIELDS,
+    access: "D/A IdentityRiskyServicePrincipal.Read.All. Delegated callers pass it as --scopes.",
+    note: "The riskyServicePrincipals API requires a Microsoft Entra Workload Identities Premium licence; limited results stay limited, never reinterpreted as empty.",
+    sources: ["https://learn.microsoft.com/graph/api/identityprotectionroot-list-riskyserviceprincipals?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}", kind: "single", query: SINGLE_QUERY, fields: RISKY_SP_FIELDS,
+    access: "D/A IdentityRiskyServicePrincipal.Read.All. Delegated callers pass it as --scopes.",
+    sources: ["https://learn.microsoft.com/graph/api/riskyserviceprincipal-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}/history", kind: "collection", query: COLLECTION_QUERY, fields: RISKY_SP_HISTORY_FIELDS,
+    access: "D/A IdentityRiskyServicePrincipal.Read.All. Delegated callers pass it as --scopes.",
+    note: "Per-principal risk history; history items inherit the principal properties and add the service-principal identifier with the actor/activity of the change.",
+    sources: ["https://learn.microsoft.com/graph/api/riskyserviceprincipal-list-history?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}/history/{riskyServicePrincipalHistoryItem-id}", kind: "single", query: SINGLE_QUERY, fields: RISKY_SP_HISTORY_FIELDS,
+    access: "D/A IdentityRiskyServicePrincipal.Read.All. Delegated callers pass it as --scopes.",
+    note: "No operation-level documentation page; access follows the parent history-list contract and the history-item resource reference.",
+    sources: ["https://learn.microsoft.com/graph/api/riskyserviceprincipal-list-history?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/riskyserviceprincipalhistoryitem?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityProtection/servicePrincipalRiskDetections", kind: "collection", query: COLLECTION_QUERY, fields: SP_DETECTION_FIELDS,
+    access: "D/A IdentityRiskEvent.Read.All. Delegated callers pass it as --scopes.",
+    note: "The servicePrincipalRiskDetection API requires a Microsoft Entra Workload Identities Premium licence; riskDetail and riskLevel report hidden without it.",
+    sources: ["https://learn.microsoft.com/graph/api/identityprotectionroot-list-serviceprincipalriskdetections?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityProtection/servicePrincipalRiskDetections/{servicePrincipalRiskDetection-id}", kind: "single", query: SINGLE_QUERY, fields: SP_DETECTION_FIELDS,
+    access: "D/A IdentityRiskEvent.Read.All. Delegated callers pass it as --scopes.",
+    sources: ["https://learn.microsoft.com/graph/api/serviceprincipalriskdetection-get?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/applications", kind: "collection", query: COLLECTION_QUERY, fields: APP_FIELDS,
     access: "D/A Application.Read.All. Delegated callers pass it as --scopes.",
     note: "appId (client ID) is distinct from the object id. Credential fields carry expiry metadata only; GET never returns secret values and success redaction still applies.",

@@ -58,6 +58,18 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
     if (denied) {
       status = 403;
       body = { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } };
+    } else if (url.pathname === "/v1.0/tenantRelationships/delegatedAdminCustomers/$count") {
+      body = customers.length;
+    } else if (url.pathname === "/v1.0/tenantRelationships/delegatedAdminRelationships/$count") {
+      body = relationships.length;
+    } else if (url.pathname.endsWith("/serviceManagementDetails/$count")) {
+      body = details.length;
+    } else if (url.pathname.endsWith("/accessAssignments/$count")) {
+      body = assignments.length;
+    } else if (url.pathname.endsWith("/operations/$count")) {
+      body = operations.length;
+    } else if (url.pathname.endsWith("/requests/$count")) {
+      body = requests.length;
     } else if (url.pathname === "/v1.0/tenantRelationships/delegatedAdminCustomers") {
       body = { value: customers };
     } else if (url.pathname === "/v1.0/tenantRelationships/delegatedAdminRelationships") {

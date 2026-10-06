@@ -4,18 +4,29 @@ import type { AnyProfile } from "./profiles.js";
 
 // READ-06: the Entra risky-user and risk-detection read mapping behind
 // `mg-axi entra risky-user list/show` and `mg-axi entra risk-detection
-// list/show`. Operation construction stays beside its command; the shared
+// list/show`, extended with the workload-identity surface behind
+// `mg-axi entra risky-service-principal list/show`,
+// `mg-axi entra risky-service-principal history list/show` and
+// `mg-axi entra service-principal-risk-detection list/show`. Operation construction stays beside its command; the shared
 // session owns URLs, credentials, paging, retries and error translation, and
 // the SDK owns TOON rendering. This module only maps flags to session calls,
 // bounds detection queries in time, and projects rows for compact output.
 //
 // Reviewed against the v1.0 riskyuser-list/get and riskdetection-list/get
-// operation documentation on 2026-10-04. Risky-user reads take D/A
+// operation documentation on 2026-10-04, and against the v1.0
+// riskyserviceprincipal-list/get, history-list and
+// serviceprincipalriskdetection-list/get operation documentation on
+// 2026-10-06. Risky-user reads take D/A
 // IdentityRiskyUser.Read.All and risk-detection reads take D/A
-// IdentityRiskEvent.Read.All; delegated callers additionally need Global
+// IdentityRiskEvent.Read.All; risky-service-principal reads (including
+// history) take D/A IdentityRiskyServicePrincipal.Read.All while
+// service-principal risk detections reuse D/A IdentityRiskEvent.Read.All.
+// Delegated callers additionally need Global
 // Reader, Security Operator, Security Reader or Security Administrator. The
 // riskyUsers API requires a P2 licence, while risk detection permits P1 or
-// P2. Limited views stay limited: a premium detection without P2 detail
+// P2; the workload-identity APIs require a Microsoft Entra Workload
+// Identities Premium licence, and service-principal detections report
+// riskDetail and riskLevel hidden without it. Limited views stay limited: a premium detection without P2 detail
 // reports riskEventType generic, hidden risk levels report the licence
 // boundary instead of the level, and a null detection correlationId means no
 // sign-in is associated. None of these is ever reinterpreted as empty or
@@ -58,8 +69,67 @@ export const KNOWN_RISK_DETECTION_FIELDS: readonly string[] = [
   "userPrincipalName",
   "additionalInfo",
 ];
+// Workload-identity surface. History items inherit every risky-service-
+// principal property and add the service-principal identifier plus the
+// actor/activity of the risk change. Service-principal detections carry the
+// service-principal join keys (servicePrincipalId, servicePrincipalDisplayName,
+// appId, keyIds) instead of user keys; keyIds are key-credential identifiers,
+// never secret material. tokenIssuerType stays absent for the same redaction
+// reason as above.
+export const KNOWN_RISKY_SP_FIELDS: readonly string[] = [
+  "id",
+  "isEnabled",
+  "isProcessing",
+  "riskDetail",
+  "riskLastUpdatedDateTime",
+  "riskLevel",
+  "riskState",
+  "displayName",
+  "appId",
+  "servicePrincipalType",
+];
+export const KNOWN_RISKY_SP_HISTORY_FIELDS: readonly string[] = [
+  "id",
+  "isEnabled",
+  "isProcessing",
+  "riskDetail",
+  "riskLastUpdatedDateTime",
+  "riskLevel",
+  "riskState",
+  "displayName",
+  "appId",
+  "servicePrincipalType",
+  "servicePrincipalId",
+  "initiatedBy",
+  "activity",
+];
+export const KNOWN_SP_DETECTION_FIELDS: readonly string[] = [
+  "id",
+  "requestId",
+  "correlationId",
+  "riskEventType",
+  "riskState",
+  "riskLevel",
+  "riskDetail",
+  "source",
+  "detectionTimingType",
+  "activity",
+  "ipAddress",
+  "location",
+  "activityDateTime",
+  "detectedDateTime",
+  "lastUpdatedDateTime",
+  "servicePrincipalId",
+  "servicePrincipalDisplayName",
+  "appId",
+  "keyIds",
+  "additionalInfo",
+];
 const RISKY_USER_KNOWN = new Set(KNOWN_RISKY_USER_FIELDS);
 const RISK_DETECTION_KNOWN = new Set(KNOWN_RISK_DETECTION_FIELDS);
+const RISKY_SP_KNOWN = new Set(KNOWN_RISKY_SP_FIELDS);
+const RISKY_SP_HISTORY_KNOWN = new Set(KNOWN_RISKY_SP_HISTORY_FIELDS);
+const SP_DETECTION_KNOWN = new Set(KNOWN_SP_DETECTION_FIELDS);
 
 // Compact list rows: identifier, who is at risk, and the triage state.
 const DEFAULT_RISKY_USER_LIST_SELECT = ["id", "userPrincipalName", "riskLevel", "riskState"];
@@ -69,6 +139,7 @@ const DEFAULT_RISKY_USER_SHOW_SELECT = [...KNOWN_RISKY_USER_FIELDS];
 const DEFAULT_RISK_DETECTION_SHOW_SELECT = [...KNOWN_RISK_DETECTION_FIELDS];
 export const DEFAULT_RISKY_USER_SCOPES = ["https://graph.microsoft.com/IdentityRiskyUser.Read.All"];
 export const DEFAULT_RISK_DETECTION_SCOPES = ["https://graph.microsoft.com/IdentityRiskEvent.Read.All"];
+export const DEFAULT_RISKY_SP_SCOPES = ["https://graph.microsoft.com/IdentityRiskyServicePrincipal.Read.All"];
 const TRUNCATE_AT = 500;
 
 export type RiskFlags = Record<string, string | boolean>;
@@ -245,11 +316,33 @@ const RISK_DETECTION_DENIAL_HINTS = [
   "Risk detection needs a P1 or P2 licence; premium detections report riskEventType generic without P2 detail, so generic is the server's limited view rather than the real type",
 ];
 
+const RISKY_SP_DENIAL_HINTS = [
+  "Risky-service-principal reads need IdentityRiskyServicePrincipal.Read.All plus a supported directory role: Global Reader, Security Operator, Security Reader or Security Administrator for delegated access, or admin-consented IdentityRiskyServicePrincipal.Read.All for application access",
+  "The riskyServicePrincipals API requires a Microsoft Entra Workload Identities Premium licence; data availability follows Entra retention policies",
+];
+
+const SP_DETECTION_DENIAL_HINTS = [
+  "Service-principal-risk-detection reads need IdentityRiskEvent.Read.All plus a supported directory role: Global Reader, Security Operator, Security Reader or Security Administrator for delegated access, or admin-consented IdentityRiskEvent.Read.All for application access",
+  "The servicePrincipalRiskDetection API requires a Microsoft Entra Workload Identities Premium licence; riskDetail and riskLevel report hidden without it, so hidden is the server's limited view rather than no risk",
+];
+
+// Nested history routes bind the parent risky-service-principal id before
+// credentials; a missing or empty parent fails as usage, never as Graph 404.
+function parentServicePrincipal(flags: RiskFlags, help: string): Record<string, string> {
+  const parent = flags["service-principal"];
+  if (parent === undefined || !String(parent).trim()) {
+    throw new AxiError("--service-principal needs the risky-service-principal object ID owning this history", "VALIDATION_ERROR", [help]);
+  }
+  return { "riskyServicePrincipal-id": String(parent) };
+}
+
 interface CollectionShape {
   noun: string;
   key: string;
   /** Time field bounding new queries; absent for state collections with no time bound. */
   dateField?: string;
+  /** Parent path bindings for nested routes such as per-principal history. */
+  pathParams?: (flags: RiskFlags, help: string) => Record<string, string>;
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -297,6 +390,66 @@ const RISK_DETECTION_LIST: CollectionShape = {
   ],
 };
 
+// Compact workload rows: identifier, which workload, and the triage state.
+const DEFAULT_RISKY_SP_LIST_SELECT = ["id", "displayName", "riskLevel", "riskState"];
+const DEFAULT_SP_DETECTION_LIST_SELECT = ["id", "detectedDateTime", "servicePrincipalDisplayName", "riskLevel"];
+const DEFAULT_RISKY_SP_SHOW_SELECT = [...KNOWN_RISKY_SP_FIELDS];
+const DEFAULT_RISKY_SP_HISTORY_SHOW_SELECT = [...KNOWN_RISKY_SP_HISTORY_FIELDS];
+const DEFAULT_SP_DETECTION_SHOW_SELECT = [...KNOWN_SP_DETECTION_FIELDS];
+
+const RISKY_SP_LIST: CollectionShape = {
+  noun: "risky-service-principal",
+  key: "riskyServicePrincipals",
+  known: RISKY_SP_KNOWN,
+  knownList: KNOWN_RISKY_SP_FIELDS,
+  defaultSelect: DEFAULT_RISKY_SP_LIST_SELECT,
+  defaultScopes: DEFAULT_RISKY_SP_SCOPES,
+  denialHints: RISKY_SP_DENIAL_HINTS,
+  showHint: "mg-axi entra risky-service-principal show --id <risky-service-principal-id>",
+  emptyHints: profileName => [
+    `mg-axi entra risky-service-principal list --filter <odata-filter> ${profileHint(profileName)}`,
+    "0 risky service principals matched; the absence of results is the answer, not an error",
+    "Limited results stay limited: without Workload Identities Premium detail the service reports what the caller may see, so never read a short list as no risk",
+  ],
+  extraHelp: () => [],
+};
+
+const RISKY_SP_HISTORY_LIST: CollectionShape = {
+  noun: "risky-service-principal history",
+  key: "riskyServicePrincipalHistory",
+  pathParams: parentServicePrincipal,
+  known: RISKY_SP_HISTORY_KNOWN,
+  knownList: KNOWN_RISKY_SP_HISTORY_FIELDS,
+  defaultSelect: DEFAULT_RISKY_SP_LIST_SELECT,
+  defaultScopes: DEFAULT_RISKY_SP_SCOPES,
+  denialHints: RISKY_SP_DENIAL_HINTS,
+  showHint: "mg-axi entra risky-service-principal history show --service-principal <risky-service-principal-id> --id <history-item-id>",
+  emptyHints: profileName => [
+    `mg-axi entra risky-service-principal history list --service-principal <risky-service-principal-id> ${profileHint(profileName)}`,
+    "0 history items matched; the absence of results is the answer, not an error",
+  ],
+  extraHelp: () => [],
+};
+
+const SP_DETECTION_LIST: CollectionShape = {
+  noun: "service-principal-risk-detection",
+  key: "servicePrincipalRiskDetections",
+  dateField: "detectedDateTime",
+  known: SP_DETECTION_KNOWN,
+  knownList: KNOWN_SP_DETECTION_FIELDS,
+  defaultSelect: DEFAULT_SP_DETECTION_LIST_SELECT,
+  defaultScopes: DEFAULT_RISK_DETECTION_SCOPES,
+  denialHints: SP_DETECTION_DENIAL_HINTS,
+  showHint: "mg-axi entra service-principal-risk-detection show --id <service-principal-risk-detection-id>",
+  emptyHints: profileName => [
+    `mg-axi entra service-principal-risk-detection list --since <earlier-iso-time> ${profileHint(profileName)}`,
+    "0 service-principal risk detections matched in this window; widen --since/--until or loosen --filter - the absence of results is the answer, not an error",
+  ],
+  extraHelp: () => [
+    "Limited views stay limited: riskDetail and riskLevel report hidden without Workload Identities Premium detail - never read hidden as none",
+  ],
+};
+
 async function listRisk(
   shape: CollectionShape,
   session: GraphSession,
@@ -339,6 +492,7 @@ async function listRisk(
     query.$filter = String(flags.filter);
   }
   const args: CollectArgs = { profile, operation, query, scopes };
+  if (shape.pathParams !== undefined) args.params = shape.pathParams(flags, help);
   if (cursor !== undefined) args.cursor = cursor;
   if (flags.all === true) {
     if (flags.limit !== undefined) throw new AxiError("--limit and --all cannot be combined", "VALIDATION_ERROR", [help]);
@@ -380,6 +534,8 @@ interface SingleShape {
   noun: string;
   key: string;
   param: string;
+  /** Extra parent path bindings for nested routes such as per-principal history. */
+  parentParams?: (flags: RiskFlags, help: string) => Record<string, string>;
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -422,6 +578,53 @@ const RISK_DETECTION_SHOW: SingleShape = {
   noSignInNote: "This detection carries no associated sign-in (correlationId is null); sign-in correlation does not apply",
 };
 
+const RISKY_SP_SHOW: SingleShape = {
+  noun: "risky-service-principal",
+  key: "riskyServicePrincipal",
+  param: "riskyServicePrincipal-id",
+  known: RISKY_SP_KNOWN,
+  knownList: KNOWN_RISKY_SP_FIELDS,
+  defaultSelect: DEFAULT_RISKY_SP_SHOW_SELECT,
+  defaultScopes: DEFAULT_RISKY_SP_SCOPES,
+  denialHints: RISKY_SP_DENIAL_HINTS,
+  correlationHelp: profileName => [
+    `List this workload's detections with mg-axi entra service-principal-risk-detection list --since <iso-time> --filter "servicePrincipalId eq '<risky-service-principal-id>'" ${profileHint(profileName)}`,
+    `List this workload's risk history with mg-axi entra risky-service-principal history list --service-principal <risky-service-principal-id> ${profileHint(profileName)}`,
+    "Confirming compromise and dismissing risk are separately reviewed writes; this read never confirms, dismisses or remediates risk",
+  ],
+};
+
+const RISKY_SP_HISTORY_SHOW: SingleShape = {
+  noun: "risky-service-principal history",
+  key: "riskyServicePrincipalHistoryItem",
+  param: "riskyServicePrincipalHistoryItem-id",
+  parentParams: parentServicePrincipal,
+  known: RISKY_SP_HISTORY_KNOWN,
+  knownList: KNOWN_RISKY_SP_HISTORY_FIELDS,
+  defaultSelect: DEFAULT_RISKY_SP_HISTORY_SHOW_SELECT,
+  defaultScopes: DEFAULT_RISKY_SP_SCOPES,
+  denialHints: RISKY_SP_DENIAL_HINTS,
+  correlationHelp: profileName => [
+    `List this workload's detections with mg-axi entra service-principal-risk-detection list --since <iso-time> --filter "servicePrincipalId eq '<risky-service-principal-id>'" ${profileHint(profileName)}`,
+  ],
+};
+
+const SP_DETECTION_SHOW: SingleShape = {
+  noun: "service-principal-risk-detection",
+  key: "servicePrincipalRiskDetection",
+  param: "servicePrincipalRiskDetection-id",
+  known: SP_DETECTION_KNOWN,
+  knownList: KNOWN_SP_DETECTION_FIELDS,
+  defaultSelect: DEFAULT_SP_DETECTION_SHOW_SELECT,
+  defaultScopes: DEFAULT_RISK_DETECTION_SCOPES,
+  denialHints: SP_DETECTION_DENIAL_HINTS,
+  correlationHelp: profileName => [
+    `List this workload's detections with mg-axi entra service-principal-risk-detection list --since <iso-time> --filter "servicePrincipalId eq '<service-principal-id>'" ${profileHint(profileName)}`,
+    "Limited views stay limited: riskDetail and riskLevel report hidden without Workload Identities Premium detail - never read hidden as none",
+  ],
+  noSignInNote: "This detection carries no associated sign-in (correlationId is null); sign-in correlation does not apply",
+};
+
 async function showRisk(
   shape: SingleShape,
   session: GraphSession,
@@ -437,7 +640,7 @@ async function showRisk(
   const raw = await withGuidance(shape.denialHints, () => session.execute({
     profile,
     operation,
-    params: { [shape.param]: String(flags.id) },
+    params: { ...(shape.parentParams === undefined ? {} : shape.parentParams(flags, help)), [shape.param]: String(flags.id) },
     query: { $select: select.join(",") },
     scopes,
   }));
@@ -499,4 +702,70 @@ export async function showRiskDetection(
   profileName: string,
 ): Promise<Record<string, unknown>> {
   return showRisk(RISK_DETECTION_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+export async function listRiskyServicePrincipals(
+  session: GraphSession,
+  flags: RiskFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listRisk(RISKY_SP_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showRiskyServicePrincipal(
+  session: GraphSession,
+  flags: RiskFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showRisk(RISKY_SP_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+export async function listRiskyServicePrincipalHistory(
+  session: GraphSession,
+  flags: RiskFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listRisk(RISKY_SP_HISTORY_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showRiskyServicePrincipalHistory(
+  session: GraphSession,
+  flags: RiskFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showRisk(RISKY_SP_HISTORY_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+export async function listServicePrincipalRiskDetections(
+  session: GraphSession,
+  flags: RiskFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listRisk(SP_DETECTION_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showServicePrincipalRiskDetection(
+  session: GraphSession,
+  flags: RiskFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showRisk(SP_DETECTION_SHOW, session, flags, profile, operation, help, profileName);
 }

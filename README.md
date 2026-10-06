@@ -32,7 +32,7 @@ EXT-03 (identity providers) adds workforce identity-provider list/show/count/ava
 EXT-01 (federation configurations) adds workforce directory federation-configuration list/show/count/available-types reads with default signing-certificate omission through the same session.
 EXT-03 (data policy operations) adds workforce data-policy-operation list/show/count reads with storage-location redaction through the same session.
 EXT-03 (risk prevention) adds workforce fraud-protection-provider, web-application-firewall-provider and web-application-firewall-verification list/show/count reads plus verification provider show with key-material scrubbing through the same delegated session.
-READ-06 executes Entra risky-user and risk-detection list/show through that session; risk usage follows the log usage below.
+READ-06 executes Entra risky-user, risk-detection, risky-service-principal (with per-principal history) and service-principal-risk-detection list/show through that session; risk usage follows the log usage below.
 EXT-01 (organization) adds tenant-organization list/show, default sign-in branding metadata and locale branding reads through the same session.
 EXT-04 (contracts) adds partner-tenant customer-contract list/show/count through the same session.
 EXT-04 (delegated-admin) adds partner-tenant delegated-admin customer and relationship list/show through the same session.
@@ -561,6 +561,12 @@ mg-axi entra delegated-admin-relationship list-requests --profile soc --id <rela
 mg-axi entra delegated-admin-relationship show-request --profile soc --id <relationship-id> --request-id <request-id>
 mg-axi entra delegated-admin-customer list-service-management-details --profile soc --id <customer-id>
 mg-axi entra delegated-admin-customer show-service-management-detail --profile soc --id <customer-id> --detail-id <detail-id>
+mg-axi entra delegated-admin-customer count --profile soc
+mg-axi entra delegated-admin-customer count-service-management-details --profile soc --id <customer-id>
+mg-axi entra delegated-admin-relationship count --profile soc
+mg-axi entra delegated-admin-relationship count-access-assignments --profile soc --id <relationship-id>
+mg-axi entra delegated-admin-relationship count-operations --profile soc --id <relationship-id>
+mg-axi entra delegated-admin-relationship count-requests --profile soc --id <relationship-id>
 ```
 
 Delegated-admin reads run in the partner tenant; customer objects are created by the system when a relationship exists and deleted when none remain, so a non-partner tenant lists zero customers, which is an answer rather than an error.
@@ -571,11 +577,12 @@ The named-list caps, `count`, cursors, null/missing preservation and 500-charact
 The access-assignment, operation and request navigation lists bind their parent relationship through `--id` and take `--assignment-id`, `--operation-id` and `--request-id` on their shows; the service-management-detail reads bind their parent customer through `--id` and take `--detail-id` on the show.
 The navigation lists default to compact properties (`id`, `status`, `accessContainer`, `accessDetails` for assignments; `id`, `operationType`, `status`, `lastModifiedDateTime` for operations; `id`, `action`, `status`, `lastModifiedDateTime` for requests) while the service-management-detail reads always carry (`id`, `serviceName`, `serviceManagementUrl`); every show defaults to its full reviewed property set.
 The access-assignment, operation and request lists accept `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`; Graph documents no query parameters for service-management details, so those two reads take no `--select` or `--filter` and project `--fields` locally.
-All twelve named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
+Each `count` returns one scalar (`delegatedAdminCustomerCount`, `delegatedAdminServiceManagementDetailCount`, `delegatedAdminRelationshipCount`, `delegatedAdminAccessAssignmentCount`, `delegatedAdminRelationshipOperationCount`, `delegatedAdminRelationshipRequestCount`) from its text/plain `$count` route and takes no `--filter`, `--select`, `--limit` or `--cursor`.
+All eighteen named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
 Delegated delegated-admin reads default to `https://graph.microsoft.com/DelegatedAdminRelationship.Read.All`, while application profiles use the configured `.default` audience.
 Personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for delegated-admin reads; denied reads name the scope, partner-tenant and licensing guidance instead of only the generic cause.
-No delegated-admin mutation lives here; the `$count` scalars and the container root belong to later pieces, while the multi-tenant-organization reads shipped in the next section and tenant-lookup functions ship as `entra tenant-information show` in the tenant-information usage below; see the [delegated-admin scope decisions](docs/coverage.md#ext-04-delegated-admin-scope-decisions) for deferred reads and later subfamilies.
+No delegated-admin mutation lives here; the container root belongs to a later piece, while the multi-tenant-organization reads shipped in the next section and tenant-lookup functions ship as `entra tenant-information show` in the tenant-information usage below; see the [delegated-admin scope decisions](docs/coverage.md#ext-04-delegated-admin-scope-decisions) for deferred reads and later subfamilies.
 
 Log in with `https://graph.microsoft.com/MultiTenantOrganization.Read.All`, then inspect the tenant multitenant organization:
 
@@ -1023,28 +1030,37 @@ Owner rows default to `id`, `displayName` and `mail`, the only selectable owner 
 The named-list caps, `count`, cursor resume rules and 500-character text truncation described above also apply to these reads; resume owner lists with the same `--application` or `--service-principal` object ID.
 Delegated application reads default to `https://graph.microsoft.com/Application.Read.All`, while application profiles use the configured `.default` audience.
 
-Log in with `https://graph.microsoft.com/IdentityRiskyUser.Read.All` and `https://graph.microsoft.com/IdentityRiskEvent.Read.All`, then triage risky users and risk detections:
+Log in with `https://graph.microsoft.com/IdentityRiskyUser.Read.All`, `https://graph.microsoft.com/IdentityRiskEvent.Read.All` and `https://graph.microsoft.com/IdentityRiskyServicePrincipal.Read.All`, then triage risky users, risk detections, risky service principals and service-principal risk detections:
 
 ```sh
-mg-axi login --profile soc --scopes https://graph.microsoft.com/IdentityRiskyUser.Read.All,https://graph.microsoft.com/IdentityRiskEvent.Read.All
+mg-axi login --profile soc --scopes https://graph.microsoft.com/IdentityRiskyUser.Read.All,https://graph.microsoft.com/IdentityRiskEvent.Read.All,https://graph.microsoft.com/IdentityRiskyServicePrincipal.Read.All
 mg-axi entra risky-user list --profile soc --limit 10
 mg-axi entra risky-user show --profile soc --id <risky-user-id>
 mg-axi entra risk-detection list --profile soc --since 2026-09-01T00:00:00Z --limit 10
 mg-axi entra risk-detection show --profile soc --id <risk-detection-id>
+mg-axi entra risky-service-principal list --profile soc --limit 10
+mg-axi entra risky-service-principal show --profile soc --id <risky-service-principal-id>
+mg-axi entra risky-service-principal history list --profile soc --service-principal <risky-service-principal-id>
+mg-axi entra risky-service-principal history show --profile soc --service-principal <risky-service-principal-id> --id <history-item-id>
+mg-axi entra service-principal-risk-detection list --profile soc --since 2026-09-01T00:00:00Z --limit 10
+mg-axi entra service-principal-risk-detection show --profile soc --id <service-principal-risk-detection-id>
 ```
 
-Delegated risky-user reads default to `https://graph.microsoft.com/IdentityRiskyUser.Read.All`; risk-detection reads default to `https://graph.microsoft.com/IdentityRiskEvent.Read.All`.
+Delegated risky-user reads default to `https://graph.microsoft.com/IdentityRiskyUser.Read.All`; user and service-principal risk-detection reads default to `https://graph.microsoft.com/IdentityRiskEvent.Read.All`; risky-service-principal and history reads default to `https://graph.microsoft.com/IdentityRiskyServicePrincipal.Read.All`.
 `--scopes` overrides those defaults; application profiles use the configured Graph `.default` audience and reject delegated scopes.
-`entra risky-user list` is a state collection with an optional `--filter`; `entra risk-detection list` always carries an explicit time bound, so `--since` is required for a new query (with optional `--until` and `--filter` refinements) and resume reuses `--cursor` instead.
+`entra risky-user list` and `entra risky-service-principal list` are state collections with an optional `--filter`; `entra risk-detection list` and `entra service-principal-risk-detection list` always carry an explicit time bound, so `--since` is required for a new query (with optional `--until` and `--filter` refinements) and resume reuses `--cursor` instead.
+`entra risky-service-principal history list` and `history show` always carry `--service-principal` naming the owning risky-service-principal object ID.
 Resume validates the saved detectedDateTime bounds; a cursor from an unbounded raw query is rejected, so start a new query with `--since`.
 Resume risk lists with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra risk-detection list --profile soc --cursor - < cursor.txt`.
 `entra risky-user list` defaults to `id`, `userPrincipalName`, `riskLevel` and `riskState`; `entra risk-detection list` defaults to `id`, `detectedDateTime`, `userPrincipalName` and `riskLevel`.
-Both risk show commands default to the full reviewed property set.
+`entra risky-service-principal list` and `history list` default to `id`, `displayName`, `riskLevel` and `riskState`; `entra service-principal-risk-detection list` defaults to `id`, `detectedDateTime`, `servicePrincipalDisplayName` and `riskLevel`.
+All risk show commands default to the full reviewed property set.
 `--select` requests properties from the [supported risk property sets](src/entra-risk.ts); `--fields` projects locally and must be a subset of the fetched selection.
 Risk reads truncate text longer than 500 characters, including nested values such as `location` and the `additionalInfo` JSON string; `--full` restores complete text without lifting redaction, row caps or time bounds.
-See the [access and licence contract](docs/graph-coverage.md#licence-matrix-by-area) for the riskyUsers P2 requirement and risk-detection P1/P2 detail boundaries.
-Limited views stay limited: a premium detection without P2 detail reports `riskEventType` generic, hidden risk levels report the licence boundary instead of the level, and a null detection `correlationId` means no sign-in is associated.
+See the [access and licence contract](docs/graph-coverage.md#licence-matrix-by-area) for the riskyUsers P2 requirement, risk-detection P1/P2 detail boundaries and the Workload Identities Premium requirement behind the workload-identity reads.
+Limited views stay limited: a premium detection without P2 detail reports `riskEventType` generic, hidden risk levels report the licence boundary instead of the level, service-principal detections report `riskDetail` and `riskLevel` hidden without Workload Identities Premium, and a null detection `correlationId` means no sign-in is associated.
 To correlate a detection to sign-ins, use `risk-detection show` or select `activityDateTime`, then filter the sign-in list above on the detection's `userPrincipalName` in that activity window; sign-in reads require the separate `AuditLog.Read.All` login above, and there is no riskySignIns endpoint.
+To correlate a workload detection, filter `service-principal-risk-detection list` on the principal's `servicePrincipalId` in the detection window, or list that principal's risk history with `risky-service-principal history list --service-principal <risky-service-principal-id>`; workload reads never confirm, dismiss or remediate risk.
 WRITE-05 adds a named write: `mg-axi entra risky-user dismiss --user <risky-user-id>` dismisses one user's risk through `POST /identityProtection/riskyUsers/dismiss` with a single-element `{ "userIds": [...] }` body.
 There is no bulk form: `--user` takes exactly one ID and a comma-separated list is a usage error.
 The command supports only `--api-version v1.0`; beta writes are rejected before credentials or HTTP.

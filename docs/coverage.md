@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 221 (219 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 233 (231 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 7 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -126,6 +126,12 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra delegated-admin-relationship show-request` | `GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/{delegatedAdminRelationshipRequest-id}` | scheduled | EXT-04 |
 | `mg-axi entra delegated-admin-customer list-service-management-details` | `GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails` | scheduled | EXT-04 |
 | `mg-axi entra delegated-admin-customer show-service-management-detail` | `GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/{delegatedAdminServiceManagementDetail-id}` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-customer count` | `GET:/tenantRelationships/delegatedAdminCustomers/$count` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-customer count-service-management-details` | `GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/$count` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-relationship count` | `GET:/tenantRelationships/delegatedAdminRelationships/$count` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-relationship count-access-assignments` | `GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/$count` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-relationship count-operations` | `GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/$count` | scheduled | EXT-04 |
+| `mg-axi entra delegated-admin-relationship count-requests` | `GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/$count` | scheduled | EXT-04 |
 | `mg-axi entra multi-tenant-organization show` | `GET:/tenantRelationships/multiTenantOrganization` | scheduled | EXT-04 |
 | `mg-axi entra multi-tenant-organization join-request show` | `GET:/tenantRelationships/multiTenantOrganization/joinRequest` | scheduled | EXT-04 |
 | `mg-axi entra multi-tenant-organization tenant list` | `GET:/tenantRelationships/multiTenantOrganization/tenants` | scheduled | EXT-04 |
@@ -147,6 +153,12 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra risky-user show` | `GET:/identityProtection/riskyUsers/{riskyUser-id}` | scheduled | READ-06 |
 | `mg-axi entra risk-detection list` | `GET:/identityProtection/riskDetections` | scheduled | READ-06 |
 | `mg-axi entra risk-detection show` | `GET:/identityProtection/riskDetections/{riskDetection-id}` | scheduled | READ-06 |
+| `mg-axi entra risky-service-principal list` | `GET:/identityProtection/riskyServicePrincipals` | scheduled | READ-06 |
+| `mg-axi entra risky-service-principal show` | `GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}` | scheduled | READ-06 |
+| `mg-axi entra risky-service-principal history list` | `GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}/history` | scheduled | READ-06 |
+| `mg-axi entra risky-service-principal history show` | `GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}/history/{riskyServicePrincipalHistoryItem-id}` | scheduled | READ-06 |
+| `mg-axi entra service-principal-risk-detection list` | `GET:/identityProtection/servicePrincipalRiskDetections` | scheduled | READ-06 |
+| `mg-axi entra service-principal-risk-detection show` | `GET:/identityProtection/servicePrincipalRiskDetections/{servicePrincipalRiskDetection-id}` | scheduled | READ-06 |
 | `mg-axi entra conditional-access policy list` | `GET:/identity/conditionalAccess/policies` | scheduled | READ-03 |
 | `mg-axi entra conditional-access policy show` | `GET:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}` | scheduled | READ-03 |
 | `mg-axi entra conditional-access named-location list` | `GET:/identity/conditionalAccess/namedLocations` | scheduled | READ-03 |
@@ -758,19 +770,13 @@ Beta contracts need their own review; delta-token sync needs its own change-trac
 
 ## EXT-04 delegated-admin scope decisions
 
-Firstmate scope: approve narrowing this change to the twelve v1.0 delegated-admin reads above (customer list/show, relationship list/show, access-assignment list/show, operation list/show, request list/show and service-management-detail list/show).
+Firstmate scope: approve narrowing this change to the eighteen v1.0 delegated-admin reads above (customer list/show/count, relationship list/show/count, access-assignment list/show/count, operation list/show/count, request list/show/count and service-management-detail list/show/count).
 The operations below remain scheduled with an explicit deferred disposition to a later EXT-04 subfamily; no new commands or raw access are approved.
-Scalar counts need a separate query and response contract from the approved list/show reads; the tenantRelationship container root needs its own projection review; multi-tenant-organization reads shipped in the section below, and tenant-lookup functions ship as tenant-information show under the mg-ext-04e function-argument contract.
+The tenantRelationship container root needs its own projection review; multi-tenant-organization reads shipped in the section below, and tenant-lookup functions ship as tenant-information show under the mg-ext-04e function-argument contract.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|
 | `v1.0:GET:/tenantRelationships` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin root subfamily: the tenantRelationship container singleton needs its own projection review beyond the approved customer and relationship list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminCustomers/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
-| `v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/$count` | scheduled (deferred) | EXT-04 | Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads. |
 
 ## EXT-04 multi-tenant-organization scope decisions
 
@@ -780,6 +786,15 @@ The single-member read below remains scheduled with an explicit deferred disposi
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|
 | `v1.0:GET:/tenantRelationships/multiTenantOrganization/tenants/{multiTenantOrganizationMember-id}` | scheduled (deferred) | EXT-04 | Deferred by firstmate multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for the single-member read. |
+
+## EXT-04 reports scope decisions
+
+Firstmate scope: approve deferring the v1.0 relying-party summary read below; no named command or raw access is approved for it.
+The relying-party summary read below remains scheduled with an explicit deferred disposition: its period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for it until its own guard review lands.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `v1.0:GET:/reports/getRelyingPartyDetailedSummary(period='{period}')` | scheduled (deferred) | EXT-04 | Deferred by firstmate reports scope to a later EXT-04 reports subfamily: the period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for the relying-party summary read. |
 
 ## EXT-04 tenant-lookup scope decisions
 

@@ -89,23 +89,29 @@ APPROVED_CONTRACT_READS = {
     "/contracts/{contract-id}",
     "/contracts/$count",
 }
-# The twelve approved EXT-04b/EXT-04d v1.0 delegated-admin reads: customer
-# and relationship list/show plus the access-assignment, operation, request
-# and service-management-detail navigation list/show reads. Counts, the
-# container root and the multi-tenant-organization/lookup functions stay
-# scheduled for later EXT-04 subfamilies.
+# The eighteen approved EXT-04b/EXT-04d/EXT-04-v1-counts v1.0 delegated-admin
+# reads: customer and relationship list/show/count plus the access-assignment,
+# operation, request and service-management-detail navigation list/show/count
+# reads. The container root and the multi-tenant-organization/lookup
+# functions stay scheduled for later EXT-04 subfamilies.
 APPROVED_DELEGATED_ADMIN_READS = {
     "/tenantRelationships/delegatedAdminCustomers",
+    "/tenantRelationships/delegatedAdminCustomers/$count",
     "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}",
     "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails",
+    "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/$count",
     "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/{delegatedAdminServiceManagementDetail-id}",
     "/tenantRelationships/delegatedAdminRelationships",
+    "/tenantRelationships/delegatedAdminRelationships/$count",
     "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}",
     "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments",
+    "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/$count",
     "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/{delegatedAdminAccessAssignment-id}",
     "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations",
+    "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/$count",
     "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/{delegatedAdminRelationshipOperation-id}",
     "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests",
+    "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/$count",
     "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/{delegatedAdminRelationshipRequest-id}",
 }
 # The four approved EXT-04c v1.0 multi-tenant-organization reads:
@@ -341,6 +347,8 @@ def make_row(version, path, method, operation):
             reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin customer-details subfamily: service-management detail reads need their own query, access and projection review beyond the approved customer list/show reads."
         elif "/accessAssignments" in path or "/operations" in path or "/requests" in path:
             reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin relationship-details subfamily: access-assignment, operation and request navigation reads need their own query, access and projection review beyond the approved relationship list/show reads."
+    if owner == "EXT-04" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/reports/getRelyingPartyDetailedSummary(period='{period}')":
+        reason = "Deferred by firstmate reports scope to a later EXT-04 reports subfamily: the period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for the relying-party summary read."
     if owner == "EXT-02" and method == "GET" and disposition == "scheduled" and "/accessReviews/historyDefinitions" in path:
         disposition, reason = "intentionally-blocked", "Blocked: documented least privilege is the write scope AccessReview.ReadWrite.All (no read scope), and history instances return SAS download URLs in downloadUri; recording or emitting that URL needs its own redaction and output review."
         owner = "EXT-02c"

@@ -3,8 +3,9 @@ import type { CollectArgs, GraphSession, SessionOperation } from "./graph-sessio
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-02 lifecycle-workflows reads: the read-only workflow, workflow
-// template, task definition and tenant-settings first part plus the
-// second-part top-level run and user/subject processing-result reads. See
+// template, task definition and tenant-settings first part, the
+// second-part top-level run and user/subject processing-result reads and
+// the third-part task-report reads. See
 // README.md for the supported commands and usage. Operation construction
 // stays beside its command; the shared session owns URLs, credentials,
 // paging, retries and error translation, and the SDK owns TOON rendering.
@@ -16,18 +17,25 @@ import type { AnyProfile } from "./profiles.js";
 // workflowtemplate-get, lifecycleworkflowscontainer-list-taskdefinitions,
 // taskdefinition-get, lifecyclemanagementsettings-get, workflow-list-runs,
 // run-get, workflow-list-userprocessingresults, userprocessingresult-get,
-// run-list-subjectprocessingresults and subjectprocessingresult-get
-// operation documentation and the reviewed resource property sets for
-// workflow, workflowTemplate, taskDefinition, lifecycleManagementSettings,
-// run, userProcessingResult and subjectProcessingResult, on 2026-10-05.
+// run-list-subjectprocessingresults, subjectprocessingresult-get,
+// workflow-list-taskreports and task-get operation documentation and the
+// reviewed resource property sets for workflow, workflowTemplate,
+// taskDefinition, lifecycleManagementSettings, run, userProcessingResult,
+// subjectProcessingResult, taskReport and task, on 2026-10-06.
 // Workflow list/show take D/A
 // LifecycleWorkflows-Workflow.ReadBasic.All as the least privileged choice
 // (LifecycleWorkflows-Workflow.Read.All or LifecycleWorkflows.Read.All for
-// richer detail); template, task-definition and settings reads take D/A
-// LifecycleWorkflows.Read.All; run and processing-result reads take D/A
-// LifecycleWorkflows-Reports.Read.All as the least privileged choice
-// (LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All for
-// richer detail). Delegated personal Microsoft accounts are not supported.
+// richer detail); template and top-level task-definition reads take D/A
+// LifecycleWorkflows.Read.All; run, processing-result and task-report reads
+// take D/A LifecycleWorkflows-Reports.Read.All as the least privileged
+// choice (LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All
+// for richer detail). The taskReport-nested task and taskDefinition singles
+// have no operation-level documentation page, so they share the reporting
+// family's Reports.Read.All default; the workflow-tasks task-get page
+// documents LifecycleWorkflows-Workflow.Read.All for its own route and the
+// top-level taskdefinition-get page documents LifecycleWorkflows.Read.All
+// for its own route, and both stay named as richer alternatives on denial.
+// Delegated personal Microsoft accounts are not supported.
 // Delegated callers additionally need Global Reader or Lifecycle Workflows
 // Administrator. The run and user-processing lists document $filter (and
 // $select), so --filter passes through as plain $filter with no $count or
@@ -36,13 +44,23 @@ import type { AnyProfile } from "./profiles.js";
 // singles document $select only. The subject list documents $filter but not
 // $select and the subject get documents $expand only, so subject rows
 // arrive whole and are projected locally with --fields (the template-show
-// pattern); the subject navigation stays out everywhere. Processing results
+// pattern); the subject navigation stays out everywhere. Task reports
+// aggregate one task's results within one workflow; the task and
+// taskDefinition navigations return the related objects whole (task
+// arguments and definition parameters ride along as reviewed fields) while
+// taskProcessingResults, the subject link and every $expand stay out.
+// The taskReports list documents $select/$filter (with $orderby/$expand
+// unreviewed); the taskReport get and the taskReport-nested task and
+// taskDefinition singles have no operation-level page (the task-get page
+// covers the workflow-tasks route only and documents no query parameters
+// there), so those three singles arrive whole and are projected locally
+// with --fields (--select is refused before credentials). Processing results
 // are personal data: user and subject defaults carry status and counts
 // only, never the subject link. Deeper execution detail (run-nested and
-// third-level processing results, reprocessed runs, task reports, workflow
-// tasks, createdBy, lastModifiedBy, previewScope, executionScope, versions,
-// insights, deleted items, custom task extensions) needs its own sub-read
-// and stays out, as do the summary functions (bracketed start/end
+// third-level processing results, reprocessed runs, subjects, workflow and
+// template tasks, createdBy, lastModifiedBy, previewScope, executionScope,
+// versions, insights, deleted items, custom task extensions) needs its own
+// sub-read and stays out, as do the summary functions (bracketed start/end
 // arguments outside the session-guard function-binding allowlist).
 // Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra
 // Suite (every governed user, not only administrators). No mutation (no
@@ -149,6 +167,37 @@ export const KNOWN_SUBJECT_PROCESSING_FIELDS: readonly string[] = [
   "workflowExecutionType",
   "workflowVersion",
 ];
+// Task reports aggregate one workflow task's processing results within one
+// run. runId names the owning run; the task, taskDefinition and
+// taskProcessingResults relationships need their own sub-reads ($expand
+// stays out), so only scalar report properties are reviewed here.
+export const KNOWN_TASK_REPORT_FIELDS: readonly string[] = [
+  "id",
+  "runId",
+  "processingStatus",
+  "successfulUsersCount",
+  "failedUsersCount",
+  "unprocessedUsersCount",
+  "totalUsersCount",
+  "startedDateTime",
+  "completedDateTime",
+  "lastUpdatedDateTime",
+];
+// Tasks are the actions a workflow executes when triggered. arguments
+// carries the configured key/value pairs (for example group IDs); the
+// taskProcessingResults relationship needs its own sub-read, so it stays
+// out with $expand.
+export const KNOWN_TASK_FIELDS: readonly string[] = [
+  "id",
+  "arguments",
+  "category",
+  "continueOnError",
+  "description",
+  "displayName",
+  "executionSequence",
+  "isEnabled",
+  "taskDefinitionId",
+];
 const WORKFLOW_KNOWN = new Set(KNOWN_WORKFLOW_FIELDS);
 const WORKFLOW_TEMPLATE_KNOWN = new Set(KNOWN_WORKFLOW_TEMPLATE_FIELDS);
 const TASK_DEFINITION_KNOWN = new Set(KNOWN_TASK_DEFINITION_FIELDS);
@@ -156,6 +205,8 @@ const LIFECYCLE_SETTINGS_KNOWN = new Set(KNOWN_LIFECYCLE_SETTINGS_FIELDS);
 const RUN_KNOWN = new Set(KNOWN_RUN_FIELDS);
 const USER_PROCESSING_KNOWN = new Set(KNOWN_USER_PROCESSING_FIELDS);
 const SUBJECT_PROCESSING_KNOWN = new Set(KNOWN_SUBJECT_PROCESSING_FIELDS);
+const TASK_REPORT_KNOWN = new Set(KNOWN_TASK_REPORT_FIELDS);
+const TASK_KNOWN = new Set(KNOWN_TASK_FIELDS);
 
 // Compact rows: identifiers plus category and enablement state.
 const DEFAULT_WORKFLOW_LIST_SELECT = ["id", "displayName", "category", "isEnabled", "isSchedulingEnabled"];
@@ -174,6 +225,10 @@ const DEFAULT_RUN_SHOW_SELECT = [...KNOWN_RUN_FIELDS];
 const DEFAULT_USER_PROCESSING_LIST_SELECT = ["id", "processingStatus", "failedTasksCount", "totalTasksCount", "totalUnprocessedTasksCount"];
 const DEFAULT_USER_PROCESSING_SHOW_SELECT = [...DEFAULT_USER_PROCESSING_LIST_SELECT];
 const DEFAULT_SUBJECT_PROCESSING_FIELDS = ["id", "subjectType", "processingStatus", "failedTasksCount", "totalTasksCount", "totalUnprocessedTasksCount"];
+// Compact task-report rows: identifiers plus the owning run and user counts.
+const DEFAULT_TASK_REPORT_LIST_SELECT = ["id", "runId", "processingStatus", "totalUsersCount", "failedUsersCount", "successfulUsersCount"];
+const DEFAULT_TASK_REPORT_SHOW_SELECT = [...KNOWN_TASK_REPORT_FIELDS];
+const DEFAULT_TASK_SHOW_SELECT = [...KNOWN_TASK_FIELDS];
 export const DEFAULT_WORKFLOW_SCOPES = ["https://graph.microsoft.com/LifecycleWorkflows-Workflow.ReadBasic.All"];
 export const DEFAULT_LIFECYCLE_SCOPES = ["https://graph.microsoft.com/LifecycleWorkflows.Read.All"];
 export const DEFAULT_REPORTS_SCOPES = ["https://graph.microsoft.com/LifecycleWorkflows-Reports.Read.All"];
@@ -329,6 +384,14 @@ function workflowId(flags: LifecycleWorkflowsFlags, help: string): string {
   return workflow;
 }
 
+function reportId(flags: LifecycleWorkflowsFlags, help: string): string {
+  const report = flags.report === undefined ? "" : String(flags.report);
+  if (!report.trim()) {
+    throw new AxiError("--report needs the parent task report ID", "VALIDATION_ERROR", [help]);
+  }
+  return report;
+}
+
 interface CollectionShape {
   command: string;
   key: string;
@@ -433,6 +496,21 @@ const SUBJECT_PROCESSING_LIST: CollectionShape = {
   standing: profileName => [
     "Subject processing results mirror user results for non-user subjects and carry personal data: rows arrive whole (Graph documents no $select here) and defaults stay minimal",
     `Show one subject processing result: mg-axi entra lifecycle subject-processing-result show --workflow <workflow-id> --id <result-id> ${profileHint(profileName)}`,
+  ],
+};
+
+const TASK_REPORT_LIST: CollectionShape = {
+  command: "entra lifecycle task-report list",
+  key: "taskReports",
+  known: TASK_REPORT_KNOWN,
+  knownList: KNOWN_TASK_REPORT_FIELDS,
+  defaultSelect: DEFAULT_TASK_REPORT_LIST_SELECT,
+  defaultScopes: DEFAULT_REPORTS_SCOPES,
+  hints: REPORTS_DENIAL_HINTS,
+  emptyNote: "0 task reports matched; the absence of results is the answer, not an error",
+  standing: profileName => [
+    "Task reports aggregate one workflow task's results within one run: a report row never carries its task, task definition or task processing results; those belong to later slices",
+    `Show one task report: mg-axi entra lifecycle task-report show --workflow <workflow-id> --id <report-id> ${profileHint(profileName)}`,
   ],
 };
 
@@ -858,4 +936,87 @@ export async function countSubjectProcessingResults(
   const workflow = workflowId(flags, help);
   return countCollection("subject processing result", SUBJECT_PROCESSING_LIST.emptyNote, DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
     session, flags, profile, operation, help, profileName, { "workflow-id": workflow });
+}
+
+export async function listTaskReports(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return listCollection(TASK_REPORT_LIST, session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow },
+    `Resume losslessly with the same --workflow and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
+}
+
+export async function showTaskReport(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return showOne("taskReport", "entra lifecycle task-report show",
+    TASK_REPORT_KNOWN, KNOWN_TASK_REPORT_FIELDS, DEFAULT_TASK_REPORT_SHOW_SELECT,
+    DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "taskReport-id": String(flags.id) },
+    "Graph returned a malformed task report body",
+    true);
+}
+
+export async function countTaskReports(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return countCollection("task report", TASK_REPORT_LIST.emptyNote, DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName, { "workflow-id": workflow });
+}
+
+export async function showTaskReportTask(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  const report = reportId(flags, help);
+  return showOne("task", "entra lifecycle task-report task show",
+    TASK_KNOWN, KNOWN_TASK_FIELDS, DEFAULT_TASK_SHOW_SELECT,
+    DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "taskReport-id": report },
+    "Graph returned a malformed lifecycle task body",
+    true);
+}
+
+export async function showTaskReportTaskDefinition(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  const report = reportId(flags, help);
+  return showOne("taskDefinition", "entra lifecycle task-report task-definition show",
+    TASK_DEFINITION_KNOWN, KNOWN_TASK_DEFINITION_FIELDS, DEFAULT_TASK_DEFINITION_SHOW_SELECT,
+    DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "taskReport-id": report },
+    "Graph returned a malformed task definition body",
+    true);
 }

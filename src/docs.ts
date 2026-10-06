@@ -87,7 +87,7 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra entitlement assignment-request ", "entitlement assignments and requests"],
   ["entra entitlement assignment-policy ", "entitlement catalogs and access packages"],
   ["entra entitlement resource-role-scope ", "entitlement catalogs and access packages"],
-  ["entra lifecycle ", "lifecycle workflows, templates, task definitions, settings, runs and processing results"],
+  ["entra lifecycle ", "lifecycle workflows, templates, task definitions, settings, runs, processing results and task reports"],
   ["api get", "reviewed raw reads"],
 ];
 
@@ -550,9 +550,9 @@ export function capabilityDocument(): string {
     "",
     "## EXT-02 lifecycle-workflows scope decisions",
     "",
-    "This change covers the nineteen v1.0 lifecycle-workflows first- and second-part reads above (workflow, workflow-template and task-definition list/show/count reads, the tenant settings show, plus top-level run and user/subject processing-result list/show/count reads).",
-    "Task reports, run-nested and third-level processing results, reprocessed runs, subject and task sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay scheduled for the follow-up mg-ext-02h part with no new commands or raw access approved; so do the six top-level summary functions, which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard cannot change beyond READ_SCOPES additions. Every beta operation and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.",
-    "No new commands or raw access are approved for any lifecycle-workflows row outside the nineteen above.",
+    "This change covers the twenty-four v1.0 lifecycle-workflows first-, second- and third-part reads above (workflow, workflow-template and task-definition list/show/count reads, the tenant settings show, top-level run and user/subject processing-result list/show/count reads, plus task-report list/show/count reads with the task and taskDefinition singles).",
+    "Run-nested and third-level processing results, taskProcessingResults sub-reads, reprocessed runs, subject sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay scheduled for follow-up parts with no new commands or raw access approved; so do the six top-level summary functions, which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard cannot change beyond READ_SCOPES additions. Every beta operation and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.",
+    "No new commands or raw access are approved for any lifecycle-workflows row outside the twenty-four above.",
     "",
     "## Named writes",
     "",

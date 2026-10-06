@@ -3,38 +3,51 @@ import type { CollectArgs, GraphSession, SessionOperation } from "./graph-sessio
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-02 lifecycle-workflows reads: the read-only workflow, workflow
-// template, task definition and tenant-settings first part. See README.md
-// for the supported commands and usage. Operation construction stays beside
-// its command; the shared session owns URLs, credentials, paging, retries
-// and error translation, and the SDK owns TOON rendering. This module only
-// maps flags to session calls and projects rows for compact output.
+// template, task definition and tenant-settings first part plus the
+// second-part top-level run and user/subject processing-result reads. See
+// README.md for the supported commands and usage. Operation construction
+// stays beside its command; the shared session owns URLs, credentials,
+// paging, retries and error translation, and the SDK owns TOON rendering.
+// This module only maps flags to session calls and projects rows for
+// compact output.
 //
 // Reviewed against the v1.0 lifecycleworkflowscontainer-list-workflows,
 // workflow-get, lifecycleworkflowscontainer-list-workflowtemplates,
 // workflowtemplate-get, lifecycleworkflowscontainer-list-taskdefinitions,
-// taskdefinition-get and lifecyclemanagementsettings-get operation
-// documentation and the pinned v1.0 metadata property sets for workflow,
-// workflowTemplate, taskDefinition and lifecycleManagementSettings, on
-// 2026-10-05. Workflow list/show take D/A
+// taskdefinition-get, lifecyclemanagementsettings-get, workflow-list-runs,
+// run-get, workflow-list-userprocessingresults, userprocessingresult-get,
+// run-list-subjectprocessingresults and subjectprocessingresult-get
+// operation documentation and the reviewed resource property sets for
+// workflow, workflowTemplate, taskDefinition, lifecycleManagementSettings,
+// run, userProcessingResult and subjectProcessingResult, on 2026-10-05.
+// Workflow list/show take D/A
 // LifecycleWorkflows-Workflow.ReadBasic.All as the least privileged choice
 // (LifecycleWorkflows-Workflow.Read.All or LifecycleWorkflows.Read.All for
 // richer detail); template, task-definition and settings reads take D/A
-// LifecycleWorkflows.Read.All. Delegated personal Microsoft accounts are
-// not supported. Delegated callers additionally need Global Reader or
-// Lifecycle Workflows Administrator. The three lists document $filter (and
+// LifecycleWorkflows.Read.All; run and processing-result reads take D/A
+// LifecycleWorkflows-Reports.Read.All as the least privileged choice
+// (LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All for
+// richer detail). Delegated personal Microsoft accounts are not supported.
+// Delegated callers additionally need Global Reader or Lifecycle Workflows
+// Administrator. The run and user-processing lists document $filter (and
 // $select), so --filter passes through as plain $filter with no $count or
 // ConsistencyLevel contract ($search/$orderby/$expand stay unreviewed and
-// $top/$skip stay server-side paging concerns); workflow, task-definition
-// and settings singles document $select only. The template get documents no
-// query parameters, so the template show projects whole rows with no
-// --select. Navigation and execution detail (workflow tasks, createdBy,
-// lastModifiedBy, previewScope, executionScope, runs, user/subject/task
-// processing results, versions, insights, deleted items, custom task
-// extensions) needs $expand or its own sub-read and stays out: runs and
-// processing results belong to a later part, never to these reads.
+// $top/$skip stay server-side paging concerns); run and user-processing
+// singles document $select only. The subject list documents $filter but not
+// $select and the subject get documents $expand only, so subject rows
+// arrive whole and are projected locally with --fields (the template-show
+// pattern); the subject navigation stays out everywhere. Processing results
+// are personal data: user and subject defaults carry status and counts
+// only, never the subject link. Deeper execution detail (run-nested and
+// third-level processing results, reprocessed runs, task reports, workflow
+// tasks, createdBy, lastModifiedBy, previewScope, executionScope, versions,
+// insights, deleted items, custom task extensions) needs its own sub-read
+// and stays out, as do the summary functions (bracketed start/end
+// arguments outside the session-guard function-binding allowlist).
 // Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra
 // Suite (every governed user, not only administrators). No mutation (no
-// workflow create/update/delete/activate, no settings update) and no beta.
+// workflow create/update/delete/activate/run, no settings update) and no
+// beta.
 
 // Workflows expose the configured joiner/mover/leaver automations. Only
 // scalar properties carry a reviewed $select contract; tasks, runs,
@@ -86,10 +99,63 @@ export const KNOWN_LIFECYCLE_SETTINGS_FIELDS: readonly string[] = [
   "emailSettings",
   "quarantineConfiguration",
 ];
+// Runs expose the execution instances of one workflow. activatedOnScope is
+// a complex scope object (not a reviewed scalar) and the processing-result
+// relationships need their own sub-reads, so neither is projected here.
+// totalTasksCounts keeps the resource documentation's spelling.
+export const KNOWN_RUN_FIELDS: readonly string[] = [
+  "id",
+  "completedDateTime",
+  "failedTasksCount",
+  "failedUsersCount",
+  "lastUpdatedDateTime",
+  "processingStatus",
+  "scheduledDateTime",
+  "startedDateTime",
+  "successfulUsersCount",
+  "totalTasksCounts",
+  "totalUsersCount",
+  "totalUnprocessedTasksCount",
+  "workflowExecutionType",
+];
+// User processing results aggregate one user's workflow execution. The
+// subject relationship carries the targeted user identity: it needs
+// $expand, stays off the reviewed set, and is never requested.
+export const KNOWN_USER_PROCESSING_FIELDS: readonly string[] = [
+  "id",
+  "completedDateTime",
+  "failedTasksCount",
+  "processingStatus",
+  "scheduledDateTime",
+  "startedDateTime",
+  "totalTasksCount",
+  "totalUnprocessedTasksCount",
+  "workflowExecutionType",
+  "workflowVersion",
+];
+// Subject processing results mirror user results for non-user subjects.
+// subjectType stays (it names the subject kind, not the subject); the
+// workflowSubject-typed subject navigation stays out with $expand.
+export const KNOWN_SUBJECT_PROCESSING_FIELDS: readonly string[] = [
+  "id",
+  "completedDateTime",
+  "failedTasksCount",
+  "processingStatus",
+  "scheduledDateTime",
+  "startedDateTime",
+  "subjectType",
+  "totalTasksCount",
+  "totalUnprocessedTasksCount",
+  "workflowExecutionType",
+  "workflowVersion",
+];
 const WORKFLOW_KNOWN = new Set(KNOWN_WORKFLOW_FIELDS);
 const WORKFLOW_TEMPLATE_KNOWN = new Set(KNOWN_WORKFLOW_TEMPLATE_FIELDS);
 const TASK_DEFINITION_KNOWN = new Set(KNOWN_TASK_DEFINITION_FIELDS);
 const LIFECYCLE_SETTINGS_KNOWN = new Set(KNOWN_LIFECYCLE_SETTINGS_FIELDS);
+const RUN_KNOWN = new Set(KNOWN_RUN_FIELDS);
+const USER_PROCESSING_KNOWN = new Set(KNOWN_USER_PROCESSING_FIELDS);
+const SUBJECT_PROCESSING_KNOWN = new Set(KNOWN_SUBJECT_PROCESSING_FIELDS);
 
 // Compact rows: identifiers plus category and enablement state.
 const DEFAULT_WORKFLOW_LIST_SELECT = ["id", "displayName", "category", "isEnabled", "isSchedulingEnabled"];
@@ -99,8 +165,18 @@ const DEFAULT_WORKFLOW_TEMPLATE_SHOW_SELECT = [...KNOWN_WORKFLOW_TEMPLATE_FIELDS
 const DEFAULT_TASK_DEFINITION_LIST_SELECT = ["id", "displayName", "category", "version"];
 const DEFAULT_TASK_DEFINITION_SHOW_SELECT = [...KNOWN_TASK_DEFINITION_FIELDS];
 const DEFAULT_LIFECYCLE_SETTINGS_SELECT = [...KNOWN_LIFECYCLE_SETTINGS_FIELDS];
+// Compact run rows: identifiers plus execution status and user counts.
+const DEFAULT_RUN_LIST_SELECT = ["id", "processingStatus", "totalUsersCount", "failedUsersCount", "successfulUsersCount"];
+const DEFAULT_RUN_SHOW_SELECT = [...KNOWN_RUN_FIELDS];
+// Processing results are personal data: minimal default fields (status and
+// counts only) on both lists and singles; datetimes and versions need an
+// explicit --select (user results) or --fields (subject results).
+const DEFAULT_USER_PROCESSING_LIST_SELECT = ["id", "processingStatus", "failedTasksCount", "totalTasksCount", "totalUnprocessedTasksCount"];
+const DEFAULT_USER_PROCESSING_SHOW_SELECT = [...DEFAULT_USER_PROCESSING_LIST_SELECT];
+const DEFAULT_SUBJECT_PROCESSING_FIELDS = ["id", "subjectType", "processingStatus", "failedTasksCount", "totalTasksCount", "totalUnprocessedTasksCount"];
 export const DEFAULT_WORKFLOW_SCOPES = ["https://graph.microsoft.com/LifecycleWorkflows-Workflow.ReadBasic.All"];
 export const DEFAULT_LIFECYCLE_SCOPES = ["https://graph.microsoft.com/LifecycleWorkflows.Read.All"];
+export const DEFAULT_REPORTS_SCOPES = ["https://graph.microsoft.com/LifecycleWorkflows-Reports.Read.All"];
 const TRUNCATE_AT = 500;
 
 export type LifecycleWorkflowsFlags = Record<string, string | boolean>;
@@ -238,6 +314,21 @@ const WORKFLOW_DENIAL_HINTS = [
   "Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite (every governed user, not only administrators)",
 ];
 
+// Run and processing-result reads document the reports scope, so denials
+// name Reports.Read.All first with the richer read alternatives beside it.
+const REPORTS_DENIAL_HINTS = [
+  "Lifecycle-workflow reporting reads need LifecycleWorkflows-Reports.Read.All (least privileged; LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All for richer detail) plus Global Reader or Lifecycle Workflows Administrator for delegated access, or admin-consented LifecycleWorkflows-Reports.Read.All for application access; delegated personal Microsoft accounts are not supported",
+  "Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite (every governed user, not only administrators)",
+];
+
+function workflowId(flags: LifecycleWorkflowsFlags, help: string): string {
+  const workflow = flags.workflow === undefined ? "" : String(flags.workflow);
+  if (!workflow.trim()) {
+    throw new AxiError("--workflow needs the parent lifecycle workflow ID", "VALIDATION_ERROR", [help]);
+  }
+  return workflow;
+}
+
 interface CollectionShape {
   command: string;
   key: string;
@@ -248,6 +339,10 @@ interface CollectionShape {
   hints: readonly string[];
   emptyNote: string;
   standing: (profileName: string) => string[];
+  // Queryless lists document no $select: rows arrive whole and are
+  // projected locally with --fields (defaultSelect doubles as the default
+  // field set). --filter still passes through where documented.
+  queryless?: boolean;
 }
 
 const WORKFLOW_LIST: CollectionShape = {
@@ -295,6 +390,52 @@ const TASK_DEFINITION_LIST: CollectionShape = {
   ],
 };
 
+const RUN_LIST: CollectionShape = {
+  command: "entra lifecycle run list",
+  key: "runs",
+  known: RUN_KNOWN,
+  knownList: KNOWN_RUN_FIELDS,
+  defaultSelect: DEFAULT_RUN_LIST_SELECT,
+  defaultScopes: DEFAULT_REPORTS_SCOPES,
+  hints: REPORTS_DENIAL_HINTS,
+  emptyNote: "0 runs matched; the absence of results is the answer, not an error",
+  standing: profileName => [
+    "Runs are the execution instances of one workflow: a run row never carries its user, subject or task processing results; those belong to later slices",
+    `Show one run: mg-axi entra lifecycle run show --workflow <workflow-id> --id <run-id> ${profileHint(profileName)}`,
+  ],
+};
+
+const USER_PROCESSING_LIST: CollectionShape = {
+  command: "entra lifecycle user-processing-result list",
+  key: "userProcessingResults",
+  known: USER_PROCESSING_KNOWN,
+  knownList: KNOWN_USER_PROCESSING_FIELDS,
+  defaultSelect: DEFAULT_USER_PROCESSING_LIST_SELECT,
+  defaultScopes: DEFAULT_REPORTS_SCOPES,
+  hints: REPORTS_DENIAL_HINTS,
+  emptyNote: "0 user processing results matched; the absence of results is the answer, not an error",
+  standing: profileName => [
+    "User processing results aggregate one user's workflow execution and carry personal data: defaults stay minimal and the subject link is never requested",
+    `Show one user processing result: mg-axi entra lifecycle user-processing-result show --workflow <workflow-id> --id <result-id> ${profileHint(profileName)}`,
+  ],
+};
+
+const SUBJECT_PROCESSING_LIST: CollectionShape = {
+  command: "entra lifecycle subject-processing-result list",
+  key: "subjectProcessingResults",
+  known: SUBJECT_PROCESSING_KNOWN,
+  knownList: KNOWN_SUBJECT_PROCESSING_FIELDS,
+  defaultSelect: DEFAULT_SUBJECT_PROCESSING_FIELDS,
+  defaultScopes: DEFAULT_REPORTS_SCOPES,
+  hints: REPORTS_DENIAL_HINTS,
+  emptyNote: "0 subject processing results matched; the absence of results is the answer, not an error",
+  queryless: true,
+  standing: profileName => [
+    "Subject processing results mirror user results for non-user subjects and carry personal data: rows arrive whole (Graph documents no $select here) and defaults stay minimal",
+    `Show one subject processing result: mg-axi entra lifecycle subject-processing-result show --workflow <workflow-id> --id <result-id> ${profileHint(profileName)}`,
+  ],
+};
+
 async function listCollection(
   shape: CollectionShape,
   session: GraphSession,
@@ -303,30 +444,42 @@ async function listCollection(
   operation: SessionOperation,
   help: string,
   profileName: string,
+  params: Record<string, string> = {},
+  resumeHint?: string,
 ): Promise<Record<string, unknown>> {
   const cursor = flags.cursor === undefined ? undefined : String(flags.cursor);
   if (cursor !== undefined && !cursor.trim()) throw new AxiError("--cursor needs the opaque cursor from a partial result", "VALIDATION_ERROR", [help]);
+  if (shape.queryless === true && flags.select !== undefined) {
+    throw new AxiError("Graph documents no $select on this read; whole rows are returned and projected locally with --fields", "VALIDATION_ERROR", [help]);
+  }
   const saved = cursor === undefined ? undefined : session.cursorQuery(operation, cursor);
   const savedSelect = saved?.$select;
-  const { select, fields } = selectedFields(flags,
-    savedSelect === undefined ? shape.defaultSelect : fieldList(savedSelect, "select", shape.known, shape.knownList, help),
-    shape.known, shape.knownList, help);
+  const { select, fields } = shape.queryless === true
+    ? { select: [] as string[], fields: flags.fields === undefined ? [...shape.defaultSelect] : fieldList(flags.fields, "fields", shape.known, shape.knownList, help) }
+    : selectedFields(flags,
+      savedSelect === undefined ? shape.defaultSelect : fieldList(savedSelect, "select", shape.known, shape.knownList, help),
+      shape.known, shape.knownList, help);
   const savedFilter = saved?.$filter;
   const filter = flags.filter === undefined ? savedFilter : String(flags.filter);
   const scopes = scopesFor(flags, profile, shape.defaultScopes, help);
   const full = flags.full === true;
-  // These lists document $filter (and $select), so --filter passes through
-  // as plain $filter with no $count or ConsistencyLevel contract;
-  // $search/$orderby/$expand stay unreviewed and $top/$skip stay
-  // server-side paging concerns. Resumed queries replay the stored $select
-  // verbatim so resume never conflicts.
-  const sendSelect = cursor === undefined
-    ? select
-    : saved?.$select === undefined ? [] : fieldList(saved.$select, "select", shape.known, shape.knownList, help);
+  // These lists document $filter (and $select, except the queryless
+  // subject list), so --filter passes through as plain $filter with no
+  // $count or ConsistencyLevel contract; $search/$orderby/$expand stay
+  // unreviewed and $top/$skip stay server-side paging concerns. Resumed
+  // queries replay the stored $select verbatim so resume never conflicts.
+  // Queryless lists never send $select: rows arrive whole and --fields
+  // projects locally.
+  let sendSelect: string[] = [];
+  if (shape.queryless !== true) {
+    sendSelect = cursor === undefined
+      ? select
+      : saved?.$select === undefined ? [] : fieldList(saved.$select, "select", shape.known, shape.knownList, help);
+  }
   const query: Record<string, string> = {};
   if (sendSelect.length) query.$select = sendSelect.join(",");
   if (filter !== undefined) query.$filter = filter;
-  const args: CollectArgs = { profile, operation, params: {}, query, scopes };
+  const args: CollectArgs = { profile, operation, params, query, scopes };
   if (cursor !== undefined) args.cursor = cursor;
   if (flags.all === true) {
     if (flags.limit !== undefined) throw new AxiError("--limit and --all cannot be combined", "VALIDATION_ERROR", [help]);
@@ -345,14 +498,14 @@ async function listCollection(
   }
   const truncationHints = truncated ? [fullHint(shape.command, effectiveFlags, profileName)] : [];
   if (truncated && cursor !== undefined) truncationHints.push("Supply the original input cursor on stdin to replay this result with --full");
-  const resumeHint = `Resume losslessly with the same flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`;
+  const resume = resumeHint ?? `Resume losslessly with the same flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`;
   const standing = [...shape.standing(profileName)];
   if (!result.complete) {
     return {
       [shape.key]: rows,
       count: { returned: rows.length, complete: false, reason: result.reason },
       cursor: result.cursor,
-      help: [...truncationHints, resumeHint, ...standing],
+      help: [...truncationHints, resume, ...standing],
     };
   }
   const count = { returned: rows.length, complete: true };
@@ -422,6 +575,7 @@ async function countCollection(
   operation: SessionOperation,
   help: string,
   _profileName: string,
+  params: Record<string, string> = {},
 ): Promise<Record<string, unknown>> {
   const scopes = scopesFor(flags, profile, defaultScopes, help);
   // The $count route returns a text/plain integer scalar rather than a
@@ -429,7 +583,7 @@ async function countCollection(
   // scalar mode and accepts only a non-negative integer. The $count route
   // carries no operation-level documentation page and takes no
   // --filter/--select/--limit/--cursor.
-  const raw = await withGuidance(() => session.execute({ profile, operation, scopes, scalar: true }), hints);
+  const raw = await withGuidance(() => session.execute({ profile, operation, params, scopes, scalar: true }), hints);
   if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) {
     throw new AxiError(`Graph returned a malformed ${key} count body`, "GRAPH_ERROR", [
       "Counts carry one non-negative integer scalar; treat anything else as unknown, not empty",
@@ -571,4 +725,137 @@ export async function showLifecycleSettings(
     session, flags, profile, operation, help, profileName,
     {},
     "Graph returned a malformed lifecycle settings body");
+}
+
+export async function listRuns(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return listCollection(RUN_LIST, session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow },
+    `Resume losslessly with the same --workflow and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
+}
+
+export async function showRun(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return showOne("run", "entra lifecycle run show",
+    RUN_KNOWN, KNOWN_RUN_FIELDS, DEFAULT_RUN_SHOW_SELECT,
+    DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "run-id": String(flags.id) },
+    "Graph returned a malformed lifecycle run body");
+}
+
+export async function countRuns(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return countCollection("run", RUN_LIST.emptyNote, DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName, { "workflow-id": workflow });
+}
+
+export async function listUserProcessingResults(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return listCollection(USER_PROCESSING_LIST, session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow },
+    `Resume losslessly with the same --workflow and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
+}
+
+export async function showUserProcessingResult(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return showOne("userProcessingResult", "entra lifecycle user-processing-result show",
+    USER_PROCESSING_KNOWN, KNOWN_USER_PROCESSING_FIELDS, DEFAULT_USER_PROCESSING_SHOW_SELECT,
+    DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "userProcessingResult-id": String(flags.id) },
+    "Graph returned a malformed user processing result body");
+}
+
+export async function countUserProcessingResults(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return countCollection("user processing result", USER_PROCESSING_LIST.emptyNote, DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName, { "workflow-id": workflow });
+}
+
+export async function listSubjectProcessingResults(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return listCollection(SUBJECT_PROCESSING_LIST, session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow },
+    `Resume losslessly with the same --workflow and flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`);
+}
+
+export async function showSubjectProcessingResult(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return showOne("subjectProcessingResult", "entra lifecycle subject-processing-result show",
+    SUBJECT_PROCESSING_KNOWN, KNOWN_SUBJECT_PROCESSING_FIELDS, DEFAULT_SUBJECT_PROCESSING_FIELDS,
+    DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName,
+    { "workflow-id": workflow, "subjectProcessingResult-id": String(flags.id) },
+    "Graph returned a malformed subject processing result body",
+    true);
+}
+
+export async function countSubjectProcessingResults(
+  session: GraphSession,
+  flags: LifecycleWorkflowsFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const workflow = workflowId(flags, help);
+  return countCollection("subject processing result", SUBJECT_PROCESSING_LIST.emptyNote, DEFAULT_REPORTS_SCOPES, REPORTS_DENIAL_HINTS,
+    session, flags, profile, operation, help, profileName, { "workflow-id": workflow });
 }

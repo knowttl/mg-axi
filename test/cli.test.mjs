@@ -436,6 +436,40 @@ test("lifecycle settings show leaf help marks the read-only singleton", () => {
   assert.match(result.stdout, /updating settings belongs to no read slice/);
 });
 
+test("lifecycle run list leaf help marks compact rows scoped to one workflow", () => {
+  const result = run(["entra", "lifecycle", "run", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /rows never carry processing results/);
+  assert.match(result.stdout, /--workflow.*required/);
+  assert.match(result.stdout, /LifecycleWorkflows-Reports\.Read\.All/);
+});
+
+test("lifecycle run show leaf help marks later-slice processing results", () => {
+  const result = run(["entra", "lifecycle", "run", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /processing results belong to later slices/);
+  assert.match(result.stdout, /--workflow.*required/);
+  assert.match(result.stdout, /--id.*required/);
+});
+
+test("lifecycle user-processing-result list leaf help marks minimal personal data", () => {
+  const result = run(["entra", "lifecycle", "user-processing-result", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /subject link is never requested/);
+  assert.match(result.stdout, /--workflow.*required/);
+});
+
+test("lifecycle subject-processing-result show leaf help marks whole rows with no select", () => {
+  const result = run(["entra", "lifecycle", "subject-processing-result", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /row always arrives whole/);
+  assert.match(result.stdout, /--workflow.*required/);
+});
+
 test("administrative-unit member list leaf help advertises the relationship flags", () => {
   const result = run(["entra", "administrative-unit", "member", "list", "--help"]);
   assert.equal(result.status, 0);

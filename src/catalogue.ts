@@ -379,6 +379,23 @@ const lifecycleGovernanceRead = {
   cursor: lifecycleWorkflowRead.cursor,
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to LifecycleWorkflows.Read.All" },
 };
+const lifecycleReportsRead = {
+  workflow: { value: "workflow-id", required: true, description: "Parent lifecycle workflow ID owning the run or processing result" },
+  filter: lifecycleWorkflowRead.filter,
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed reporting set; reads default to LifecycleWorkflows-Reports.Read.All in both modes (richer detail may need LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All) plus Global Reader or Lifecycle Workflows Administrator for delegated access" },
+  fields: lifecycleWorkflowRead.fields,
+  full: lifecycleWorkflowRead.full,
+  cursor: lifecycleWorkflowRead.cursor,
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to LifecycleWorkflows-Reports.Read.All" },
+} as const;
+const lifecycleSubjectRead = {
+  workflow: { value: "workflow-id", required: true, description: "Parent lifecycle workflow ID owning the subject processing result" },
+  filter: lifecycleWorkflowRead.filter,
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally from the reviewed subject set; Graph documents no $select here so rows always arrive whole" },
+  full: lifecycleWorkflowRead.full,
+  cursor: lifecycleWorkflowRead.cursor,
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to LifecycleWorkflows-Reports.Read.All" },
+} as const;
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
   { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
@@ -1931,7 +1948,83 @@ export const LEAVES: Leaf[] = [
     full: lifecycleGovernanceRead.full,
     scopes: lifecycleGovernanceRead.scopes,
   }, examples: ["mg-axi entra lifecycle settings show --profile soc"] },
-  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations, branding, access reviews, entitlement catalogs and access packages, lifecycle workflows, workflow templates, task definitions and lifecycle settings, and partner contracts; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+  { path: "entra lifecycle run list", description: "List runs of one lifecycle workflow with compact properties (id, processingStatus, user counts); rows never carry processing results", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs", flags: {
+    ...common,
+    workflow: lifecycleReportsRead.workflow,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: lifecycleReportsRead.filter,
+    select: lifecycleReportsRead.select,
+    fields: lifecycleReportsRead.fields,
+    full: lifecycleReportsRead.full,
+    cursor: lifecycleReportsRead.cursor,
+    scopes: lifecycleReportsRead.scopes,
+  }, examples: ["mg-axi entra lifecycle run list --workflow <workflow-id> --profile soc", "mg-axi entra lifecycle run list --workflow <workflow-id> --profile soc --limit 10", "mg-axi entra lifecycle run list --workflow <workflow-id> --profile soc --filter \"processingStatus eq 'completed'\""] },
+  { path: "entra lifecycle run show", description: "Show one lifecycle workflow run with the full reviewed scalar set; processing results belong to later slices", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}", flags: {
+    ...common,
+    workflow: lifecycleReportsRead.workflow,
+    id: { value: "run-id", required: true, description: "Lifecycle workflow run ID" },
+    select: lifecycleReportsRead.select,
+    fields: lifecycleReportsRead.fields,
+    full: lifecycleReportsRead.full,
+    scopes: lifecycleReportsRead.scopes,
+  }, examples: ["mg-axi entra lifecycle run show --workflow <workflow-id> --id <run-id> --profile soc"] },
+  { path: "entra lifecycle run count", description: "Count runs of one lifecycle workflow as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/$count", flags: {
+    ...common,
+    workflow: lifecycleReportsRead.workflow,
+    scopes: lifecycleReportsRead.scopes,
+  }, examples: ["mg-axi entra lifecycle run count --workflow <workflow-id> --profile soc"] },
+  { path: "entra lifecycle user-processing-result list", description: "List user processing results of one lifecycle workflow with minimal personal-data properties (id, processingStatus, task counts); the subject link is never requested", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/userProcessingResults", flags: {
+    ...common,
+    workflow: lifecycleReportsRead.workflow,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: lifecycleReportsRead.filter,
+    select: lifecycleReportsRead.select,
+    fields: lifecycleReportsRead.fields,
+    full: lifecycleReportsRead.full,
+    cursor: lifecycleReportsRead.cursor,
+    scopes: lifecycleReportsRead.scopes,
+  }, examples: ["mg-axi entra lifecycle user-processing-result list --workflow <workflow-id> --profile soc", "mg-axi entra lifecycle user-processing-result list --workflow <workflow-id> --profile soc --limit 10"] },
+  { path: "entra lifecycle user-processing-result show", description: "Show one user processing result with minimal personal-data properties; the subject link stays out", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/userProcessingResults/{userProcessingResult-id}", flags: {
+    ...common,
+    workflow: lifecycleReportsRead.workflow,
+    id: { value: "user-processing-result-id", required: true, description: "User processing result ID" },
+    select: lifecycleReportsRead.select,
+    fields: lifecycleReportsRead.fields,
+    full: lifecycleReportsRead.full,
+    scopes: lifecycleReportsRead.scopes,
+  }, examples: ["mg-axi entra lifecycle user-processing-result show --workflow <workflow-id> --id <result-id> --profile soc"] },
+  { path: "entra lifecycle user-processing-result count", description: "Count user processing results of one lifecycle workflow as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/userProcessingResults/$count", flags: {
+    ...common,
+    workflow: lifecycleReportsRead.workflow,
+    scopes: lifecycleReportsRead.scopes,
+  }, examples: ["mg-axi entra lifecycle user-processing-result count --workflow <workflow-id> --profile soc"] },
+  { path: "entra lifecycle subject-processing-result list", description: "List subject processing results of one lifecycle workflow with minimal personal-data properties; Graph documents no $select here so rows always arrive whole", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/subjectProcessingResults", flags: {
+    ...common,
+    workflow: lifecycleSubjectRead.workflow,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: lifecycleSubjectRead.filter,
+    fields: lifecycleSubjectRead.fields,
+    full: lifecycleSubjectRead.full,
+    cursor: lifecycleSubjectRead.cursor,
+    scopes: lifecycleSubjectRead.scopes,
+  }, examples: ["mg-axi entra lifecycle subject-processing-result list --workflow <workflow-id> --profile soc", "mg-axi entra lifecycle subject-processing-result list --workflow <workflow-id> --profile soc --limit 10"] },
+  { path: "entra lifecycle subject-processing-result show", description: "Show one subject processing result with minimal personal-data properties; the get documents $expand only so the row always arrives whole and the subject navigation stays out", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/subjectProcessingResults/{subjectProcessingResult-id}", flags: {
+    ...common,
+    workflow: lifecycleSubjectRead.workflow,
+    id: { value: "subject-processing-result-id", required: true, description: "Subject processing result ID" },
+    fields: lifecycleSubjectRead.fields,
+    full: lifecycleSubjectRead.full,
+    scopes: lifecycleSubjectRead.scopes,
+  }, examples: ["mg-axi entra lifecycle subject-processing-result show --workflow <workflow-id> --id <result-id> --profile soc"] },
+  { path: "entra lifecycle subject-processing-result count", description: "Count subject processing results of one lifecycle workflow as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/subjectProcessingResults/$count", flags: {
+    ...common,
+    workflow: lifecycleSubjectRead.workflow,
+    scopes: lifecycleSubjectRead.scopes,
+  }, examples: ["mg-axi entra lifecycle subject-processing-result count --workflow <workflow-id> --profile soc"] },
+  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations, branding, access reviews, entitlement catalogs and access packages, lifecycle workflows, workflow templates, task definitions, lifecycle settings, workflow runs and user/subject processing results, and partner contracts; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
     cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --odata to reuse its query" },
@@ -1985,8 +2078,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (Object.hasOwn(flags, name)) fail(`duplicate flag --${name}`);
     if (flag!.value) {
       const value = match![2] ?? argv[++i];
-      if (!value?.trim() || (value.startsWith("-") && !(name === "cursor" && value === "-"
-        && (leaf.path === "api get" || leaf.path === "entra sign-in list" || leaf.path === "entra directory-audit list" || leaf.path === "entra risky-user list" || leaf.path === "entra risk-detection list" || leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra access-review definition list" || leaf.path === "entra access-review instance list" || leaf.path === "entra access-review decision list" || leaf.path === "entra access-review contacted-reviewer list" || leaf.path === "entra access-review stage list" || leaf.path === "entra entitlement catalog list" || leaf.path === "entra entitlement access-package list" || leaf.path === "entra entitlement assignment-policy list" || leaf.path === "entra entitlement resource-role-scope list" || leaf.path === "entra entitlement assignment list" || leaf.path === "entra entitlement assignment-request list" || leaf.path === "entra lifecycle workflow list" || leaf.path === "entra lifecycle workflow-template list" || leaf.path === "entra lifecycle task-definition list")))) fail(`--${name} requires a non-empty value`);
+      if (!value?.trim() || (value.startsWith("-") && !(name === "cursor" && value === "-" && String(flag!.value ?? "").includes("|-")))) fail(`--${name} requires a non-empty value`);
       flags[name] = value!;
     } else {
       if (match![2] !== undefined) fail(`--${name} does not take a value`);

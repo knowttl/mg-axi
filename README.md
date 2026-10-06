@@ -41,7 +41,16 @@ EXT-01 (group lifecycle) adds group lifecycle-policy and group setting-template 
 EXT-01 (custom security attributes) adds attribute-set, custom-security-attribute-definition and allowed-value list/show/count reads with attribute-role denial guidance through the same session.
 Tests use fixture credential and transport providers; no tenant, real credentials or network access are required for help or an unconfigured home view.
 
-Use the Node requirement and pinned pnpm version declared in [package.json](package.json):
+Run commands non-interactively as `npx -y @knowttl/mg-axi ...`: no global install needed and no interactive prompts.
+Version pinning is the installer's choice: use `npx -y @knowttl/mg-axi@<version> ...` to select a specific release.
+
+```sh
+npx -y @knowttl/mg-axi --version
+npx -y @knowttl/mg-axi --help
+npx -y @knowttl/mg-axi entra user list --help
+```
+
+For a local build, use the Node requirement and pinned pnpm version declared in [package.json](package.json):
 
 ```sh
 corepack pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false
@@ -61,8 +70,8 @@ mg-axi --version
 mg-axi --help
 ```
 
-Run commands non-interactively with `mg-axi <command>` after linking.
 Without linking, substitute `node dist/bin/mg-axi.js` from the repository root wherever examples or CLI output use `mg-axi`.
+The no-args home view and `--help` hints print the `npx -y @knowttl/mg-axi ...` form, which works with or without a linked checkout.
 
 The home view reports unavailable tenant summaries explicitly.
 `entra user list` defaults to basic properties (`id`, `displayName`, `userPrincipalName`, `mail`); `entra user show --id <user-id-or-upn>` defaults to the richer server property set.
@@ -1105,7 +1114,11 @@ The pinned [Entra operation inventory](docs/inventory.md) defines the INV-01 dis
 
 This is the supported Entra read and gated write surface, not full Entra coverage.
 See the generated [capability report](docs/coverage.md) for implemented reads, writes and discovery dispositions, and the [skill command table](skills/mg-axi/SKILL.md#orientation) for all executable leaves, including local commands.
-The package is marked private and ships no publish workflow: preparing this release never publishes it.
+The package is published to npm as `@knowttl/mg-axi` with public access.
+Install it globally with `npm install --global @knowttl/mg-axi`, or run without a global install via `npx -y @knowttl/mg-axi --help`.
+The `.github/workflows/release-please.yml` workflow manages release PRs on `main` and builds, checks and publishes newly created releases with provenance using npm trusted publishing (OIDC) from the public repository.
+Publication is skipped when the release version already exists on npm.
+Version `0.1.0` was bootstrap-published on npm, and release-please continues from that version.
 The packed files are `dist`, the discovery inventory, `skills/mg-axi`, `docs/coverage.md` and this README.
 Follow the [checkout instructions](#mg-axi) to install dependencies, build, link the binary and run the version probe.
 

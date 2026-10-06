@@ -520,7 +520,7 @@ test("skill next steps match the no-args home view hints", async () => {
     const skill = skillDocument();
     const output = await executeArgv([]);
     assert.ok(output && typeof output === "object" && Array.isArray(output.help));
-    assert.deepEqual(hints.slice(0, 2), ["mg-axi profile list", "mg-axi login --help"]);
+    assert.deepEqual(hints.slice(0, 2), ["npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi login --help"]);
     assert.equal(new Set(hints).size, hints.length);
     assert.deepEqual(output.help, hints);
     const repeated = await executeArgv([]);

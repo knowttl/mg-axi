@@ -60,7 +60,7 @@ function localHome(name?: string) {
       output.profile = "unavailable: no default profile selected";
     }
   }
-  output.help.unshift("mg-axi profile list", "mg-axi login --help");
+  output.help.unshift("npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi login --help");
   return output;
 }
 
@@ -102,7 +102,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
   }
   if (leaf.path === "profile list") {
     const items = profiles.list();
-    return items.length ? { profiles: items, help: ["mg-axi profile show --profile <name>", "mg-axi login --help"] } : { profiles: "0 profiles configured", help: ["mg-axi profile create --help"] };
+    return items.length ? { profiles: items, help: ["npx -y @knowttl/mg-axi profile show --profile <name>", "npx -y @knowttl/mg-axi login --help"] } : { profiles: "0 profiles configured", help: ["npx -y @knowttl/mg-axi profile create --help"] };
   }
   if (leaf.path === "profile show") return profiles.resolve(flags.profile as string | undefined);
   if (leaf.path === "setup") return setupView(profiles);

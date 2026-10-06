@@ -28,7 +28,7 @@
   "packageManager": "pnpm@10.34.6",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test --test-concurrency=4 test/*.test.mjs",
     "lint": "tsc --noEmit -p tsconfig.json",
     "docs:generate": "node tools/generate-docs.mjs",
     "docs:check": "node tools/generate-docs.mjs --check"

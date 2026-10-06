@@ -1206,7 +1206,7 @@ The service requests only `https://graph.microsoft.com/.default`, representing t
 Ask an administrator to grant those permissions on the configured app registration; per-command delegated scopes cannot narrow the application token.
 Acquisition failures return `AUTH_REQUIRED` with consent and certificate/federation guidance, without user or device-code fallback.
 
-Run `corepack pnpm build`, `corepack pnpm test` and `corepack pnpm lint` for shell validation.
+Run `corepack pnpm build`, `corepack pnpm test` (test files run at most 4 at a time via `--test-concurrency=4` in the `test` script) and `corepack pnpm lint` for shell validation.
 The [CI workflow](.github/workflows/ci.yml) defines the platform/runtime matrix for shell build, test and lint checks, validates the Python inventory tooling separately, and rejects stale generated docs.
 The [implementation plan](PLAN.md) remains the design authority.
 

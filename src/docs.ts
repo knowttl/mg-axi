@@ -324,6 +324,7 @@ export function capabilityDocument(): string {
   const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate custom-security-attributes scope "));
   const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
   const deferredEntitlementRows = rows.filter(row => row.owningSlice === "EXT-02" && row.reason.startsWith("Deferred by firstmate entitlement-management scope "));
+  const deferredAppLookupRows = rows.filter(row => row.owningSlice === "READ-07" && row.reason.startsWith("Deferred by firstmate application-lookups scope "));
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
   return [
@@ -596,6 +597,15 @@ export function capabilityDocument(): string {
     "This change covers the thirty-three v1.0 lifecycle-workflows first-, second-, third- and fourth-part reads above (workflow, workflow-template and task-definition list/show/count reads, the tenant settings show, top-level run and user/subject processing-result list/show/count reads, task-report list/show/count reads with the task and taskDefinition singles, plus run-nested user/subject/task processing-result list/show/count reads).",
     "Third-level processing results, taskProcessingResults sub-reads under a user or subject result, reprocessed runs, subject sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay scheduled for follow-up parts with no new commands or raw access approved; so do the six summary functions (the run user/subject summaries plus the four top-level ones), which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard cannot change beyond READ_SCOPES additions. Every beta operation and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.",
     "No new commands or raw access are approved for any lifecycle-workflows row outside the thirty-three above.",
+    "",
+    "## READ-07 application lookups scope decisions",
+    "",
+    "This change covers seven v1.0 application and service-principal reads above (application and service-principal federated-credential list/show reads with credential metadata only, service-principal app-role-assigned-to list/show reads, and the service-principal app-role-assignment show companion).",
+    "The four parenthesised lookups below remain scheduled with an explicit deferred disposition to a later READ-07 follow-up: the (appId='...') alternate-key forms and the federated-credential (name='...') function forms each need a new session-guard binding, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for them until their own guard review lands.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredAppLookupRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),
     "",
     "## Named writes",
     "",

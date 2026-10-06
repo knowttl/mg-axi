@@ -99,6 +99,7 @@ const APP_FIELDS = ["id", "appId", "displayName", "createdDateTime", "signInAudi
 const SP_FIELDS = ["id", "appId", "displayName", "servicePrincipalType", "accountEnabled", "appOwnerOrganizationId", "appRoleAssignmentRequired", "preferredSingleSignOnMode", "loginUrl"];
 const GRANT_FIELDS = ["id", "clientId", "consentType", "principalId", "resourceId", "scope", "startTime", "expiryTime"];
 const APP_ROLE_FIELDS = ["id", "appRoleId", "principalId", "principalDisplayName", "principalType", "resourceId", "resourceDisplayName", "createdDateTime"];
+const FEDERATED_FIELDS = ["id", "name", "issuer", "subject", "description", "audiences"];
 const ROLE_ASSIGNMENT_FIELDS = ["id", "principalId", "roleDefinitionId", "directoryScopeId", "appScopeId", "createdDateTime"];
 const PIM_INSTANCE_FIELDS = ["id", "roleDefinitionId", "principalId", "assignmentType", "memberType", "startDateTime", "endDateTime", "activatedUsing"];
 const DEVICE_FIELDS = ["id", "deviceId", "displayName", "operatingSystem", "operatingSystemVersion", "trustType", "isCompliant", "isManaged", "accountEnabled", "createdDateTime", "approximateLastSignInDateTime", "manufacturer", "model"];
@@ -275,6 +276,34 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Application.Read.All. Delegated callers pass it as --scopes.",
     note: "Actual granted assignments; requested permissions are a separate contract.",
     sources: ["https://learn.microsoft.com/graph/api/serviceprincipal-list-approleassignments?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignments/{appRoleAssignment-id}", kind: "single", query: SINGLE_QUERY, fields: APP_ROLE_FIELDS,
+    access: "D/A Application.Read.All. Delegated callers pass it as --scopes.",
+    note: "One granted assignment on the client service principal; requested permissions are a separate contract.",
+    sources: ["https://learn.microsoft.com/graph/api/approleassignment-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo", kind: "collection", query: COLLECTION_QUERY, fields: APP_ROLE_FIELDS,
+    access: "D/A Application.Read.All. Delegated callers pass it as --scopes.",
+    note: "Principals assigned to this resource service principal; the reverse view of appRoleAssignments.",
+    sources: ["https://learn.microsoft.com/graph/api/serviceprincipal-list-approleassignedto?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo/{appRoleAssignment-id}", kind: "single", query: SINGLE_QUERY, fields: APP_ROLE_FIELDS,
+    access: "D/A Application.Read.All. Delegated callers pass it as --scopes.",
+    note: "One principal assignment on the resource service principal; the reverse view of appRoleAssignments.",
+    sources: ["https://learn.microsoft.com/graph/api/approleassignment-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/applications/{application-id}/federatedIdentityCredentials", kind: "collection", query: COLLECTION_QUERY, fields: FEDERATED_FIELDS,
+    access: "D/A Application.Read.All. Delegated callers pass it as --scopes.",
+    note: "Workload-identity trust metadata only; GET never returns secret values and success redaction still applies.",
+    sources: ["https://learn.microsoft.com/graph/api/federatedidentitycredential-list?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/applications/{application-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}", kind: "single", query: SINGLE_QUERY, fields: FEDERATED_FIELDS,
+    access: "D/A Application.Read.All. Delegated callers pass it as --scopes.",
+    note: "One workload-identity trust entry; metadata only, never secret values.",
+    sources: ["https://learn.microsoft.com/graph/api/federatedidentitycredential-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials", kind: "collection", query: COLLECTION_QUERY, fields: FEDERATED_FIELDS,
+    access: "D/A Application.Read.All. Delegated callers pass it as --scopes.",
+    note: "Same federatedIdentityCredential resource contract as the application navigation; metadata only, never secret values.",
+    sources: ["https://learn.microsoft.com/graph/api/federatedidentitycredential-list?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/federatedidentitycredential?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}", kind: "single", query: SINGLE_QUERY, fields: FEDERATED_FIELDS,
+    access: "D/A Application.Read.All. Delegated callers pass it as --scopes.",
+    note: "Same federatedIdentityCredential resource contract as the application navigation; metadata only, never secret values.",
+    sources: ["https://learn.microsoft.com/graph/api/federatedidentitycredential-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/federatedidentitycredential?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/oauth2PermissionGrants", kind: "collection", query: COLLECTION_QUERY, fields: GRANT_FIELDS,
     access: "D/A Directory.Read.All as the read choice. Delegated callers pass it as --scopes.",
     note: "Actual granted consent; requested permissions are a separate contract.",

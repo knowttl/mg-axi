@@ -176,6 +176,13 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra service-principal owner list` | native | read |
 | `mg-axi entra service-principal oauth2-grant list` | native | read |
 | `mg-axi entra service-principal app-role-assignment list` | native | read |
+| `mg-axi entra service-principal app-role-assignment show` | native | read |
+| `mg-axi entra service-principal app-role-assigned-to list` | native | read |
+| `mg-axi entra service-principal app-role-assigned-to show` | native | read |
+| `mg-axi entra application federated-credential list` | native | read |
+| `mg-axi entra application federated-credential show` | native | read |
+| `mg-axi entra service-principal federated-credential list` | native | read |
+| `mg-axi entra service-principal federated-credential show` | native | read |
 | `mg-axi entra risky-user list` | native | read |
 | `mg-axi entra risky-user show` | native | read |
 | `mg-axi entra risky-user dismiss` | native | write |

@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 256 (254 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 263 (261 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 7 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -158,6 +158,13 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra service-principal owner list` | `GET:/servicePrincipals/{servicePrincipal-id}/owners` | scheduled | READ-07 |
 | `mg-axi entra service-principal oauth2-grant list` | `GET:/servicePrincipals/{servicePrincipal-id}/oauth2PermissionGrants` | scheduled | READ-07 |
 | `mg-axi entra service-principal app-role-assignment list` | `GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignments` | scheduled | READ-08 |
+| `mg-axi entra service-principal app-role-assignment show` | `GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignments/{appRoleAssignment-id}` | scheduled | READ-08 |
+| `mg-axi entra service-principal app-role-assigned-to list` | `GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo` | scheduled | READ-07 |
+| `mg-axi entra service-principal app-role-assigned-to show` | `GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo/{appRoleAssignment-id}` | scheduled | READ-07 |
+| `mg-axi entra application federated-credential list` | `GET:/applications/{application-id}/federatedIdentityCredentials` | scheduled | READ-07 |
+| `mg-axi entra application federated-credential show` | `GET:/applications/{application-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}` | scheduled | READ-07 |
+| `mg-axi entra service-principal federated-credential list` | `GET:/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials` | scheduled | READ-07 |
+| `mg-axi entra service-principal federated-credential show` | `GET:/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}` | scheduled | READ-07 |
 | `mg-axi entra risky-user list` | `GET:/identityProtection/riskyUsers` | scheduled | READ-06 |
 | `mg-axi entra risky-user show` | `GET:/identityProtection/riskyUsers/{riskyUser-id}` | scheduled | READ-06 |
 | `mg-axi entra risk-detection list` | `GET:/identityProtection/riskDetections` | scheduled | READ-06 |
@@ -1098,6 +1105,18 @@ Approval and subject reads carry personal data and stay scheduled for later part
 This change covers the thirty-three v1.0 lifecycle-workflows first-, second-, third- and fourth-part reads above (workflow, workflow-template and task-definition list/show/count reads, the tenant settings show, top-level run and user/subject processing-result list/show/count reads, task-report list/show/count reads with the task and taskDefinition singles, plus run-nested user/subject/task processing-result list/show/count reads).
 Third-level processing results, taskProcessingResults sub-reads under a user or subject result, reprocessed runs, subject sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay scheduled for follow-up parts with no new commands or raw access approved; so do the six summary functions (the run user/subject summaries plus the four top-level ones), which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard cannot change beyond READ_SCOPES additions. Every beta operation and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.
 No new commands or raw access are approved for any lifecycle-workflows row outside the thirty-three above.
+
+## READ-07 application lookups scope decisions
+
+This change covers seven v1.0 application and service-principal reads above (application and service-principal federated-credential list/show reads with credential metadata only, service-principal app-role-assigned-to list/show reads, and the service-principal app-role-assignment show companion).
+The four parenthesised lookups below remain scheduled with an explicit deferred disposition to a later READ-07 follow-up: the (appId='...') alternate-key forms and the federated-credential (name='...') function forms each need a new session-guard binding, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for them until their own guard review lands.
+
+| Inventory operation | Disposition | Owning slice | Deferral reason |
+|---|---|---|---|
+| `v1.0:GET:/applications(appId='{appId}')` | scheduled (deferred) | READ-07 | Deferred by firstmate application-lookups scope to a later READ-07 follow-up: the (appId='...') alternate-key form needs a new session-guard function/alternate-key binding, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for the application appId lookup. |
+| `v1.0:GET:/applications/{application-id}/federatedIdentityCredentials(name='{name}')` | scheduled (deferred) | READ-07 | Deferred by firstmate application-lookups scope to a later READ-07 follow-up: the (name='...') function form needs a new session-guard function-argument binding, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for the federated-credential name lookup. |
+| `v1.0:GET:/servicePrincipals(appId='{appId}')` | scheduled (deferred) | READ-07 | Deferred by firstmate application-lookups scope to a later READ-07 follow-up: the (appId='...') alternate-key form needs a new session-guard function/alternate-key binding, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for the service-principal appId lookup. |
+| `v1.0:GET:/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials(name='{name}')` | scheduled (deferred) | READ-07 | Deferred by firstmate application-lookups scope to a later READ-07 follow-up: the (name='...') function form needs a new session-guard function-argument binding, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for the federated-credential name lookup. |
 
 ## Named writes
 

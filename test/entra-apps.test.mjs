@@ -101,6 +101,71 @@ const spOwners = [
   { "@odata.type": "#microsoft.graph.user", id: "11111111-1111-4111-8111-111111111112", displayName: "Adele Vance", mail: "adele@contoso.com" },
 ];
 
+const appFedcreds = [
+  {
+    id: "11111111-2222-4333-8444-111111111111",
+    name: "github-actions",
+    issuer: "https://token.actions.githubusercontent.com",
+    subject: "repo:contoso/web:ref:refs/heads/main",
+    description: "Deploy from main",
+    audiences: ["api://AzureADTokenExchange"],
+    clientSecret: "poison-must-never-surface",
+    secretText: "poison-must-never-surface",
+  },
+  {
+    id: "22222222-3333-4444-8555-222222222222",
+    name: "terraform-cloud",
+    issuer: "https://app.terraform.io",
+    subject: "organization:contoso:project:web:workspace:prod",
+    description: null,
+    audiences: ["api://AzureADTokenExchange"],
+  },
+];
+const spFedcreds = [
+  {
+    id: "33333333-4444-4555-8666-333333333333",
+    name: "workload-github",
+    issuer: "https://token.actions.githubusercontent.com",
+    subject: "repo:contoso/api:environment:prod",
+    description: "API prod access",
+    audiences: ["api://AzureADTokenExchange"],
+  },
+];
+const assignedTo = [
+  {
+    id: "44444444-5555-4666-8777-444444444444",
+    appRoleId: "00000000-0000-4000-8000-000000000000",
+    createdDateTime: "2024-03-01T00:00:00Z",
+    principalDisplayName: "Adele Vance",
+    principalId: "11111111-1111-4111-8111-111111111112",
+    principalType: "User",
+    resourceDisplayName: "Contoso Web",
+    resourceId: s1.id,
+  },
+  {
+    id: "55555555-6666-4777-8888-555555555555",
+    appRoleId: "00000000-0000-4000-8000-000000000000",
+    createdDateTime: "2024-04-01T00:00:00Z",
+    principalDisplayName: "Daemon Batch",
+    principalId: s2.id,
+    principalType: "ServicePrincipal",
+    resourceDisplayName: "Contoso Web",
+    resourceId: s1.id,
+  },
+];
+const spAssignments = [
+  {
+    id: "66666666-7777-4888-8999-666666666666",
+    appRoleId: "11111111-0000-4000-8000-000000000000",
+    createdDateTime: "2024-05-01T00:00:00Z",
+    principalDisplayName: "Contoso Web",
+    principalId: s1.id,
+    principalType: "ServicePrincipal",
+    resourceDisplayName: "Microsoft Graph",
+    resourceId: "00000003-0000-0000-c000-000000000000",
+  },
+];
+
 function setupProfiles() {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-read-07-"));
   const previous = process.env.MG_AXI_CONFIG;
@@ -162,6 +227,29 @@ function appTransport() {
         value: [s1, s2],
         "@odata.nextLink": "https://graph.microsoft.com/v1.0/servicePrincipals?%24skiptoken=page2",
       });
+    }
+    if (/^\/v1\.0\/applications\/[^/]+\/federatedIdentityCredentials$/.test(path)) return json(200, { value: appFedcreds });
+    const appFedSingle = /^\/v1\.0\/applications\/[^/]+\/federatedIdentityCredentials\/([^/]+)$/.exec(path);
+    if (appFedSingle) {
+      const found = appFedcreds.find(row => row.id === decodeURIComponent(appFedSingle[1]));
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such credential" } });
+    }
+    if (/^\/v1\.0\/servicePrincipals\/[^/]+\/federatedIdentityCredentials$/.test(path)) return json(200, { value: spFedcreds });
+    const spFedSingle = /^\/v1\.0\/servicePrincipals\/[^/]+\/federatedIdentityCredentials\/([^/]+)$/.exec(path);
+    if (spFedSingle) {
+      const found = spFedcreds.find(row => row.id === decodeURIComponent(spFedSingle[1]));
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such credential" } });
+    }
+    if (/^\/v1\.0\/servicePrincipals\/[^/]+\/appRoleAssignedTo$/.test(path)) return json(200, { value: assignedTo });
+    const assignedSingle = /^\/v1\.0\/servicePrincipals\/[^/]+\/appRoleAssignedTo\/([^/]+)$/.exec(path);
+    if (assignedSingle) {
+      const found = assignedTo.find(row => row.id === decodeURIComponent(assignedSingle[1]));
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such assignment" } });
+    }
+    const grantSingle = /^\/v1\.0\/servicePrincipals\/[^/]+\/appRoleAssignments\/([^/]+)$/.exec(path);
+    if (grantSingle) {
+      const found = spAssignments.find(row => row.id === decodeURIComponent(grantSingle[1]));
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such assignment" } });
     }
     const appSingle = /^\/v1\.0\/applications\/([^/]+)$/.exec(path);
     if (appSingle) {
@@ -315,6 +403,109 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "1 owners");
       assert.equal(result.total, null);
       assert.ok(new URL(requests[0].url).pathname.endsWith(`/servicePrincipals/${s1.id}/owners`));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists application federated credentials with metadata only`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "application", "federated-credential", "list", "--application", a1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.federatedCredentials, [
+        { id: appFedcreds[0].id, name: "github-actions", issuer: "https://token.actions.githubusercontent.com", subject: "repo:contoso/web:ref:refs/heads/main" },
+        { id: appFedcreds[1].id, name: "terraform-cloud", issuer: "https://app.terraform.io", subject: "organization:contoso:project:web:workspace:prod" },
+      ]);
+      assert.deepEqual(result.count, "2 federated credentials");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
+      assert.ok(new URL(requests[0].url).pathname.endsWith(`/applications/${a1.id}/federatedIdentityCredentials`));
+      assert.ok(!JSON.stringify(result).includes("poison-must-never-surface"));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows an application federated credential without secret material`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "application", "federated-credential", "show", "--application", a1.id, "--id", appFedcreds[0].id, "--profile", profile], overrides);
+      assert.deepEqual(result.federatedCredential, {
+        id: appFedcreds[0].id,
+        name: "github-actions",
+        issuer: "https://token.actions.githubusercontent.com",
+        subject: "repo:contoso/web:ref:refs/heads/main",
+        description: "Deploy from main",
+        audiences: ["api://AzureADTokenExchange"],
+      });
+      assert.ok(!JSON.stringify(result).includes("poison-must-never-surface"));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists service-principal federated credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "service-principal", "federated-credential", "list", "--service-principal", s1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.federatedCredentials, [
+        { id: spFedcreds[0].id, name: "workload-github", issuer: "https://token.actions.githubusercontent.com", subject: "repo:contoso/api:environment:prod" },
+      ]);
+      assert.deepEqual(result.count, "1 federated credentials");
+      assert.ok(new URL(requests[0].url).pathname.endsWith(`/servicePrincipals/${s1.id}/federatedIdentityCredentials`));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows a service-principal federated credential`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "service-principal", "federated-credential", "show", "--service-principal", s1.id, "--id", spFedcreds[0].id, "--profile", profile], overrides);
+      assert.equal(result.federatedCredential.name, "workload-github");
+      assert.deepEqual(result.federatedCredential.audiences, ["api://AzureADTokenExchange"]);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists principals assigned to a service principal`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "service-principal", "app-role-assigned-to", "list", "--service-principal", s1.id, "--profile", profile], overrides);
+      assert.equal(result.appRoleAssignedTo.length, 2);
+      assert.equal(result.appRoleAssignedTo[0].principalDisplayName, "Adele Vance");
+      assert.equal(result.appRoleAssignedTo[1].principalType, "ServicePrincipal");
+      assert.deepEqual(result.count, "2 app role assignments");
+      assert.equal(result.total, null);
+      assert.ok(new URL(requests[0].url).pathname.endsWith(`/servicePrincipals/${s1.id}/appRoleAssignedTo`));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one principal assignment on a service principal`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "service-principal", "app-role-assigned-to", "show", "--service-principal", s1.id, "--id", assignedTo[0].id, "--profile", profile], overrides);
+      assert.deepEqual(result.appRoleAssignedTo, assignedTo[0]);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one app-only role assignment of a client service principal`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "service-principal", "app-role-assignment", "show", "--service-principal", s1.id, "--id", spAssignments[0].id, "--profile", profile], overrides);
+      assert.deepEqual(result.appRoleAssignment, spAssignments[0]);
     } finally {
       teardownProfiles(state);
     }
@@ -499,7 +690,7 @@ test("secret-minting routes are refused before credentials", async () => {
       showApplication(session, { id: a1.id }, { mode: "delegated", tenantId: tenant, clientId: client }, secretOperation, leafHelp(leaf), "soc"),
       error => {
         assert.equal(error.code, "VALIDATION_ERROR");
-        return /six catalogued application/.test(error.message);
+        return /thirteen catalogued application/.test(error.message);
       },
     );
     assert.equal(requests.length, 0);

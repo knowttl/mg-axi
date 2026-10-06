@@ -1,12 +1,15 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { KNOWN_APP_ROLE_FIELDS } from "./entra-grants.js";
 import { listTotals } from "./list-totals.js";
 import { SAFE_CREDENTIAL_FIELDS } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-07: the Entra application and service-principal read mapping behind
 // `mg-axi entra application list/show`, `mg-axi entra service-principal
-// list/show` and the two `owner list` relationship reads. Operation
+// list/show`, the two `owner list` relationship reads, the service-principal
+// `app-role-assigned-to` and `app-role-assignment show` assignment reads and
+// the two `federated-credential` collections. Operation
 // construction stays beside its command; the shared session owns URLs,
 // credentials, paging, retries and error translation, and the SDK owns TOON
 // rendering. This module only maps flags to session calls and projects rows
@@ -17,14 +20,18 @@ import type { AnyProfile } from "./profiles.js";
 // servicePrincipal-list-owners operation documentation on 2026-10-04.
 // Delegated and application reads take Application.Read.All; the object id
 // (`id`) is never conflated with the client ID (`appId`) - both ride in the
-// compact list defaults so callers can see the distinction. Consent grants
-// (appRoleAssignments, oauth2PermissionGrants) are READ-08 and stay out of
-// this slice; only owners are projected as relationships.
+// compact list defaults so callers can see the distinction. Delegated
+// permission grants (oauth2PermissionGrants) are READ-08 and stay out of
+// this slice; only owners, direct assignments and federated credentials are
+// projected as relationships. Alternate-key lookups by appId and
+// federated-credential lookups by name stay out too: they need a validated
+// function-argument binding the session guard does not have, and widening
+// the guard is out of scope for a read slice.
 //
 // Credential safety belongs to the shared session's SAFE_CREDENTIAL_FIELDS
 // projection, applied before collection buffering and again on cursor decode.
 // Local projection uses that same allowlist for the displayed view.
-// The six GET operations below are the only ones this module ever binds;
+// The thirteen GET operations below are the only ones this module ever binds;
 // secret-minting routes (addPassword, addKey) and every write stay refused before
 // credentials via checkReadOperation.
 
@@ -58,6 +65,22 @@ export const KNOWN_SP_FIELDS: readonly string[] = [
 ];
 const KNOWN_SPS = new Set(KNOWN_SP_FIELDS);
 
+const KNOWN_ASSIGNED = new Set(KNOWN_APP_ROLE_FIELDS);
+
+// Federated-credential rows carry workload-identity metadata only: issuer,
+// subject and audiences name the trusted token source. There is no secret
+// material on this resource, and the projection still drops anything outside
+// this set so a future property can never leak through.
+export const KNOWN_FEDERATED_FIELDS: readonly string[] = [
+  "id",
+  "name",
+  "issuer",
+  "subject",
+  "description",
+  "audiences",
+];
+const KNOWN_FEDERATED = new Set(KNOWN_FEDERATED_FIELDS);
+
 // Owner rows are directoryObjects of mixed types; richer per-type fields
 // need single-object reads, so only these stay selectable.
 export const KNOWN_OWNER_FIELDS: readonly string[] = ["id", "displayName", "mail"];
@@ -75,6 +98,16 @@ const DEFAULT_APP_SHOW_SELECT = [...KNOWN_APP_FIELDS];
 const DEFAULT_SP_SHOW_SELECT = [...KNOWN_SP_FIELDS];
 // Compact owner rows: identifier, display name and address.
 const DEFAULT_OWNER_SELECT = ["id", "displayName", "mail"];
+// Compact federated-credential rows: the credential id, its name and the
+// trusted token source. The full set adds the human description and the
+// audience list.
+const DEFAULT_FEDERATED_LIST_SELECT = ["id", "name", "issuer", "subject"];
+const DEFAULT_FEDERATED_SHOW_SELECT = [...KNOWN_FEDERATED_FIELDS];
+// Compact assignment rows: the assignment id, the granted role and who
+// holds it. principalId is constant for one service principal's
+// appRoleAssignments list but varies across appRoleAssignedTo rows.
+const DEFAULT_ASSIGNED_LIST_SELECT = ["id", "appRoleId", "principalDisplayName", "principalId", "principalType", "resourceDisplayName", "resourceId"];;
+const DEFAULT_ASSIGNED_SHOW_SELECT = [...KNOWN_APP_ROLE_FIELDS];
 // Application.Read.All covers applications, service principals and owners in
 // both modes; delegated reads default to it unless --scopes overrides it.
 export const DEFAULT_DELEGATED_SCOPES = ["https://graph.microsoft.com/Application.Read.All"];
@@ -86,9 +119,16 @@ const READ_OPERATIONS: Readonly<Record<string, string>> = {
   "GET:/applications": "application",
   "GET:/applications/{application-id}": "application",
   "GET:/applications/{application-id}/owners": "application",
+  "GET:/applications/{application-id}/federatedIdentityCredentials": "application",
+  "GET:/applications/{application-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}": "application",
   "GET:/servicePrincipals": "service-principal",
   "GET:/servicePrincipals/{servicePrincipal-id}": "service-principal",
   "GET:/servicePrincipals/{servicePrincipal-id}/owners": "service-principal",
+  "GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo": "service-principal",
+  "GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo/{appRoleAssignment-id}": "service-principal",
+  "GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignments/{appRoleAssignment-id}": "service-principal",
+  "GET:/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials": "service-principal",
+  "GET:/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}": "service-principal",
 };
 
 function checkReadOperation(operation: SessionOperation, help: string): void {
@@ -97,7 +137,7 @@ function checkReadOperation(operation: SessionOperation, help: string): void {
   // fabricated secret-minting or write route can never reach credentials.
   const route = `${operation.method}:${operation.path}`;
   if (operation.method !== "GET" || !Object.hasOwn(READ_OPERATIONS, route)) {
-    throw new AxiError(`Refused non-read route ${operation.id}: READ-07 serves only the six catalogued application and service-principal GETs`, "VALIDATION_ERROR", [
+    throw new AxiError(`Refused non-read route ${operation.id}: READ-07 serves only the thirteen catalogued application and service-principal GETs`, "VALIDATION_ERROR", [
       help,
       "Secret-minting routes (addPassword, addKey) and writes are never constructed here; consent grants belong to READ-08",
     ]);
@@ -527,4 +567,226 @@ export async function listServicePrincipalOwners(
 ): Promise<Record<string, unknown>> {
   return listOwners(session, flags, profile, operation, help, profileName,
     "entra service-principal owner list", "servicePrincipal-id", "service-principal");
+}
+
+interface ChildCollection {
+  command: string;
+  key: string;
+  emptyNoun: string;
+  showHint: string;
+  parentParam: string;
+  parentFlag: string;
+  parentLabel: string;
+}
+
+async function listChildCollection(
+  session: GraphSession,
+  flags: AppFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+  child: ChildCollection,
+  known: Set<string>,
+  knownList: readonly string[],
+  defaults: string[],
+): Promise<Record<string, unknown>> {
+  checkReadOperation(operation, help);
+  const parent = String(flags[child.parentFlag]);
+  if (!parent.trim()) throw new AxiError(`--${child.parentFlag} needs ${child.parentLabel}`, "VALIDATION_ERROR", [help]);
+  const common = collectionCommon(session, flags, known, knownList, defaults, operation, help, profile);
+  const args = collectArgs(profile, operation, common, flags, help);
+  args.params = { [child.parentParam]: parent };
+  const result = await session.collect(args);
+  const effectiveFlags: AppFlags = { ...flags, select: result.query.$select ?? defaults.join(",") };
+  if (result.query.$filter !== undefined) effectiveFlags.filter = result.query.$filter;
+  const rows: Record<string, unknown>[] = [];
+  let truncated = false;
+  for (const row of result.value) {
+    const projected = project(row, common.fields, common.full);
+    rows.push(projected.row);
+    truncated = truncated || projected.truncated;
+  }
+  const truncationHints = truncated ? [fullHint(child.command, effectiveFlags, profileName)] : [];
+  if (!result.complete) {
+    return {
+      [child.key]: rows,
+      ...listTotals(rows.length, result.total, child.emptyNoun, false),
+      complete: false,
+      reason: result.reason,
+      cursor: result.cursor,
+      help: [...truncationHints, resumeHint(profileName), child.showHint],
+    };
+  }
+  if (!rows.length) {
+    return {
+      [child.key]: rows,
+      ...listTotals(rows.length, result.total, child.emptyNoun, true),
+      complete: true,
+      help: [
+        `0 ${child.emptyNoun} matched; the absence of results is the answer, not an error`,
+        child.showHint,
+      ],
+    };
+  }
+  return { [child.key]: rows, ...listTotals(rows.length, result.total, child.emptyNoun, true), complete: true, help: [...truncationHints, child.showHint] };
+}
+
+async function showChildObject(
+  session: GraphSession,
+  flags: AppFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+  command: string,
+  key: string,
+  known: Set<string>,
+  knownList: readonly string[],
+  defaults: string[],
+  parentParam: string,
+  parentFlag: string,
+  parentLabel: string,
+  childParam: string,
+): Promise<Record<string, unknown>> {
+  checkReadOperation(operation, help);
+  const parent = String(flags[parentFlag]);
+  if (!parent.trim()) throw new AxiError(`--${parentFlag} needs ${parentLabel}`, "VALIDATION_ERROR", [help]);
+  const { select, fields } = selectedFields(flags, known, knownList, defaults, help);
+  const scopes = scopesFor(flags, profile, help);
+  const full = flags.full === true;
+  const raw = await session.execute({
+    profile,
+    operation,
+    params: { [parentParam]: parent, [childParam]: String(flags.id) },
+    query: { $select: select.join(",") },
+    scopes,
+  });
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new AxiError("Graph returned a malformed child object body", "GRAPH_ERROR", [
+      "Single-object reads carry one object; treat anything else as unknown, not empty",
+    ]);
+  }
+  const { row, truncated } = project(raw, fields, full);
+  if (truncated) return { [key]: row, help: [fullHint(command, flags, profileName)] };
+  return { [key]: row };
+}
+
+export async function listApplicationFederatedCredentials(
+  session: GraphSession,
+  flags: AppFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listChildCollection(session, flags, profile, operation, help, profileName,
+    {
+      command: "entra application federated-credential list",
+      key: "federatedCredentials",
+      emptyNoun: "federated credentials",
+      showHint: `mg-axi entra application federated-credential show --application <application-object-id> --id <credential-id> ${profileHint(profileName)}`,
+      parentParam: "application-id",
+      parentFlag: "application",
+      parentLabel: "the owning application object ID",
+    },
+    KNOWN_FEDERATED, KNOWN_FEDERATED_FIELDS, DEFAULT_FEDERATED_LIST_SELECT);
+}
+
+export async function showApplicationFederatedCredential(
+  session: GraphSession,
+  flags: AppFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showChildObject(session, flags, profile, operation, help, profileName,
+    "entra application federated-credential show", "federatedCredential",
+    KNOWN_FEDERATED, KNOWN_FEDERATED_FIELDS, DEFAULT_FEDERATED_SHOW_SELECT,
+    "application-id", "application", "the owning application object ID", "federatedIdentityCredential-id");
+}
+
+export async function listServicePrincipalFederatedCredentials(
+  session: GraphSession,
+  flags: AppFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listChildCollection(session, flags, profile, operation, help, profileName,
+    {
+      command: "entra service-principal federated-credential list",
+      key: "federatedCredentials",
+      emptyNoun: "federated credentials",
+      showHint: `mg-axi entra service-principal federated-credential show --service-principal <service-principal-object-id> --id <credential-id> ${profileHint(profileName)}`,
+      parentParam: "servicePrincipal-id",
+      parentFlag: "service-principal",
+      parentLabel: "the owning service-principal object ID",
+    },
+    KNOWN_FEDERATED, KNOWN_FEDERATED_FIELDS, DEFAULT_FEDERATED_LIST_SELECT);
+}
+
+export async function showServicePrincipalFederatedCredential(
+  session: GraphSession,
+  flags: AppFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showChildObject(session, flags, profile, operation, help, profileName,
+    "entra service-principal federated-credential show", "federatedCredential",
+    KNOWN_FEDERATED, KNOWN_FEDERATED_FIELDS, DEFAULT_FEDERATED_SHOW_SELECT,
+    "servicePrincipal-id", "service-principal", "the owning service-principal object ID", "federatedIdentityCredential-id");
+}
+
+export async function listServicePrincipalAssignedTo(
+  session: GraphSession,
+  flags: AppFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listChildCollection(session, flags, profile, operation, help, profileName,
+    {
+      command: "entra service-principal app-role-assigned-to list",
+      key: "appRoleAssignedTo",
+      emptyNoun: "app role assignments",
+      showHint: `mg-axi entra service-principal app-role-assigned-to show --service-principal <service-principal-object-id> --id <assignment-id> ${profileHint(profileName)}`,
+      parentParam: "servicePrincipal-id",
+      parentFlag: "service-principal",
+      parentLabel: "the resource service-principal object ID",
+    },
+    KNOWN_ASSIGNED, KNOWN_APP_ROLE_FIELDS, DEFAULT_ASSIGNED_LIST_SELECT);
+}
+
+export async function showServicePrincipalAssignedTo(
+  session: GraphSession,
+  flags: AppFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showChildObject(session, flags, profile, operation, help, profileName,
+    "entra service-principal app-role-assigned-to show", "appRoleAssignedTo",
+    KNOWN_ASSIGNED, KNOWN_APP_ROLE_FIELDS, DEFAULT_ASSIGNED_SHOW_SELECT,
+    "servicePrincipal-id", "service-principal", "the resource service-principal object ID", "appRoleAssignment-id");
+}
+
+export async function showServicePrincipalAppRoleAssignment(
+  session: GraphSession,
+  flags: AppFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showChildObject(session, flags, profile, operation, help, profileName,
+    "entra service-principal app-role-assignment show", "appRoleAssignment",
+    KNOWN_ASSIGNED, KNOWN_APP_ROLE_FIELDS, DEFAULT_ASSIGNED_SHOW_SELECT,
+    "servicePrincipal-id", "service-principal", "the client service-principal object ID", "appRoleAssignment-id");
 }

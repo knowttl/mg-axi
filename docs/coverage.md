@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 254 (252 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 261 (259 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 7 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -156,6 +156,13 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra service-principal owner list` | `GET:/servicePrincipals/{servicePrincipal-id}/owners` | scheduled | READ-07 |
 | `mg-axi entra service-principal oauth2-grant list` | `GET:/servicePrincipals/{servicePrincipal-id}/oauth2PermissionGrants` | scheduled | READ-07 |
 | `mg-axi entra service-principal app-role-assignment list` | `GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignments` | scheduled | READ-08 |
+| `mg-axi entra service-principal app-role-assignment show` | `GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignments/{appRoleAssignment-id}` | scheduled | READ-08 |
+| `mg-axi entra service-principal app-role-assigned-to list` | `GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo` | scheduled | READ-07 |
+| `mg-axi entra service-principal app-role-assigned-to show` | `GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo/{appRoleAssignment-id}` | scheduled | READ-07 |
+| `mg-axi entra application federated-credential list` | `GET:/applications/{application-id}/federatedIdentityCredentials` | scheduled | READ-07 |
+| `mg-axi entra application federated-credential show` | `GET:/applications/{application-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}` | scheduled | READ-07 |
+| `mg-axi entra service-principal federated-credential list` | `GET:/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials` | scheduled | READ-07 |
+| `mg-axi entra service-principal federated-credential show` | `GET:/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}` | scheduled | READ-07 |
 | `mg-axi entra risky-user list` | `GET:/identityProtection/riskyUsers` | scheduled | READ-06 |
 | `mg-axi entra risky-user show` | `GET:/identityProtection/riskyUsers/{riskyUser-id}` | scheduled | READ-06 |
 | `mg-axi entra risk-detection list` | `GET:/identityProtection/riskDetections` | scheduled | READ-06 |

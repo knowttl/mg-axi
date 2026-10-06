@@ -15,7 +15,7 @@ import { listDirectoryRoles, showDirectoryRole, listDirectoryRoleTemplates, show
 import { listGroupAssignmentSchedules, showGroupAssignmentSchedule, listGroupAssignmentInstances, showGroupAssignmentInstance, listGroupEligibilitySchedules, showGroupEligibilitySchedule, listGroupEligibilityInstances, showGroupEligibilityInstance, listGroupEligibilityRequests, showGroupEligibilityRequest } from "./entra-group-pim.js";
 import { listAdministrativeUnitMembers, listAdministrativeUnits, listDevices, showAdministrativeUnit, showDevice } from "./entra-directory.js";
 import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from "./entra-audit-logs.js";
-import { listApplicationOwners, listApplications, listServicePrincipalOwners, listServicePrincipals, showApplication, showServicePrincipal } from "./entra-apps.js";
+import { listApplicationFederatedCredentials, listApplicationOwners, listApplications, listServicePrincipalAssignedTo, listServicePrincipalFederatedCredentials, listServicePrincipalOwners, listServicePrincipals, showApplication, showApplicationFederatedCredential, showServicePrincipal, showServicePrincipalAppRoleAssignment, showServicePrincipalAssignedTo, showServicePrincipalFederatedCredential } from "./entra-apps.js";
 import { listAppRoleAssignments, listOAuth2Grants } from "./entra-grants.js";
 import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection, listRiskyServicePrincipals, showRiskyServicePrincipal, listRiskyServicePrincipalHistory, showRiskyServicePrincipalHistory, listServicePrincipalRiskDetections, showServicePrincipalRiskDetection } from "./entra-risk.js";
 import { dismissRiskyUser } from "./entra-risk-dismiss.js";
@@ -686,7 +686,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       default: return showBrandingLocalization(session, flags, selected.profile, operation, help, selected.name);
     }
   }
-  if (leaf.path === "entra sign-in list" || leaf.path === "entra sign-in show" || leaf.path === "entra directory-audit list" || leaf.path === "entra directory-audit show" || leaf.path === "entra application list" || leaf.path === "entra application show" || leaf.path === "entra service-principal list" || leaf.path === "entra service-principal show" || leaf.path === "entra application owner list" || leaf.path === "entra service-principal owner list") {
+  if (leaf.path === "entra sign-in list" || leaf.path === "entra sign-in show" || leaf.path === "entra directory-audit list" || leaf.path === "entra directory-audit show" || leaf.path === "entra application list" || leaf.path === "entra application show" || leaf.path === "entra service-principal list" || leaf.path === "entra service-principal show" || leaf.path === "entra application owner list" || leaf.path === "entra service-principal owner list" || leaf.path === "entra application federated-credential list" || leaf.path === "entra application federated-credential show" || leaf.path === "entra service-principal federated-credential list" || leaf.path === "entra service-principal federated-credential show" || leaf.path === "entra service-principal app-role-assigned-to list" || leaf.path === "entra service-principal app-role-assigned-to show" || leaf.path === "entra service-principal app-role-assignment show") {
     const selected = profiles.resolve(flags.profile as string | undefined);
     const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
     if (!operation || operation.method !== "GET") {
@@ -717,6 +717,13 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra service-principal list": return listServicePrincipals(session, flags, selected.profile, operation, help, selected.name);
       case "entra service-principal show": return showServicePrincipal(session, flags, selected.profile, operation, help, selected.name);
       case "entra application owner list": return listApplicationOwners(session, flags, selected.profile, operation, help, selected.name);
+      case "entra application federated-credential list": return listApplicationFederatedCredentials(session, flags, selected.profile, operation, help, selected.name);
+      case "entra application federated-credential show": return showApplicationFederatedCredential(session, flags, selected.profile, operation, help, selected.name);
+      case "entra service-principal federated-credential list": return listServicePrincipalFederatedCredentials(session, flags, selected.profile, operation, help, selected.name);
+      case "entra service-principal federated-credential show": return showServicePrincipalFederatedCredential(session, flags, selected.profile, operation, help, selected.name);
+      case "entra service-principal app-role-assigned-to list": return listServicePrincipalAssignedTo(session, flags, selected.profile, operation, help, selected.name);
+      case "entra service-principal app-role-assigned-to show": return showServicePrincipalAssignedTo(session, flags, selected.profile, operation, help, selected.name);
+      case "entra service-principal app-role-assignment show": return showServicePrincipalAppRoleAssignment(session, flags, selected.profile, operation, help, selected.name);
       default: return listServicePrincipalOwners(session, flags, selected.profile, operation, help, selected.name);
     }
   }

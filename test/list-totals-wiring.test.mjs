@@ -871,6 +871,36 @@ const wired = [
     ],
   },
   {
+    name: "application federated-credential list",
+    argv: ["entra", "application", "federated-credential", "list", "--application", ID_A, "--profile", "soc"],
+    key: "federatedCredentials",
+    noun: "federated credentials",
+    rows: () => [
+      { id: ID_A, name: "github-actions", issuer: "https://token.actions.githubusercontent.com", subject: "repo:contoso/web:ref:refs/heads/main" },
+      { id: ID_B, name: "terraform-cloud", issuer: "https://app.terraform.io", subject: "organization:contoso:project:web:workspace:prod" },
+    ],
+  },
+  {
+    name: "service-principal federated-credential list",
+    argv: ["entra", "service-principal", "federated-credential", "list", "--service-principal", ID_A, "--profile", "soc"],
+    key: "federatedCredentials",
+    noun: "federated credentials",
+    rows: () => [
+      { id: ID_A, name: "workload-github", issuer: "https://token.actions.githubusercontent.com", subject: "repo:contoso/api:environment:prod" },
+      { id: ID_B, name: "workload-terraform", issuer: "https://app.terraform.io", subject: "organization:contoso:project:api:workspace:prod" },
+    ],
+  },
+  {
+    name: "service-principal app-role-assigned-to list",
+    argv: ["entra", "service-principal", "app-role-assigned-to", "list", "--service-principal", ID_A, "--profile", "soc"],
+    key: "appRoleAssignedTo",
+    noun: "app role assignments",
+    rows: () => [
+      { id: ID_A, principalDisplayName: "Adele Vance", principalType: "User", resourceId: ID_A },
+      { id: ID_B, principalDisplayName: "Daemon Batch", principalType: "ServicePrincipal", resourceId: ID_A },
+    ],
+  },
+  {
     name: "group-lifecycle-policy list",
     argv: ["entra", "group-lifecycle-policy", "list", "--profile", "soc"],
     key: "groupLifecyclePolicies",

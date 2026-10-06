@@ -14,7 +14,7 @@ READ-02 adds group list/show and direct or transitive member and parent-membersh
 READ-04 adds targeted per-user authentication-method reads and the tenant registration report through the same session, with phone numbers redacted.
 READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
 READ-03 adds Conditional Access policy, named-location, authentication-strength-policy, combination-configuration, authentication-method-mode, template, auth-context, deleted-policy and deleted-named-location list/show as separate grammar through the same session; Conditional Access usage follows the device and administrative-unit usage below.
-READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the Conditional Access usage below.
+READ-05 executes Entra sign-in, directory-audit and provisioning-log list/show through that session; log usage follows the Conditional Access usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
 READ-10 adds directory-device and administrative-unit list/show and unit-member reads through the same session.
 READ-08 adds service-principal delegated-grant and app-role-assignment consent reads for a named client through the same session.
@@ -1060,7 +1060,7 @@ Delegated method reads default to `https://graph.microsoft.com/UserAuthenticatio
 Delegated callers acting on another user additionally need Global Reader, Authentication Administrator or Privileged Authentication Administrator for methods, and Reports Reader, Security Reader, Security Administrator or Global Reader for the report.
 Denied reads name that role requirement instead of only the generic grant/role/licence cause.
 
-Log in with `https://graph.microsoft.com/AuditLog.Read.All`, then query sign-ins and directory audits in bounded time windows:
+Log in with `https://graph.microsoft.com/AuditLog.Read.All`, then query sign-ins, directory audits and provisioning logs in bounded time windows (provisioning needs the extra scope below):
 
 ```sh
 mg-axi login --profile soc --scopes https://graph.microsoft.com/AuditLog.Read.All

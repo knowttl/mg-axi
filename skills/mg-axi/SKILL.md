@@ -1,7 +1,7 @@
 ---
 name: mg-axi
 description: >
-  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, federation configurations, deleted directory items, data policy operations, access reviews, entitlement catalogs and access packages, entitlement assignments and requests, lifecycle workflows, templates, task definitions, settings, runs and processing results, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
+  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, federation configurations, deleted directory items, data policy operations, access reviews, entitlement catalogs and access packages, entitlement assignments and requests, lifecycle workflows, templates, task definitions, settings, runs, processing results and task reports, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
 user-invocable: false
 ---
 
@@ -229,6 +229,11 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra lifecycle subject-processing-result list` | native | read |
 | `mg-axi entra lifecycle subject-processing-result show` | native | read |
 | `mg-axi entra lifecycle subject-processing-result count` | native | read |
+| `mg-axi entra lifecycle task-report list` | native | read |
+| `mg-axi entra lifecycle task-report show` | native | read |
+| `mg-axi entra lifecycle task-report count` | native | read |
+| `mg-axi entra lifecycle task-report task show` | native | read |
+| `mg-axi entra lifecycle task-report task-definition show` | native | read |
 | `mg-axi api get` | native | read |
 <!-- command-registry:end -->
 

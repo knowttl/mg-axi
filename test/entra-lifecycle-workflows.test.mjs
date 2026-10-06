@@ -139,6 +139,41 @@ const spr2 = {
   totalUnprocessedTasksCount: 1,
 };
 const subjectProcessingResults = [spr1, spr2];
+const tr1 = {
+  id: "3a3bea11-99ca-462d-86fb-d283db8d734a",
+  runId: "dad77a47-6eda-4de7-bc37-fe8eb5aaf17d",
+  processingStatus: "completed",
+  successfulUsersCount: 2,
+  failedUsersCount: 0,
+  unprocessedUsersCount: 0,
+  totalUsersCount: 2,
+  startedDateTime: "2022-08-24T23:28:04.5785337Z",
+  completedDateTime: "2022-08-24T23:28:11.1348863Z",
+  lastUpdatedDateTime: "2022-08-24T23:33:09.1980357Z",
+  task: { id: "report-task-expanded" },
+  taskDefinition: { id: "report-definition-expanded" },
+  taskProcessingResults: [{ id: "report-task-nav-expanded" }],
+};
+const tr2 = {
+  id: "23f37fcb-040d-4ee9-91df-1234700ebeb6",
+  runId: "dad77a47-6eda-4de7-bc37-fe8eb5aaf17d",
+  processingStatus: "inProgress",
+  totalUsersCount: 1,
+  failedUsersCount: 0,
+  successfulUsersCount: 0,
+};
+const taskReports = [tr1, tr2];
+const reportTask = {
+  id: "fafa2189-cd62-4643-a825-06cab8817086",
+  arguments: [{ name: "groupID", value: "e5659cb0-bcbb-4a9f-9092-90f72bd19028" }],
+  category: "joiner,leaver",
+  continueOnError: false,
+  description: "Enable user account in the directory",
+  displayName: "Enable User Account",
+  executionSequence: 1,
+  isEnabled: true,
+  taskDefinitionId: "6fc52c9d-398b-4305-9763-15f42c1676fc",
+};
 
 function setupProfiles() {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-read-lifecycle-"));
@@ -219,6 +254,9 @@ function lifecycleTransport() {
     if (path === `${nestedBase}/subjectProcessingResults/$count`) {
       return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(subjectProcessingResults.length) };
     }
+    if (path === `${nestedBase}/taskReports/$count`) {
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(taskReports.length) };
+    }
     if (path === `${nestedBase}/runs`) {
       if (url.searchParams.has("$skiptoken")) return json(200, { value: [run2] });
       return json(200, {
@@ -228,6 +266,18 @@ function lifecycleTransport() {
     }
     if (path === `${nestedBase}/userProcessingResults`) return json(200, { value: userProcessingResults });
     if (path === `${nestedBase}/subjectProcessingResults`) return json(200, { value: subjectProcessingResults });
+    if (path === `${nestedBase}/taskReports`) {
+      if (url.searchParams.has("$skiptoken")) return json(200, { value: [tr2] });
+      return json(200, {
+        value: [tr1],
+        "@odata.nextLink": `https://graph.microsoft.com${nestedBase}/taskReports?%24skiptoken=page2`,
+      });
+    }
+    for (const report of taskReports) {
+      if (path === `${nestedBase}/taskReports/${report.id}`) return json(200, report);
+      if (path === `${nestedBase}/taskReports/${report.id}/task`) return json(200, reportTask);
+      if (path === `${nestedBase}/taskReports/${report.id}/taskDefinition`) return json(200, td1);
+    }
     for (const [rows, base] of [[runs, `${nestedBase}/runs`], [userProcessingResults, `${nestedBase}/userProcessingResults`], [subjectProcessingResults, `${nestedBase}/subjectProcessingResults`]]) {
       const found = rows.find(row => path === `${base}/${row.id}`);
       if (found) return json(200, found);
@@ -263,7 +313,7 @@ function runLifecycleCli(args, state, mode, denied = false) {
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
-      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, workflows, workflowTemplates, taskDefinitions, settings, runs, userProcessingResults, subjectProcessingResults, denied }),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, workflows, workflowTemplates, taskDefinitions, settings, runs, userProcessingResults, subjectProcessingResults, taskReports, reportTask, denied }),
     },
   });
 }
@@ -590,6 +640,239 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         `https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/userProcessingResults/$count`,
         `https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/subjectProcessingResults/$count`,
       ]);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists task reports with compact rows and the reports scope`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "task-report", "list", "--workflow", wf1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.taskReports, [
+        { id: tr1.id, runId: tr1.runId, processingStatus: "completed", totalUsersCount: 2, failedUsersCount: 0, successfulUsersCount: 2 },
+        { id: tr2.id, runId: tr2.runId, processingStatus: "inProgress", totalUsersCount: 1, failedUsersCount: 0, successfulUsersCount: 0 },
+      ]);
+      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.ok(result.help.some(hint => hint.includes("entra lifecycle task-report show --workflow <workflow-id> --id <report-id>")));
+      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/taskReports?`));
+      if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(reportsScopes)));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists task reports with a plain documented $filter`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "task-report", "list", "--workflow", wf1.id, "--profile", profile,
+        "--filter", "processingStatus eq 'completed'"], overrides);
+      assert.equal(result.count.returned, 2);
+      const sent = new URL(requests[0].url).searchParams;
+      assert.equal(sent.get("$filter"), "processingStatus eq 'completed'");
+      assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} resumes a capped task-report list through its opaque cursor`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const first = await executeArgv(["entra", "lifecycle", "task-report", "list", "--workflow", wf1.id, "--profile", profile, "--limit", "1"], overrides);
+      assert.deepEqual(first.taskReports.map(row => row.id), [tr1.id]);
+      assert.equal(first.count.complete, false);
+      assert.equal(typeof first.cursor, "string");
+      const second = await executeArgv(["entra", "lifecycle", "task-report", "list", "--workflow", wf1.id, "--profile", profile, "--cursor", first.cursor], overrides);
+      assert.deepEqual(second.taskReports.map(row => row.id), [tr2.id]);
+      assert.deepEqual(second.count, { returned: 1, complete: true });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows one task report whole with no $select`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "task-report", "show", "--workflow", wf1.id, "--id", tr1.id, "--profile", profile], overrides);
+      assert.ok(!new URL(requests[0].url).searchParams.has("$select"));
+      assert.ok(!Object.hasOwn(result.taskReport, "task"));
+      assert.ok(!Object.hasOwn(result.taskReport, "taskDefinition"));
+      assert.ok(!Object.hasOwn(result.taskReport, "taskProcessingResults"));
+      assert.deepEqual(result.taskReport, {
+        id: tr1.id,
+        runId: tr1.runId,
+        processingStatus: "completed",
+        successfulUsersCount: 2,
+        failedUsersCount: 0,
+        unprocessedUsersCount: 0,
+        totalUsersCount: 2,
+        startedDateTime: "2022-08-24T23:28:04.5785337Z",
+        completedDateTime: "2022-08-24T23:28:11.1348863Z",
+        lastUpdatedDateTime: "2022-08-24T23:33:09.1980357Z",
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} unknown task report ids report absence, not emptiness`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      await assert.rejects(executeArgv(["entra", "lifecycle", "task-report", "show", "--workflow", wf1.id, "--id", "report-missing", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows the task behind a task report whole with arguments`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "task-report", "task", "show", "--workflow", wf1.id, "--report", tr1.id, "--profile", profile], overrides);
+      assert.ok(!new URL(requests[0].url).searchParams.has("$select"));
+      assert.ok(!Object.hasOwn(result.task, "taskProcessingResults"));
+      assert.deepEqual(result.task, reportTask);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows the task definition behind a task report whole`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "lifecycle", "task-report", "task-definition", "show", "--workflow", wf1.id, "--report", tr1.id, "--profile", profile], overrides);
+      assert.ok(!new URL(requests[0].url).searchParams.has("$select"));
+      assert.deepEqual(result.taskDefinition, td1);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} task-report reads refuse --select before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "task-report", "show", "--workflow", wf1.id, "--id", tr1.id, "--profile", profile, "--select", "id"], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "task-report", "task", "show", "--workflow", wf1.id, "--report", tr1.id, "--profile", profile, "--select", "id"], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "task-report", "task-definition", "show", "--workflow", wf1.id, "--report", tr1.id, "--profile", profile, "--select", "id"], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} task-report reads require --workflow and --report before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "task-report", "list", "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /--workflow/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "task-report", "count", "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /--workflow/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "task-report", "task", "show", "--workflow", wf1.id, "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /--report/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "task-report", "task-definition", "show", "--report", tr1.id, "--profile", profile], overrides),
+        error => error.code === "VALIDATION_ERROR" && /--workflow/.test(error.message),
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} counts task reports as scalars`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const reportCount = await executeArgv(["entra", "lifecycle", "task-report", "count", "--workflow", wf1.id, "--profile", profile], overrides);
+      assert.deepEqual(reportCount, { count: { returned: 2, complete: true } });
+      assert.deepEqual(requests.map(request => request.url), [
+        `https://graph.microsoft.com/v1.0/identityGovernance/lifecycleWorkflows/workflows/${wf1.id}/taskReports/$count`,
+      ]);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} denied task-report reads surface scope, role and licensing`, async () => {
+    const state = setupProfiles();
+    try {
+      const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
+      const { overrides } = overridesFor(mode, denied);
+      await assert.rejects(executeArgv(["entra", "lifecycle", "task-report", "list", "--workflow", wf1.id, "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        assert.ok(error.suggestions.some(hint => hint.includes("LifecycleWorkflows-Reports.Read.All")));
+        assert.ok(error.suggestions.some(hint => hint.includes("Lifecycle Workflows Administrator")));
+        assert.ok(error.suggestions.some(hint => hint.includes("Entra ID Governance or Microsoft Entra Suite")));
+        return /grant, role, licence/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} task navigation names fail as unknown properties on task-report reads`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "task-report", "list", "--workflow", wf1.id, "--profile", profile, "--select", "id,taskProcessingResults"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /Unknown property taskProcessingResults/.test(error.message)
+          && error.suggestions.join("\n").includes("Known properties: "),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "task-report", "show", "--workflow", wf1.id, "--id", tr1.id, "--profile", profile, "--fields", "id,task"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /Unknown property task/.test(error.message),
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} task-report reads refuse beta before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "task-report", "list", "--workflow", wf1.id, "--profile", profile, "--api-version", "beta"], overrides),
+        error => error.code === "VALIDATION_ERROR" && /v1\.0 only/.test(error.message),
+      );
+      await assert.rejects(
+        executeArgv(["entra", "lifecycle", "task-report", "task", "show", "--workflow", wf1.id, "--report", tr1.id, "--profile", profile, "--api-version", "beta"], overrides),
+        { code: "VALIDATION_ERROR" },
+      );
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
     } finally {
       teardownProfiles(state);
     }
@@ -939,6 +1222,38 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const subjectsCounted = runLifecycleCli(["entra", "lifecycle", "subject-processing-result", "count", "--workflow", wf1.id, "--profile", profile], state, mode);
       assert.equal(subjectsCounted.status, 0, subjectsCounted.stdout);
       assert.deepEqual(decode(subjectsCounted.stdout).count, { returned: 2, complete: true });
+
+      const reportsListed = runLifecycleCli(["entra", "lifecycle", "task-report", "list", "--workflow", wf1.id, "--profile", profile], state, mode);
+      assert.equal(reportsListed.status, 0, reportsListed.stdout);
+      assert.deepEqual(decode(reportsListed.stdout).taskReports.map(row => row.id), [tr1.id, tr2.id]);
+      assert.ok(!Object.hasOwn(decode(reportsListed.stdout).taskReports[0], "task"));
+
+      const reportShown = runLifecycleCli(["entra", "lifecycle", "task-report", "show", "--workflow", wf1.id, "--id", tr1.id, "--profile", profile], state, mode);
+      assert.equal(reportShown.status, 0, reportShown.stdout);
+      assert.deepEqual(decode(reportShown.stdout).taskReport, {
+        id: tr1.id,
+        runId: tr1.runId,
+        processingStatus: "completed",
+        successfulUsersCount: 2,
+        failedUsersCount: 0,
+        unprocessedUsersCount: 0,
+        totalUsersCount: 2,
+        startedDateTime: "2022-08-24T23:28:04.5785337Z",
+        completedDateTime: "2022-08-24T23:28:11.1348863Z",
+        lastUpdatedDateTime: "2022-08-24T23:33:09.1980357Z",
+      });
+
+      const reportsCounted = runLifecycleCli(["entra", "lifecycle", "task-report", "count", "--workflow", wf1.id, "--profile", profile], state, mode);
+      assert.equal(reportsCounted.status, 0, reportsCounted.stdout);
+      assert.deepEqual(decode(reportsCounted.stdout).count, { returned: 2, complete: true });
+
+      const reportTaskShown = runLifecycleCli(["entra", "lifecycle", "task-report", "task", "show", "--workflow", wf1.id, "--report", tr1.id, "--profile", profile], state, mode);
+      assert.equal(reportTaskShown.status, 0, reportTaskShown.stdout);
+      assert.deepEqual(decode(reportTaskShown.stdout).task, reportTask);
+
+      const reportDefinitionShown = runLifecycleCli(["entra", "lifecycle", "task-report", "task-definition", "show", "--workflow", wf1.id, "--report", tr1.id, "--profile", profile], state, mode);
+      assert.equal(reportDefinitionShown.status, 0, reportDefinitionShown.stdout);
+      assert.deepEqual(decode(reportDefinitionShown.stdout).taskDefinition, td1);
     } finally {
       teardownProfiles(state);
     }

@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 211 (209 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 221 (219 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 7 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -38,6 +38,16 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra role-assignment list` | `GET:/roleManagement/directory/roleAssignments` | scheduled | READ-09 |
 | `mg-axi entra pim eligible list` | `GET:/roleManagement/directory/roleEligibilityScheduleInstances` | scheduled | READ-09 |
 | `mg-axi entra pim active list` | `GET:/roleManagement/directory/roleAssignmentScheduleInstances` | scheduled | READ-09 |
+| `mg-axi entra pim group-assignment-schedule list` | `GET:/identityGovernance/privilegedAccess/group/assignmentSchedules` | scheduled | EXT-02 |
+| `mg-axi entra pim group-assignment-schedule show` | `GET:/identityGovernance/privilegedAccess/group/assignmentSchedules/{privilegedAccessGroupAssignmentSchedule-id}` | scheduled | EXT-02 |
+| `mg-axi entra pim group-assignment-instance list` | `GET:/identityGovernance/privilegedAccess/group/assignmentScheduleInstances` | scheduled | EXT-02 |
+| `mg-axi entra pim group-assignment-instance show` | `GET:/identityGovernance/privilegedAccess/group/assignmentScheduleInstances/{privilegedAccessGroupAssignmentScheduleInstance-id}` | scheduled | EXT-02 |
+| `mg-axi entra pim group-eligibility-schedule list` | `GET:/identityGovernance/privilegedAccess/group/eligibilitySchedules` | scheduled | EXT-02 |
+| `mg-axi entra pim group-eligibility-schedule show` | `GET:/identityGovernance/privilegedAccess/group/eligibilitySchedules/{privilegedAccessGroupEligibilitySchedule-id}` | scheduled | EXT-02 |
+| `mg-axi entra pim group-eligibility-instance list` | `GET:/identityGovernance/privilegedAccess/group/eligibilityScheduleInstances` | scheduled | EXT-02 |
+| `mg-axi entra pim group-eligibility-instance show` | `GET:/identityGovernance/privilegedAccess/group/eligibilityScheduleInstances/{privilegedAccessGroupEligibilityScheduleInstance-id}` | scheduled | EXT-02 |
+| `mg-axi entra pim group-eligibility-request list` | `GET:/identityGovernance/privilegedAccess/group/eligibilityScheduleRequests` | scheduled | EXT-02 |
+| `mg-axi entra pim group-eligibility-request show` | `GET:/identityGovernance/privilegedAccess/group/eligibilityScheduleRequests/{privilegedAccessGroupEligibilityScheduleRequest-id}` | scheduled | EXT-02 |
 | `mg-axi entra device list` | `GET:/devices` | scheduled | READ-10 |
 | `mg-axi entra device show` | `GET:/devices/{device-id}` | scheduled | READ-10 |
 | `mg-axi entra administrative-unit list` | `GET:/directory/administrativeUnits` | scheduled | READ-10 |

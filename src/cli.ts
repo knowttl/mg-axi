@@ -12,6 +12,7 @@ import { revokeUserSessions } from "./entra-user-revoke-sessions.js";
 import { createMutationCoordinator, mutationFetchTransport, type MutationTransport } from "./mutations.js";
 import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
 import { listDirectoryRoles, showDirectoryRole, listRoleAssignments, listPimEligible, listPimActive } from "./entra-roles.js";
+import { listGroupAssignmentSchedules, showGroupAssignmentSchedule, listGroupAssignmentInstances, showGroupAssignmentInstance, listGroupEligibilitySchedules, showGroupEligibilitySchedule, listGroupEligibilityInstances, showGroupEligibilityInstance, listGroupEligibilityRequests, showGroupEligibilityRequest } from "./entra-group-pim.js";
 import { listAdministrativeUnitMembers, listAdministrativeUnits, listDevices, showAdministrativeUnit, showDevice } from "./entra-directory.js";
 import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from "./entra-audit-logs.js";
 import { listApplicationOwners, listApplications, listServicePrincipalOwners, listServicePrincipals, showApplication, showServicePrincipal } from "./entra-apps.js";
@@ -584,6 +585,11 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     });
   }
   if (leaf.path === "entra directory-role list" || leaf.path === "entra directory-role show" || leaf.path === "entra role-assignment list" || leaf.path === "entra pim eligible list" || leaf.path === "entra pim active list"
+    || leaf.path === "entra pim group-assignment-schedule list" || leaf.path === "entra pim group-assignment-schedule show"
+    || leaf.path === "entra pim group-assignment-instance list" || leaf.path === "entra pim group-assignment-instance show"
+    || leaf.path === "entra pim group-eligibility-schedule list" || leaf.path === "entra pim group-eligibility-schedule show"
+    || leaf.path === "entra pim group-eligibility-instance list" || leaf.path === "entra pim group-eligibility-instance show"
+    || leaf.path === "entra pim group-eligibility-request list" || leaf.path === "entra pim group-eligibility-request show"
     || leaf.path === "entra device list" || leaf.path === "entra device show"
     || leaf.path === "entra administrative-unit list" || leaf.path === "entra administrative-unit show"
     || leaf.path === "entra administrative-unit member list") {
@@ -612,6 +618,16 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra role-assignment list": return listRoleAssignments(session, flags, selected.profile, operation, help, selected.name);
       case "entra pim eligible list": return listPimEligible(session, flags, selected.profile, operation, help, selected.name);
       case "entra pim active list": return listPimActive(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim group-assignment-schedule list": return listGroupAssignmentSchedules(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim group-assignment-schedule show": return showGroupAssignmentSchedule(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim group-assignment-instance list": return listGroupAssignmentInstances(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim group-assignment-instance show": return showGroupAssignmentInstance(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim group-eligibility-schedule list": return listGroupEligibilitySchedules(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim group-eligibility-schedule show": return showGroupEligibilitySchedule(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim group-eligibility-instance list": return listGroupEligibilityInstances(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim group-eligibility-instance show": return showGroupEligibilityInstance(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim group-eligibility-request list": return listGroupEligibilityRequests(session, flags, selected.profile, operation, help, selected.name);
+      case "entra pim group-eligibility-request show": return showGroupEligibilityRequest(session, flags, selected.profile, operation, help, selected.name);
       case "entra device list": return listDevices(session, flags, selected.profile, operation, help, selected.name);
       case "entra device show": return showDevice(session, flags, selected.profile, operation, help, selected.name);
       case "entra administrative-unit list": return listAdministrativeUnits(session, flags, selected.profile, operation, help, selected.name);

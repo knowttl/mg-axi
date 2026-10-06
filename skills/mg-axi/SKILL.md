@@ -56,6 +56,16 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra role-assignment list` | native | read |
 | `mg-axi entra pim eligible list` | native | read |
 | `mg-axi entra pim active list` | native | read |
+| `mg-axi entra pim group-assignment-schedule list` | native | read |
+| `mg-axi entra pim group-assignment-schedule show` | native | read |
+| `mg-axi entra pim group-assignment-instance list` | native | read |
+| `mg-axi entra pim group-assignment-instance show` | native | read |
+| `mg-axi entra pim group-eligibility-schedule list` | native | read |
+| `mg-axi entra pim group-eligibility-schedule show` | native | read |
+| `mg-axi entra pim group-eligibility-instance list` | native | read |
+| `mg-axi entra pim group-eligibility-instance show` | native | read |
+| `mg-axi entra pim group-eligibility-request list` | native | read |
+| `mg-axi entra pim group-eligibility-request show` | native | read |
 | `mg-axi entra device list` | native | read |
 | `mg-axi entra device show` | native | read |
 | `mg-axi entra administrative-unit list` | native | read |

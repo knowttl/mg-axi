@@ -1069,14 +1069,22 @@ mg-axi entra sign-in list --profile soc --since 2026-09-01T00:00:00Z --filter "s
 mg-axi entra sign-in show --profile soc --id <sign-in-id>
 mg-axi entra directory-audit list --profile soc --since 2026-09-01T00:00:00Z
 mg-axi entra directory-audit show --profile soc --id <directory-audit-id>
+mg-axi entra provisioning list --profile soc --since 2026-09-01T00:00:00Z
+mg-axi entra provisioning show --profile soc --id <provisioning-id>
+```
+
+Provisioning logs additionally need `https://graph.microsoft.com/Directory.Read.All` alongside `AuditLog.Read.All`, plus a Microsoft Entra ID P1 or P2 licence on the tenant:
+
+```sh
+mg-axi login --profile soc --scopes https://graph.microsoft.com/AuditLog.Read.All,https://graph.microsoft.com/Directory.Read.All
 ```
 
 Log lists always carry an explicit time bound: `--since` is required for a new query (with optional `--until` and `--filter` refinements), and resume reuses `--cursor` instead.
 Resume validates the saved time bounds; a cursor from an unbounded raw query is rejected, so start a new query with `--since`.
-Resume sign-in and directory-audit lists with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra sign-in list --profile soc --cursor - < cursor.txt`.
+Resume sign-in, directory-audit and provisioning lists with `--cursor -` and supply the returned cursor on stdin, for example `mg-axi entra sign-in list --profile soc --cursor - < cursor.txt`.
 Small cursors can also use `--cursor <token>`; both forms enforce a 16 MB size ceiling.
-`entra sign-in list` defaults to `id`, `createdDateTime`, `userPrincipalName` and `appDisplayName`; `entra directory-audit list` defaults to `id`, `activityDateTime`, `activityDisplayName` and `result`.
-Both log show commands default to the full reviewed property set.
+`entra sign-in list` defaults to `id`, `createdDateTime`, `userPrincipalName` and `appDisplayName`; `entra directory-audit list` defaults to `id`, `activityDateTime`, `activityDisplayName` and `result`; `entra provisioning list` defaults to `id`, `activityDateTime`, `action` and `provisioningStatusInfo`.
+All three log show commands default to the full reviewed property set.
 `--select` requests properties from the [supported log property sets](src/entra-audit-logs.ts); `--fields` projects locally and must be a subset of the fetched selection.
 Log reads truncate text longer than 500 characters, including nested values; `--full` restores complete text without lifting redaction, row caps or time bounds.
 To replay a resumed result with `--full`, supply the original input cursor on stdin; the returned cursor continues after that result.

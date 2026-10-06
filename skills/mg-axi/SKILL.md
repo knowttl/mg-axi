@@ -159,6 +159,8 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra sign-in show` | native | read |
 | `mg-axi entra directory-audit list` | native | read |
 | `mg-axi entra directory-audit show` | native | read |
+| `mg-axi entra provisioning list` | native | read |
+| `mg-axi entra provisioning show` | native | read |
 | `mg-axi entra application list` | native | read |
 | `mg-axi entra application show` | native | read |
 | `mg-axi entra service-principal list` | native | read |

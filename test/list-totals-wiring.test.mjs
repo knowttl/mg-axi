@@ -511,6 +511,16 @@ const wired = [
     ],
   },
   {
+    name: "provisioning list",
+    argv: ["entra", "provisioning", "list", "--profile", "soc", "--since", SINCE],
+    key: "provisioning",
+    noun: "provisioning events",
+    rows: () => [
+      { id: ID_A, activityDateTime: "2026-09-10T12:00:00Z", action: "create", provisioningStatusInfo: { status: "success" } },
+      { id: ID_B, activityDateTime: "2026-09-10T12:05:00Z", action: "update", provisioningStatusInfo: { status: "failure" } },
+    ],
+  },
+  {
     name: "user authentication-method list",
     argv: ["entra", "user", "authentication-method", "list", "--user", AUTH_USER_ID, "--profile", "soc"],
     key: "authenticationMethods",

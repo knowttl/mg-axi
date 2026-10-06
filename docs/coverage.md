@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 247 (245 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 249 (247 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 7 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -141,6 +141,8 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra sign-in show` | `GET:/auditLogs/signIns/{signIn-id}` | scheduled | READ-05 |
 | `mg-axi entra directory-audit list` | `GET:/auditLogs/directoryAudits` | scheduled | READ-05 |
 | `mg-axi entra directory-audit show` | `GET:/auditLogs/directoryAudits/{directoryAudit-id}` | scheduled | READ-05 |
+| `mg-axi entra provisioning list` | `GET:/auditLogs/provisioning` | scheduled | READ-05 |
+| `mg-axi entra provisioning show` | `GET:/auditLogs/provisioning/{provisioningObjectSummary-id}` | scheduled | READ-05 |
 | `mg-axi entra application list` | `GET:/applications` | scheduled | READ-07 |
 | `mg-axi entra application show` | `GET:/applications/{application-id}` | scheduled | READ-07 |
 | `mg-axi entra service-principal list` | `GET:/servicePrincipals` | scheduled | READ-07 |

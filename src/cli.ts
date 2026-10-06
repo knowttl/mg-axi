@@ -14,7 +14,7 @@ import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, 
 import { listDirectoryRoles, showDirectoryRole, listRoleAssignments, listPimEligible, listPimActive } from "./entra-roles.js";
 import { listGroupAssignmentSchedules, showGroupAssignmentSchedule, listGroupAssignmentInstances, showGroupAssignmentInstance, listGroupEligibilitySchedules, showGroupEligibilitySchedule, listGroupEligibilityInstances, showGroupEligibilityInstance, listGroupEligibilityRequests, showGroupEligibilityRequest } from "./entra-group-pim.js";
 import { listAdministrativeUnitMembers, listAdministrativeUnits, listDevices, showAdministrativeUnit, showDevice } from "./entra-directory.js";
-import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from "./entra-audit-logs.js";
+import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit, listProvisioning, showProvisioning } from "./entra-audit-logs.js";
 import { listApplicationOwners, listApplications, listServicePrincipalOwners, listServicePrincipals, showApplication, showServicePrincipal } from "./entra-apps.js";
 import { listAppRoleAssignments, listOAuth2Grants } from "./entra-grants.js";
 import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection, listRiskyServicePrincipals, showRiskyServicePrincipal, listRiskyServicePrincipalHistory, showRiskyServicePrincipalHistory, listServicePrincipalRiskDetections, showServicePrincipalRiskDetection } from "./entra-risk.js";
@@ -679,13 +679,13 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       default: return showBrandingLocalization(session, flags, selected.profile, operation, help, selected.name);
     }
   }
-  if (leaf.path === "entra sign-in list" || leaf.path === "entra sign-in show" || leaf.path === "entra directory-audit list" || leaf.path === "entra directory-audit show" || leaf.path === "entra application list" || leaf.path === "entra application show" || leaf.path === "entra service-principal list" || leaf.path === "entra service-principal show" || leaf.path === "entra application owner list" || leaf.path === "entra service-principal owner list") {
+  if (leaf.path === "entra sign-in list" || leaf.path === "entra sign-in show" || leaf.path === "entra directory-audit list" || leaf.path === "entra directory-audit show" || leaf.path === "entra provisioning list" || leaf.path === "entra provisioning show" || leaf.path === "entra application list" || leaf.path === "entra application show" || leaf.path === "entra service-principal list" || leaf.path === "entra service-principal show" || leaf.path === "entra application owner list" || leaf.path === "entra service-principal owner list") {
     const selected = profiles.resolve(flags.profile as string | undefined);
     const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
     if (!operation || operation.method !== "GET") {
       throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
     }
-    if ((leaf.path.startsWith("entra sign-in ") || leaf.path.startsWith("entra directory-audit ")) && flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
+    if ((leaf.path.startsWith("entra sign-in ") || leaf.path.startsWith("entra directory-audit ") || leaf.path.startsWith("entra provisioning ")) && flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
     let delegated = overrides.delegated;
     let application = overrides.application;
     if (!delegated) {
@@ -705,6 +705,8 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra sign-in show": return showSignIn(session, flags, selected.profile, operation, help, selected.name);
       case "entra directory-audit list": return listDirectoryAudits(session, flags, selected.profile, operation, help, selected.name);
       case "entra directory-audit show": return showDirectoryAudit(session, flags, selected.profile, operation, help, selected.name);
+      case "entra provisioning list": return listProvisioning(session, flags, selected.profile, operation, help, selected.name);
+      case "entra provisioning show": return showProvisioning(session, flags, selected.profile, operation, help, selected.name);
       case "entra application list": return listApplications(session, flags, selected.profile, operation, help, selected.name);
       case "entra application show": return showApplication(session, flags, selected.profile, operation, help, selected.name);
       case "entra service-principal list": return listServicePrincipals(session, flags, selected.profile, operation, help, selected.name);

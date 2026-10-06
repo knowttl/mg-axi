@@ -38,6 +38,7 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi profile show` | native | local |
 | `mg-axi login` | native | local |
 | `mg-axi setup` | native | local |
+| `mg-axi setup hooks` | native | local |
 | `mg-axi doctor` | native | read |
 | `mg-axi entra user list` | native | read |
 | `mg-axi entra user show` | native | read |
@@ -274,6 +275,19 @@ npx -y @knowttl/mg-axi entra user list --profile soc --limit 10
 
 Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate file.
 `mg-axi setup` shows the selected path and writes nothing.
+
+Agent discovery has two install paths, and either suffices alone.
+For ambient context at every agent session start instead of the skill, install the CLI globally and opt into the session hook:
+
+```sh
+npm install --global @knowttl/mg-axi
+mg-axi setup hooks
+```
+
+This installs a `SessionStart` hook for Claude Code, Codex and OpenCode that prints a short local-only summary (configured profile names with tenant labels, auth-cache presence, write posture and version).
+The hook makes no network, Graph or sign-in call, and prints a short `not configured` record with exit 0 when unconfigured.
+Restart the agent session after running the installer.
+No ordinary command installs hooks, plugins or configuration.
 
 ## Selecting a profile
 

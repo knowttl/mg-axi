@@ -441,6 +441,7 @@ export const LEAVES: Leaf[] = [
     scopes: { value: "comma-separated-Graph-scopes", required: true, description: "Explicit delegated permissions using full https://graph.microsoft.com/ scope names" },
   }, examples: ["mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read", "mg-axi login --profile soc --method device-code --scopes https://graph.microsoft.com/User.Read"] },
   { path: "setup", description: "Show installation, configuration and capability guidance without signing in or writing anything", flags: {}, examples: ["mg-axi setup", "mg-axi setup --help"] },
+  { path: "setup hooks", description: "Install or repair agent SessionStart hooks for mg-axi ambient context", flags: {}, examples: ["mg-axi setup hooks", "mg-axi setup hooks --help"] },
   { path: "doctor", description: "Check each selected profile with one bounded user-list read; never signs in interactively, installs nothing, enables no writes", flags: {
     profile: common.profile,
   }, examples: ["mg-axi doctor", "mg-axi doctor --profile soc", "mg-axi doctor --help"] },

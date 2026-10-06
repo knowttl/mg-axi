@@ -1,5 +1,7 @@
 import { encode } from "@toon-format/toon";
-import { AxiError, runAxiCli } from "axi-sdk-js";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { AxiError, installSessionStartHooks, runAxiCli } from "axi-sdk-js";
 import { LEAVES, home, leafHelp, operationFor, resolveCommand, DESCRIPTION, TOP_LEVEL_HELP } from "./catalogue.js";
 import { VERSION } from "./version.js";
 import { Profiles } from "./profiles.js";
@@ -64,6 +66,37 @@ function localHome(name?: string) {
   return output;
 }
 
+// One dispatch for the hook installer: resolve the sibling hook entry point
+// installed next to this binary and register it as the SessionStart command
+// for Claude Code, Codex and OpenCode through the SDK. No config, profile,
+// transport or network is involved; the hook itself prints the local-only
+// summary from src/hook.ts. Install failures throw loudly; hook failures
+// never do.
+function runSetupHooks(): Record<string, unknown> {
+  const hookPath = join(dirname(process.argv[1] ?? ""), "mg-axi-hook.js");
+  if (!existsSync(hookPath)) {
+    throw new AxiError("Cannot locate the mg-axi-hook entry point", "HOOK_INSTALL_FAILED", [
+      "Reinstall @knowttl/mg-axi so dist/bin/mg-axi-hook.js sits next to the main entry point",
+      "Run mg-axi setup hooks again after reinstalling",
+    ]);
+  }
+  const failures: string[] = [];
+  installSessionStartHooks({
+    marker: "mg-axi-hook",
+    execPath: hookPath,
+    binaryNames: ["mg-axi-hook"],
+    distEntrypoints: ["dist/bin/mg-axi-hook.js"],
+    onError: (message) => { failures.push(message); },
+  });
+  if (failures.length > 0) {
+    throw new AxiError("Failed to install mg-axi agent hooks", "HOOK_INSTALL_FAILED", failures);
+  }
+  return {
+    hooks: { status: "installed", integrations: "Claude Code, Codex, OpenCode" },
+    help: ["Restart your agent session to receive mg-axi ambient context"],
+  };
+}
+
 // Test seam over true external boundaries only: the packaged dispatch stays
 // identical while offline journeys substitute fixture credential services and
 // transports. Production callers pass no overrides and reach MSAL + HTTPS.
@@ -106,6 +139,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
   }
   if (leaf.path === "profile show") return profiles.resolve(flags.profile as string | undefined);
   if (leaf.path === "setup") return setupView(profiles);
+  if (leaf.path === "setup hooks") return runSetupHooks();
   if (leaf.path === "doctor") {
     const names = doctorTargets(profiles, flags.profile as string | undefined);
     let delegated = overrides.delegated;

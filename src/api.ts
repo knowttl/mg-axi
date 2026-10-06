@@ -13,7 +13,7 @@ import { KNOWN_DATA_POLICY_FIELDS } from "./entra-data-policy-operations.js";
 import { KNOWN_FRAUD_FIELDS, KNOWN_WAF_FIELDS, KNOWN_VERIFICATION_FIELDS } from "./entra-risk-prevention.js";
 import { KNOWN_FEDERATION_FIELDS } from "./entra-federation-configurations.js";
 import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
-import { KNOWN_COMBO_FIELDS, KNOWN_MODE_FIELDS, KNOWN_STRENGTH_FIELDS, KNOWN_TEMPLATE_FIELDS as KNOWN_CA_TEMPLATE_FIELDS } from "./entra-conditional-access.js";
+import { KNOWN_AUTH_CONTEXT_FIELDS, KNOWN_COMBO_FIELDS, KNOWN_DELETED_LOCATION_FIELDS, KNOWN_DELETED_POLICY_FIELDS, KNOWN_MODE_FIELDS, KNOWN_STRENGTH_FIELDS, KNOWN_TEMPLATE_FIELDS as KNOWN_CA_TEMPLATE_FIELDS } from "./entra-conditional-access.js";
 import { KNOWN_SUBSCRIPTION_FIELDS } from "./entra-subscriptions.js";
 import { KNOWN_ASSIGNMENT_INSTANCE_FIELDS, KNOWN_ASSIGNMENT_SCHEDULE_FIELDS, KNOWN_ELIGIBILITY_INSTANCE_FIELDS, KNOWN_ELIGIBILITY_REQUEST_FIELDS, KNOWN_ELIGIBILITY_SCHEDULE_FIELDS } from "./entra-group-pim.js";
 import { KNOWN_SYNC_FIELDS } from "./entra-on-premises-synchronization.js";
@@ -171,6 +171,30 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Policy.Read.All. Delegated callers pass it as --scopes; a supported administrator role (for example Security Reader) is also required.",
     note: "Conditional Access needs P1.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/conditionalaccesstemplate-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/authenticationContextClassReferences", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_AUTH_CONTEXT_FIELDS,
+    access: "D/A AuthenticationContext.Read.All. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/graph/api/conditionalaccessroot-list-authenticationcontextclassreferences?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/authenticationContextClassReferences/{authenticationContextClassReference-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_AUTH_CONTEXT_FIELDS,
+    access: "D/A AuthenticationContext.Read.All. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "The get page documents no optional query parameters; $select travels as the standard single-object projection. Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/graph/api/authenticationcontextclassreference-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/deletedItems/policies", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_DELETED_POLICY_FIELDS,
+    access: "D/A Policy.Read.All. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "No v1.0 operation-level documentation page; access follows the beta policyDeletableItem contract for conditional-access objects with the conditionalAccessPolicy resource reference. Soft-deleted policies restore within 30 days; restore is beta-only and out of scope. Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/policydeletableitem-list?view=graph-rest-beta", "https://learn.microsoft.com/en-us/graph/api/resources/policydeletableitem?view=graph-rest-beta"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/deletedItems/policies/{conditionalAccessPolicy-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_DELETED_POLICY_FIELDS,
+    access: "D/A Policy.Read.All. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "No v1.0 operation-level documentation page; access follows the beta policyDeletableItem contract for conditional-access objects with the conditionalAccessPolicy resource reference. Soft-deleted policies restore within 30 days; restore is beta-only and out of scope. Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/policydeletableitem-get?view=graph-rest-beta", "https://learn.microsoft.com/en-us/graph/api/resources/policydeletableitem?view=graph-rest-beta"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/deletedItems/namedLocations", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_DELETED_LOCATION_FIELDS, keepODataType: true,
+    access: "D/A Policy.Read.All. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "No v1.0 operation-level documentation page; access follows the beta policyDeletableItem contract for conditional-access objects with the namedLocation resource reference. Rows are polymorphic: the @odata.type discriminator rides along automatically to name the location kind. Soft-deleted locations restore within 30 days; restore is beta-only and out of scope. Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/policydeletableitem-list?view=graph-rest-beta", "https://learn.microsoft.com/en-us/graph/api/resources/policydeletableitem?view=graph-rest-beta"] },
+  { id: "v1.0:GET:/identity/conditionalAccess/deletedItems/namedLocations/{namedLocation-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_DELETED_LOCATION_FIELDS, keepODataType: true,
+    access: "D/A Policy.Read.All. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader) is also required.",
+    note: "No v1.0 operation-level documentation page; access follows the beta policyDeletableItem contract for conditional-access objects with the namedLocation resource reference. Soft-deleted locations restore within 30 days; restore is beta-only and out of scope. Conditional Access needs P1.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/policydeletableitem-get?view=graph-rest-beta", "https://learn.microsoft.com/en-us/graph/api/resources/policydeletableitem?view=graph-rest-beta"] },
   { id: "v1.0:GET:/users/{user-id}/authentication/methods", kind: "collection", query: ["$select"], fields: AUTH_METHOD_FIELDS,
     access: "D/A UserAuthenticationMethod.Read.All for other users; delegated self UserAuthenticationMethod.Read. Dedicated administrator roles also apply.",
     note: "Targeted per-user inspection only; aggregate coverage belongs to the registration report, never to a scan across users.",

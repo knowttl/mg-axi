@@ -34,6 +34,7 @@ const READ_SCOPES = new Set([
   "AdministrativeUnit.Read.All",
   "Application.Read.All",
   "AuditLog.Read.All",
+  "AuthenticationContext.Read.All",
   "CustomSecAttributeDefinition.Read.All",
   "CrossTenantInformation.ReadBasic.All",
   "DelegatedAdminRelationship.Read.All",

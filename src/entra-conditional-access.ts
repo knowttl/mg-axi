@@ -8,8 +8,9 @@ import type { AnyProfile } from "./profiles.js";
 // `mg-axi entra conditional-access named-location list/show` as separate
 // az-style grammar, plus the remaining v1.0 named collections under
 // `identity/conditionalAccess`: authentication-strength policies, each
-// policy's combination configurations, authentication method modes and
-// templates. Operation construction stays beside its command; the
+// policy's combination configurations, authentication method modes,
+// templates, authentication context class references and the deleted
+// policy and named-location collections. Operation construction stays beside its command; the
 // shared session owns URLs, credentials, paging, retries and error
 // translation, and the SDK owns TOON rendering. This module only maps flags
 // to session calls and projects rows for compact output. No policy mutation
@@ -23,8 +24,14 @@ import type { AnyProfile } from "./profiles.js";
 // authenticationstrengthpolicy-list-combinationconfigurations,
 // authenticationcombinationconfiguration-get,
 // authenticationstrengthroot-list-authenticationmethodmodes,
-// authenticationmethodmodedetail-get, conditionalaccessroot-list-templates
-// and conditionalaccesstemplate-get operation documentation on 2026-10-06.
+// authenticationmethodmodedetail-get, conditionalaccessroot-list-templates,
+// conditionalaccesstemplate-get, conditionalaccessroot-list-
+// authenticationcontextclassreferences and authenticationcontextclassreference-
+// get operation documentation on 2026-10-06. The deleted policy and
+// named-location collections carry no v1.0 operation-level documentation
+// page; their review follows the beta policyDeletableItem list/get contract
+// for conditional-access objects with the conditionalAccessPolicy,
+// namedLocation and policyDeletableItem resource references.
 // Policy and named-location reads need D/A Policy.Read.All; the
 // authentication-strength family (policies, combination configurations and
 // authentication method modes) reads D/A Policy.Read.AuthenticationMethod
@@ -32,7 +39,12 @@ import type { AnyProfile } from "./profiles.js";
 // additionally need a supported directory role (Conditional Access
 // Administrator, Security Administrator or Security Reader for the
 // strength family; those plus Global Reader and Global Secure Access
-// Administrator for policies, named locations and templates).
+// Administrator for policies, named locations and templates). The
+// authentication context class references read D/A
+// AuthenticationContext.Read.All with the same broad delegated role set.
+// Deleted policies and named locations read D/A Policy.Read.All with the
+// same broad delegated role set; restore is a beta-only mutation and stays
+// out of scope.
 // Conditional Access needs P1; risk-based Conditional Access needs P2. The
 // reviewed raw surface in src/api.ts carries exactly these routes, fields
 // and access choices; the named commands below reuse that contract.
@@ -42,10 +54,9 @@ import type { AnyProfile } from "./profiles.js";
 // it never passes through the session's validated function-argument
 // binding (FUNCTION_ARGUMENT_BINDINGS covers only named-parameter
 // segments); widening the request-path guard for one function is out of
-// scope. Authentication context class references and the deleted
-// policy/named-location collections land as the follow-up split: the
-// former needs an AuthenticationContext.Read.All allowlist addition and
-// the latter its own sourced review.
+// scope. Authentication context class references land here: the former
+// needs an AuthenticationContext.Read.All allowlist addition, now carried
+// in the session's READ_SCOPES set.
 
 // Every policy property this slice may request or display, matching the
 // reviewed raw surface. Anything else fails before credentials.
@@ -108,10 +119,26 @@ export const KNOWN_TEMPLATE_FIELDS: readonly string[] = [
   "scenarios",
   "details",
 ];
+// Every authentication context class reference property this slice may
+// request or display, matching the reviewed v1.0 resource shape.
+export const KNOWN_AUTH_CONTEXT_FIELDS: readonly string[] = [
+  "id",
+  "displayName",
+  "description",
+  "isAvailable",
+];
+// Deleted policies and named locations return the underlying policy and
+// location objects with the soft-delete timestamp the policyDeletableItem
+// base type adds, so the reviewed sets extend the live ones.
+export const KNOWN_DELETED_POLICY_FIELDS: readonly string[] = [...KNOWN_POLICY_FIELDS, "deletedDateTime"];
+export const KNOWN_DELETED_LOCATION_FIELDS: readonly string[] = [...KNOWN_LOCATION_FIELDS, "deletedDateTime"];
 const STRENGTH_KNOWN = new Set(KNOWN_STRENGTH_FIELDS);
 const COMBO_KNOWN = new Set(KNOWN_COMBO_FIELDS);
 const MODE_KNOWN = new Set(KNOWN_MODE_FIELDS);
 const TEMPLATE_KNOWN = new Set(KNOWN_TEMPLATE_FIELDS);
+const AUTH_CONTEXT_KNOWN = new Set(KNOWN_AUTH_CONTEXT_FIELDS);
+const DELETED_POLICY_KNOWN = new Set(KNOWN_DELETED_POLICY_FIELDS);
+const DELETED_LOCATION_KNOWN = new Set(KNOWN_DELETED_LOCATION_FIELDS);
 // @odata.type is preserved on named-location rows without being selectable:
 // it names the location kind (ipNamedLocation versus countryNamedLocation).
 const LOCATION_TYPE_PROPERTY = "@odata.type";
@@ -143,11 +170,28 @@ const DEFAULT_MODE_SHOW_SELECT = [...KNOWN_MODE_FIELDS];
 const DEFAULT_TEMPLATE_LIST_SELECT = ["id", "name"];
 // Show rows: the full reviewed template set.
 const DEFAULT_TEMPLATE_SHOW_SELECT = [...KNOWN_TEMPLATE_FIELDS];
+// Compact authentication-context rows: identifier and name.
+const DEFAULT_AUTH_CONTEXT_LIST_SELECT = ["id", "displayName"];
+// Show rows: the full reviewed authentication-context set.
+const DEFAULT_AUTH_CONTEXT_SHOW_SELECT = [...KNOWN_AUTH_CONTEXT_FIELDS];
+// Compact deleted-policy rows: identifier, name, enforcement state and the
+// soft-delete timestamp, which is the point of the deleted collection.
+const DEFAULT_DELETED_POLICY_LIST_SELECT = ["id", "displayName", "state", "deletedDateTime"];
+// Show rows: the full reviewed deleted-policy set.
+const DEFAULT_DELETED_POLICY_SHOW_SELECT = [...KNOWN_DELETED_POLICY_FIELDS];
+// Compact deleted-location rows: identifier, name and deletion timestamp;
+// the kind rides as @odata.type.
+const DEFAULT_DELETED_LOCATION_LIST_SELECT = ["id", "displayName", "deletedDateTime"];
+// Show rows: the full reviewed deleted-location set.
+const DEFAULT_DELETED_LOCATION_SHOW_SELECT = [...KNOWN_DELETED_LOCATION_FIELDS];
 // Policy.Read.All covers policies, named locations and templates in both modes.
 export const DEFAULT_DELEGATED_SCOPES = ["https://graph.microsoft.com/Policy.Read.All"];
 // Policy.Read.AuthenticationMethod is the least-privileged read for the
 // authentication-strength family in both modes.
 export const DEFAULT_STRENGTH_SCOPES = ["https://graph.microsoft.com/Policy.Read.AuthenticationMethod"];
+// AuthenticationContext.Read.All is the least-privileged read for the
+// authentication context class references in both modes.
+export const DEFAULT_AUTH_CONTEXT_SCOPES = ["https://graph.microsoft.com/AuthenticationContext.Read.All"];
 const TRUNCATE_AT = 500;
 
 export type ConditionalAccessFlags = Record<string, string | boolean>;
@@ -316,6 +360,29 @@ const STRENGTH_DENIAL_HINTS = [
 const TEMPLATE_DENIAL_HINTS = [
   "Conditional Access template reads need Policy.Read.All plus a supported directory role: Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access, or admin-consented Policy.Read.All for application access",
   "Conditional Access needs P1",
+];
+
+// Authentication-context reads carry the least-privileged
+// AuthenticationContext.Read.All with the broad Conditional Access role
+// set shared with policies, named locations and templates.
+const AUTH_CONTEXT_DENIAL_HINTS = [
+  "Authentication-context reads need AuthenticationContext.Read.All plus a supported directory role: Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access, or admin-consented AuthenticationContext.Read.All for application access",
+  "Conditional Access needs P1",
+];
+
+// Deleted policy and named-location reads keep Policy.Read.All with the
+// broad Conditional Access role set; restore is a beta-only mutation, so
+// denial guidance never offers it as a next step.
+const DELETED_POLICY_DENIAL_HINTS = [
+  "Deleted-policy reads need Policy.Read.All plus a supported directory role: Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access, or admin-consented Policy.Read.All for application access",
+  "Deleted policies restore within 30 days; restore is a beta-only mutation outside mg-axi scope",
+  "Conditional Access needs P1",
+];
+
+const DELETED_LOCATION_DENIAL_HINTS = [
+  "Deleted named-location reads need Policy.Read.All plus a supported directory role: Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader for delegated access, or admin-consented Policy.Read.All for application access",
+  "Deleted named locations restore within 30 days; restore is a beta-only mutation outside mg-axi scope",
+  "Conditional Access and named locations need P1",
 ];
 
 interface CollectionShape {
@@ -758,4 +825,154 @@ export async function showTemplate(
   profileName: string,
 ): Promise<Record<string, unknown>> {
   return showSingle(TEMPLATE_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+const AUTH_CONTEXT_LIST: CollectionShape = {
+  command: "entra conditional-access auth-context list",
+  key: "authContexts",
+  noun: "auth-context",
+  plural: "auth contexts",
+  known: AUTH_CONTEXT_KNOWN,
+  knownList: KNOWN_AUTH_CONTEXT_FIELDS,
+  defaultSelect: DEFAULT_AUTH_CONTEXT_LIST_SELECT,
+  defaultScopes: DEFAULT_AUTH_CONTEXT_SCOPES,
+  denialHints: AUTH_CONTEXT_DENIAL_HINTS,
+  showHint: "mg-axi entra conditional-access auth-context show --id <auth-context-id>",
+  emptyHint: "0 authentication context class references matched; the absence of results is the answer, not an error",
+  preserveType: false,
+};
+
+const DELETED_POLICY_LIST: CollectionShape = {
+  command: "entra conditional-access deleted-policy list",
+  key: "deletedPolicies",
+  noun: "deleted-policy",
+  plural: "deleted policies",
+  known: DELETED_POLICY_KNOWN,
+  knownList: KNOWN_DELETED_POLICY_FIELDS,
+  defaultSelect: DEFAULT_DELETED_POLICY_LIST_SELECT,
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
+  denialHints: DELETED_POLICY_DENIAL_HINTS,
+  showHint: "mg-axi entra conditional-access deleted-policy show --id <deleted-policy-id>",
+  emptyHint: "0 deleted policies matched; the absence of results is the answer, not an error",
+  preserveType: false,
+};
+
+const DELETED_LOCATION_LIST: CollectionShape = {
+  command: "entra conditional-access deleted-named-location list",
+  key: "deletedNamedLocations",
+  noun: "deleted-named-location",
+  plural: "deleted named locations",
+  known: DELETED_LOCATION_KNOWN,
+  knownList: KNOWN_DELETED_LOCATION_FIELDS,
+  defaultSelect: DEFAULT_DELETED_LOCATION_LIST_SELECT,
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
+  denialHints: DELETED_LOCATION_DENIAL_HINTS,
+  showHint: "mg-axi entra conditional-access deleted-named-location show --id <deleted-named-location-id>",
+  emptyHint: "0 deleted named locations matched; the absence of results is the answer, not an error",
+  preserveType: true,
+};
+
+const AUTH_CONTEXT_SHOW: SingleShape = {
+  command: "entra conditional-access auth-context show",
+  key: "authContext",
+  param: "authenticationContextClassReference-id",
+  noun: "auth-context",
+  known: AUTH_CONTEXT_KNOWN,
+  knownList: KNOWN_AUTH_CONTEXT_FIELDS,
+  defaultSelect: DEFAULT_AUTH_CONTEXT_SHOW_SELECT,
+  defaultScopes: DEFAULT_AUTH_CONTEXT_SCOPES,
+  denialHints: AUTH_CONTEXT_DENIAL_HINTS,
+  preserveType: false,
+};
+
+const DELETED_POLICY_SHOW: SingleShape = {
+  command: "entra conditional-access deleted-policy show",
+  key: "deletedPolicy",
+  param: "conditionalAccessPolicy-id",
+  noun: "deleted-policy",
+  known: DELETED_POLICY_KNOWN,
+  knownList: KNOWN_DELETED_POLICY_FIELDS,
+  defaultSelect: DEFAULT_DELETED_POLICY_SHOW_SELECT,
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
+  denialHints: DELETED_POLICY_DENIAL_HINTS,
+  preserveType: false,
+};
+
+const DELETED_LOCATION_SHOW: SingleShape = {
+  command: "entra conditional-access deleted-named-location show",
+  key: "deletedNamedLocation",
+  param: "namedLocation-id",
+  noun: "deleted-named-location",
+  known: DELETED_LOCATION_KNOWN,
+  knownList: KNOWN_DELETED_LOCATION_FIELDS,
+  defaultSelect: DEFAULT_DELETED_LOCATION_SHOW_SELECT,
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
+  denialHints: DELETED_LOCATION_DENIAL_HINTS,
+  preserveType: true,
+};
+
+export async function listAuthContexts(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listCollection(AUTH_CONTEXT_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showAuthContext(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showSingle(AUTH_CONTEXT_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+export async function listDeletedPolicies(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listCollection(DELETED_POLICY_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showDeletedPolicy(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showSingle(DELETED_POLICY_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+export async function listDeletedNamedLocations(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listCollection(DELETED_LOCATION_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showDeletedNamedLocation(
+  session: GraphSession,
+  flags: ConditionalAccessFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showSingle(DELETED_LOCATION_SHOW, session, flags, profile, operation, help, profileName);
 }

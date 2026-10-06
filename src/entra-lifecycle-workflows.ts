@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-02 lifecycle-workflows reads: the read-only workflow, workflow
@@ -435,6 +436,7 @@ function runId(flags: LifecycleWorkflowsFlags, help: string): string {
 interface CollectionShape {
   command: string;
   key: string;
+  totalsNoun: string;
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -451,6 +453,7 @@ interface CollectionShape {
 const WORKFLOW_LIST: CollectionShape = {
   command: "entra lifecycle workflow list",
   key: "workflows",
+  totalsNoun: "workflows",
   known: WORKFLOW_KNOWN,
   knownList: KNOWN_WORKFLOW_FIELDS,
   defaultSelect: DEFAULT_WORKFLOW_LIST_SELECT,
@@ -466,6 +469,7 @@ const WORKFLOW_LIST: CollectionShape = {
 const WORKFLOW_TEMPLATE_LIST: CollectionShape = {
   command: "entra lifecycle workflow-template list",
   key: "workflowTemplates",
+  totalsNoun: "workflow templates",
   known: WORKFLOW_TEMPLATE_KNOWN,
   knownList: KNOWN_WORKFLOW_TEMPLATE_FIELDS,
   defaultSelect: DEFAULT_WORKFLOW_TEMPLATE_LIST_SELECT,
@@ -481,6 +485,7 @@ const WORKFLOW_TEMPLATE_LIST: CollectionShape = {
 const TASK_DEFINITION_LIST: CollectionShape = {
   command: "entra lifecycle task-definition list",
   key: "taskDefinitions",
+  totalsNoun: "task definitions",
   known: TASK_DEFINITION_KNOWN,
   knownList: KNOWN_TASK_DEFINITION_FIELDS,
   defaultSelect: DEFAULT_TASK_DEFINITION_LIST_SELECT,
@@ -496,6 +501,7 @@ const TASK_DEFINITION_LIST: CollectionShape = {
 const RUN_LIST: CollectionShape = {
   command: "entra lifecycle run list",
   key: "runs",
+  totalsNoun: "runs",
   known: RUN_KNOWN,
   knownList: KNOWN_RUN_FIELDS,
   defaultSelect: DEFAULT_RUN_LIST_SELECT,
@@ -511,6 +517,7 @@ const RUN_LIST: CollectionShape = {
 const USER_PROCESSING_LIST: CollectionShape = {
   command: "entra lifecycle user-processing-result list",
   key: "userProcessingResults",
+  totalsNoun: "user processing results",
   known: USER_PROCESSING_KNOWN,
   knownList: KNOWN_USER_PROCESSING_FIELDS,
   defaultSelect: DEFAULT_USER_PROCESSING_LIST_SELECT,
@@ -526,6 +533,7 @@ const USER_PROCESSING_LIST: CollectionShape = {
 const SUBJECT_PROCESSING_LIST: CollectionShape = {
   command: "entra lifecycle subject-processing-result list",
   key: "subjectProcessingResults",
+  totalsNoun: "subject processing results",
   known: SUBJECT_PROCESSING_KNOWN,
   knownList: KNOWN_SUBJECT_PROCESSING_FIELDS,
   defaultSelect: DEFAULT_SUBJECT_PROCESSING_FIELDS,
@@ -542,6 +550,7 @@ const SUBJECT_PROCESSING_LIST: CollectionShape = {
 const TASK_REPORT_LIST: CollectionShape = {
   command: "entra lifecycle task-report list",
   key: "taskReports",
+  totalsNoun: "task reports",
   known: TASK_REPORT_KNOWN,
   knownList: KNOWN_TASK_REPORT_FIELDS,
   defaultSelect: DEFAULT_TASK_REPORT_LIST_SELECT,
@@ -557,6 +566,7 @@ const TASK_REPORT_LIST: CollectionShape = {
 const RUN_USER_PROCESSING_LIST: CollectionShape = {
   command: "entra lifecycle run user-processing-result list",
   key: "userProcessingResults",
+  totalsNoun: "user processing results",
   known: USER_PROCESSING_KNOWN,
   knownList: KNOWN_USER_PROCESSING_FIELDS,
   defaultSelect: DEFAULT_USER_PROCESSING_LIST_SELECT,
@@ -572,6 +582,7 @@ const RUN_USER_PROCESSING_LIST: CollectionShape = {
 const RUN_SUBJECT_PROCESSING_LIST: CollectionShape = {
   command: "entra lifecycle run subject-processing-result list",
   key: "subjectProcessingResults",
+  totalsNoun: "subject processing results",
   known: SUBJECT_PROCESSING_KNOWN,
   knownList: KNOWN_SUBJECT_PROCESSING_FIELDS,
   defaultSelect: DEFAULT_SUBJECT_PROCESSING_FIELDS,
@@ -588,6 +599,7 @@ const RUN_SUBJECT_PROCESSING_LIST: CollectionShape = {
 const RUN_TASK_PROCESSING_LIST: CollectionShape = {
   command: "entra lifecycle run task-processing-result list",
   key: "taskProcessingResults",
+  totalsNoun: "task processing results",
   known: TASK_PROCESSING_KNOWN,
   knownList: KNOWN_TASK_PROCESSING_FIELDS,
   defaultSelect: DEFAULT_TASK_PROCESSING_LIST_SELECT,
@@ -667,16 +679,17 @@ async function listCollection(
   if (!result.complete) {
     return {
       [shape.key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, shape.totalsNoun, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resume, ...standing],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
-    return { [shape.key]: rows, count, help: [shape.emptyNote, ...standing] };
+    return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.totalsNoun, true), complete: true, help: [shape.emptyNote, ...standing] };
   }
-  return { [shape.key]: rows, count, help: [...truncationHints, ...standing] };
+  return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.totalsNoun, true), complete: true, help: [...truncationHints, ...standing] };
 }
 
 async function showOne(

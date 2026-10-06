@@ -132,7 +132,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: fabrikam.id, displayName: "Fabrikam", "@odata.type": "#microsoft.graph.samlOrWsFedExternalDomainFederation" },
         { id: builtin.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 federation configurations");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra federation-configuration show --id <configuration-id>")));
       assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
       assert.ok(result.help.some(hint => hint.includes("--select signingCertificate")));
@@ -194,12 +196,17 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, federationTransport());
       const first = await executeArgv(["entra", "federation-configuration", "list", "--profile", profile, "--limit", "2"], overrides);
       assert.equal(first.federationConfigurations.length, 2);
-      assert.deepEqual(first.count, { returned: 2, complete: false, reason: "row limit reached; buffered remainder is preserved in the cursor" });
+      assert.deepEqual(first.count, "2 federation configurations shown, more available");
+      assert.equal(first.total, null);
+      assert.equal(first.complete, false);
+      assert.equal(first.reason, "row limit reached; buffered remainder is preserved in the cursor");
       assert.equal(typeof first.cursor, "string");
       const { overrides: resumeOverrides } = overridesFor(mode, federationTransport());
       const second = await executeArgv(["entra", "federation-configuration", "list", "--profile", profile, "--cursor", first.cursor], resumeOverrides);
       assert.equal(second.federationConfigurations.length, 1);
-      assert.deepEqual(second.count, { returned: 1, complete: true });
+      assert.deepEqual(second.count, "1 federation configurations");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }

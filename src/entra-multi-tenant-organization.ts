@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-04 multi-tenant-organization subfamily: the read mapping behind
@@ -366,20 +367,22 @@ export async function listMultiTenantOrganizationTenants(
   if (!result.complete) {
     return {
       multiTenantOrganizationTenants: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, "tenants", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), countHint, MTO_NOTE],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
     return {
       multiTenantOrganizationTenants: rows,
-      count,
+      ...listTotals(rows.length, result.total, "tenants", true),
+      complete: true,
       help: ["0 tenants matched; the absence of results is the answer, not an error", MTO_NOTE],
     };
   }
-  return { multiTenantOrganizationTenants: rows, count, help: [...truncationHints, countHint, MTO_NOTE] };
+  return { multiTenantOrganizationTenants: rows, ...listTotals(rows.length, result.total, "tenants", true), complete: true, help: [...truncationHints, countHint, MTO_NOTE] };
 }
 
 // The $count route returns a text/plain integer scalar rather than a JSON

@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 terms-of-use subfamily: the read mapping behind
@@ -334,20 +335,22 @@ export async function listAgreements(
   if (!result.complete) {
     return {
       agreements,
-      count: { returned: agreements.length, complete: false, reason: result.reason },
+      ...listTotals(agreements.length, result.total, "agreements", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: agreements.length, complete: true };
   if (!agreements.length) {
     return {
       agreements,
-      count,
+      ...listTotals(agreements.length, result.total, "agreements", true),
+      complete: true,
       help: ["0 agreements matched; no terms-of-use agreements are configured for the tenant, or no row passed --filter"],
     };
   }
-  return { agreements, count, help: [...truncationHints, showHint] };
+  return { agreements, ...listTotals(agreements.length, result.total, "agreements", true), complete: true, help: [...truncationHints, showHint] };
 }
 
 export async function showAgreement(
@@ -420,20 +423,22 @@ async function collectAcceptances(
   if (!result.complete) {
     return {
       agreementAcceptances: acceptances,
-      count: { returned: acceptances.length, complete: false, reason: result.reason },
+      ...listTotals(acceptances.length, result.total, "agreement acceptances", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: acceptances.length, complete: true };
   if (!acceptances.length) {
     return {
       agreementAcceptances: acceptances,
-      count,
+      ...listTotals(acceptances.length, result.total, "agreement acceptances", true),
+      complete: true,
       help: ["0 agreement acceptances matched; nobody recorded an acceptance in scope yet, or no row passed --filter"],
     };
   }
-  return { agreementAcceptances: acceptances, count, help: [...truncationHints, showHint] };
+  return { agreementAcceptances: acceptances, ...listTotals(acceptances.length, result.total, "agreement acceptances", true), complete: true, help: [...truncationHints, showHint] };
 }
 
 async function showAcceptanceById(

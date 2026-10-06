@@ -126,7 +126,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: facebook.id, displayName: "Facebook", "@odata.type": "#microsoft.graph.socialIdentityProvider" },
         { id: builtin.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 identity providers");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra identity-provider show --id <provider-id>")));
       assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
       assert.ok(!JSON.stringify(result).includes("must-never-surface"));
@@ -175,12 +177,17 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, providerTransport());
       const first = await executeArgv(["entra", "identity-provider", "list", "--profile", profile, "--limit", "2"], overrides);
       assert.equal(first.identityProviders.length, 2);
-      assert.deepEqual(first.count, { returned: 2, complete: false, reason: "row limit reached; buffered remainder is preserved in the cursor" });
+      assert.deepEqual(first.count, "2 identity providers shown, more available");
+      assert.equal(first.total, null);
+      assert.equal(first.complete, false);
+      assert.equal(first.reason, "row limit reached; buffered remainder is preserved in the cursor");
       assert.equal(typeof first.cursor, "string");
       const { overrides: resumeOverrides } = overridesFor(mode, providerTransport());
       const second = await executeArgv(["entra", "identity-provider", "list", "--profile", profile, "--cursor", first.cursor], resumeOverrides);
       assert.equal(second.identityProviders.length, 1);
-      assert.deepEqual(second.count, { returned: 1, complete: true });
+      assert.deepEqual(second.count, "1 identity providers");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }

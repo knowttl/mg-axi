@@ -191,7 +191,9 @@ test("delegated lists agreements with compact rows preserving null and missing",
       { id: agreement2.id, displayName: agreement2.displayName },
       { id: agreement3.id },
     ]);
-    assert.deepEqual(result.count, { returned: 3, complete: true });
+    assert.deepEqual(result.count, "3 agreements");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(result.help.some(hint => hint.includes("entra agreement show --id <agreement-id>")));
     assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-delegated-token"));
     assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/agreements?"));
@@ -210,7 +212,9 @@ test("delegated agreement list passes --filter through as plain $filter", async 
   try {
     const { requests, overrides } = overridesFor("delegated");
     const result = await executeArgv(["entra", "agreement", "list", "--profile", "soc", "--filter", "displayName eq 'All users terms of use'"], overrides);
-    assert.deepEqual(result.count, { returned: 3, complete: true });
+    assert.deepEqual(result.count, "3 agreements");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.equal(new URL(requests[0].url).searchParams.get("$filter"), "displayName eq 'All users terms of use'");
   } finally {
     teardownProfiles(state);
@@ -223,11 +227,13 @@ test("delegated resumes a capped agreement list through its opaque cursor", asyn
     const { overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "agreement", "list", "--profile", "soc", "--limit", "1"], overrides);
     assert.deepEqual(first.agreements.map(row => row.id), [agreement1.id]);
-    assert.equal(first.count.complete, false);
+    assert.equal(first.complete, false);
     assert.equal(typeof first.cursor, "string");
     const second = await executeArgv(["entra", "agreement", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(second.agreements.map(row => row.id), [agreement2.id, agreement3.id]);
-    assert.deepEqual(second.count, { returned: 2, complete: true });
+    assert.deepEqual(second.count, "2 agreements");
+    assert.equal(second.total, null);
+    assert.equal(second.complete, true);
   } finally {
     teardownProfiles(state);
   }
@@ -271,7 +277,9 @@ test("delegated lists one agreement's acceptances with minimal personal-data row
     const { requests, calls, overrides } = overridesFor("delegated");
     const result = await executeArgv(["entra", "agreement", "acceptance", "list", "--agreement", agreement1.id, "--profile", "soc"], overrides);
     assert.deepEqual(result.agreementAcceptances, [minimalAcceptance1]);
-    assert.deepEqual(result.count, { returned: 1, complete: true });
+    assert.deepEqual(result.count, "1 agreement acceptances");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(!JSON.stringify(result).includes("MeganB@contoso.example"));
     assert.ok(result.help.some(hint => hint.includes("entra agreement acceptance show")));
     assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/agreements/${agreement1.id}/acceptances?`));
@@ -289,7 +297,9 @@ test("delegated lists tenant-wide acceptances with minimal personal-data rows", 
     const { requests, overrides } = overridesFor("delegated");
     const result = await executeArgv(["entra", "agreement-acceptance", "list", "--profile", "soc"], overrides);
     assert.deepEqual(result.agreementAcceptances, [minimalAcceptance1, minimalAcceptance2]);
-    assert.deepEqual(result.count, { returned: 2, complete: true });
+    assert.deepEqual(result.count, "2 agreement acceptances");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(!JSON.stringify(result).includes("MeganB@contoso.example"));
     assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/agreementAcceptances?"));
   } finally {
@@ -401,7 +411,9 @@ test("delegated empty agreement lists stay definitive", async () => {
     const { overrides } = overridesFor("delegated", empty);
     const listed = await executeArgv(["entra", "agreement", "list", "--profile", "soc"], overrides);
     assert.deepEqual(listed.agreements, []);
-    assert.deepEqual(listed.count, { returned: 0, complete: true });
+    assert.deepEqual(listed.count, "0 agreements");
+    assert.equal(listed.total, null);
+    assert.equal(listed.complete, true);
     assert.ok(listed.help.some(hint => hint.includes("no terms-of-use agreements are configured")));
     const accepted = await executeArgv(["entra", "agreement-acceptance", "list", "--profile", "soc"], overrides);
     assert.deepEqual(accepted.agreementAcceptances, []);
@@ -483,7 +495,9 @@ test("delegated executable lists and shows agreement reads", () => {
     assert.equal(listed.stderr, "");
     const listOut = decode(listed.stdout);
     assert.deepEqual(listOut.agreements.map(row => row.id), [agreement1.id, agreement2.id]);
-    assert.deepEqual(listOut.count, { returned: 2, complete: true });
+    assert.deepEqual(listOut.count, "2 agreements");
+    assert.equal(listOut.total, null);
+    assert.equal(listOut.complete, true);
     assert.ok(!listed.stdout.includes("opaque-fixture-delegated-token"));
 
     const shown = runTermsCli(["entra", "agreement", "show", "--id", agreement1.id, "--profile", "soc"], state, "delegated");
@@ -504,7 +518,7 @@ test("delegated executable lists and shows agreement reads", () => {
 
     const rooted = runTermsCli(["entra", "agreement-acceptance", "list", "--profile", "soc"], state, "delegated");
     assert.equal(rooted.status, 0, rooted.stdout);
-    assert.equal(decode(rooted.stdout).count.returned, 2);
+    assert.equal(decode(rooted.stdout).agreementAcceptances.length, 2);
   } finally { teardownProfiles(state); }
 });
 

@@ -3,19 +3,25 @@ import type { CollectArgs, GraphSession, SessionOperation } from "./graph-sessio
 import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
-// READ-05: the Entra sign-in and directory-audit read mapping behind
-// `mg-axi entra sign-in list/show` and `mg-axi entra directory-audit
-// list/show`. Operation construction stays beside its command; the shared
+// READ-05: the Entra sign-in, directory-audit and provisioning-log read
+// mapping behind `mg-axi entra sign-in list/show`, `mg-axi entra
+// directory-audit list/show` and `mg-axi entra provisioning list/show`.
+// Operation construction stays beside its command; the shared
 // session owns URLs, credentials, paging, retries and error translation, and
 // the SDK owns TOON rendering. This module only maps flags to session calls,
 // bounds every collection query in time, and projects rows for compact output.
 //
 // Reviewed against the v1.0 signin-list and directoryaudit-list operation
-// documentation on 2026-10-04. Both collections read D/A AuditLog.Read.All;
-// delegated sign-in reads additionally accept Global Reader, Reports Reader,
-// Security Administrator, Security Operator or Security Reader, while
-// delegated directory-audit reads accept Reports Reader, Security
-// Administrator or Security Reader. Graph omits appliedConditionalAccessPolicies
+// documentation on 2026-10-04 and the provisioningobjectsummary-list
+// documentation on 2026-10-06. Sign-in and directory-audit collections read
+// D/A AuditLog.Read.All; delegated sign-in reads additionally accept Global
+// Reader, Reports Reader, Security Administrator, Security Operator or
+// Security Reader, while delegated directory-audit reads accept Reports
+// Reader, Security Administrator or Security Reader. The provisioning
+// collection reads D/A AuditLog.Read.All and Directory.Read.All together;
+// delegated reads accept the same five roles as sign-ins, Reports Reader is
+// the least privileged role for the logs, and the tenant needs a P1 or P2
+// licence. Graph omits appliedConditionalAccessPolicies
 // without a CA-data permission/role, so an absent property is reported as
 // unavailable rather than invented. Sign-in/audit Graph reporting carries a
 // conservative P1/P2 deployment prerequisite; retention and premium fields
@@ -59,14 +65,46 @@ export const KNOWN_AUDIT_FIELDS: readonly string[] = [
 ];
 const SIGNIN_KNOWN = new Set(KNOWN_SIGNIN_FIELDS);
 const AUDIT_KNOWN = new Set(KNOWN_AUDIT_FIELDS);
+// The full reviewed provisioningObjectSummary property set. None of these
+// is credential material (no password, key or secret properties), and the
+// known-set gate rejects anything else before credentials; the session's
+// shared redaction stays the backstop for secret-shaped values.
+export const KNOWN_PROVISIONING_FIELDS: readonly string[] = [
+  "id",
+  "activityDateTime",
+  "tenantId",
+  "jobId",
+  "cycleId",
+  "changeId",
+  "action",
+  "durationInMilliseconds",
+  "sourceSystem",
+  "sourceIdentity",
+  "targetSystem",
+  "targetIdentity",
+  "provisioningStatusInfo",
+  "provisioningSteps",
+  "modifiedProperties",
+  "servicePrincipal",
+  "initiatedBy",
+];
+const PROVISIONING_KNOWN = new Set(KNOWN_PROVISIONING_FIELDS);
 
 // Compact list rows: identifier, time, who/what happened, and outcome.
 const DEFAULT_SIGNIN_LIST_SELECT = ["id", "createdDateTime", "userPrincipalName", "appDisplayName"];
 const DEFAULT_AUDIT_LIST_SELECT = ["id", "activityDateTime", "activityDisplayName", "result"];
+const DEFAULT_PROVISIONING_LIST_SELECT = ["id", "activityDateTime", "action", "provisioningStatusInfo"];
 // Show rows: the full reviewed server set for one object.
 const DEFAULT_SIGNIN_SHOW_SELECT = [...KNOWN_SIGNIN_FIELDS];
 const DEFAULT_AUDIT_SHOW_SELECT = [...KNOWN_AUDIT_FIELDS];
+const DEFAULT_PROVISIONING_SHOW_SELECT = [...KNOWN_PROVISIONING_FIELDS];
 export const DEFAULT_DELEGATED_SCOPES = ["https://graph.microsoft.com/AuditLog.Read.All"];
+// Provisioning reads need both directory scopes; the pair is the documented
+// least-privileged delegated set and both names already sit in READ_SCOPES.
+export const DEFAULT_PROVISIONING_SCOPES = [
+  "https://graph.microsoft.com/AuditLog.Read.All",
+  "https://graph.microsoft.com/Directory.Read.All",
+];
 const TRUNCATE_AT = 500;
 
 // Graph omits this property without CA-data access instead of failing, so an
@@ -97,7 +135,12 @@ function fieldList(raw: unknown, flag: string, known: Set<string>, knownList: re
   return fields;
 }
 
-function scopesFor(flags: LogFlags, profile: AnyProfile, help: string): string[] | undefined {
+function scopesFor(
+  flags: LogFlags,
+  profile: AnyProfile,
+  help: string,
+  defaultScopes: readonly string[] = DEFAULT_DELEGATED_SCOPES,
+): string[] | undefined {
   if (profile.mode === "application") {
     if (flags.scopes !== undefined) {
       throw new AxiError(
@@ -108,7 +151,7 @@ function scopesFor(flags: LogFlags, profile: AnyProfile, help: string): string[]
     }
     return undefined;
   }
-  if (flags.scopes === undefined) return [...DEFAULT_DELEGATED_SCOPES];
+  if (flags.scopes === undefined) return [...defaultScopes];
   const scopes = String(flags.scopes)
     .split(",")
     .map(scope => scope.trim())
@@ -253,11 +296,17 @@ const AUDIT_DENIAL_HINTS = [
   "Audit Graph reporting carries a conservative P1/P2 deployment prerequisite; retention stays a separate constraint",
 ];
 
+const PROVISIONING_DENIAL_HINTS = [
+  "Provisioning-log reads need AuditLog.Read.All and Directory.Read.All plus a supported directory role: Global Reader, Reports Reader, Security Administrator, Security Operator or Security Reader for delegated access, or admin-consented AuditLog.Read.All and Directory.Read.All for application access",
+  "Provisioning logs need a Microsoft Entra ID P1 or P2 licence on the tenant; retention is 30 days on premium and 7 days on free",
+];
+
 interface CollectionShape {
   noun: string;
   plural: string;
   key: string;
   dateField: string;
+  defaultScopes: readonly string[];
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -272,6 +321,7 @@ const SIGNIN_LIST: CollectionShape = {
   plural: "sign-ins",
   key: "signIns",
   dateField: "createdDateTime",
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
   known: SIGNIN_KNOWN,
   knownList: KNOWN_SIGNIN_FIELDS,
   defaultSelect: DEFAULT_SIGNIN_LIST_SELECT,
@@ -289,6 +339,7 @@ const AUDIT_LIST: CollectionShape = {
   plural: "directory audits",
   key: "directoryAudits",
   dateField: "activityDateTime",
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
   known: AUDIT_KNOWN,
   knownList: KNOWN_AUDIT_FIELDS,
   defaultSelect: DEFAULT_AUDIT_LIST_SELECT,
@@ -298,6 +349,24 @@ const AUDIT_LIST: CollectionShape = {
   emptyHints: profileName => [
     `mg-axi entra directory-audit list --since <earlier-iso-time> ${profileHint(profileName)}`,
     "0 directory audits matched in this window; widen --since/--until or loosen --filter - the absence of results is the answer, not an error",
+  ],
+};
+
+const PROVISIONING_LIST: CollectionShape = {
+  noun: "provisioning",
+  plural: "provisioning events",
+  key: "provisioning",
+  dateField: "activityDateTime",
+  defaultScopes: DEFAULT_PROVISIONING_SCOPES,
+  known: PROVISIONING_KNOWN,
+  knownList: KNOWN_PROVISIONING_FIELDS,
+  defaultSelect: DEFAULT_PROVISIONING_LIST_SELECT,
+  unavailable: {},
+  denialHints: PROVISIONING_DENIAL_HINTS,
+  showHint: "mg-axi entra provisioning show --id <provisioning-id>",
+  emptyHints: profileName => [
+    `mg-axi entra provisioning list --since <earlier-iso-time> ${profileHint(profileName)}`,
+    "0 provisioning events matched in this window; widen --since/--until or loosen --filter - the absence of results is the answer, not an error",
   ],
 };
 
@@ -331,7 +400,7 @@ async function listLogs(
   const { select, fields } = selectedFields(flags,
     savedSelect === undefined ? shape.defaultSelect : fieldList(savedSelect, "select", shape.known, shape.knownList, help),
     shape.known, shape.knownList, help);
-  const scopes = scopesFor(flags, profile, help);
+  const scopes = scopesFor(flags, profile, help, shape.defaultScopes);
   const full = flags.full === true;
   const filter = boundedFilter(shape.dateField, flags, help);
   const query: Record<string, string> = { $select: select.join(",") };
@@ -379,6 +448,7 @@ interface SingleShape {
   noun: string;
   key: string;
   param: string;
+  defaultScopes: readonly string[];
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -391,6 +461,7 @@ const SIGNIN_SHOW: SingleShape = {
   noun: "sign-in",
   key: "signIn",
   param: "signIn-id",
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
   known: SIGNIN_KNOWN,
   knownList: KNOWN_SIGNIN_FIELDS,
   defaultSelect: DEFAULT_SIGNIN_SHOW_SELECT,
@@ -403,12 +474,26 @@ const AUDIT_SHOW: SingleShape = {
   noun: "directory-audit",
   key: "directoryAudit",
   param: "directoryAudit-id",
+  defaultScopes: DEFAULT_DELEGATED_SCOPES,
   known: AUDIT_KNOWN,
   knownList: KNOWN_AUDIT_FIELDS,
   defaultSelect: DEFAULT_AUDIT_SHOW_SELECT,
   unavailable: {},
   denialHints: AUDIT_DENIAL_HINTS,
   idFlag: "<directory-audit-id>",
+};
+
+const PROVISIONING_SHOW: SingleShape = {
+  noun: "provisioning",
+  key: "provisioning",
+  param: "provisioningObjectSummary-id",
+  defaultScopes: DEFAULT_PROVISIONING_SCOPES,
+  known: PROVISIONING_KNOWN,
+  knownList: KNOWN_PROVISIONING_FIELDS,
+  defaultSelect: DEFAULT_PROVISIONING_SHOW_SELECT,
+  unavailable: {},
+  denialHints: PROVISIONING_DENIAL_HINTS,
+  idFlag: "<provisioning-id>",
 };
 
 async function showLog(
@@ -421,7 +506,7 @@ async function showLog(
   profileName: string,
 ): Promise<Record<string, unknown>> {
   const { select, fields } = selectedFields(flags, shape.defaultSelect, shape.known, shape.knownList, help);
-  const scopes = scopesFor(flags, profile, help);
+  const scopes = scopesFor(flags, profile, help, shape.defaultScopes);
   const full = flags.full === true;
   const raw = await withGuidance(shape.denialHints, () => session.execute({
     profile,
@@ -482,4 +567,26 @@ export async function showDirectoryAudit(
   profileName: string,
 ): Promise<Record<string, unknown>> {
   return showLog(AUDIT_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+export async function listProvisioning(
+  session: GraphSession,
+  flags: LogFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listLogs(PROVISIONING_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showProvisioning(
+  session: GraphSession,
+  flags: LogFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showLog(PROVISIONING_SHOW, session, flags, profile, operation, help, profileName);
 }

@@ -74,6 +74,7 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra tenant-information ", "tenant information"],
   ["entra sign-in ", "sign-ins and audit logs"],
   ["entra directory-audit ", "sign-ins and audit logs"],
+  ["entra provisioning ", "sign-ins and audit logs"],
   ["entra application ", "applications and consent grants"],
   ["entra service-principal ", "applications and consent grants"],
   ["entra risky-user ", "risk"],

@@ -89,6 +89,7 @@ const AUTH_METHOD_FIELDS = ["id", "createdDateTime", "displayName", "phoneNumber
 const REGISTRATION_FIELDS = ["id", "userPrincipalName", "userDisplayName", "userType", "isAdmin", "isMfaRegistered", "isMfaCapable", "isPasswordlessCapable", "isSsprRegistered", "isSsprEnabled", "isSsprCapable", "userPreferredMethodForSecondaryAuthentication", "lastUpdatedDateTime"];
 const SIGNIN_FIELDS = ["id", "createdDateTime", "userId", "userPrincipalName", "userDisplayName", "appDisplayName", "appId", "ipAddress", "location", "status", "conditionalAccessStatus", "riskDetail", "riskLevelAggregated", "riskLevelDuringSignIn", "riskState", "resourceDisplayName", "resourceId", "clientAppUsed"];
 const AUDIT_FIELDS = ["id", "activityDateTime", "activityDisplayName", "category", "loggedByService", "operationType", "result", "resultReason", "correlationId", "initiatedBy", "targetResources"];
+const PROVISIONING_FIELDS = ["id", "activityDateTime", "tenantId", "jobId", "cycleId", "changeId", "action", "durationInMilliseconds", "sourceSystem", "sourceIdentity", "targetSystem", "targetIdentity", "provisioningStatusInfo", "provisioningSteps", "modifiedProperties", "servicePrincipal", "initiatedBy"];
 const RISKY_USER_FIELDS = ["id", "userPrincipalName", "userDisplayName", "riskDetail", "riskLastUpdatedDateTime", "riskLevel", "riskState"];
 const RISK_DETECTION_FIELDS = ["id", "detectedDateTime", "activityDateTime", "userId", "userPrincipalName", "userDisplayName", "ipAddress", "location", "riskDetail", "riskLevel", "riskState", "riskEventType", "detectionTimingType", "lastUpdatedDateTime", "source"];
 const RISKY_SP_FIELDS = ["id", "displayName", "appId", "servicePrincipalType", "riskDetail", "riskLastUpdatedDateTime", "riskLevel", "riskState", "isEnabled", "isProcessing"];
@@ -215,6 +216,10 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
   { id: "v1.0:GET:/auditLogs/directoryAudits", kind: "collection", query: COLLECTION_QUERY, fields: AUDIT_FIELDS,
     access: "D/A AuditLog.Read.All. Delegated callers pass it as --scopes.",
     sources: ["https://learn.microsoft.com/graph/api/directoryaudit-list?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/auditLogs/provisioning", kind: "collection", query: COLLECTION_QUERY, fields: PROVISIONING_FIELDS,
+    access: "D/A AuditLog.Read.All and Directory.Read.All. Delegated callers pass both as --scopes; Reports Reader is the least privileged directory role.",
+    note: "Entra ID P1/P2 licence prerequisite; retention is 30 days on premium and 7 days on free.",
+    sources: ["https://learn.microsoft.com/graph/api/provisioningobjectsummary-list?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/identityProtection/riskyUsers", kind: "collection", query: COLLECTION_QUERY, fields: RISKY_USER_FIELDS,
     access: "D/A IdentityRiskyUser.Read.All. Delegated callers pass it as --scopes.",
     note: "Full investigation needs P2/Suite; limited results stay limited, never reinterpreted as empty.",

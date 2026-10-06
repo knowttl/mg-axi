@@ -15,6 +15,7 @@ import { KNOWN_FEDERATION_FIELDS } from "./entra-federation-configurations.js";
 import { KNOWN_CA_FIELDS, KNOWN_PKI_FIELDS } from "./entra-certificate-auth.js";
 import { KNOWN_AUTH_CONTEXT_FIELDS, KNOWN_COMBO_FIELDS, KNOWN_DELETED_LOCATION_FIELDS, KNOWN_DELETED_POLICY_FIELDS, KNOWN_MODE_FIELDS, KNOWN_STRENGTH_FIELDS, KNOWN_TEMPLATE_FIELDS as KNOWN_CA_TEMPLATE_FIELDS } from "./entra-conditional-access.js";
 import { KNOWN_SUBSCRIPTION_FIELDS } from "./entra-subscriptions.js";
+import { KNOWN_TEMPLATE_FIELDS as KNOWN_ROLE_TEMPLATE_FIELDS, KNOWN_ROLE_MEMBER_FIELDS, KNOWN_SCOPED_MEMBER_FIELDS } from "./entra-roles.js";
 import { KNOWN_ASSIGNMENT_INSTANCE_FIELDS, KNOWN_ASSIGNMENT_SCHEDULE_FIELDS, KNOWN_ELIGIBILITY_INSTANCE_FIELDS, KNOWN_ELIGIBILITY_REQUEST_FIELDS, KNOWN_ELIGIBILITY_SCHEDULE_FIELDS } from "./entra-group-pim.js";
 import { KNOWN_SYNC_FIELDS } from "./entra-on-premises-synchronization.js";
 import { KNOWN_ACCEPTANCE_FIELDS, KNOWN_AGREEMENT_FIELDS } from "./entra-terms-of-use.js";
@@ -288,6 +289,33 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A RoleAssignmentSchedule.Read.Directory. Delegated callers pass it as --scopes.",
     note: "Active (including activated eligible) assignments; PIM needs P2 or ID Governance.",
     sources: ["https://learn.microsoft.com/graph/api/rbacapplication-list-roleassignmentscheduleinstances?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directoryRoleTemplates", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_ROLE_TEMPLATE_FIELDS,
+    access: "D/A RoleManagement.Read.Directory. Delegated callers pass it as --scopes.",
+    note: "Templates describe every role; activation state lives on directoryRoles.",
+    sources: ["https://learn.microsoft.com/graph/api/directoryroletemplate-list?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directoryRoleTemplates/{directoryRoleTemplate-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_ROLE_TEMPLATE_FIELDS,
+    access: "D/A RoleManagement.Read.Directory. Delegated callers pass it as --scopes.",
+    sources: ["https://learn.microsoft.com/graph/api/directoryroletemplate-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directoryRoles/{directoryRole-id}/members", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_ROLE_MEMBER_FIELDS,
+    access: "D/A RoleManagement.Read.Directory. Delegated callers pass it as --scopes.",
+    note: "Members are the assigned principals; @odata.type names each member kind.",
+    sources: ["https://learn.microsoft.com/graph/api/directoryrole-list-members?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directoryRoles/{directoryRole-id}/scopedMembers", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_SCOPED_MEMBER_FIELDS,
+    access: "D/A RoleManagement.Read.Directory. Delegated callers pass it as --scopes.",
+    note: "Scoped members bind one role to one principal within one directory scope; administrative-unit scopes need P1.",
+    sources: ["https://learn.microsoft.com/graph/api/directoryrole-list-scopedmembers?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/directoryRoles/{directoryRole-id}/scopedMembers/{scopedRoleMembership-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_SCOPED_MEMBER_FIELDS,
+    access: "D/A RoleManagement.Read.Directory. Delegated callers pass it as --scopes.",
+    note: "Administrative-unit scopes need P1.",
+    sources: ["https://learn.microsoft.com/graph/api/scopedrolemembership-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/scopedRoleMemberships", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_SCOPED_MEMBER_FIELDS,
+    access: "D/A RoleManagement.Read.Directory. Delegated callers pass it as --scopes.",
+    note: "Administrative-unit-scoped admin assignments; directory-wide assignments live on roleAssignments. Administrative-unit scopes need P1.",
+    sources: ["https://learn.microsoft.com/graph/api/scopedrolemembership-list?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/scopedRoleMemberships/{scopedRoleMembership-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_SCOPED_MEMBER_FIELDS,
+    access: "D/A RoleManagement.Read.Directory. Delegated callers pass it as --scopes.",
+    note: "Administrative-unit scopes need P1.",
+    sources: ["https://learn.microsoft.com/graph/api/scopedrolemembership-get?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/identityGovernance/privilegedAccess/group/assignmentSchedules", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_ASSIGNMENT_SCHEDULE_FIELDS,
     access: "D/A PrivilegedAssignmentSchedule.Read.AzureADGroup. Delegated callers pass it as --scopes.",
     note: "Assignment schedules govern group membership or ownership over time; PIM for Groups needs P2 or ID Governance; lists require $filter on groupId or principalId. AssignmentScheduleRequests stay out: their least privilege is the write scope PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup.",

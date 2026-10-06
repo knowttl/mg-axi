@@ -185,6 +185,46 @@ const wired = [
     ],
   },
   {
+    name: "directory-role-template list",
+    argv: ["entra", "directory-role-template", "list", "--profile", "soc"],
+    key: "directoryRoleTemplates",
+    noun: "directory-role templates",
+    rows: () => [
+      { id: ID_A, displayName: "Global Administrator" },
+      { id: ID_B, displayName: "Directory Readers" },
+    ],
+  },
+  {
+    name: "directory-role member list",
+    argv: ["entra", "directory-role", "member", "list", "--role", ID_A, "--profile", "soc"],
+    key: "roleMembers",
+    noun: "role members",
+    rows: () => [
+      { "@odata.type": "#microsoft.graph.user", id: ID_A, displayName: "Adele Vance" },
+      { "@odata.type": "#microsoft.graph.group", id: ID_B, displayName: "Ops Admins" },
+    ],
+  },
+  {
+    name: "directory-role scoped-member list",
+    argv: ["entra", "directory-role", "scoped-member", "list", "--role", ID_A, "--profile", "soc"],
+    key: "scopedMembers",
+    noun: "scoped members",
+    rows: () => [
+      { id: ID_A, principalId: ID_A, roleId: ID_B },
+      { id: ID_B, principalId: ID_B, roleId: ID_A },
+    ],
+  },
+  {
+    name: "scoped-role-membership list",
+    argv: ["entra", "scoped-role-membership", "list", "--profile", "soc"],
+    key: "scopedRoleMemberships",
+    noun: "scoped role memberships",
+    rows: () => [
+      { id: ID_A, principalId: ID_A, roleId: ID_B },
+      { id: ID_B, principalId: ID_B, roleId: ID_A },
+    ],
+  },
+  {
     name: "role-assignment list",
     argv: ["entra", "role-assignment", "list", "--profile", "soc"],
     key: "roleAssignments",

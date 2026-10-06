@@ -4,27 +4,41 @@ import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-09: the Entra directory-role and PIM read mapping behind
-// `mg-axi entra directory-role list/show`, `mg-axi entra role-assignment
-// list`, `mg-axi entra pim eligible list` and `mg-axi entra pim active list`.
+// `mg-axi entra directory-role list/show`, `mg-axi entra directory-role-template
+// list/show`, `mg-axi entra directory-role member list`, `mg-axi entra
+// directory-role scoped-member list/show`, `mg-axi entra scoped-role-membership
+// list/show`, `mg-axi entra role-assignment list`, `mg-axi entra pim eligible
+// list` and `mg-axi entra pim active list`.
 // Operation construction stays beside its command; the shared session owns
 // URLs, credentials, paging, retries and error translation, and the SDK owns
 // TOON rendering. This module only maps flags to session calls and projects
 // rows for compact output.
 //
 // Reviewed against the v1.0 directoryrole-list, directoryrole-get,
+// directoryroletemplate-list, directoryroletemplate-get,
+// directoryrole-list-members, directoryrole-list-scopedmembers,
+// scopedrolemembership-list, scopedrolemembership-get,
 // rbacapplication-list-roleassignments,
 // rbacapplication-list-roleeligibilityscheduleinstances and
 // rbacapplication-list-roleassignmentscheduleinstances operation
-// documentation on 2026-10-04. Directory-role reads and role
-// assignments read D/A RoleManagement.Read.Directory; eligible PIM reads
+// documentation on 2026-10-04 (roles, assignments and PIM) and 2026-10-06
+// (templates, members, scoped members and scoped memberships). Directory-role reads, role
+// assignments, templates, members, scoped members and scoped memberships
+// read D/A RoleManagement.Read.Directory; eligible PIM reads
 // D/A RoleEligibilitySchedule.Read.Directory; active PIM reads D/A
 // RoleAssignmentSchedule.Read.Directory. Delegated callers additionally need
 // a supported administrator role per operation. None of these collections
 // documents an advanced-query contract, so --filter passes through as plain
 // $filter with no $count or ConsistencyLevel attached.
 //
-// The four views cover: directoryRoles are activated role
+// The views cover: directoryRoles are activated role
 // instances only (a role appears here after activation, never before);
+// directoryRoleTemplates describe every role definition whether activated or
+// not; members are the principals assigned to one activated role (@odata.type
+// names each member kind: user, group, device or service principal); scoped
+// members bind one role to one principal within one directory scope;
+// scopedRoleMemberships are the administrative-unit-scoped admin assignments
+// (directory-wide assignments live on roleAssignments);
 // roleAssignments include direct and PIM-activated assignments; eligible schedule
 // instances are PIM-eligible but not active; active schedule instances cover
 // both directly assigned (assignmentType Assigned) and activated eligible
@@ -61,10 +75,31 @@ export const KNOWN_ELIGIBLE_FIELDS: readonly string[] = [
   "endDateTime",
 ];
 export const KNOWN_ACTIVE_FIELDS: readonly string[] = [...KNOWN_ELIGIBLE_FIELDS, "assignmentType"];
+export const KNOWN_TEMPLATE_FIELDS: readonly string[] = [
+  "id",
+  "displayName",
+  "description",
+];
+export const KNOWN_ROLE_MEMBER_FIELDS: readonly string[] = [
+  "id",
+  "displayName",
+  "mail",
+  "userPrincipalName",
+];
+export const KNOWN_SCOPED_MEMBER_FIELDS: readonly string[] = [
+  "id",
+  "principalId",
+  "roleId",
+  "directoryScopeId",
+  "administrativeUnitId",
+];
 const ROLE_KNOWN = new Set(KNOWN_ROLE_FIELDS);
 const ASSIGNMENT_KNOWN = new Set(KNOWN_ASSIGNMENT_FIELDS);
 const ELIGIBLE_KNOWN = new Set(KNOWN_ELIGIBLE_FIELDS);
 const ACTIVE_KNOWN = new Set(KNOWN_ACTIVE_FIELDS);
+const TEMPLATE_KNOWN = new Set(KNOWN_TEMPLATE_FIELDS);
+const MEMBER_KNOWN = new Set(KNOWN_ROLE_MEMBER_FIELDS);
+const SCOPED_KNOWN = new Set(KNOWN_SCOPED_MEMBER_FIELDS);
 
 // Compact rows: identifiers plus the correlation keys. For built-in roles
 // the unified roleDefinitionId matches the directory-role roleTemplateId.
@@ -73,6 +108,11 @@ const DEFAULT_ROLE_SHOW_SELECT = [...KNOWN_ROLE_FIELDS];
 const DEFAULT_ASSIGNMENT_SELECT = ["id", "principalId", "roleDefinitionId", "directoryScopeId"];
 const DEFAULT_ELIGIBLE_SELECT = ["id", "principalId", "roleDefinitionId", "memberType"];
 const DEFAULT_ACTIVE_SELECT = ["id", "principalId", "roleDefinitionId", "assignmentType", "memberType"];
+const DEFAULT_TEMPLATE_LIST_SELECT = ["id", "displayName", "description"];
+const DEFAULT_TEMPLATE_SHOW_SELECT = [...KNOWN_TEMPLATE_FIELDS];
+const DEFAULT_MEMBER_SELECT = ["id", "displayName"];
+const DEFAULT_SCOPED_LIST_SELECT = ["id", "principalId", "roleId", "directoryScopeId"];
+const DEFAULT_SCOPED_SHOW_SELECT = [...KNOWN_SCOPED_MEMBER_FIELDS];
 export const DEFAULT_ROLE_SCOPES = ["https://graph.microsoft.com/RoleManagement.Read.Directory"];
 export const DEFAULT_ELIGIBLE_SCOPES = ["https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory"];
 export const DEFAULT_ACTIVE_SCOPES = ["https://graph.microsoft.com/RoleAssignmentSchedule.Read.Directory"];
@@ -131,9 +171,15 @@ function project(
   row: unknown,
   fields: string[],
   full: boolean,
+  keepODataType = false,
 ): { row: Record<string, unknown>; truncated: boolean } {
   const source = row !== null && typeof row === "object" && !Array.isArray(row) ? (row as Record<string, unknown>) : {};
   const projected: Record<string, unknown> = {};
+  // Heterogeneous member rows carry their kind in @odata.type, which is
+  // structural rather than a selectable property, so it rides along first.
+  if (keepODataType && typeof source["@odata.type"] === "string") {
+    projected["@odata.type"] = source["@odata.type"];
+  }
   let truncated = false;
   for (const field of fields) {
     if (!Object.hasOwn(source, field)) continue;
@@ -206,6 +252,11 @@ const ACTIVE_DENIAL_HINTS = [
   "PIM reads need P2 or ID Governance, not only P2",
 ];
 
+const SCOPED_DENIAL_HINTS = [
+  "Scoped membership reads need RoleManagement.Read.Directory plus Global Reader, Security Reader or Privileged Role Administrator for delegated access, or admin-consented RoleManagement.Read.Directory for application access",
+  "Administrative-unit-scoped memberships need P1",
+];
+
 interface CollectionShape {
   command: string;
   key: string;
@@ -217,6 +268,8 @@ interface CollectionShape {
   denialHints: string[];
   scopeNote: string;
   emptyNote: string;
+  parent?: { param: string; flag: string; label: string };
+  keepODataType?: boolean;
 }
 
 const ROLE_LIST: CollectionShape = {
@@ -271,6 +324,61 @@ const PIM_ACTIVE: CollectionShape = {
   emptyNote: "0 active assignments matched; the absence of results is the answer, not an error",
 };
 
+const TEMPLATE_LIST: CollectionShape = {
+  command: "entra directory-role-template list",
+  key: "directoryRoleTemplates",
+  noun: "directory-role templates",
+  known: TEMPLATE_KNOWN,
+  knownList: KNOWN_TEMPLATE_FIELDS,
+  defaultSelect: DEFAULT_TEMPLATE_LIST_SELECT,
+  defaultScopes: DEFAULT_ROLE_SCOPES,
+  denialHints: ROLE_DENIAL_HINTS,
+  scopeNote: "Templates describe every role definition; activation state lives on directoryRoles, which appear only after activation",
+  emptyNote: "0 directory-role templates matched; the absence of results is the answer, not an error",
+};
+
+const MEMBER_LIST: CollectionShape = {
+  command: "entra directory-role member list",
+  key: "roleMembers",
+  noun: "role members",
+  known: MEMBER_KNOWN,
+  knownList: KNOWN_ROLE_MEMBER_FIELDS,
+  defaultSelect: DEFAULT_MEMBER_SELECT,
+  defaultScopes: DEFAULT_ROLE_SCOPES,
+  denialHints: ROLE_DENIAL_HINTS,
+  scopeNote: "Members are the principals assigned to the activated role; @odata.type names each member kind (user, group, device or service principal)",
+  emptyNote: "0 role members matched; the absence of results is the answer, not an error",
+  parent: { param: "directoryRole-id", flag: "role", label: "activated directory-role object ID whose members are listed" },
+  keepODataType: true,
+};
+
+const SCOPED_LIST: CollectionShape = {
+  command: "entra directory-role scoped-member list",
+  key: "scopedMembers",
+  noun: "scoped members",
+  known: SCOPED_KNOWN,
+  knownList: KNOWN_SCOPED_MEMBER_FIELDS,
+  defaultSelect: DEFAULT_SCOPED_LIST_SELECT,
+  defaultScopes: DEFAULT_ROLE_SCOPES,
+  denialHints: SCOPED_DENIAL_HINTS,
+  scopeNote: "Scoped members bind one role to one principal within one directory scope; administrative-unit scopes need P1",
+  emptyNote: "0 scoped members matched; the absence of results is the answer, not an error",
+  parent: { param: "directoryRole-id", flag: "role", label: "activated directory-role object ID whose scoped members are listed" },
+};
+
+const MEMBERSHIP_LIST: CollectionShape = {
+  command: "entra scoped-role-membership list",
+  key: "scopedRoleMemberships",
+  noun: "scoped role memberships",
+  known: SCOPED_KNOWN,
+  knownList: KNOWN_SCOPED_MEMBER_FIELDS,
+  defaultSelect: DEFAULT_SCOPED_LIST_SELECT,
+  defaultScopes: DEFAULT_ROLE_SCOPES,
+  denialHints: SCOPED_DENIAL_HINTS,
+  scopeNote: "Scoped role memberships are administrative-unit-scoped admin assignments; directory-wide assignments live on roleAssignments",
+  emptyNote: "0 scoped role memberships matched; the absence of results is the answer, not an error",
+};
+
 async function listCollection(
   shape: CollectionShape,
   session: GraphSession,
@@ -282,6 +390,12 @@ async function listCollection(
 ): Promise<Record<string, unknown>> {
   const cursor = flags.cursor === undefined ? undefined : String(flags.cursor);
   if (cursor !== undefined && !cursor.trim()) throw new AxiError("--cursor needs the opaque cursor from a partial result", "VALIDATION_ERROR", [help]);
+  let params: Record<string, string> | undefined;
+  if (shape.parent !== undefined) {
+    const parentId = String(flags[shape.parent.flag] ?? "");
+    if (!parentId.trim()) throw new AxiError(`--${shape.parent.flag} needs the ${shape.parent.label}`, "VALIDATION_ERROR", [help]);
+    params = { [shape.parent.param]: parentId };
+  }
   const saved = cursor === undefined ? undefined : session.cursorQuery(operation, cursor);
   const savedSelect = saved?.$select;
   const { select, fields } = selectedFields(flags,
@@ -296,6 +410,7 @@ async function listCollection(
   const query: Record<string, string> = { $select: select.join(",") };
   if (filter !== undefined) query.$filter = filter;
   const args: CollectArgs = { profile, operation, query, scopes };
+  if (params !== undefined) args.params = params;
   if (cursor !== undefined) args.cursor = cursor;
   if (flags.all === true) {
     if (flags.limit !== undefined) throw new AxiError("--limit and --all cannot be combined", "VALIDATION_ERROR", [help]);
@@ -308,11 +423,13 @@ async function listCollection(
   const rows: Record<string, unknown>[] = [];
   let truncated = false;
   for (const row of result.value) {
-    const projected = project(row, fields, full);
+    const projected = project(row, fields, full, shape.keepODataType === true);
     rows.push(projected.row);
     truncated = truncated || projected.truncated;
   }
-  const showHint = shape.key === "directoryRoles" ? `mg-axi entra directory-role show --id <role-id> ${profileHint(profileName)}` : undefined;
+  const showHint = shape.key === "directoryRoles" ? `mg-axi entra directory-role show --id <role-id> ${profileHint(profileName)}`
+    : shape.key === "directoryRoleTemplates" ? `mg-axi entra directory-role-template show --id <template-id> ${profileHint(profileName)}`
+    : undefined;
   const correlateHint = shape.key === "directoryRoles"
     ? undefined
     : `For built-in roles, roleDefinitionId matches the directory-role roleTemplateId: mg-axi entra directory-role list ${profileHint(profileName)}`;
@@ -404,4 +521,157 @@ export async function listPimActive(
   profileName: string,
 ): Promise<Record<string, unknown>> {
   return listCollection(PIM_ACTIVE, session, flags, profile, operation, help, profileName);
+}
+
+interface SingleShape {
+  command: string;
+  key: string;
+  noun: string;
+  known: Set<string>;
+  knownList: readonly string[];
+  defaultSelect: string[];
+  defaultScopes: readonly string[];
+  denialHints: string[];
+}
+
+const TEMPLATE_SINGLE: SingleShape = {
+  command: "entra directory-role-template show",
+  key: "directoryRoleTemplate",
+  noun: "directory-role template",
+  known: TEMPLATE_KNOWN,
+  knownList: KNOWN_TEMPLATE_FIELDS,
+  defaultSelect: DEFAULT_TEMPLATE_SHOW_SELECT,
+  defaultScopes: DEFAULT_ROLE_SCOPES,
+  denialHints: ROLE_DENIAL_HINTS,
+};
+
+const SCOPED_SINGLE: SingleShape = {
+  command: "entra directory-role scoped-member show",
+  key: "scopedMember",
+  noun: "scoped member",
+  known: SCOPED_KNOWN,
+  knownList: KNOWN_SCOPED_MEMBER_FIELDS,
+  defaultSelect: DEFAULT_SCOPED_SHOW_SELECT,
+  defaultScopes: DEFAULT_ROLE_SCOPES,
+  denialHints: SCOPED_DENIAL_HINTS,
+};
+
+const MEMBERSHIP_SINGLE: SingleShape = {
+  command: "entra scoped-role-membership show",
+  key: "scopedRoleMembership",
+  noun: "scoped role membership",
+  known: SCOPED_KNOWN,
+  knownList: KNOWN_SCOPED_MEMBER_FIELDS,
+  defaultSelect: DEFAULT_SCOPED_SHOW_SELECT,
+  defaultScopes: DEFAULT_ROLE_SCOPES,
+  denialHints: SCOPED_DENIAL_HINTS,
+};
+
+async function showSingle(
+  shape: SingleShape,
+  params: Record<string, string>,
+  session: GraphSession,
+  flags: RoleFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const { select, fields } = selectedFields(flags, shape.defaultSelect, shape.known, shape.knownList, help);
+  const scopes = scopesFor(flags, profile, shape.defaultScopes, help);
+  const full = flags.full === true;
+  const raw = await withGuidance(shape.denialHints, () => session.execute({
+    profile,
+    operation,
+    params,
+    query: { $select: select.join(",") },
+    scopes,
+  }));
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new AxiError(`Graph returned a malformed ${shape.noun} body`, "GRAPH_ERROR", [
+      `Single-${shape.noun} reads carry one object; treat anything else as unknown, not empty`,
+    ]);
+  }
+  const { row, truncated } = project(raw, fields, full);
+  if (truncated) return { [shape.key]: row, help: [fullHint(shape.command, flags, profileName)] };
+  return { [shape.key]: row };
+}
+
+export async function listDirectoryRoleTemplates(
+  session: GraphSession,
+  flags: RoleFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listCollection(TEMPLATE_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showDirectoryRoleTemplate(
+  session: GraphSession,
+  flags: RoleFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showSingle(TEMPLATE_SINGLE, { "directoryRoleTemplate-id": String(flags.id) }, session, flags, profile, operation, help, profileName);
+}
+
+export async function listRoleMembers(
+  session: GraphSession,
+  flags: RoleFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listCollection(MEMBER_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function listScopedMembers(
+  session: GraphSession,
+  flags: RoleFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listCollection(SCOPED_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showScopedMember(
+  session: GraphSession,
+  flags: RoleFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const roleId = String(flags.role ?? "");
+  if (!roleId.trim()) throw new AxiError("--role needs the activated directory-role object ID owning the scoped member", "VALIDATION_ERROR", [help]);
+  return showSingle(SCOPED_SINGLE, { "directoryRole-id": roleId, "scopedRoleMembership-id": String(flags.id) }, session, flags, profile, operation, help, profileName);
+}
+
+export async function listScopedRoleMemberships(
+  session: GraphSession,
+  flags: RoleFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return listCollection(MEMBERSHIP_LIST, session, flags, profile, operation, help, profileName);
+}
+
+export async function showScopedRoleMembership(
+  session: GraphSession,
+  flags: RoleFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  return showSingle(MEMBERSHIP_SINGLE, { "scopedRoleMembership-id": String(flags.id) }, session, flags, profile, operation, help, profileName);
 }

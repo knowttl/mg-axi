@@ -39,6 +39,8 @@ const READ_AREA_LABELS: Array<[string, string]> = [
   ["entra user ", "users"],
   ["entra group ", "groups"],
   ["entra directory-role ", "roles"],
+  ["entra directory-role-template ", "roles"],
+  ["entra scoped-role-membership ", "roles"],
   ["entra role-assignment ", "roles"],
   ["entra pim ", "roles"],
   ["entra device ", "devices"],

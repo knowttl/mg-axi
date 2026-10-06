@@ -10,7 +10,7 @@ list below is the implemented truth and never counts scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 247 (245 named Entra reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 254 (252 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 7 (home, profile, login and setup views)
 - inventory named-command: 0
@@ -35,6 +35,13 @@ list below is the implemented truth and never counts scheduled work as complete.
 | `mg-axi entra group member-of list` | `GET:/groups/{group-id}/memberOf` | scheduled | READ-02 |
 | `mg-axi entra directory-role list` | `GET:/directoryRoles` | scheduled | READ-09 |
 | `mg-axi entra directory-role show` | `GET:/directoryRoles/{directoryRole-id}` | scheduled | READ-09 |
+| `mg-axi entra directory-role-template list` | `GET:/directoryRoleTemplates` | scheduled | READ-09 |
+| `mg-axi entra directory-role-template show` | `GET:/directoryRoleTemplates/{directoryRoleTemplate-id}` | scheduled | READ-09 |
+| `mg-axi entra directory-role member list` | `GET:/directoryRoles/{directoryRole-id}/members` | scheduled | READ-09 |
+| `mg-axi entra directory-role scoped-member list` | `GET:/directoryRoles/{directoryRole-id}/scopedMembers` | scheduled | READ-09 |
+| `mg-axi entra directory-role scoped-member show` | `GET:/directoryRoles/{directoryRole-id}/scopedMembers/{scopedRoleMembership-id}` | scheduled | READ-09 |
+| `mg-axi entra scoped-role-membership list` | `GET:/scopedRoleMemberships` | scheduled | READ-09 |
+| `mg-axi entra scoped-role-membership show` | `GET:/scopedRoleMemberships/{scopedRoleMembership-id}` | scheduled | READ-09 |
 | `mg-axi entra role-assignment list` | `GET:/roleManagement/directory/roleAssignments` | scheduled | READ-09 |
 | `mg-axi entra pim eligible list` | `GET:/roleManagement/directory/roleEligibilityScheduleInstances` | scheduled | READ-09 |
 | `mg-axi entra pim active list` | `GET:/roleManagement/directory/roleAssignmentScheduleInstances` | scheduled | READ-09 |

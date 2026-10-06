@@ -218,7 +218,7 @@ export function skillDocument(): string {
     "This installs a `SessionStart` hook for Claude Code, Codex and OpenCode that prints a short local-only summary (configured profile names with tenant labels, auth-cache presence, write posture and version).",
     "The hook makes no network, Graph or sign-in call, and prints a short `not configured` record with exit 0 when unconfigured.",
     "Restart the agent session after running the installer.",
-    "No ordinary command installs hooks, plugins or configuration.",
+    "No other ordinary command installs hooks, plugins or configuration.",
     "",
     "## Selecting a profile",
     "",

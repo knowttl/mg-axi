@@ -785,3 +785,69 @@ for (const credentialRef of [{ provider: "federated", key }, { provider: "certif
     assert.equal(f.requests.length, 0);
   });
 }
+
+test("collect captures @odata.count as the known total", async () => {
+  const f = fixture(json(200, { value: [{ id: "a" }, { id: "b" }], "@odata.count": 2 }));
+  const result = await f.session.collect({ profile: delegatedProfile, operation: users, scopes });
+  assert.equal(result.complete, true);
+  assert.equal(result.total, 2);
+  assert.deepEqual(result.value, [{ id: "a" }, { id: "b" }]);
+});
+
+test("collect keeps the first @odata.count across disagreeing pages", async () => {
+  const next = "https://graph.microsoft.com/v1.0/users?$skiptoken=page2";
+  const f = fixture((request, count) => count === 1
+    ? json(200, { value: [{ id: "a" }], "@odata.count": 3, "@odata.nextLink": next })
+    : json(200, { value: [{ id: "b" }, { id: "c" }], "@odata.count": 99 }));
+  const result = await f.session.collect({ profile: delegatedProfile, operation: users, scopes });
+  assert.equal(result.complete, true);
+  assert.equal(result.total, 3);
+  assert.deepEqual(result.value, [{ id: "a" }, { id: "b" }, { id: "c" }]);
+});
+
+test("collect leaves the total unknown without @odata.count", async () => {
+  const f = fixture(json(200, { value: [{ id: "a" }] }));
+  const result = await f.session.collect({ profile: delegatedProfile, operation: users, scopes });
+  assert.equal(result.complete, true);
+  assert.equal(result.total, null);
+});
+
+for (const count of ["many", -1, 1.5, NaN]) {
+  test(`collect ignores malformed @odata.count ${String(count)} instead of failing`, async () => {
+    const f = fixture(json(200, { value: [{ id: "a" }], "@odata.count": count }));
+    const result = await f.session.collect({ profile: delegatedProfile, operation: users, scopes });
+    assert.equal(result.complete, true);
+    assert.equal(result.total, null);
+    assert.deepEqual(result.value, [{ id: "a" }]);
+  });
+}
+
+test("partial results carry the total and resumes keep it without a new count", async () => {
+  const next = "https://graph.microsoft.com/v1.0/users?$skiptoken=page2";
+  const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }, { id: "c" }], "@odata.count": 3, "@odata.nextLink": next }));
+  const first = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, limit: 1 });
+  assert.equal(first.complete, false);
+  assert.equal(first.total, 3);
+  assert.deepEqual(first.value, [{ id: "a" }]);
+  const stored = decodeCursor(first.cursor);
+  assert.equal(stored.total, 3);
+  const f = fixture(json(200, { value: [{ id: "d" }] }));
+  const resumed = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor });
+  assert.equal(resumed.complete, true);
+  assert.equal(resumed.total, 3);
+  assert.deepEqual(resumed.value, [{ id: "b" }, { id: "c" }, { id: "d" }]);
+});
+
+test("cursors issued before totals resume as unknown", async () => {
+  const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
+  const first = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, limit: 1 });
+  assert.equal(first.total, null);
+  const legacy = { ...decodeCursor(first.cursor) };
+  delete legacy.total;
+  const cursor = Buffer.from(JSON.stringify(legacy), "utf8").toString("base64url");
+  const f = fixture(json(200, { value: [] }));
+  const resumed = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor });
+  assert.equal(resumed.complete, true);
+  assert.equal(resumed.total, null);
+  assert.deepEqual(resumed.value, [{ id: "b" }]);
+});

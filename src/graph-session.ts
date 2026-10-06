@@ -180,6 +180,11 @@ export interface CollectionResult {
   cursor?: string;
   requests: number;
   bytes: number;
+  // Server-supplied total from the fetched pages (@odata.count), or null
+  // when the pages carried no usable total. Never invented and never
+  // fetched with an extra request; list commands render it through the
+  // shared list-totals helper with an honest fallback when unknown.
+  total: number | null;
 }
 
 let operationsById: Map<string, SessionOperation> | undefined;
@@ -683,10 +688,14 @@ interface CursorState {
   consistencyLevel?: "eventual";
   context: string;
   identity: string | null;
+  // Last known server total, so a resumed read keeps a known total even
+  // when later pages carry no count of their own. Absent on cursors
+  // issued before totals were captured, which resume as unknown.
+  total: number | null;
 }
 
 function encodeCursor(operation: SessionOperation, state: CursorState): string {
-  const payload = { v: 3, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN), query: state.query, consistencyLevel: state.consistencyLevel ?? null, context: state.context, identity: state.identity };
+  const payload = { v: 3, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN), query: state.query, consistencyLevel: state.consistencyLevel ?? null, context: state.context, identity: state.identity, total: state.total };
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
@@ -700,7 +709,7 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   } catch {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
-  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown; query?: unknown; consistencyLevel?: unknown; context?: unknown; identity?: unknown };
+  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown; query?: unknown; consistencyLevel?: unknown; context?: unknown; identity?: unknown; total?: unknown };
   if (!record || typeof record !== "object" || record.v !== 3 || record.op !== operation.id || !(record.next === null || typeof record.next === "string") || !Array.isArray(record.buffered) || !Array.isArray(record.seen) || !record.query || typeof record.query !== "object" || Array.isArray(record.query) || !(record.consistencyLevel === null || record.consistencyLevel === "eventual") || typeof record.context !== "string" || !/^[0-9a-f]{64}$/.test(record.context) || !(record.identity === null || (typeof record.identity === "string" && /^[0-9a-f]{64}$/.test(record.identity)))) {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
@@ -708,18 +717,32 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
   if (record.buffered.length > 5000) throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["The cursor buffers at most one fetched page"]);
+  const total = record.total === undefined ? null : record.total;
+  if (!(total === null || (typeof total === "number" && Number.isSafeInteger(total) && total >= 0))) {
+    throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
+  }
   if (record.identity === null && (record.buffered.length > 0 || record.seen.length > 0)) throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Fetched rows and consumed pages require a bound credential identity"]);
   const query = record.query as Record<string, string>;
   const consistencyLevel = record.consistencyLevel ?? undefined;
   buildQuery(query);
   checkQueryContext(query, consistencyLevel);
-  return { next: record.next ?? undefined, buffered: record.buffered.map(redact), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity };
+  return { next: record.next ?? undefined, buffered: record.buffered.map(redact), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity, total };
 }
 
 function nextLinkOf(body: unknown): string | undefined {
   if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
   const value = (body as Record<string, unknown>)["@odata.nextLink"];
   return typeof value === "string" && value ? value : undefined;
+}
+
+// The total Graph already supplies on collection pages when the query
+// carries $count=true. Only a valid non-negative integer becomes a total;
+// anything else stays unknown rather than failing the read or inventing
+// a number.
+function countOf(body: unknown): number | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const count = (body as Record<string, unknown>)["@odata.count"];
+  return typeof count === "number" && Number.isSafeInteger(count) && count >= 0 ? count : null;
 }
 
 function valuesOf(operation: SessionOperation, body: unknown): unknown[] {
@@ -834,14 +857,18 @@ export class GraphSession {
     let requests = 0;
     let bytes = 0;
     let identity = resumed?.identity ?? null;
+    // First known server total wins across pages and resumes; later pages
+    // repeat the same query total, so disagreement keeps the first.
+    let total: number | null = resumed?.total ?? null;
     const partial = (reason: string, next: string | undefined, buffered: unknown[]): CollectionResult => ({
       value: results,
       query,
       complete: false,
       reason,
-      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel, context, identity }),
+      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel, context, identity, total }),
       requests,
       bytes,
+      total,
     });
     let token: string;
     try {
@@ -872,10 +899,10 @@ export class GraphSession {
       while (pending.length > 0 && (args.limit === undefined || results.length < args.limit)) results.push(pending.shift()!);
       if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
       if (args.limit !== undefined && results.length >= args.limit) {
-        if (pending.length === 0 && !current) return { value: results, query, complete: true, requests, bytes };
+        if (pending.length === 0 && !current) return { value: results, query, complete: true, requests, bytes, total };
         return partial("row limit reached; buffered remainder is preserved in the cursor", current, pending);
       }
-      if (!current) return { value: results, query, complete: true, requests, bytes };
+      if (!current) return { value: results, query, complete: true, requests, bytes, total };
       if (requests >= budget.maxRequests) return partial(`request budget exhausted after ${requests} requests`, current, pending);
       const cycleKey = digestUrl(current);
       if (seen.has(cycleKey)) return partial("continuation cycle detected; result is partial, never complete", current, pending);
@@ -944,6 +971,8 @@ export class GraphSession {
           throw new AxiError(`Graph returned a non-JSON success body for ${operation.id}`, "GRAPH_ERROR", ["Successful reads are JSON; anything else is malformed"]);
         }
         const rows = valuesOf(operation, parsed);
+        const pageTotal = countOf(parsed);
+        if (total === null && pageTotal !== null) total = pageTotal;
         const rawNext = nextLinkOf(parsed);
         const nextUrl = rawNext ? authorizeUrl(operation, params, rawNext, fetchUrl, consistencyLevel) : undefined;
         remember(current);

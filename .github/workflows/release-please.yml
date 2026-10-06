@@ -50,12 +50,10 @@ jobs:
             writeFileSync(path, readFileSync(path, "utf8").split("\n").filter(line => !line.includes(":_authToken=")).join("\n"));
           '
       - name: Publish to npm
-        # No --provenance: npm provenance requires a public repository and
-        # knowttl/mg-axi is private, so attestation upload would fail.
         run: |
           version=$(node -p "require('./package.json').version")
           if npm view "@knowttl/mg-axi@$version" version > /dev/null 2>&1; then
             echo "@knowttl/mg-axi@$version is already published; skipping."
           else
-            npm publish --access public
+            npm publish --access public --provenance
           fi

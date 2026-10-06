@@ -1101,7 +1101,7 @@ This is the supported Entra read and gated write surface, not full Entra coverag
 See the generated [capability report](docs/coverage.md) for implemented reads, writes and discovery dispositions, and the [skill command table](skills/mg-axi/SKILL.md#orientation) for all executable leaves, including local commands.
 The package is published to npm as `@knowttl/mg-axi` with public access.
 Install it globally with `npm install --global @knowttl/mg-axi`, or run without a global install via `npx -y @knowttl/mg-axi --help`.
-The `.github/workflows/release-please.yml` workflow manages release PRs on `main` and builds, checks and publishes newly created releases using npm trusted publishing (OIDC); the publish step omits `--provenance` because npm provenance requires a public repository and knowttl/mg-axi is private.
+The `.github/workflows/release-please.yml` workflow manages release PRs on `main` and builds, checks and publishes newly created releases with provenance using npm trusted publishing (OIDC) from the public repository.
 Publication is skipped when the release version already exists on npm.
 Version `0.1.0` was bootstrap-published on npm, and release-please continues from that version.
 The packed files are `dist`, the discovery inventory, `skills/mg-axi`, `docs/coverage.md` and this README.

@@ -134,6 +134,12 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra delegated-admin-relationship show-request` | native | read |
 | `mg-axi entra delegated-admin-customer list-service-management-details` | native | read |
 | `mg-axi entra delegated-admin-customer show-service-management-detail` | native | read |
+| `mg-axi entra delegated-admin-customer count` | native | read |
+| `mg-axi entra delegated-admin-customer count-service-management-details` | native | read |
+| `mg-axi entra delegated-admin-relationship count` | native | read |
+| `mg-axi entra delegated-admin-relationship count-access-assignments` | native | read |
+| `mg-axi entra delegated-admin-relationship count-operations` | native | read |
+| `mg-axi entra delegated-admin-relationship count-requests` | native | read |
 | `mg-axi entra multi-tenant-organization show` | native | read |
 | `mg-axi entra multi-tenant-organization join-request show` | native | read |
 | `mg-axi entra multi-tenant-organization tenant list` | native | read |

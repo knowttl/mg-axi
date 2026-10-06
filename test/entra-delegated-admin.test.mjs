@@ -144,6 +144,19 @@ function delegatedAdminTransport() {
   return transport(request => {
     const url = new URL(request.url);
     const path = url.pathname;
+    if (path === "/v1.0/tenantRelationships/delegatedAdminCustomers/$count") {
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(customers.length) };
+    }
+    if (path === "/v1.0/tenantRelationships/delegatedAdminRelationships/$count") {
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(relationships.length) };
+    }
+    if (/^\/v1\.0\/tenantRelationships\/delegatedAdminCustomers\/[^/]+\/serviceManagementDetails\/\$count$/.test(path)) {
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(detailRows.length) };
+    }
+    if (/^\/v1\.0\/tenantRelationships\/delegatedAdminRelationships\/[^/]+\/(accessAssignments|operations|requests)\/\$count$/.test(path)) {
+      const segment = path.includes("/accessAssignments/") ? assignmentRows : path.includes("/operations/") ? operationRows : requestRows;
+      return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(segment.length) };
+    }
     if (path === "/v1.0/tenantRelationships/delegatedAdminCustomers") {
       if (url.searchParams.has("$skiptoken")) return json(200, { value: [cu3] });
       return json(200, {
@@ -654,6 +667,90 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
+  test(`${mode} counts delegated-admin customers and relationships as scalars`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, calls, overrides } = overridesFor(mode);
+      const customers = await executeArgv(["entra", "delegated-admin-customer", "count", "--profile", profile], overrides);
+      assert.deepEqual(customers, { delegatedAdminCustomerCount: 3 });
+      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminCustomers/$count");
+      const relationships = await executeArgv(["entra", "delegated-admin-relationship", "count", "--profile", profile], overrides);
+      assert.deepEqual(relationships, { delegatedAdminRelationshipCount: 3 });
+      assert.equal(requests[1].url, "https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/$count");
+      assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
+      if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(delegatedAdminScopes)));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} counts delegated-admin navigation collections as scalars bound to the parent`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const details = await executeArgv(["entra", "delegated-admin-customer", "count-service-management-details", "--id", cu1.id, "--profile", profile], overrides);
+      assert.deepEqual(details, { delegatedAdminServiceManagementDetailCount: 3 });
+      assert.equal(requests[0].url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminCustomers/${cu1.id}/serviceManagementDetails/$count`);
+      const assignments = await executeArgv(["entra", "delegated-admin-relationship", "count-access-assignments", "--id", rel1.id, "--profile", profile], overrides);
+      assert.deepEqual(assignments, { delegatedAdminAccessAssignmentCount: 3 });
+      assert.equal(requests[1].url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(rel1.id)}/accessAssignments/$count`);
+      const operations = await executeArgv(["entra", "delegated-admin-relationship", "count-operations", "--id", rel1.id, "--profile", profile], overrides);
+      assert.deepEqual(operations, { delegatedAdminRelationshipOperationCount: 3 });
+      assert.equal(requests[2].url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(rel1.id)}/operations/$count`);
+      const relationshipRequests = await executeArgv(["entra", "delegated-admin-relationship", "count-requests", "--id", rel1.id, "--profile", profile], overrides);
+      assert.deepEqual(relationshipRequests, { delegatedAdminRelationshipRequestCount: 3 });
+      assert.equal(requests[3].url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(rel1.id)}/requests/$count`);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} denied delegated-admin counts surface scope and partner guidance`, async () => {
+    const state = setupProfiles();
+    try {
+      const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
+      const { overrides } = overridesFor(mode, denied);
+      await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "count", "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        assert.ok(error.suggestions.some(hint => hint.includes("DelegatedAdminRelationship.Read.All")));
+        assert.ok(error.suggestions.some(hint => hint.includes("partner tenant")));
+        return /grant, role, licence/.test(error.message);
+      });
+      await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "count-access-assignments", "--id", rel1.id, "--profile", profile], overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        assert.ok(error.suggestions.some(hint => hint.includes("partner tenant")));
+        return /grant, role, licence/.test(error.message);
+      });
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} executable delegated-admin counts end to end`, () => {
+    const state = setupProfiles();
+    try {
+      const customerCount = runDelegatedAdminCli(["entra", "delegated-admin-customer", "count", "--profile", profile], state, mode);
+      assert.equal(customerCount.status, 0, customerCount.stdout);
+      assert.deepEqual(decode(customerCount.stdout).delegatedAdminCustomerCount, 2);
+      const detailsCount = runDelegatedAdminCli(["entra", "delegated-admin-customer", "count-service-management-details", "--id", cu1.id, "--profile", profile], state, mode);
+      assert.equal(detailsCount.status, 0, detailsCount.stdout);
+      assert.deepEqual(decode(detailsCount.stdout).delegatedAdminServiceManagementDetailCount, 2);
+      const relationshipCount = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "count", "--profile", profile], state, mode);
+      assert.equal(relationshipCount.status, 0, relationshipCount.stdout);
+      assert.deepEqual(decode(relationshipCount.stdout).delegatedAdminRelationshipCount, 2);
+      const assignmentsCount = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "count-access-assignments", "--id", rel1.id, "--profile", profile], state, mode);
+      assert.equal(assignmentsCount.status, 0, assignmentsCount.stdout);
+      assert.deepEqual(decode(assignmentsCount.stdout).delegatedAdminAccessAssignmentCount, 2);
+      const operationsCount = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "count-operations", "--id", rel1.id, "--profile", profile], state, mode);
+      assert.equal(operationsCount.status, 0, operationsCount.stdout);
+      assert.deepEqual(decode(operationsCount.stdout).delegatedAdminRelationshipOperationCount, 2);
+      const requestsCount = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "count-requests", "--id", rel1.id, "--profile", profile], state, mode);
+      assert.equal(requestsCount.status, 0, requestsCount.stdout);
+      assert.deepEqual(decode(requestsCount.stdout).delegatedAdminRelationshipRequestCount, 2);
+      assert.ok(!requestsCount.stdout.includes(`opaque-fixture-${mode}-token`));
+    } finally { teardownProfiles(state); }
+  });
+
   test(`${mode} executable lists and shows delegated-admin customers and relationships`, () => {
     const state = setupProfiles();
     try {
@@ -708,6 +805,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["delegated-admin-relationship", "show-request"], ["--id", rel1.id, "--request-id", rq1.id]],
     [["delegated-admin-customer", "list-service-management-details"], ["--id", cu1.id, "--limit", "1"]],
     [["delegated-admin-customer", "show-service-management-detail"], ["--id", cu1.id, "--detail-id", smd1.id]],
+    [["delegated-admin-customer", "count"], []],
+    [["delegated-admin-customer", "count-service-management-details"], ["--id", cu1.id]],
+    [["delegated-admin-relationship", "count"], []],
+    [["delegated-admin-relationship", "count-access-assignments"], ["--id", rel1.id]],
+    [["delegated-admin-relationship", "count-operations"], ["--id", rel1.id]],
+    [["delegated-admin-relationship", "count-requests"], ["--id", rel1.id]],
   ]) {
     for (const preview of [false, true]) {
       test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
@@ -804,4 +907,32 @@ test("delegated-admin read flags validate before profiles or HTTP", async () => 
   await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id]), { code: "VALIDATION_ERROR" });
   await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "list", "--bogus"]), { code: "VALIDATION_ERROR" });
   await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "list", "--bogus"]), { code: "VALIDATION_ERROR" });
+  await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "count", "--limit", "5"]), /unknown flag --limit/);
+  await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "count", "--filter", "displayName eq 'x'"]), /unknown flag --filter/);
+  await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "count", "--select", "id"]), /unknown flag --select/);
+  await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "count", "--cursor", "x"]), /unknown flag --cursor/);
+  await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "count-service-management-details"]), { code: "VALIDATION_ERROR" });
+  await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "count-access-assignments"]), { code: "VALIDATION_ERROR" });
+  await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "count-operations", "--id", rel1.id, "--limit", "5"]), /unknown flag --limit/);
+  await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "count-requests", "--id", rel1.id, "--filter", "status eq 'succeeded'"]), /unknown flag --filter/);
+});
+
+test("malformed delegated-admin count bodies fail as unknown, not zero", async () => {
+  const state = setupProfiles();
+  try {
+    for (const body of ["{}", "-1", "2.5", "\"3\""]) {
+      const malformed = transport(() => ({ status: 200, headers: {}, body }));
+      const scoped = overridesFor("delegated", malformed);
+      await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "count", "--profile", "soc"], scoped.overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        return /malformed delegated-admin customer count|non-JSON success body/.test(error.message);
+      });
+      await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "count-access-assignments", "--id", rel1.id, "--profile", "soc"], scoped.overrides), error => {
+        assert.equal(error.code, "GRAPH_ERROR");
+        return /malformed delegated-admin access assignment count|non-JSON success body/.test(error.message);
+      });
+    }
+  } finally {
+    teardownProfiles(state);
+  }
 });

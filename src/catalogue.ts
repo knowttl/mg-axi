@@ -1295,6 +1295,30 @@ export const LEAVES: Leaf[] = [
     full: delegatedAdminQuerylessRead.full,
     scopes: delegatedAdminQuerylessRead.scopes,
   }, examples: ["mg-axi entra delegated-admin-customer show-service-management-detail --id <customer-id> --detail-id <detail-id> --profile soc"] },
+  { path: "entra delegated-admin-customer count", description: "Count delegated-admin customers of the partner tenant as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/tenantRelationships/delegatedAdminCustomers/$count", flags: {
+    ...common,
+    scopes: delegatedAdminRead.scopes,
+  }, examples: ["mg-axi entra delegated-admin-customer count --profile soc"] },
+  { path: "entra delegated-admin-customer count-service-management-details", description: "Count one customer's service-management details as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/$count", flags: {
+    ...common, id: { value: "customer-id", required: true, description: "Delegated-admin customer identifier" },
+    scopes: delegatedAdminRead.scopes,
+  }, examples: ["mg-axi entra delegated-admin-customer count-service-management-details --id <customer-id> --profile soc"] },
+  { path: "entra delegated-admin-relationship count", description: "Count partner-tenant delegated-admin relationships as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/tenantRelationships/delegatedAdminRelationships/$count", flags: {
+    ...common,
+    scopes: delegatedAdminRead.scopes,
+  }, examples: ["mg-axi entra delegated-admin-relationship count --profile soc"] },
+  { path: "entra delegated-admin-relationship count-access-assignments", description: "Count one relationship's delegated-admin access assignments as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/$count", flags: {
+    ...common, id: { value: "relationship-id", required: true, description: "Delegated-admin relationship identifier" },
+    scopes: delegatedAdminRead.scopes,
+  }, examples: ["mg-axi entra delegated-admin-relationship count-access-assignments --id <relationship-id> --profile soc"] },
+  { path: "entra delegated-admin-relationship count-operations", description: "Count one relationship's long-running delegated-admin operations as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/$count", flags: {
+    ...common, id: { value: "relationship-id", required: true, description: "Delegated-admin relationship identifier" },
+    scopes: delegatedAdminRead.scopes,
+  }, examples: ["mg-axi entra delegated-admin-relationship count-operations --id <relationship-id> --profile soc"] },
+  { path: "entra delegated-admin-relationship count-requests", description: "Count one relationship's delegated-admin requests as one scalar; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/$count", flags: {
+    ...common, id: { value: "relationship-id", required: true, description: "Delegated-admin relationship identifier" },
+    scopes: delegatedAdminRead.scopes,
+  }, examples: ["mg-axi entra delegated-admin-relationship count-requests --id <relationship-id> --profile soc"] },
   { path: "entra multi-tenant-organization show", description: "Show the tenant multitenant organization with the full reviewed property set (createdDateTime, description, displayName, id, state); at most one exists per tenant and state inactive means no membership", operation: "GET:/tenantRelationships/multiTenantOrganization", flags: {
     ...common,
     select: multiTenantOrganizationRead.select,

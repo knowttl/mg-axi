@@ -271,7 +271,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: s2.id, displayName: s2.displayName, riskLevel: s2.riskLevel, riskState: s2.riskState },
         { id: s3.id, displayName: s3.displayName, riskLevel: s3.riskLevel, riskState: s3.riskState },
       ]);
-      assert.deepEqual(output.count, { returned: 3, complete: true });
+      assert.deepEqual(output.count, "3 risky service principals");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
       assert.ok(output.help.some(hint => hint.includes("entra risky-service-principal show --id <risky-service-principal-id>")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -289,7 +291,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: sd2.id, detectedDateTime: sd2.detectedDateTime, servicePrincipalDisplayName: sd2.servicePrincipalDisplayName, riskLevel: sd2.riskLevel },
         { id: sd3.id, detectedDateTime: sd3.detectedDateTime, servicePrincipalDisplayName: sd3.servicePrincipalDisplayName, riskLevel: sd3.riskLevel },
       ]);
-      assert.deepEqual(output.count, { returned: 3, complete: true });
+      assert.deepEqual(output.count, "3 service principal risk detections");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
       assert.ok(output.help.some(hint => hint.includes("entra service-principal-risk-detection show --id <service-principal-risk-detection-id>")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -304,7 +308,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.stderr, "");
       const output = decode(result.stdout);
       assert.deepEqual(output.riskyServicePrincipalHistory.map(row => row.id), [h1.id, h2.id]);
-      assert.deepEqual(output.count, { returned: 2, complete: true });
+      assert.deepEqual(output.count, "2 history items");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
       assert.ok(output.help.some(hint => hint.includes("entra risky-service-principal history show --service-principal <risky-service-principal-id> --id <history-item-id>")));
     } finally { teardownProfiles(state); }
   });
@@ -431,7 +437,9 @@ test("service-principal detection list composes since and filter into one bounde
       "--since", SINCE, "--filter", "riskState eq 'atRisk'", "--all"], overrides);
     assert.equal(new URL(requests[0].url).searchParams.get("$filter"),
       "detectedDateTime ge 2026-09-01T00:00:00.000Z and (riskState eq 'atRisk')");
-    assert.deepEqual(result.count, { returned: 3, complete: true });
+    assert.deepEqual(result.count, "3 service principal risk detections");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.equal(requests.length, 2);
   } finally { teardownProfiles(state); }
 });
@@ -442,10 +450,12 @@ test("a capped risky-service-principal list resumes losslessly through its opaqu
     const { overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "risky-service-principal", "list", "--profile", "soc", "--limit", "2"], overrides);
     assert.deepEqual(first.riskyServicePrincipals.map(row => row.id), [s1.id, s2.id]);
-    assert.equal(first.count.complete, false);
+    assert.equal(first.complete, false);
     const resumed = await executeArgv(["entra", "risky-service-principal", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(resumed.riskyServicePrincipals.map(row => row.id), [s3.id]);
-    assert.deepEqual(resumed.count, { returned: 1, complete: true });
+    assert.deepEqual(resumed.count, "1 risky service principals");
+    assert.equal(resumed.total, null);
+    assert.equal(resumed.complete, true);
   } finally { teardownProfiles(state); }
 });
 

@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 directory federation-configurations subfamily: the read mapping
@@ -231,20 +232,22 @@ export async function listFederationConfigurations(
   if (!result.complete) {
     return {
       federationConfigurations: configurations,
-      count: { returned: configurations.length, complete: false, reason: result.reason },
+      ...listTotals(configurations.length, result.total, "federation configurations", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, `Resume losslessly with the same flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`, showHint, CERT_BLOB_NOTE, WORKFORCE_NOTE],
     };
   }
-  const count = { returned: configurations.length, complete: true };
   if (!configurations.length) {
     return {
       federationConfigurations: configurations,
-      count,
+      ...listTotals(configurations.length, result.total, "federation configurations", true),
+      complete: true,
       help: ["0 federation configurations matched; no SAML or WS-Fed federation is configured for the tenant, or no row passed --filter", CERT_BLOB_NOTE, WORKFORCE_NOTE],
     };
   }
-  return { federationConfigurations: configurations, count, help: [...truncationHints, showHint, CERT_BLOB_NOTE, WORKFORCE_NOTE] };
+  return { federationConfigurations: configurations, ...listTotals(configurations.length, result.total, "federation configurations", true), complete: true, help: [...truncationHints, showHint, CERT_BLOB_NOTE, WORKFORCE_NOTE] };
 }
 
 export async function showFederationConfiguration(

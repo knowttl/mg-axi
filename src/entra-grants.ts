@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-08: the Entra consent-grant read mapping behind
@@ -212,6 +213,7 @@ const APP_ROLE_DENIAL_HINTS = [
 interface CollectionShape {
   command: string;
   key: string;
+  noun: string;
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -224,6 +226,7 @@ interface CollectionShape {
 const OAUTH2_GRANT_LIST: CollectionShape = {
   command: "entra service-principal oauth2-grant list",
   key: "oauth2PermissionGrants",
+  noun: "oauth2 grants",
   known: GRANT_KNOWN,
   knownList: KNOWN_GRANT_FIELDS,
   defaultSelect: DEFAULT_GRANT_SELECT,
@@ -236,6 +239,7 @@ const OAUTH2_GRANT_LIST: CollectionShape = {
 const APP_ROLE_LIST: CollectionShape = {
   command: "entra service-principal app-role-assignment list",
   key: "appRoleAssignments",
+  noun: "app role assignments",
   known: APP_ROLE_KNOWN,
   knownList: KNOWN_APP_ROLE_FIELDS,
   defaultSelect: DEFAULT_APP_ROLE_SELECT,
@@ -301,16 +305,17 @@ async function listCollection(
   if (!result.complete) {
     return {
       [shape.key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, shape.noun, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, `Resume losslessly with the same flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`, ...standing],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
-    return { [shape.key]: rows, count, help: [shape.emptyNote, ...standing] };
+    return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [shape.emptyNote, ...standing] };
   }
-  return { [shape.key]: rows, count, help: [...truncationHints, ...standing] };
+  return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [...truncationHints, ...standing] };
 }
 
 export async function listOAuth2Grants(

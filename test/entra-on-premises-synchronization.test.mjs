@@ -147,7 +147,9 @@ test("delegated lists synchronizations with the reviewed set preserving null and
     const { requests, calls, overrides } = overridesFor("delegated");
     const result = await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc"], overrides);
     assert.deepEqual(result.synchronizations, [sync1, { id: sync2.id, configuration: null, features: sync2.features }, sync3]);
-    assert.deepEqual(result.count, { returned: 3, complete: true });
+    assert.deepEqual(result.count, "3 synchronizations");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
     assert.ok(result.help.some(hint => hint.includes("entra on-premises-synchronization show --id <synchronization-id>")));
     assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-delegated-token"));
     assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/directory/onPremisesSynchronization?"));
@@ -167,11 +169,13 @@ test("delegated resumes a capped synchronization list through its opaque cursor"
     const { overrides } = overridesFor("delegated");
     const first = await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc", "--limit", "1"], overrides);
     assert.deepEqual(first.synchronizations.map(row => row.id), [sync1.id]);
-    assert.equal(first.count.complete, false);
+    assert.equal(first.complete, false);
     assert.equal(typeof first.cursor, "string");
     const second = await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(second.synchronizations.map(row => row.id), [sync2.id, sync3.id]);
-    assert.deepEqual(second.count, { returned: 2, complete: true });
+    assert.deepEqual(second.count, "2 synchronizations");
+    assert.equal(second.total, null);
+    assert.equal(second.complete, true);
   } finally {
     teardownProfiles(state);
   }
@@ -272,7 +276,9 @@ test("delegated empty synchronization lists stay definitive", async () => {
     const { overrides } = overridesFor("delegated", empty);
     const listed = await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc"], overrides);
     assert.deepEqual(listed.synchronizations, []);
-    assert.deepEqual(listed.count, { returned: 0, complete: true });
+    assert.deepEqual(listed.count, "0 synchronizations");
+    assert.equal(listed.total, null);
+    assert.equal(listed.complete, true);
     assert.ok(listed.help.some(hint => hint.includes("not configured for the tenant")));
   } finally {
     teardownProfiles(state);
@@ -323,7 +329,9 @@ test("delegated executable lists and shows synchronization reads", () => {
     assert.equal(listed.stderr, "");
     const listOut = decode(listed.stdout);
     assert.deepEqual(listOut.synchronizations.map(row => row.id), [sync1.id, sync2.id]);
-    assert.deepEqual(listOut.count, { returned: 2, complete: true });
+    assert.deepEqual(listOut.count, "2 synchronizations");
+    assert.equal(listOut.total, null);
+    assert.equal(listOut.complete, true);
     assert.ok(!listed.stdout.includes("opaque-fixture-delegated-token"));
 
     const shown = runSyncCli(["entra", "on-premises-synchronization", "show", "--id", sync1.id, "--profile", "soc"], state, "delegated");

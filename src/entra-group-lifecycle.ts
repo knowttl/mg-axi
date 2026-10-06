@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 group lifecycle subfamily: the read mapping behind
@@ -309,20 +310,22 @@ export async function listLifecyclePolicies(
   if (!result.complete) {
     return {
       groupLifecyclePolicies: policies,
-      count: { returned: policies.length, complete: false, reason: result.reason },
+      ...listTotals(policies.length, result.total, "lifecycle policies", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: policies.length, complete: true };
   if (!policies.length) {
     return {
       groupLifecyclePolicies: policies,
-      count,
+      ...listTotals(policies.length, result.total, "lifecycle policies", true),
+      complete: true,
       help: ["0 lifecycle policies matched; the absence of results is the answer, not an error"],
     };
   }
-  return { groupLifecyclePolicies: policies, count, help: [...truncationHints, showHint] };
+  return { groupLifecyclePolicies: policies, ...listTotals(policies.length, result.total, "lifecycle policies", true), complete: true, help: [...truncationHints, showHint] };
 }
 
 export async function showLifecyclePolicy(
@@ -397,20 +400,22 @@ export async function listSettingTemplates(
   if (!result.complete) {
     return {
       groupSettingTemplates: templates,
-      count: { returned: templates.length, complete: false, reason: result.reason },
+      ...listTotals(templates.length, result.total, "setting templates", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, filterNote],
     };
   }
-  const count = { returned: templates.length, complete: true };
   if (!templates.length) {
     return {
       groupSettingTemplates: templates,
-      count,
+      ...listTotals(templates.length, result.total, "setting templates", true),
+      complete: true,
       help: [filterNote, "0 setting templates matched; the absence of results is the answer, not an error"],
     };
   }
-  return { groupSettingTemplates: templates, count, help: [...truncationHints, showHint, filterNote] };
+  return { groupSettingTemplates: templates, ...listTotals(templates.length, result.total, "setting templates", true), complete: true, help: [...truncationHints, showHint, filterNote] };
 }
 
 export async function showSettingTemplate(

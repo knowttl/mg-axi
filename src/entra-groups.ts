@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-02: the Entra group read mapping behind `mg-axi entra group list/show`
@@ -290,23 +291,25 @@ export async function listGroups(
   if (!result.complete) {
     return {
       groups,
-      count: { returned: groups.length, complete: false, reason: result.reason },
+      ...listTotals(groups.length, result.total, "groups", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: groups.length, complete: true };
   if (!groups.length) {
     return {
       groups,
-      count,
+      ...listTotals(groups.length, result.total, "groups", true),
+      complete: true,
       help: [
         `mg-axi entra group list --filter <odata-filter> ${profileHint(profileName)}`,
         "0 groups matched; the absence of results is the answer, not an error",
       ],
     };
   }
-  return { groups, count, help: [...truncationHints, showHint] };
+  return { groups, ...listTotals(groups.length, result.total, "groups", true), complete: true, help: [...truncationHints, showHint] };
 }
 
 export async function showGroup(
@@ -383,17 +386,19 @@ async function listRelationship(
   if (!result.complete) {
     return {
       [key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, emptyNoun, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       ...warnings,
       help: [...truncationHints, ...limitedHints, hiddenHint, resumeHint(profileName), scopeHint],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
     return {
       [key]: rows,
-      count,
+      ...listTotals(rows.length, result.total, emptyNoun, true),
+      complete: true,
       ...warnings,
       help: [
         ...limitedHints,
@@ -403,7 +408,7 @@ async function listRelationship(
       ],
     };
   }
-  return { [key]: rows, count, ...warnings, help: [...truncationHints, ...limitedHints, hiddenHint, scopeHint] };
+  return { [key]: rows, ...listTotals(rows.length, result.total, emptyNoun, true), complete: true, ...warnings, help: [...truncationHints, ...limitedHints, hiddenHint, scopeHint] };
 }
 
 export async function listGroupMembers(

@@ -558,7 +558,7 @@ export function capabilityDocument(): string {
     "The relying-party summary read below remains scheduled with an explicit deferred disposition: its period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for it until its own guard review lands.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
-    "|---|---|---|",
+    "|---|---|---|---|",
     ...deferredReportsRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),    "",
     "## EXT-04 tenant-lookup scope decisions",
     "",

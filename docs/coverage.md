@@ -777,7 +777,7 @@ Firstmate scope: approve deferring the v1.0 relying-party summary read below; no
 The relying-party summary read below remains scheduled with an explicit deferred disposition: its period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for it until its own guard review lands.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
-|---|---|---|
+|---|---|---|---|
 | `v1.0:GET:/reports/getRelyingPartyDetailedSummary(period='{period}')` | scheduled (deferred) | EXT-04 | Deferred by firstmate reports scope to a later EXT-04 reports subfamily: the period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for the relying-party summary read. |
 
 ## EXT-04 tenant-lookup scope decisions

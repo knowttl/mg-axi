@@ -53,10 +53,11 @@ export async function runDoctor(args: {
       // no cursor and accepts none; recovery reruns doctor, not the read.
       const result = (await listUsers(args.session, { limit: "1" }, selected.profile, operation, `npx -y @knowttl/mg-axi ${DOCTOR_CHECK} --help`, name)) as {
         users: unknown[];
-        count: { complete: boolean; reason?: string };
+        complete: boolean;
+        reason?: string;
       };
-      if (!result.count.complete && result.count.reason !== "row limit reached; buffered remainder is preserved in the cursor") {
-        throw new AxiError(`Doctor read incomplete: ${result.count.reason}`, "GRAPH_ERROR", [rerun]);
+      if (!result.complete && result.reason !== "row limit reached; buffered remainder is preserved in the cursor") {
+        throw new AxiError(`Doctor read incomplete: ${result.reason}`, "GRAPH_ERROR", [rerun]);
       }
       profiles.push({ name, mode: selected.profile.mode, check: DOCTOR_CHECK, status: "ok",
         detail: result.users.length ? "1 user row returned" : "0 users matched; the absence of results is the answer" });

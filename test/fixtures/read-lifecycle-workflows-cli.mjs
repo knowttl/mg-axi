@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Socket } from "node:net";
 import { mock } from "node:test";
 
-const { mode, workflows, workflowTemplates, taskDefinitions, settings, runs, userProcessingResults, subjectProcessingResults, taskReports, reportTask, denied } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const { mode, workflows, workflowTemplates, taskDefinitions, settings, runs, userProcessingResults, subjectProcessingResults, taskReports, reportTask, runUserProcessingResults, runSubjectProcessingResults, runTaskProcessingResults, denied } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
 const allowedDelegated = new Set([
   "https://graph.microsoft.com/LifecycleWorkflows-Workflow.ReadBasic.All",
   "https://graph.microsoft.com/LifecycleWorkflows.Read.All",
@@ -75,6 +75,9 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
         : url.pathname === `${base}/workflowTemplates/$count` ? workflowTemplates.length
         : url.pathname === `${base}/taskDefinitions/$count` ? taskDefinitions.length
         : url.pathname.endsWith("/runs/$count") ? runs.length
+        : url.pathname.includes("/runs/") && url.pathname.endsWith("/userProcessingResults/$count") ? runUserProcessingResults.length
+        : url.pathname.includes("/runs/") && url.pathname.endsWith("/subjectProcessingResults/$count") ? runSubjectProcessingResults.length
+        : url.pathname.includes("/runs/") && url.pathname.endsWith("/taskProcessingResults/$count") ? runTaskProcessingResults.length
         : url.pathname.endsWith("/userProcessingResults/$count") ? userProcessingResults.length
         : url.pathname.endsWith("/subjectProcessingResults/$count") ? subjectProcessingResults.length
         : url.pathname.endsWith("/taskReports/$count") ? taskReports.length
@@ -89,6 +92,12 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
       body = { value: taskDefinitions };
     } else if (url.pathname === `${base}/settings`) {
       body = settings;
+    } else if (url.pathname.includes("/runs/") && url.pathname.endsWith("/userProcessingResults")) {
+      body = { value: runUserProcessingResults };
+    } else if (url.pathname.includes("/runs/") && url.pathname.endsWith("/subjectProcessingResults")) {
+      body = { value: runSubjectProcessingResults };
+    } else if (url.pathname.includes("/runs/") && url.pathname.endsWith("/taskProcessingResults")) {
+      body = { value: runTaskProcessingResults };
     } else if (url.pathname.endsWith("/runs")) {
       body = { value: runs };
     } else if (url.pathname.endsWith("/userProcessingResults")) {
@@ -103,7 +112,7 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
       } else if (url.pathname.includes("/taskReports/") && url.pathname.endsWith("/taskDefinition")) {
         body = taskDefinitions[0];
       } else {
-        const nested = [...runs, ...userProcessingResults, ...subjectProcessingResults, ...taskReports]
+        const nested = [...runs, ...userProcessingResults, ...subjectProcessingResults, ...taskReports, ...runUserProcessingResults, ...runSubjectProcessingResults, ...runTaskProcessingResults]
           .find(row => url.pathname.endsWith(`/${row.id}`));
         body = nested ?? single(workflows, url.pathname, `${base}/workflows`);
       }

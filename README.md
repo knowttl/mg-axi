@@ -359,17 +359,37 @@ mg-axi entra lifecycle task-report task show --workflow <workflow-id> --report <
 mg-axi entra lifecycle task-report task-definition show --workflow <workflow-id> --report <report-id> --profile soc
 ```
 
+Read one run's user, subject and task processing results through nine views; run-nested reads share the reports scope:
+
+```sh
+mg-axi entra lifecycle run user-processing-result list --workflow <workflow-id> --run <run-id> --profile soc --limit 10
+mg-axi entra lifecycle run user-processing-result list --workflow <workflow-id> --run <run-id> --profile soc --filter "processingStatus eq 'completed'"
+mg-axi entra lifecycle run user-processing-result show --workflow <workflow-id> --run <run-id> --profile soc --id <result-id>
+mg-axi entra lifecycle run user-processing-result count --workflow <workflow-id> --run <run-id> --profile soc
+mg-axi entra lifecycle run subject-processing-result list --workflow <workflow-id> --run <run-id> --profile soc --limit 10
+mg-axi entra lifecycle run subject-processing-result show --workflow <workflow-id> --run <run-id> --profile soc --id <result-id>
+mg-axi entra lifecycle run subject-processing-result count --workflow <workflow-id> --run <run-id> --profile soc
+mg-axi entra lifecycle run task-processing-result list --workflow <workflow-id> --run <run-id> --profile soc --limit 10
+mg-axi entra lifecycle run task-processing-result show --workflow <workflow-id> --run <run-id> --profile soc --id <result-id>
+mg-axi entra lifecycle run task-processing-result count --workflow <workflow-id> --run <run-id> --profile soc
+```
+
+`entra lifecycle run task-processing-result list` defaults to `id`, `processingStatus` and `failureReason`, and `entra lifecycle run task-processing-result show` defaults to the full reviewed scalar set including failure detail; task rows never carry subject, task or workflowSubject detail.
+Run user results share the top-level user query contract (`--select` reviewed, `--filter` plain), while run subject rows always arrive whole like their top-level counterparts (Graph documents no `$select` on the list and `$expand` only on the get) and the run task single has no operation-level page, so both arrive whole and `--fields` projects them locally; `--select` is refused before credentials.
+User, subject and task processing results are personal data: user and subject rows default to status and counts only (subject rows add `subjectType`), and the subject link is never requested.
+Third-level processing results, reprocessed runs, subject and task sub-reads and the time-windowed summary functions belong to later slices.
+
 `entra lifecycle task-report list` defaults to `id`, `runId`, `processingStatus`, `totalUsersCount`, `failedUsersCount` and `successfulUsersCount`, and `entra lifecycle task-report show` defaults to the full reviewed scalar set; report rows never carry task, task-definition or processing-result detail.
 The task-report get and the taskReport-nested task and taskDefinition singles document no query parameters, so those rows always arrive whole and `--fields` projects them locally; `--select` is refused before credentials.
-Run-nested and third-level processing results, reprocessed runs, subject sub-reads and the time-windowed summary functions belong to later slices.
+Third-level processing results, reprocessed runs, subject sub-reads and the time-windowed summary functions belong to later slices.
 
 `entra lifecycle run list` defaults to `id`, `processingStatus`, `totalUsersCount`, `failedUsersCount` and `successfulUsersCount`, and `entra lifecycle run show` defaults to the full reviewed scalar set; run rows never carry processing results.
 User and subject processing results are personal data: lists and singles default to status and counts only (subject lists add `subjectType`), and the subject link is never requested.
 The subject list documents `$filter` but not `$select` and the subject get documents `$expand` only, so subject rows always arrive whole and `--fields` projects them locally; `--select` is refused before credentials.
-Run-nested and third-level processing results, taskProcessingResults sub-reads, reprocessed runs, subject sub-reads and the time-windowed summary functions belong to later slices.
+Third-level processing results, taskProcessingResults sub-reads under a user or subject result, reprocessed runs, subject sub-reads and the time-windowed summary functions belong to later slices.
 
 `entra lifecycle workflow list` defaults to `id`, `displayName`, `category`, `isEnabled` and `isSchedulingEnabled`, and `entra lifecycle workflow show --id <workflow-id>` defaults to the full reviewed scalar set.
-Workflow rows never carry tasks, runs, processing results or task reports: tasks ride expanded by default on the get and are dropped in local projection, and run-nested processing results and summaries belong to later parts, never to these reads.
+Workflow rows never carry tasks, runs, processing results or task reports: tasks ride expanded by default on the get and are dropped in local projection, and third-level processing results and summaries belong to later parts, never to these reads.
 `entra lifecycle workflow-template list` defaults to `id`, `displayName` and `category`; the template get documents no query parameters, so `entra lifecycle workflow-template show --id <template-id>` takes no `--select` and always returns whole rows.
 `entra lifecycle task-definition list` defaults to `id`, `displayName`, `category` and `version`, and `entra lifecycle task-definition show --id <task-definition-id>` defaults to the full reviewed parameter set.
 `entra lifecycle settings show` returns the tenant schedule interval with the email and quarantine configuration; updating settings belongs to no read slice.

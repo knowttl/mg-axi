@@ -2095,7 +2095,7 @@ export const LEAVES: Leaf[] = [
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit full https://graph.microsoft.com/ scope names; application profiles use the .default audience" },
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; use --all to follow pages within budget" },
     all: { description: "Follow @odata.nextLink pages within the request budget" },
-    full: { description: "Disable 4000-character string truncation; never disables redaction or row caps" },
+    full: { description: "Disable 500-character string truncation; never disables redaction or row caps" },
   }, examples: ["mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All", "mg-axi api get /groups --odata '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All", "mg-axi api get /users --cursor - --all --scopes https://graph.microsoft.com/User.Read.All < cursor.txt"] },
 ];
 

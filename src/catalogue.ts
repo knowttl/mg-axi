@@ -396,6 +396,29 @@ const lifecycleSubjectRead = {
   cursor: lifecycleWorkflowRead.cursor,
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to LifecycleWorkflows-Reports.Read.All" },
 } as const;
+const lifecycleTaskReportRead = {
+  workflow: { value: "workflow-id", required: true, description: "Parent lifecycle workflow ID owning the task report" },
+  filter: lifecycleWorkflowRead.filter,
+  select: lifecycleReportsRead.select,
+  fields: lifecycleWorkflowRead.fields,
+  full: lifecycleWorkflowRead.full,
+  cursor: lifecycleWorkflowRead.cursor,
+  scopes: lifecycleReportsRead.scopes,
+} as const;
+const lifecycleTaskReportShow = {
+  workflow: { value: "workflow-id", required: true, description: "Parent lifecycle workflow ID owning the task report" },
+  id: { value: "task-report-id", required: true, description: "Task report ID" },
+  fields: { value: "comma-separated-properties", description: "Project the returned row locally from the reviewed task-report set; Graph documents no query parameters here so rows always arrive whole" },
+  full: lifecycleWorkflowRead.full,
+  scopes: lifecycleReportsRead.scopes,
+} as const;
+const lifecycleTaskReportSubRead = {
+  workflow: { value: "workflow-id", required: true, description: "Parent lifecycle workflow ID owning the task report" },
+  report: { value: "task-report-id", required: true, description: "Parent task report ID owning the task or task definition" },
+  fields: { value: "comma-separated-properties", description: "Project the returned row locally from the reviewed set; Graph documents no query parameters here so rows always arrive whole" },
+  full: lifecycleWorkflowRead.full,
+  scopes: lifecycleReportsRead.scopes,
+} as const;
 export const LEAVES: Leaf[] = [
   { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
   { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
@@ -2024,7 +2047,48 @@ export const LEAVES: Leaf[] = [
     workflow: lifecycleSubjectRead.workflow,
     scopes: lifecycleSubjectRead.scopes,
   }, examples: ["mg-axi entra lifecycle subject-processing-result count --workflow <workflow-id> --profile soc"] },
-  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations, branding, access reviews, entitlement catalogs and access packages, lifecycle workflows, workflow templates, task definitions, lifecycle settings, workflow runs and user/subject processing results, and partner contracts; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+  { path: "entra lifecycle task-report list", description: "List task reports of one lifecycle workflow with compact properties (id, runId, processingStatus, user counts); rows never carry task, task-definition or processing-result detail", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports", flags: {
+    ...common,
+    workflow: lifecycleTaskReportRead.workflow,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: lifecycleTaskReportRead.filter,
+    select: lifecycleTaskReportRead.select,
+    fields: lifecycleTaskReportRead.fields,
+    full: lifecycleTaskReportRead.full,
+    cursor: lifecycleTaskReportRead.cursor,
+    scopes: lifecycleTaskReportRead.scopes,
+  }, examples: ["mg-axi entra lifecycle task-report list --workflow <workflow-id> --profile soc", "mg-axi entra lifecycle task-report list --workflow <workflow-id> --profile soc --limit 10", "mg-axi entra lifecycle task-report list --workflow <workflow-id> --profile soc --filter \"processingStatus eq 'completed'\""] },
+  { path: "entra lifecycle task-report show", description: "Show one task report with the full reviewed scalar set; Graph documents no query parameters here so the row always arrives whole and task, task-definition and processing-result detail belongs to later slices", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/{taskReport-id}", flags: {
+    ...common,
+    workflow: lifecycleTaskReportShow.workflow,
+    id: lifecycleTaskReportShow.id,
+    fields: lifecycleTaskReportShow.fields,
+    full: lifecycleTaskReportShow.full,
+    scopes: lifecycleTaskReportShow.scopes,
+  }, examples: ["mg-axi entra lifecycle task-report show --workflow <workflow-id> --id <report-id> --profile soc"] },
+  { path: "entra lifecycle task-report count", description: "Count task reports of one lifecycle workflow as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/$count", flags: {
+    ...common,
+    workflow: lifecycleTaskReportRead.workflow,
+    scopes: lifecycleTaskReportRead.scopes,
+  }, examples: ["mg-axi entra lifecycle task-report count --workflow <workflow-id> --profile soc"] },
+  { path: "entra lifecycle task-report task show", description: "Show the workflow task behind one task report with the full reviewed set including arguments; Graph documents no query parameters here so the row always arrives whole and task processing results belong to a later slice", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/{taskReport-id}/task", flags: {
+    ...common,
+    workflow: lifecycleTaskReportSubRead.workflow,
+    report: lifecycleTaskReportSubRead.report,
+    fields: lifecycleTaskReportSubRead.fields,
+    full: lifecycleTaskReportSubRead.full,
+    scopes: lifecycleTaskReportSubRead.scopes,
+  }, examples: ["mg-axi entra lifecycle task-report task show --workflow <workflow-id> --report <report-id> --profile soc"] },
+  { path: "entra lifecycle task-report task-definition show", description: "Show the task definition behind one task report with the full reviewed parameter set; Graph documents no query parameters here so the row always arrives whole", operation: "GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/{taskReport-id}/taskDefinition", flags: {
+    ...common,
+    workflow: lifecycleTaskReportSubRead.workflow,
+    report: lifecycleTaskReportSubRead.report,
+    fields: lifecycleTaskReportSubRead.fields,
+    full: lifecycleTaskReportSubRead.full,
+    scopes: lifecycleTaskReportSubRead.scopes,
+  }, examples: ["mg-axi entra lifecycle task-report task-definition show --workflow <workflow-id> --report <report-id> --profile soc"] },
+  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations, branding, access reviews, entitlement catalogs and access packages, lifecycle workflows, workflow templates, task definitions, lifecycle settings, workflow runs, user/subject processing results and task reports, and partner contracts; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
     cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --odata to reuse its query" },

@@ -172,6 +172,7 @@ for (const profile of [delegatedProfile, appProfile]) {
     "/identityGovernance/lifecycleWorkflows/workflows/wf-1/runs/$count",
     "/identityGovernance/lifecycleWorkflows/workflows/wf-1/userProcessingResults/$count",
     "/identityGovernance/lifecycleWorkflows/workflows/wf-1/subjectProcessingResults/$count",
+    "/identityGovernance/lifecycleWorkflows/workflows/wf-1/taskReports/$count",
     "/domains/$count/verificationDnsRecords",
     "/identity/identityProviders/$count",
     "/directory/federationConfigurations/$count",

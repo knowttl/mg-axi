@@ -316,6 +316,7 @@ export function capabilityDocument(): string {
   const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
   const deferredDelegatedAdminRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate delegated-admin scope "));
   const deferredMtoRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate multi-tenant-organization scope "));
+  const deferredReportsRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate reports scope "));
   const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
   const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate custom-security-attributes scope "));
   const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
@@ -538,9 +539,9 @@ export function capabilityDocument(): string {
     ...deferredContractRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),    "",
     "## EXT-04 delegated-admin scope decisions",
     "",
-    "Firstmate scope: approve narrowing this change to the twelve v1.0 delegated-admin reads above (customer list/show, relationship list/show, access-assignment list/show, operation list/show, request list/show and service-management-detail list/show).",
+    "Firstmate scope: approve narrowing this change to the eighteen v1.0 delegated-admin reads above (customer list/show/count, relationship list/show/count, access-assignment list/show/count, operation list/show/count, request list/show/count and service-management-detail list/show/count).",
     "The operations below remain scheduled with an explicit deferred disposition to a later EXT-04 subfamily; no new commands or raw access are approved.",
-    "Scalar counts need a separate query and response contract from the approved list/show reads; the tenantRelationship container root needs its own projection review; multi-tenant-organization reads shipped in the section below, and tenant-lookup functions ship as tenant-information show under the mg-ext-04e function-argument contract.",
+    "The tenantRelationship container root needs its own projection review; multi-tenant-organization reads shipped in the section below, and tenant-lookup functions ship as tenant-information show under the mg-ext-04e function-argument contract.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
@@ -553,6 +554,14 @@ export function capabilityDocument(): string {
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredMtoRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),    "",
+    "## EXT-04 reports scope decisions",
+    "",
+    "Firstmate scope: approve deferring the v1.0 relying-party summary read below; no named command or raw access is approved for it.",
+    "The relying-party summary read below remains scheduled with an explicit deferred disposition: its period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for it until its own guard review lands.",
+    "",
+    "| Inventory operation | Disposition | Owning slice | Deferral reason |",
+    "|---|---|---|---|",
+    ...deferredReportsRows.map(row => `| \`${row.id}\` | ${row.disposition} (deferred) | ${row.owningSlice} | ${row.reason} |`),    "",
     "## EXT-04 tenant-lookup scope decisions",
     "",
     "Firstmate scope: approve the mg-ext-04e function-argument contract with the three v1.0 reads it unblocks (tenant-information show by domain name or tenant ID, subscription show by commerce subscription ID).",

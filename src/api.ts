@@ -47,7 +47,7 @@ import type { AnyProfile } from "./profiles.js";
 // so raw reads cannot bypass named-command gating.
 
 export const REVIEWED_ON = "2026-10-04";
-const TRUNCATE_AT = 4000;
+const TRUNCATE_AT = 500;
 
 export interface ReviewedRawRoute {
   /** Inventory row id: version:GET:template, the exact binding resolveSessionOperation needs. */
@@ -895,9 +895,9 @@ function reviewedFields(route: ReviewedRawRoute, value: unknown): unknown {
   return kept;
 }
 
-// String truncation at the output boundary, mirroring az-axi's 4000-char
-// convention. --full disables truncation; redaction already ran in the
-// session and row caps are unaffected. Plain objects and arrays only.
+// String truncation at the output boundary, matching the 500-char rule used
+// by every Entra command. --full disables truncation; redaction already ran
+// in the session and row caps are unaffected. Plain objects and arrays only.
 function truncateForOutput(value: unknown, full: boolean): { value: unknown; truncated: boolean } {
   if (typeof value === "string") {
     if (full || value.length <= TRUNCATE_AT) return { value, truncated: false };
@@ -1012,7 +1012,7 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
     const body = await session.execute({ profile: args.profile, operation, params, query, scopes });
     const shaped = truncateForOutput(reviewedFields(outputRoute, body), full);
     const record = isRecord(shaped.value) ? (shaped.value as Record<string, unknown>) : { value: shaped.value };
-    return shaped.truncated ? { ...record, help: ["Strings truncated at 4000 chars; re-run with --full"] } : record;
+    return shaped.truncated ? { ...record, help: ["Strings truncated at 500 chars; re-run with --full"] } : record;
   }
   const collected = await session.collect({ profile: args.profile, operation, params, query, scopes, limit: args.limit, cursor: args.cursor });
   const shaped = truncateForOutput(collected.value.map(row => reviewedFields(outputRoute, row)), full);
@@ -1020,11 +1020,11 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
   const warnings = route.warning ? { warnings: [route.warning] } : {};
   if (collected.complete) {
     return shaped.truncated
-      ? { returned: value.length, complete: true, value, ...warnings, help: ["Strings truncated at 4000 chars; re-run with --full"] }
+      ? { returned: value.length, complete: true, value, ...warnings, help: ["Strings truncated at 500 chars; re-run with --full"] }
       : { returned: value.length, complete: true, value, ...warnings };
   }
   const hint = "Resume the same path, profile and scopes with --cursor - and supply the cursor token on stdin; use --limit <rows> or --all";
-  const help = shaped.truncated ? [hint, "Strings truncated at 4000 chars; re-run with --full"] : [hint];
+  const help = shaped.truncated ? [hint, "Strings truncated at 500 chars; re-run with --full"] : [hint];
   return { returned: value.length, complete: false, reason: collected.reason, value, ...warnings, cursor: collected.cursor, help };
 }
 

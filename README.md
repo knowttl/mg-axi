@@ -1111,7 +1111,7 @@ Delegated raw reads require explicit `--scopes` from the supported read choices 
 Collections return `returned`, `complete` and `value`, default to 100 rows, and follow pages within budget under `--all`.
 `--limit` and `--all` cannot be combined.
 Completion describes pagination, not visibility of every directory object; group-member results include a warning for the [v1.0 service-principal limitation](docs/graph-coverage.md#licensing-and-completeness-findings), even when `complete` is true.
-Strings longer than 4000 characters are truncated; `--full` removes string truncation without disabling redaction, reviewed-field filtering or row caps.
+Strings longer than 500 characters are truncated; `--full` removes string truncation without disabling redaction, reviewed-field filtering or row caps.
 Partial results include a `cursor` preserving buffered rows and the next page.
 Resume with `--cursor -` and supply the cursor token on stdin under the same collection path, profile and scopes, optionally with `--all` or a new `--limit`.
 For example, `mg-axi api get /users --cursor - --all --scopes https://graph.microsoft.com/User.Read.All < cursor.txt` reads a saved token through stdin.

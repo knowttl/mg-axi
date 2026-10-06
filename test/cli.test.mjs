@@ -497,6 +497,36 @@ test("lifecycle task-report task show leaf help marks the parent report flag", (
   assert.match(result.stdout, /--report.*required/);
 });
 
+test("lifecycle run user-processing-result list leaf help marks run-scoped minimal rows", () => {
+  const result = run(["entra", "lifecycle", "run", "user-processing-result", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /subject link is never requested/);
+  assert.match(result.stdout, /--workflow.*required/);
+  assert.match(result.stdout, /--run.*required/);
+  assert.match(result.stdout, /LifecycleWorkflows-Reports\.Read\.All/);
+});
+
+test("lifecycle run subject-processing-result show leaf help marks whole rows with no select", () => {
+  const result = run(["entra", "lifecycle", "run", "subject-processing-result", "show", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /row always arrives whole/);
+  assert.match(result.stdout, /--workflow.*required/);
+  assert.match(result.stdout, /--run.*required/);
+  assert.match(result.stdout, /--id.*required/);
+});
+
+test("lifecycle run task-processing-result list leaf help marks compact failure rows", () => {
+  const result = run(["entra", "lifecycle", "run", "task-processing-result", "list", "--help"]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.match(result.stdout, /rows never carry subject, task or workflowSubject detail/);
+  assert.match(result.stdout, /--workflow.*required/);
+  assert.match(result.stdout, /--run.*required/);
+  assert.match(result.stdout, /LifecycleWorkflows-Reports\.Read\.All/);
+});
+
 test("administrative-unit member list leaf help advertises the relationship flags", () => {
   const result = run(["entra", "administrative-unit", "member", "list", "--help"]);
   assert.equal(result.status, 0);

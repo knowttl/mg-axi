@@ -3,7 +3,7 @@ import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITION_FIELDS, KNOWN_INSTANCE_FIELDS, KNOWN_STAGE_FIELDS } from "./entra-access-reviews.js";
 import { KNOWN_ACCESS_PACKAGE_FIELDS, KNOWN_ASSIGNMENT_POLICY_FIELDS, KNOWN_CATALOG_FIELDS, KNOWN_RESOURCE_ROLE_SCOPE_FIELDS } from "./entra-entitlement-management.js";
-import { KNOWN_LIFECYCLE_SETTINGS_FIELDS, KNOWN_RUN_FIELDS, KNOWN_SUBJECT_PROCESSING_FIELDS, KNOWN_TASK_DEFINITION_FIELDS, KNOWN_TASK_FIELDS, KNOWN_TASK_REPORT_FIELDS, KNOWN_USER_PROCESSING_FIELDS, KNOWN_WORKFLOW_FIELDS, KNOWN_WORKFLOW_TEMPLATE_FIELDS } from "./entra-lifecycle-workflows.js";
+import { KNOWN_LIFECYCLE_SETTINGS_FIELDS, KNOWN_RUN_FIELDS, KNOWN_SUBJECT_PROCESSING_FIELDS, KNOWN_TASK_DEFINITION_FIELDS, KNOWN_TASK_FIELDS, KNOWN_TASK_PROCESSING_FIELDS, KNOWN_TASK_REPORT_FIELDS, KNOWN_USER_PROCESSING_FIELDS, KNOWN_WORKFLOW_FIELDS, KNOWN_WORKFLOW_TEMPLATE_FIELDS } from "./entra-lifecycle-workflows.js";
 import { KNOWN_BRANDING_FIELDS, KNOWN_ORGANIZATION_FIELDS } from "./entra-organization.js";
 import { KNOWN_CONTRACT_FIELDS } from "./entra-contracts.js";
 import { KNOWN_DELEGATED_ADMIN_CUSTOMER_FIELDS, KNOWN_DELEGATED_ADMIN_RELATIONSHIP_FIELDS, KNOWN_DELEGATED_ADMIN_ACCESS_ASSIGNMENT_FIELDS, KNOWN_DELEGATED_ADMIN_OPERATION_FIELDS, KNOWN_DELEGATED_ADMIN_REQUEST_FIELDS } from "./entra-delegated-admin.js";
@@ -47,7 +47,7 @@ import type { AnyProfile } from "./profiles.js";
 // so raw reads cannot bypass named-command gating.
 
 export const REVIEWED_ON = "2026-10-04";
-const TRUNCATE_AT = 4000;
+const TRUNCATE_AT = 500;
 
 export interface ReviewedRawRoute {
   /** Inventory row id: version:GET:template, the exact binding resolveSessionOperation needs. */
@@ -755,6 +755,30 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A LifecycleWorkflows-Reports.Read.All (LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All for richer detail). Delegated callers pass one as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
     note: "No taskReport-nested operation page exists; access follows the taskReports list contract with the top-level taskdefinition-get contract (which documents LifecycleWorkflows.Read.All for its own route) and the taskDefinition resource reference. No query parameters are reviewed here, so whole rows arrive and are projected locally. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
     sources: ["https://learn.microsoft.com/graph/api/identitygovernance-workflow-list-taskreports?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/identitygovernance-taskdefinition-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/userProcessingResults", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_USER_PROCESSING_FIELDS,
+    access: "D/A LifecycleWorkflows-Reports.Read.All (LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All for richer detail). Delegated callers pass one as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract ($search/$orderby/$expand stay unreviewed). Run user processing results are personal data: defaults carry status and counts only and the subject link needs $expand and stays out. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-run-list-userprocessingresults?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/userProcessingResults/{userProcessingResult-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_USER_PROCESSING_FIELDS,
+    access: "D/A LifecycleWorkflows-Reports.Read.All (LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All for richer detail). Delegated callers pass one as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "The userprocessingresult-get page covers this run-nested single directly. Run user processing results are personal data: defaults carry status and counts only and the subject link stays out. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-userprocessingresult-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/identitygovernance-userprocessingresult?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/subjectProcessingResults", kind: "collection", query: ["$filter"], fields: KNOWN_SUBJECT_PROCESSING_FIELDS,
+    access: "D/A LifecycleWorkflows-Reports.Read.All (LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All for richer detail). Delegated callers pass one as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "Graph documents $count/$filter/$orderby/$expand but not $select here, so only $filter is reviewed and rows arrive whole. Run subject processing results are personal data: defaults carry subject type, status and counts only and the subject navigation stays out. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-run-list-subjectprocessingresults?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/identitygovernance-subjectprocessingresult?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/subjectProcessingResults/{subjectProcessingResult-id}", kind: "single", query: [], fields: KNOWN_SUBJECT_PROCESSING_FIELDS,
+    access: "D/A LifecycleWorkflows-Reports.Read.All (LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All for richer detail). Delegated callers pass one as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "The subjectprocessingresult-get page covers this run-nested single directly and documents $expand only, so whole rows are reviewed here and the subject navigation stays out. Run subject processing results are personal data: defaults carry subject type, status and counts only. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-subjectprocessingresult-get?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/identitygovernance-subjectprocessingresult?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_TASK_PROCESSING_FIELDS,
+    access: "D/A LifecycleWorkflows-Reports.Read.All (LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All for richer detail). Delegated callers pass one as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "Filtering passes through as plain $filter with no $count or ConsistencyLevel contract ($search/$orderby/$expand stay unreviewed). Run task processing results carry one task's outcome with failure detail; the subject, task and workflowSubject navigations need $expand and stay out. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-run-list-taskprocessingresults?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/identitygovernance-taskprocessingresult?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults/{taskProcessingResult-id}", kind: "single", query: [], fields: KNOWN_TASK_PROCESSING_FIELDS,
+    access: "D/A LifecycleWorkflows-Reports.Read.All (LifecycleWorkflows.Read.All or LifecycleWorkflows.ReadWrite.All for richer detail). Delegated callers pass one as --scopes; delegated access additionally needs Global Reader or Lifecycle Workflows Administrator; personal Microsoft accounts are not supported.",
+    note: "No operation-level get page exists; access follows the run task-list contract and the taskProcessingResult resource reference. No query parameters are reviewed here, so whole rows arrive and are projected locally; the subject, task and workflowSubject navigations stay out. Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite.",
+    sources: ["https://learn.microsoft.com/graph/api/identitygovernance-run-list-taskprocessingresults?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/identitygovernance-taskprocessingresult?view=graph-rest-1.0"] },
 ];
 
 function splitPath(path: string): string[] {
@@ -871,9 +895,9 @@ function reviewedFields(route: ReviewedRawRoute, value: unknown): unknown {
   return kept;
 }
 
-// String truncation at the output boundary, mirroring az-axi's 4000-char
-// convention. --full disables truncation; redaction already ran in the
-// session and row caps are unaffected. Plain objects and arrays only.
+// String truncation at the output boundary, matching the 500-char rule used
+// by every Entra command. --full disables truncation; redaction already ran
+// in the session and row caps are unaffected. Plain objects and arrays only.
 function truncateForOutput(value: unknown, full: boolean): { value: unknown; truncated: boolean } {
   if (typeof value === "string") {
     if (full || value.length <= TRUNCATE_AT) return { value, truncated: false };
@@ -988,7 +1012,7 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
     const body = await session.execute({ profile: args.profile, operation, params, query, scopes });
     const shaped = truncateForOutput(reviewedFields(outputRoute, body), full);
     const record = isRecord(shaped.value) ? (shaped.value as Record<string, unknown>) : { value: shaped.value };
-    return shaped.truncated ? { ...record, help: ["Strings truncated at 4000 chars; re-run with --full"] } : record;
+    return shaped.truncated ? { ...record, help: ["Strings truncated at 500 chars; re-run with --full"] } : record;
   }
   const collected = await session.collect({ profile: args.profile, operation, params, query, scopes, limit: args.limit, cursor: args.cursor });
   const shaped = truncateForOutput(collected.value.map(row => reviewedFields(outputRoute, row)), full);
@@ -996,11 +1020,11 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
   const warnings = route.warning ? { warnings: [route.warning] } : {};
   if (collected.complete) {
     return shaped.truncated
-      ? { returned: value.length, complete: true, value, ...warnings, help: ["Strings truncated at 4000 chars; re-run with --full"] }
+      ? { returned: value.length, complete: true, value, ...warnings, help: ["Strings truncated at 500 chars; re-run with --full"] }
       : { returned: value.length, complete: true, value, ...warnings };
   }
   const hint = "Resume the same path, profile and scopes with --cursor - and supply the cursor token on stdin; use --limit <rows> or --all";
-  const help = shaped.truncated ? [hint, "Strings truncated at 4000 chars; re-run with --full"] : [hint];
+  const help = shaped.truncated ? [hint, "Strings truncated at 500 chars; re-run with --full"] : [hint];
   return { returned: value.length, complete: false, reason: collected.reason, value, ...warnings, cursor: collected.cursor, help };
 }
 

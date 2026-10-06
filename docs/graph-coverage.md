@@ -21,6 +21,7 @@ Detail, relationship, premium property, and write contracts require their own in
 | 1 Registration report | [/reports/authenticationMethods/userRegistrationDetails](https://learn.microsoft.com/en-us/graph/api/authenticationmethodsroot-list-userregistrationdetails?view=graph-rest-1.0) | D/A AuditLog.Read.All. |
 | 1 Sign-ins | [/auditLogs/signIns](https://learn.microsoft.com/en-us/graph/api/signin-list?view=graph-rest-1.0) | D/A AuditLog.Read.All; CA details have additional policy permission/role requirements. |
 | 1 Directory audits | [/auditLogs/directoryAudits](https://learn.microsoft.com/en-us/graph/api/directoryaudit-list?view=graph-rest-1.0) | D/A AuditLog.Read.All. |
+| 1 Provisioning logs | [/auditLogs/provisioning](https://learn.microsoft.com/en-us/graph/api/provisioningobjectsummary-list?view=graph-rest-1.0) | D/A AuditLog.Read.All and Directory.Read.All; delegated role and P1/P2 licence apply. |
 | 1 Risky users | [/identityProtection/riskyUsers](https://learn.microsoft.com/en-us/graph/api/riskyuser-list?view=graph-rest-1.0) | D/A IdentityRiskyUser.Read.All. |
 | 1 Risk detections | [/identityProtection/riskDetections](https://learn.microsoft.com/en-us/graph/api/riskdetection-list?view=graph-rest-1.0) | D/A IdentityRiskEvent.Read.All. |
 | 1 Risky service principals | [/identityProtection/riskyServicePrincipals](https://learn.microsoft.com/en-us/graph/api/identityprotectionroot-list-riskyserviceprincipals?view=graph-rest-1.0) | D/A IdentityRiskyServicePrincipal.Read.All. |

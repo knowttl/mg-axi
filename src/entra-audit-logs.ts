@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-05: the Entra sign-in and directory-audit read mapping behind
@@ -254,6 +255,7 @@ const AUDIT_DENIAL_HINTS = [
 
 interface CollectionShape {
   noun: string;
+  plural: string;
   key: string;
   dateField: string;
   known: Set<string>;
@@ -267,6 +269,7 @@ interface CollectionShape {
 
 const SIGNIN_LIST: CollectionShape = {
   noun: "sign-in",
+  plural: "sign-ins",
   key: "signIns",
   dateField: "createdDateTime",
   known: SIGNIN_KNOWN,
@@ -283,6 +286,7 @@ const SIGNIN_LIST: CollectionShape = {
 
 const AUDIT_LIST: CollectionShape = {
   noun: "directory-audit",
+  plural: "directory audits",
   key: "directoryAudits",
   dateField: "activityDateTime",
   known: AUDIT_KNOWN,
@@ -358,16 +362,17 @@ async function listLogs(
   if (!result.complete) {
     return {
       [shape.key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, shape.plural, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, `Resume losslessly with the same flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`, showHint],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
-    return { [shape.key]: rows, count, help: shape.emptyHints(profileName) };
+    return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.plural, true), complete: true, help: shape.emptyHints(profileName) };
   }
-  return { [shape.key]: rows, count, help: [...truncationHints, showHint] };
+  return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.plural, true), complete: true, help: [...truncationHints, showHint] };
 }
 
 interface SingleShape {

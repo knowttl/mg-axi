@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-04 delegated-admin subfamily: the read mapping behind
@@ -476,20 +477,22 @@ async function listResource(
   if (!result.complete) {
     return {
       [collectionKey]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, `${resource.noun}s`, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, partnerNote(resource)],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
     return {
       [collectionKey]: rows,
-      count,
+      ...listTotals(rows.length, result.total, `${resource.noun}s`, true),
+      complete: true,
       help: [`0 ${resource.noun}s matched; the absence of results is the answer, not an error`, partnerNote(resource)],
     };
   }
-  return { [collectionKey]: rows, count, help: [...truncationHints, showHint, partnerNote(resource)] };
+  return { [collectionKey]: rows, ...listTotals(rows.length, result.total, `${resource.noun}s`, true), complete: true, help: [...truncationHints, showHint, partnerNote(resource)] };
 }
 
 async function showResource(

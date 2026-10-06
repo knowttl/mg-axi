@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 custom-security-attributes subfamily: the read mapping behind
@@ -336,20 +337,22 @@ export async function listAttributeSets(
   if (!result.complete) {
     return {
       attributeSets: sets,
-      count: { returned: sets.length, complete: false, reason: result.reason },
+      ...listTotals(sets.length, result.total, "attribute sets", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, filterNote],
     };
   }
-  const count = { returned: sets.length, complete: true };
   if (!sets.length) {
     return {
       attributeSets: sets,
-      count,
+      ...listTotals(sets.length, result.total, "attribute sets", true),
+      complete: true,
       help: [filterNote, "0 attribute sets matched; the absence of results is the answer, not an error"],
     };
   }
-  return { attributeSets: sets, count, help: [...truncationHints, showHint, filterNote] };
+  return { attributeSets: sets, ...listTotals(sets.length, result.total, "attribute sets", true), complete: true, help: [...truncationHints, showHint, filterNote] };
 }
 
 export async function showAttributeSet(
@@ -425,20 +428,22 @@ export async function listCustomSecurityAttributeDefinitions(
   if (!result.complete) {
     return {
       customSecurityAttributeDefinitions: definitions,
-      count: { returned: definitions.length, complete: false, reason: result.reason },
+      ...listTotals(definitions.length, result.total, "custom security attribute definitions", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: definitions.length, complete: true };
   if (!definitions.length) {
     return {
       customSecurityAttributeDefinitions: definitions,
-      count,
+      ...listTotals(definitions.length, result.total, "custom security attribute definitions", true),
+      complete: true,
       help: ["0 custom security attribute definitions matched; the absence of results is the answer, not an error"],
     };
   }
-  return { customSecurityAttributeDefinitions: definitions, count, help: [...truncationHints, showHint] };
+  return { customSecurityAttributeDefinitions: definitions, ...listTotals(definitions.length, result.total, "custom security attribute definitions", true), complete: true, help: [...truncationHints, showHint] };
 }
 
 export async function showCustomSecurityAttributeDefinition(
@@ -525,20 +530,22 @@ export async function listAllowedValues(
   if (!result.complete) {
     return {
       allowedValues: values,
-      count: { returned: values.length, complete: false, reason: result.reason },
+      ...listTotals(values.length, result.total, "allowed values", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, filterNote],
     };
   }
-  const count = { returned: values.length, complete: true };
   if (!values.length) {
     return {
       allowedValues: values,
-      count,
+      ...listTotals(values.length, result.total, "allowed values", true),
+      complete: true,
       help: [filterNote, "0 allowed values matched; the definition may allow free-form values instead of predefined ones"],
     };
   }
-  return { allowedValues: values, count, help: [...truncationHints, showHint, filterNote] };
+  return { allowedValues: values, ...listTotals(values.length, result.total, "allowed values", true), complete: true, help: [...truncationHints, showHint, filterNote] };
 }
 
 export async function showAllowedValue(

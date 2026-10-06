@@ -38,6 +38,7 @@ import { listAttributeSets, showAttributeSet, countAttributeSets, listCustomSecu
 import { listIdentityProviders, showIdentityProvider, countIdentityProviders, availableIdentityProviderTypes } from "./entra-identity-providers.js";
 import { listFederationConfigurations, showFederationConfiguration, countFederationConfigurations, availableFederationProviderTypes } from "./entra-federation-configurations.js";
 import { listDataPolicyOperations, showDataPolicyOperation, countDataPolicyOperations } from "./entra-data-policy-operations.js";
+import { listFraudProtectionProviders, showFraudProtectionProvider, countFraudProtectionProviders, listWafProviders, showWafProvider, countWafProviders, listWafVerifications, showWafVerification, countWafVerifications, showVerificationProvider } from "./entra-risk-prevention.js";
 import { listDefinitions, showDefinition, listInstances, showInstance, listDecisions, showDecision, listContactedReviewers, showContactedReviewer, listStages, showStage } from "./entra-access-reviews.js";
 import { listCatalogs, showCatalog, countCatalogs, listAccessPackages, showAccessPackage, countAccessPackages, listAssignmentPolicies, showAssignmentPolicy, countAssignmentPolicies, listResourceRoleScopes, showResourceRoleScope, countResourceRoleScopes, listAssignments, showAssignment, countAssignments, listAssignmentRequests, showAssignmentRequest, countAssignmentRequests } from "./entra-entitlement-management.js";
 import { listWorkflows, showWorkflow, countWorkflows, listWorkflowTemplates, showWorkflowTemplate, countWorkflowTemplates, listTaskDefinitions, showTaskDefinition, countTaskDefinitions, showLifecycleSettings, listRuns, showRun, countRuns, listUserProcessingResults, showUserProcessingResult, countUserProcessingResults, listSubjectProcessingResults, showSubjectProcessingResult, countSubjectProcessingResults, listTaskReports, showTaskReport, countTaskReports, showTaskReportTask, showTaskReportTaskDefinition } from "./entra-lifecycle-workflows.js";
@@ -1318,6 +1319,42 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra data-policy-operation list": return listDataPolicyOperations(session, flags, selected.profile, operation, help, selected.name);
       case "entra data-policy-operation show": return showDataPolicyOperation(session, flags, selected.profile, operation, help, selected.name);
       default: return countDataPolicyOperations(session, flags, selected.profile, operation, help, selected.name);
+    }
+  }
+  if (leaf.path === "entra fraud-protection-provider list" || leaf.path === "entra fraud-protection-provider show" || leaf.path === "entra fraud-protection-provider count" || leaf.path === "entra web-application-firewall-provider list" || leaf.path === "entra web-application-firewall-provider show" || leaf.path === "entra web-application-firewall-provider count" || leaf.path === "entra web-application-firewall-verification list" || leaf.path === "entra web-application-firewall-verification show" || leaf.path === "entra web-application-firewall-verification count" || leaf.path === "entra web-application-firewall-verification provider show") {
+    if (String(flags["api-version"] ?? "v1.0") !== "v1.0") {
+      throw new AxiError("Risk-prevention reads support v1.0 only; beta needs its own review", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const operation = operationFor(leaf, "v1.0");
+    if (!operation || operation.method !== "GET") {
+      throw new AxiError(`Unknown catalogued Graph operation for ${leaf.path}`, "VALIDATION_ERROR", [leafHelp(leaf)]);
+    }
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    const help = leafHelp(leaf);
+    switch (leaf.path) {
+      case "entra fraud-protection-provider list": return listFraudProtectionProviders(session, flags, selected.profile, operation, help, selected.name);
+      case "entra fraud-protection-provider show": return showFraudProtectionProvider(session, flags, selected.profile, operation, help, selected.name);
+      case "entra fraud-protection-provider count": return countFraudProtectionProviders(session, flags, selected.profile, operation, help);
+      case "entra web-application-firewall-provider list": return listWafProviders(session, flags, selected.profile, operation, help, selected.name);
+      case "entra web-application-firewall-provider show": return showWafProvider(session, flags, selected.profile, operation, help, selected.name);
+      case "entra web-application-firewall-provider count": return countWafProviders(session, flags, selected.profile, operation, help);
+      case "entra web-application-firewall-verification list": return listWafVerifications(session, flags, selected.profile, operation, help, selected.name);
+      case "entra web-application-firewall-verification show": return showWafVerification(session, flags, selected.profile, operation, help, selected.name);
+      case "entra web-application-firewall-verification count": return countWafVerifications(session, flags, selected.profile, operation, help);
+      default: return showVerificationProvider(session, flags, selected.profile, operation, help, selected.name);
     }
   }
   const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));

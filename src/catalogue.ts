@@ -345,6 +345,29 @@ const dataPolicyRead = {
   cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to User.Export.All, User.Read.All" },
 };
+const riskPreventionFraudRead = {
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed fraud-protection-provider set; API keys, client secrets and other key material are never selectable; reads need delegated RiskPreventionProviders.Read.All plus a supported Entra role and refuse application profiles" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to RiskPreventionProviders.Read.All" },
+};
+const riskPreventionWafRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter with no $count or ConsistencyLevel contract; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed WAF-provider set; API keys, client secrets and other key material are never selectable; reads need delegated RiskPreventionProviders.Read.All plus a supported Entra role and refuse application profiles" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to RiskPreventionProviders.Read.All" },
+};
+const riskPreventionVerificationRead = {
+  filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter with no $count or ConsistencyLevel contract; unsupported combinations fail before credentials" },
+  select: { value: "comma-separated-properties", description: "Request server properties from the reviewed WAF-verification set; reads need delegated RiskPreventionProviders.Read.All plus a supported Entra role and refuse application profiles" },
+  fields: { value: "comma-separated-properties", description: "Project returned rows locally; every field must be fetched via the default or --select set" },
+  full: { description: "Show complete text values without truncation; never lifts redaction or row caps" },
+  cursor: { value: "opaque-cursor", description: "Resume a capped collection losslessly; repeat the original query flags or omit them" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to RiskPreventionProviders.Read.All" },
+};
 const accessReviewRead = {
   filter: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter; on definitions only contains() over the scope query and eq on status are documented; unsupported combinations fail before credentials" },
   filterReviewer: { value: "odata-filter", description: "OData $filter passed to Graph as plain $filter with no $count or ConsistencyLevel; unsupported combinations fail before credentials" },
@@ -1653,6 +1676,78 @@ export const LEAVES: Leaf[] = [
     ...common,
     scopes: dataPolicyRead.scopes,
   }, examples: ["mg-axi entra data-policy-operation count --profile soc"] },
+  { path: "entra fraud-protection-provider list", description: "List workforce fraud-protection providers with compact properties (id, displayName); rows carry @odata.type naming the provider kind; API keys, client secrets and other key material are never returned; Graph documents $select only, so no --filter", operation: "GET:/identity/riskPrevention/fraudProtectionProviders", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    select: riskPreventionFraudRead.select,
+    fields: riskPreventionFraudRead.fields,
+    full: riskPreventionFraudRead.full,
+    cursor: riskPreventionFraudRead.cursor,
+    scopes: riskPreventionFraudRead.scopes,
+  }, examples: ["mg-axi entra fraud-protection-provider list --profile soc", "mg-axi entra fraud-protection-provider list --profile soc --limit 10"] },
+  { path: "entra fraud-protection-provider show", description: "Show one workforce fraud-protection provider with the full reviewed property set; API keys, client secrets and other key material are never returned", operation: "GET:/identity/riskPrevention/fraudProtectionProviders/{fraudProtectionProvider-id}", flags: {
+    ...common, id: { value: "provider-id", required: true, description: "Fraud-protection-provider ID" },
+    select: riskPreventionFraudRead.select,
+    fields: riskPreventionFraudRead.fields,
+    full: riskPreventionFraudRead.full,
+    scopes: riskPreventionFraudRead.scopes,
+  }, examples: ["mg-axi entra fraud-protection-provider show --id <provider-id> --profile soc", "mg-axi entra fraud-protection-provider show --id <provider-id> --profile soc --full"] },
+  { path: "entra fraud-protection-provider count", description: "Count workforce fraud-protection providers as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/identity/riskPrevention/fraudProtectionProviders/$count", flags: {
+    ...common,
+    scopes: riskPreventionFraudRead.scopes,
+  }, examples: ["mg-axi entra fraud-protection-provider count --profile soc"] },
+  { path: "entra web-application-firewall-provider list", description: "List workforce web-application-firewall providers with compact properties (id, displayName); rows carry @odata.type naming the provider kind; API keys, client secrets and other key material are never returned", operation: "GET:/identity/riskPrevention/webApplicationFirewallProviders", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: riskPreventionWafRead.filter,
+    select: riskPreventionWafRead.select,
+    fields: riskPreventionWafRead.fields,
+    full: riskPreventionWafRead.full,
+    cursor: riskPreventionWafRead.cursor,
+    scopes: riskPreventionWafRead.scopes,
+  }, examples: ["mg-axi entra web-application-firewall-provider list --profile soc", "mg-axi entra web-application-firewall-provider list --profile soc --limit 10", "mg-axi entra web-application-firewall-provider list --profile soc --filter \"displayName eq 'Example'\""] },
+  { path: "entra web-application-firewall-provider show", description: "Show one workforce web-application-firewall provider with the full reviewed property set; API keys, client secrets and other key material are never returned", operation: "GET:/identity/riskPrevention/webApplicationFirewallProviders/{webApplicationFirewallProvider-id}", flags: {
+    ...common, id: { value: "provider-id", required: true, description: "Web-application-firewall-provider ID" },
+    select: riskPreventionWafRead.select,
+    fields: riskPreventionWafRead.fields,
+    full: riskPreventionWafRead.full,
+    scopes: riskPreventionWafRead.scopes,
+  }, examples: ["mg-axi entra web-application-firewall-provider show --id <provider-id> --profile soc", "mg-axi entra web-application-firewall-provider show --id <provider-id> --profile soc --full"] },
+  { path: "entra web-application-firewall-provider count", description: "Count workforce web-application-firewall providers as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/identity/riskPrevention/webApplicationFirewallProviders/$count", flags: {
+    ...common,
+    scopes: riskPreventionWafRead.scopes,
+  }, examples: ["mg-axi entra web-application-firewall-provider count --profile soc"] },
+  { path: "entra web-application-firewall-verification list", description: "List workforce web-application-firewall verifications with compact properties (id, verifiedHost, providerType); rows never carry provider detail, which has its own sub-read", operation: "GET:/identity/riskPrevention/webApplicationFirewallVerifications", flags: {
+    ...common,
+    limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
+    all: { description: "Follow pages within request, byte and deadline budgets" },
+    filter: riskPreventionVerificationRead.filter,
+    select: riskPreventionVerificationRead.select,
+    fields: riskPreventionVerificationRead.fields,
+    full: riskPreventionVerificationRead.full,
+    cursor: riskPreventionVerificationRead.cursor,
+    scopes: riskPreventionVerificationRead.scopes,
+  }, examples: ["mg-axi entra web-application-firewall-verification list --profile soc", "mg-axi entra web-application-firewall-verification list --profile soc --limit 10", "mg-axi entra web-application-firewall-verification list --profile soc --filter \"providerType eq 'cloudflare'\""] },
+  { path: "entra web-application-firewall-verification show", description: "Show one workforce web-application-firewall verification with the full reviewed property set; the row never carries provider detail, which has its own sub-read", operation: "GET:/identity/riskPrevention/webApplicationFirewallVerifications/{webApplicationFirewallVerificationModel-id}", flags: {
+    ...common, id: { value: "verification-id", required: true, description: "Web-application-firewall-verification ID" },
+    select: riskPreventionVerificationRead.select,
+    fields: riskPreventionVerificationRead.fields,
+    full: riskPreventionVerificationRead.full,
+    scopes: riskPreventionVerificationRead.scopes,
+  }, examples: ["mg-axi entra web-application-firewall-verification show --id <verification-id> --profile soc", "mg-axi entra web-application-firewall-verification show --id <verification-id> --profile soc --full"] },
+  { path: "entra web-application-firewall-verification count", description: "Count workforce web-application-firewall verifications as a scalar number; the $count route takes no --filter, --select, --limit or --cursor", operation: "GET:/identity/riskPrevention/webApplicationFirewallVerifications/$count", flags: {
+    ...common,
+    scopes: riskPreventionVerificationRead.scopes,
+  }, examples: ["mg-axi entra web-application-firewall-verification count --profile soc"] },
+  { path: "entra web-application-firewall-verification provider show", description: "Show the web-application-firewall provider behind one verification with the full reviewed provider set; API keys, client secrets and other key material are never returned", operation: "GET:/identity/riskPrevention/webApplicationFirewallVerifications/{webApplicationFirewallVerificationModel-id}/provider", flags: {
+    ...common, id: { value: "verification-id", required: true, description: "Web-application-firewall-verification ID owning the provider" },
+    select: riskPreventionWafRead.select,
+    fields: riskPreventionWafRead.fields,
+    full: riskPreventionWafRead.full,
+    scopes: riskPreventionWafRead.scopes,
+  }, examples: ["mg-axi entra web-application-firewall-verification provider show --id <verification-id> --profile soc"] },
   { path: "entra access-review definition list", description: "List access-review definitions with compact properties (id, displayName, status); definitions are review schedules (a series), never their occurrences", operation: "GET:/identityGovernance/accessReviews/definitions", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },

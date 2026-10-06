@@ -77,6 +77,50 @@ const vActivated = {
 };
 const active = [vAssigned, vActivated];
 
+const t1 = {
+  id: "62e90394-69f5-4237-9190-012177145e10",
+  displayName: "Global Administrator",
+  description: "Can manage all aspects of Microsoft Entra ID.",
+};
+const t2 = {
+  id: "729827e3-9c14-49f7-bb1b-9608f156bbb8",
+  displayName: "Helpdesk Administrator",
+  description: "Can reset passwords for non-administrators and Helpdesk Administrators.",
+};
+const templates = [t1, t2];
+
+const m1 = {
+  "@odata.type": "#microsoft.graph.user",
+  id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  displayName: "Adele Vance",
+  mail: "adele@contoso.example",
+  userPrincipalName: "adele@contoso.example",
+};
+const m2 = {
+  "@odata.type": "#microsoft.graph.group",
+  id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+  displayName: "Ops Admins",
+};
+const members = [m1, m2];
+
+const s1 = {
+  id: "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  principalId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  roleId: "62e90394-69f5-4237-9190-012177145e10",
+  directoryScopeId: "/administrativeUnits/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  administrativeUnitId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+};
+const scoped = [s1];
+
+const g1 = {
+  id: "22222222-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  principalId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  roleId: "729827e3-9c14-49f7-bb1b-9608f156bbb8",
+  directoryScopeId: "/administrativeUnits/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  administrativeUnitId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+};
+const memberships = [g1];
+
 function setupProfiles() {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-read-09-"));
   const previous = process.env.MG_AXI_CONFIG;
@@ -147,6 +191,28 @@ function roleTransport(denied = false) {
       return json(200, { value: eligible });
     }
     if (path === "/v1.0/roleManagement/directory/roleAssignmentScheduleInstances") return json(200, { value: active });
+    if (path === "/v1.0/directoryRoleTemplates") return json(200, { value: templates });
+    const templateSingle = /^\/v1\.0\/directoryRoleTemplates\/([^/]+)$/.exec(path);
+    if (templateSingle) {
+      const found = templates.find(template => template.id === decodeURIComponent(templateSingle[1]));
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such template" } });
+    }
+    if (/^\/v1\.0\/directoryRoles\/[^/]+\/members$/.test(path)) {
+      assert.equal(url.searchParams.get("$select"), "id,displayName");
+      return json(200, { value: members });
+    }
+    if (/^\/v1\.0\/directoryRoles\/[^/]+\/scopedMembers$/.test(path)) return json(200, { value: scoped });
+    const scopedSingle = /^\/v1\.0\/directoryRoles\/[^/]+\/scopedMembers\/([^/]+)$/.exec(path);
+    if (scopedSingle) {
+      const found = scoped.find(row => row.id === decodeURIComponent(scopedSingle[1]));
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such scoped member" } });
+    }
+    if (path === "/v1.0/scopedRoleMemberships") return json(200, { value: memberships });
+    const membershipSingle = /^\/v1\.0\/scopedRoleMemberships\/([^/]+)$/.exec(path);
+    if (membershipSingle) {
+      const found = memberships.find(row => row.id === decodeURIComponent(membershipSingle[1]));
+      return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such membership" } });
+    }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
@@ -174,7 +240,7 @@ function runRolesCli(args, state, mode, scopes) {
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
-      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, scopes, roles, assignments, eligible, active }),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, scopes, roles, assignments, eligible, active, templates, members, scoped, memberships }),
     },
   });
 }
@@ -280,8 +346,172 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
-  test(`${mode} denied PIM reads name the role and P2/Governance requirement`, async () => {
+  test(`${mode} lists directory-role templates with compact rows`, async () => {
     const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "directory-role-template", "list", "--profile", profile], overrides);
+      assert.deepEqual(result.directoryRoleTemplates, [t1, t2]);
+      assert.deepEqual(result.count, "2 directory-role templates");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
+      assert.ok(result.help.some(hint => hint.includes("activation state lives on directoryRoles")));
+      assert.ok(result.help.some(hint => hint.includes("entra directory-role-template show --id <template-id>")));
+      assert.ok(new URL(requests[0].url).pathname.endsWith("/directoryRoleTemplates"));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows a directory-role template`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "directory-role-template", "show", "--id", t1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.directoryRoleTemplate, t1);
+      assert.equal(result.help, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists directory-role members preserving each member kind`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "directory-role", "member", "list", "--role", r1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.roleMembers, [
+        { "@odata.type": "#microsoft.graph.user", id: m1.id, displayName: "Adele Vance" },
+        { "@odata.type": "#microsoft.graph.group", id: m2.id, displayName: "Ops Admins" },
+      ]);
+      assert.deepEqual(result.count, "2 role members");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
+      assert.ok(result.help.some(hint => hint.includes("@odata.type names each member kind")));
+      const url = new URL(requests[0].url);
+      assert.equal(url.pathname, `/v1.0/directoryRoles/${r1.id}/members`);
+      assert.equal(url.searchParams.get("$select"), "id,displayName");
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists directory-role scoped members for one role`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "directory-role", "scoped-member", "list", "--role", r1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.scopedMembers, [
+        { id: s1.id, principalId: s1.principalId, roleId: s1.roleId, directoryScopeId: s1.directoryScopeId },
+      ]);
+      assert.deepEqual(result.count, "1 scoped members");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
+      assert.ok(new URL(requests[0].url).pathname.endsWith(`/directoryRoles/${r1.id}/scopedMembers`));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows a directory-role scoped member`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "directory-role", "scoped-member", "show",
+        "--role", r1.id, "--id", s1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.scopedMember, s1);
+      assert.equal(result.help, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} lists scoped role memberships`, async () => {
+    const state = setupProfiles();
+    try {
+      const { requests, overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "scoped-role-membership", "list", "--profile", profile], overrides);
+      assert.deepEqual(result.scopedRoleMemberships, [
+        { id: g1.id, principalId: g1.principalId, roleId: g1.roleId, directoryScopeId: g1.directoryScopeId },
+      ]);
+      assert.deepEqual(result.count, "1 scoped role memberships");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
+      assert.ok(result.help.some(hint => hint.includes("directory-wide assignments live on roleAssignments")));
+      assert.ok(new URL(requests[0].url).pathname.endsWith("/scopedRoleMemberships"));
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} shows a scoped role membership`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode);
+      const result = await executeArgv(["entra", "scoped-role-membership", "show", "--id", g1.id, "--profile", profile], overrides);
+      assert.deepEqual(result.scopedRoleMembership, g1);
+      assert.equal(result.help, undefined);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} denied member reads name the directory role requirement`, async () => {
+    const state = setupProfiles();
+    try {
+      const { overrides } = overridesFor(mode, roleTransport(true));
+      await assert.rejects(
+        executeArgv(["entra", "directory-role", "member", "list", "--role", r1.id, "--profile", profile], overrides),
+        error => {
+          assert.equal(error.code, "GRAPH_ERROR");
+          const text = [error.message, ...error.suggestions].join("\n");
+          assert.match(text, /RoleManagement\.Read\.Directory/);
+          assert.match(text, /Privileged Role Administrator/);
+          return true;
+        },
+      );
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} executable lists directory-role templates end to end on the fake transport`, async () => {
+    const state = setupProfiles();
+    try {
+      const result = runRolesCli(
+        ["entra", "directory-role-template", "list", "--profile", profile],
+        state, mode, "https://graph.microsoft.com/RoleManagement.Read.Directory");
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, 0, result.stdout);
+      assert.equal(result.stderr, "");
+      const output = decode(result.stdout);
+      assert.deepEqual(output.directoryRoleTemplates, [t1, t2]);
+      assert.deepEqual(output.count, "2 directory-role templates");
+      assert.equal(output.total, null);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} executable lists directory-role members end to end on the fake transport`, async () => {
+    const state = setupProfiles();
+    try {
+      const result = runRolesCli(
+        ["entra", "directory-role", "member", "list", "--role", r1.id, "--profile", profile],
+        state, mode, "https://graph.microsoft.com/RoleManagement.Read.Directory");
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, 0, result.stdout);
+      assert.equal(result.stderr, "");
+      const output = decode(result.stdout);
+      assert.equal(output.roleMembers.length, 2);
+      assert.deepEqual(output.count, "2 role members");
+      assert.equal(output.total, null);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+
+  test(`${mode} denied PIM reads name the role and P2/Governance requirement`, async () => {    const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode, roleTransport(true));
       await assert.rejects(
@@ -341,6 +571,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
   for (const [command, property] of [
     [["entra", "pim", "eligible", "list"], "assignmentType"],
     [["entra", "role-assignment", "list"], "createdDateTime"],
+    [["entra", "directory-role-template", "list"], "owner"],
+    [["entra", "scoped-role-membership", "list"], "owner"],
   ]) {
     for (const flag of ["select", "fields"]) {
       test(`${mode} ${command.join(" ")} rejects ${property} in --${flag} before credentials`, async () => {
@@ -424,6 +656,25 @@ test("delegated role reads reject unknown properties before credentials", async 
       executeArgv(["entra", "pim", "eligible", "list", "--profile", "soc", "--select", "id,owner"], overrides),
       /Unknown property owner in --select/,
     );
+    assert.equal(requests.length, 0);
+  } finally {
+    teardownProfiles(state);
+  }
+});
+
+test("delegated role member lists reject a missing parent role before credentials", async () => {
+  const state = setupProfiles();
+  try {
+    const { requests, calls, overrides } = overridesFor("delegated");
+    await assert.rejects(
+      executeArgv(["entra", "directory-role", "member", "list", "--profile", "soc"], overrides),
+      error => {
+        assert.equal(error.code, "VALIDATION_ERROR");
+        assert.match(error.message, /--role is required/);
+        return true;
+      },
+    );
+    assert.equal(calls.length, 0);
     assert.equal(requests.length, 0);
   } finally {
     teardownProfiles(state);

@@ -12,7 +12,7 @@ API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface t
 READ-01 executes Entra user list/show through that session in both delegated and application modes; current usage follows below.
 READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
 READ-04 adds targeted per-user authentication-method reads and the tenant registration report through the same session, with phone numbers redacted.
-READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
+READ-09 adds directory-role list/show, directory-role-template list/show, directory-role member and scoped-member reads, scoped-role-membership reads, current role-assignment inventory and active/eligible PIM reads through the same session.
 READ-03 adds Conditional Access policy, named-location, authentication-strength-policy, combination-configuration, authentication-method-mode, template, auth-context, deleted-policy and deleted-named-location list/show as separate grammar through the same session; Conditional Access usage follows the device and administrative-unit usage below.
 READ-05 executes Entra sign-in, directory-audit and provisioning-log list/show through that session; log usage follows the Conditional Access usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
@@ -188,7 +188,7 @@ Relationship rows default to `id` and `displayName`; `--select` accepts only `id
 Returned `@odata.type` stays visible alongside any `--fields` projection.
 Group lists return `groups`, member lists return `members`, parent-membership lists return `memberOf`, and single-group reads return `group`.
 Group and relationship lists report uniform totals through the shared list-totals helper: `total` holds the server-supplied `@odata.count` when the query carries `$count` (filtered reads) and `null` otherwise, beside a `count` line such as `3 of 10 groups`, `3 groups` or, when the total is unknown and more pages remain, `3 groups shown, more available`.
-The same helper covers the other wired core-directory lists: users, applications, service principals, owners, devices, administrative units and unit members, contacts, direct reports and memberships, directory roles, role assignments and PIM eligible/active assignments, group PIM assignment/eligibility schedules, instances and eligibility requests, directory objects, deleted items, domains and DNS records, contracts, organizations and branding localizations, subscriptions, access-review definitions, instances, decisions, contacted reviewers and stages, sign-ins and directory audits, authentication methods and registration reports, PKI configurations and certificate authorities, Conditional Access policies, named locations, authentication-strength policies, combination configurations, authentication method modes, templates, authentication contexts, deleted policies and deleted named locations, attribute sets, custom-security-attribute definitions and allowed values, data-policy operations, delegated-admin customers, relationships and navigation lists, entitlement catalogs, access packages, assignment policies, resource-role scopes, assignments and assignment requests, federation configurations, oauth2 grants and app-role assignments, group lifecycle policies and setting templates, identity providers, lifecycle workflows, workflow templates, task definitions, runs, processing results and task reports, multi-tenant-organization tenants, on-premises synchronizations, risky users, risk detections, risky service principals and their history and detections, fraud-protection, web-application-firewall and verification providers, and agreements and acceptances. Every entra list command now reports through the same helper; only the dedicated `count` and `available-types` commands keep their `count` aggregates.
+The same helper covers the other wired core-directory lists: users, applications, service principals, owners, devices, administrative units and unit members, contacts, direct reports and memberships, directory roles, directory-role templates, role members, scoped members, scoped role memberships, role assignments and PIM eligible/active assignments, group PIM assignment/eligibility schedules, instances and eligibility requests, directory objects, deleted items, domains and DNS records, contracts, organizations and branding localizations, subscriptions, access-review definitions, instances, decisions, contacted reviewers and stages, sign-ins and directory audits, authentication methods and registration reports, PKI configurations and certificate authorities, Conditional Access policies, named locations, authentication-strength policies, combination configurations, authentication method modes, templates, authentication contexts, deleted policies and deleted named locations, attribute sets, custom-security-attribute definitions and allowed values, data-policy operations, delegated-admin customers, relationships and navigation lists, entitlement catalogs, access packages, assignment policies, resource-role scopes, assignments and assignment requests, federation configurations, oauth2 grants and app-role assignments, group lifecycle policies and setting templates, identity providers, lifecycle workflows, workflow templates, task definitions, runs, processing results and task reports, multi-tenant-organization tenants, on-premises synchronizations, risky users, risk detections, risky service principals and their history and detections, fraud-protection, web-application-firewall and verification providers, and agreements and acceptances. Every entra list command now reports through the same helper; only the dedicated `count` and `available-types` commands keep their `count` aggregates.
 `complete` names pagination state, with `reason` and an opaque `cursor` on partial reads.
 The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to group and relationship reads.
 Resume relationships with the same `--group` and direct or `--transitive` command, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
@@ -199,12 +199,19 @@ Direct member results always carry the [v1.0 service-principal limitation](docs/
 Delegated group reads default to `https://graph.microsoft.com/GroupMember.Read.All`; hidden members need `Member.Read.Hidden` and richer group properties may need `Group.Read.All`, while application profiles use the configured `.default` audience.
 When richer group access is needed, pass `--scopes https://graph.microsoft.com/Group.Read.All`; for hidden-member access, explicitly log in and read with `--scopes https://graph.microsoft.com/GroupMember.Read.All,https://graph.microsoft.com/Member.Read.Hidden` and satisfy the operation's delegated role requirements.
 
-Read directory roles, current assignments and PIM activity through four views; delegated profiles first need explicit login with the read scopes:
+Read directory roles, templates, members, scoped memberships, current assignments and PIM activity through twelve views; delegated profiles first need explicit login with the read scopes:
 
 ```sh
 mg-axi login --profile soc --scopes https://graph.microsoft.com/RoleManagement.Read.Directory,https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory,https://graph.microsoft.com/RoleAssignmentSchedule.Read.Directory
 mg-axi entra directory-role list --profile soc --limit 10
 mg-axi entra directory-role show --profile soc --id <role-id>
+mg-axi entra directory-role-template list --profile soc
+mg-axi entra directory-role-template show --profile soc --id <template-id>
+mg-axi entra directory-role member list --profile soc --role <role-id>
+mg-axi entra directory-role scoped-member list --profile soc --role <role-id>
+mg-axi entra directory-role scoped-member show --profile soc --role <role-id> --id <scoped-membership-id>
+mg-axi entra scoped-role-membership list --profile soc
+mg-axi entra scoped-role-membership show --profile soc --id <scoped-membership-id>
 mg-axi entra role-assignment list --profile soc --filter "principalId eq '<principal-id>'"
 mg-axi entra pim eligible list --profile soc
 mg-axi entra pim active list --profile soc --filter "assignmentType eq 'Activated'"
@@ -212,6 +219,9 @@ mg-axi entra pim active list --profile soc --filter "assignmentType eq 'Activate
 
 `entra directory-role list` defaults to `id`, `displayName`, `description` and `roleTemplateId`; `entra directory-role show --id <role-id>` defaults to the full reviewed role set.
 Directory roles are activated instances only: a role appears after activation, never before, so an empty result never proves the role does not exist.
+`entra directory-role-template list` and `show` default to `id`, `displayName` and `description`; templates describe every role definition whether or not the role is activated.
+`entra directory-role member list --role <role-id>` defaults to `id` and `displayName` and carries each member kind in `@odata.type` (user, group, device or service principal); request `mail` or `userPrincipalName` with `--select` for richer member rows.
+`entra directory-role scoped-member list` and `show` and `entra scoped-role-membership list` and `show` default to `id`, `principalId`, `roleId` and `directoryScopeId` with the full reviewed set (`administrativeUnitId` included) on show; administrative-unit scopes need P1.
 `entra role-assignment list` defaults to `id`, `principalId`, `roleDefinitionId` and `directoryScopeId` and returns the current assignment inventory, including direct and PIM-activated assignments.
 Use `entra pim active list` to classify those assignments as described below.
 `entra pim eligible list` defaults to `id`, `principalId`, `roleDefinitionId` and `memberType`; it covers PIM-eligible assignments, which are not active, and eligible instances carry no `assignmentType`.
@@ -219,10 +229,10 @@ Use `entra pim active list` to classify those assignments as described below.
 For built-in roles the unified `roleDefinitionId` matches the directory-role `roleTemplateId`.
 `--select` requests properties from the [reviewed role property sets](src/entra-roles.ts); `--fields` must be a subset of the fetched selection.
 `--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; the named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply.
-Delegated directory-role and role-assignment reads default to `https://graph.microsoft.com/RoleManagement.Read.Directory`; eligible PIM reads default to `https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory` and active PIM reads to `https://graph.microsoft.com/RoleAssignmentSchedule.Read.Directory`, while application profiles use the configured `.default` audience.
+Delegated directory-role, template, member, scoped-member, scoped-membership and role-assignment reads default to `https://graph.microsoft.com/RoleManagement.Read.Directory`; eligible PIM reads default to `https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory` and active PIM reads to `https://graph.microsoft.com/RoleAssignmentSchedule.Read.Directory`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need a supported directory role per operation (for example Privileged Role Administrator, Global Reader or Security Reader for role reads, Directory Readers for assignments, Security Operator for PIM reads).
 Denied reads name that role requirement instead of only the generic grant/role/licence cause.
-Built-in roles are base inventory and custom role assignments need P1; PIM reads need P2 or ID Governance.
+Built-in roles are base inventory and custom role assignments need P1; administrative-unit-scoped memberships need P1; PIM reads need P2 or ID Governance.
 Role assignment, activation and every other PIM mutation belongs to later write slices, never to these reads.
 
 Read PIM-for-Groups assignment and eligibility through ten views; delegated profiles first need explicit login with the read scopes:

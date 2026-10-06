@@ -611,6 +611,36 @@ const wired = [
     ],
   },
   {
+    name: "conditional-access auth-context list",
+    argv: ["entra", "conditional-access", "auth-context", "list", "--profile", "soc"],
+    key: "authContexts",
+    noun: "auth contexts",
+    rows: () => [
+      { id: ID_A, displayName: "Contoso trusted locations" },
+      { id: ID_B, displayName: "Contoso privileged access" },
+    ],
+  },
+  {
+    name: "conditional-access deleted-policy list",
+    argv: ["entra", "conditional-access", "deleted-policy", "list", "--profile", "soc"],
+    key: "deletedPolicies",
+    noun: "deleted policies",
+    rows: () => [
+      { id: ID_A, displayName: "Retired MFA policy", state: "enabled", deletedDateTime: SINCE },
+      { id: ID_B, displayName: "Retired block policy", state: "disabled", deletedDateTime: SINCE },
+    ],
+  },
+  {
+    name: "conditional-access deleted-named-location list",
+    argv: ["entra", "conditional-access", "deleted-named-location", "list", "--profile", "soc"],
+    key: "deletedNamedLocations",
+    noun: "deleted named locations",
+    rows: () => [
+      { id: ID_A, displayName: "Retired branch office", deletedDateTime: SINCE, "@odata.type": "#microsoft.graph.ipNamedLocation" },
+      { id: ID_B, displayName: "Retired blocked countries", deletedDateTime: SINCE, "@odata.type": "#microsoft.graph.countryNamedLocation" },
+    ],
+  },
+  {
     name: "attribute-set list",
     argv: ["entra", "attribute-set", "list", "--profile", "soc"],
     key: "attributeSets",

@@ -19,7 +19,7 @@ import { listApplicationOwners, listApplications, listServicePrincipalOwners, li
 import { listAppRoleAssignments, listOAuth2Grants } from "./entra-grants.js";
 import { listRiskyUsers, showRiskyUser, listRiskDetections, showRiskDetection, listRiskyServicePrincipals, showRiskyServicePrincipal, listRiskyServicePrincipalHistory, showRiskyServicePrincipalHistory, listServicePrincipalRiskDetections, showServicePrincipalRiskDetection } from "./entra-risk.js";
 import { dismissRiskyUser } from "./entra-risk-dismiss.js";
-import { listPolicies, showPolicy, listNamedLocations, showNamedLocation, listAuthStrengthPolicies, showAuthStrengthPolicy, listCombinationConfigurations, showCombinationConfiguration, listAuthMethodModes, showAuthMethodMode, listTemplates, showTemplate } from "./entra-conditional-access.js";
+import { listPolicies, showPolicy, listNamedLocations, showNamedLocation, listAuthStrengthPolicies, showAuthStrengthPolicy, listCombinationConfigurations, showCombinationConfiguration, listAuthMethodModes, showAuthMethodMode, listTemplates, showTemplate, listAuthContexts, showAuthContext, listDeletedPolicies, showDeletedPolicy, listDeletedNamedLocations, showDeletedNamedLocation } from "./entra-conditional-access.js";
 import { listBrandingLocalizations, listOrganizations, showBranding, showBrandingLocalization, showOrganization } from "./entra-organization.js";
 import { updateCaPolicy } from "./entra-ca-policy-update.js";
 import { listDomains, showDomain, listVerificationDnsRecords, showVerificationDnsRecord, listServiceConfigurationRecords, showServiceConfigurationRecord, listDomainDnsRecords, showDomainDnsRecord } from "./entra-domains.js";
@@ -170,7 +170,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     const { MsalProvider } = await import("./msal-provider.js");
     return { profile: selected.name, ...await new DelegatedAuth(new MsalProvider()).login(selected.profile, String(flags.method ?? "browser"), String(flags.scopes).split(",")) };
   }
-  if (leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access policy show" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra conditional-access named-location show" || leaf.path === "entra conditional-access auth-strength-policy list" || leaf.path === "entra conditional-access auth-strength-policy show" || leaf.path === "entra conditional-access combination-configuration list" || leaf.path === "entra conditional-access combination-configuration show" || leaf.path === "entra conditional-access auth-method-mode list" || leaf.path === "entra conditional-access auth-method-mode show" || leaf.path === "entra conditional-access template list" || leaf.path === "entra conditional-access template show") {
+  if (leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access policy show" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra conditional-access named-location show" || leaf.path === "entra conditional-access auth-strength-policy list" || leaf.path === "entra conditional-access auth-strength-policy show" || leaf.path === "entra conditional-access combination-configuration list" || leaf.path === "entra conditional-access combination-configuration show" || leaf.path === "entra conditional-access auth-method-mode list" || leaf.path === "entra conditional-access auth-method-mode show" || leaf.path === "entra conditional-access template list" || leaf.path === "entra conditional-access template show" || leaf.path === "entra conditional-access auth-context list" || leaf.path === "entra conditional-access auth-context show" || leaf.path === "entra conditional-access deleted-policy list" || leaf.path === "entra conditional-access deleted-policy show" || leaf.path === "entra conditional-access deleted-named-location list" || leaf.path === "entra conditional-access deleted-named-location show") {
     const selected = profiles.resolve(flags.profile as string | undefined);
     const operation = operationFor(leaf, String(flags["api-version"] ?? "v1.0"));
     if (!operation || operation.method !== "GET") {
@@ -203,6 +203,12 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra conditional-access auth-method-mode list": return listAuthMethodModes(session, flags, selected.profile, operation, help, selected.name);
       case "entra conditional-access auth-method-mode show": return showAuthMethodMode(session, flags, selected.profile, operation, help, selected.name);
       case "entra conditional-access template list": return listTemplates(session, flags, selected.profile, operation, help, selected.name);
+      case "entra conditional-access auth-context list": return listAuthContexts(session, flags, selected.profile, operation, help, selected.name);
+      case "entra conditional-access auth-context show": return showAuthContext(session, flags, selected.profile, operation, help, selected.name);
+      case "entra conditional-access deleted-policy list": return listDeletedPolicies(session, flags, selected.profile, operation, help, selected.name);
+      case "entra conditional-access deleted-policy show": return showDeletedPolicy(session, flags, selected.profile, operation, help, selected.name);
+      case "entra conditional-access deleted-named-location list": return listDeletedNamedLocations(session, flags, selected.profile, operation, help, selected.name);
+      case "entra conditional-access deleted-named-location show": return showDeletedNamedLocation(session, flags, selected.profile, operation, help, selected.name);
       default: return showTemplate(session, flags, selected.profile, operation, help, selected.name);
     }
   }

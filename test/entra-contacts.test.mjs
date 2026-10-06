@@ -150,8 +150,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: c2.id, displayName: c2.displayName, mail: c2.mail, companyName: c2.companyName },
         { id: c3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("entra contact show --id <contact-id>")));
+      assert.deepEqual(result.count, "3 contacts");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/contacts?"));
       assert.ok(!new URL(requests[0].url).searchParams.has("$filter"));
@@ -169,7 +170,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "contact", "list", "--profile", profile, "--filter", "startswith(displayName,'A')"], overrides);
-      assert.equal(result.count.complete, true);
+      assert.equal(result.complete, true);
       const url = new URL(requests[0].url);
       assert.equal(url.searchParams.get("$filter"), "startswith(displayName,'A')");
       assert.equal(url.searchParams.get("$count"), "true");
@@ -185,11 +186,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "contact", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.contacts.map(row => row.id), [c1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "contact", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.contacts.map(row => row.id), [c2.id, c3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 contacts");
+      assert.equal(second.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -265,7 +267,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const listed = await executeArgv(["entra", "contact", "list", "--profile", profile], overrides);
       assert.deepEqual(listed.contacts, []);
-      assert.deepEqual(listed.count, { returned: 0, complete: true });
+      assert.deepEqual(listed.count, "0 contacts");
+      assert.equal(listed.total, null);
+      assert.equal(listed.complete, true);
       assert.ok(listed.help.some(hint => hint.includes("absence of results is the answer")));
     } finally {
       teardownProfiles(state);
@@ -317,7 +321,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const listOut = decode(listed.stdout);
       assert.deepEqual(listOut.contacts.map(row => row.id), [c1.id, c2.id]);
-      assert.deepEqual(listOut.count, { returned: 2, complete: true });
+      assert.deepEqual(listOut.count, "2 contacts");
+      assert.equal(listOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runContactCli(["entra", "contact", "show", "--id", c1.id, "--profile", profile], state, mode);
@@ -626,8 +631,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { "@odata.type": "#microsoft.graph.orgContact", id: r2.id, displayName: r2.displayName },
         { "@odata.type": "#microsoft.graph.user", id: r3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("show-direct-report --id <contact-id> --report-id <report-id>")));
+      assert.deepEqual(result.count, "3 direct reports");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("only type and id")), "limited-information rows are flagged");
       assert.ok(!JSON.stringify(result).includes("ReneR@adatum.com"), "mail stays behind --select");
     } finally {
@@ -663,10 +669,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, navTransport());
       const first = await executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.directReports.map(row => row.id), [r1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       const second = await executeArgv(["entra", "contact", "list-direct-reports", "--id", c1.id, "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.directReports.map(row => row.id), [r2.id, r3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 direct reports");
+      assert.equal(second.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -858,8 +865,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { "@odata.type": "#microsoft.graph.administrativeUnit", id: au1.id, displayName: au1.displayName },
         { "@odata.type": "#microsoft.graph.group", id: m3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
-      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/contacts/${c1.id}/memberOf?`));
+      assert.deepEqual(result.count, "3 memberships");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("show-member-of --id <contact-id> --member-id <membership-id>")));
       assert.ok(result.help.some(hint => hint.includes("only type and id")), "limited-information rows are flagged");
       assert.ok(!JSON.stringify(result).includes("best@adatum.com"), "mail stays behind --select");
@@ -877,7 +885,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode, membershipTransport());
       const result = await executeArgv(["entra", "contact", "list-member-of", "--id", c1.id, "--profile", profile,
         "--filter", "startswith(displayName,'B')"], overrides);
-      assert.equal(result.count.complete, true);
+      assert.equal(result.complete, true);
       const url = new URL(requests[0].url);
       assert.equal(url.searchParams.get("$filter"), "startswith(displayName,'B')");
       assert.equal(url.searchParams.get("$count"), "true");
@@ -894,7 +902,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = await executeArgv(["entra", "contact", "list-member-of", "--id", c1.id, "--profile", profile, "--transitive"], overrides);
       assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/contacts/${c1.id}/transitiveMemberOf?`));
       assert.deepEqual(result.memberOf.map(row => row.id), [g1.id, g2.id, au1.id, m3.id]);
-      assert.deepEqual(result.count, { returned: 4, complete: true });
+      assert.deepEqual(result.count, "4 memberships");
+      assert.equal(result.total, null);
       assert.ok(result.help.some(hint => hint.includes("Direct memberships only")));
       if (mode === "delegated") {
         assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(transitiveScopes)),
@@ -940,11 +949,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, membershipTransport());
       const first = await executeArgv(["entra", "contact", "list-member-of", "--id", c1.id, "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.memberOf.map(row => row.id), [g1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "contact", "list-member-of", "--id", c1.id, "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.memberOf.map(row => row.id), [au1.id, m3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 memberships");
+      assert.equal(second.total, null);
     } finally {
       teardownProfiles(state);
     }

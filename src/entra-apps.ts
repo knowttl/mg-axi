@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import { SAFE_CREDENTIAL_FIELDS } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
@@ -339,23 +340,25 @@ async function listCollection(
   if (!result.complete) {
     return {
       [key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, emptyNoun, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
     return {
       [key]: rows,
-      count,
+      ...listTotals(rows.length, result.total, emptyNoun, true),
+      complete: true,
       help: [
         `0 ${emptyNoun} matched; the absence of results is the answer, not an error`,
         showHint,
       ],
     };
   }
-  return { [key]: rows, count, help: [...truncationHints, showHint] };
+  return { [key]: rows, ...listTotals(rows.length, result.total, emptyNoun, true), complete: true, help: [...truncationHints, showHint] };
 }
 
 async function showSingle(
@@ -484,20 +487,22 @@ async function listOwners(
   if (!result.complete) {
     return {
       owners: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, "owners", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, ...limitedHints, resumeHint(profileName)],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
     return {
       owners: rows,
-      count,
+      ...listTotals(rows.length, result.total, "owners", true),
+      complete: true,
       help: [...limitedHints, "0 owners matched; the absence of results is the answer, not an error"],
     };
   }
-  return { owners: rows, count, help: [...truncationHints, ...limitedHints] };
+  return { owners: rows, ...listTotals(rows.length, result.total, "owners", true), complete: true, help: [...truncationHints, ...limitedHints] };
 }
 
 export async function listApplicationOwners(

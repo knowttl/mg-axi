@@ -166,7 +166,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: sub2.id, skuPartNumber: `${longSkuPartNumber.slice(0, 500)}... (truncated, ${longSkuPartNumber.length} chars total)`, status: "Suspended", totalLicenses: 10 },
         { id: sub3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 subscriptions");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra subscription show --id <subscription-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/directory/subscriptions?"));
@@ -184,7 +186,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "subscription", "list", "--profile", profile,
         "--filter", "status eq 'Enabled'"], overrides);
-      assert.equal(result.count.returned, 3);
+      assert.deepEqual(result.count, "3 subscriptions");
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$filter"), "status eq 'Enabled'");
       assert.equal(requests[0].headers.ConsistencyLevel, undefined);
@@ -199,11 +201,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "subscription", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.subscriptions.map(row => row.id), [sub1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "subscription", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.subscriptions.map(row => row.id), [sub2.id, sub3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 subscriptions");
+      assert.equal(second.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -336,7 +339,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const listed = await executeArgv(["entra", "subscription", "list", "--profile", profile], overrides);
       assert.deepEqual(listed.subscriptions, []);
-      assert.deepEqual(listed.count, { returned: 0, complete: true });
+      assert.deepEqual(listed.count, "0 subscriptions");
+      assert.equal(listed.total, null);
+      assert.equal(listed.complete, true);
       assert.ok(listed.help.some(hint => hint.includes("no commercial subscriptions")));
     } finally {
       teardownProfiles(state);
@@ -400,7 +405,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const listOut = decode(listed.stdout);
       assert.deepEqual(listOut.subscriptions.map(row => row.id), [sub1.id, sub2.id]);
-      assert.deepEqual(listOut.count, { returned: 2, complete: true });
+      assert.deepEqual(listOut.count, "2 subscriptions");
+      assert.equal(listOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runSubscriptionCli(["entra", "subscription", "show", "--id", sub1.id, "--profile", profile], state, mode);

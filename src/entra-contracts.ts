@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-04 partner contracts subfamily: the read mapping behind `mg-axi entra
@@ -258,20 +259,22 @@ export async function listContracts(
   if (!result.complete) {
     return {
       contracts,
-      count: { returned: contracts.length, complete: false, reason: result.reason },
+      ...listTotals(contracts.length, result.total, "contracts", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, resumeHint(profileName), showHint, PARTNER_NOTE],
     };
   }
-  const count = { returned: contracts.length, complete: true };
   if (!contracts.length) {
     return {
       contracts,
-      count,
+      ...listTotals(contracts.length, result.total, "contracts", true),
+      complete: true,
       help: ["0 contracts matched; the absence of results is the answer, not an error", PARTNER_NOTE],
     };
   }
-  return { contracts, count, help: [...truncationHints, showHint, PARTNER_NOTE] };
+  return { contracts, ...listTotals(contracts.length, result.total, "contracts", true), complete: true, help: [...truncationHints, showHint, PARTNER_NOTE] };
 }
 
 export async function showContract(

@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-09: the Entra directory-role and PIM read mapping behind
@@ -208,6 +209,7 @@ const ACTIVE_DENIAL_HINTS = [
 interface CollectionShape {
   command: string;
   key: string;
+  noun: string;
   known: Set<string>;
   knownList: readonly string[];
   defaultSelect: string[];
@@ -220,6 +222,7 @@ interface CollectionShape {
 const ROLE_LIST: CollectionShape = {
   command: "entra directory-role list",
   key: "directoryRoles",
+  noun: "directory roles",
   known: ROLE_KNOWN,
   knownList: KNOWN_ROLE_FIELDS,
   defaultSelect: DEFAULT_ROLE_LIST_SELECT,
@@ -232,6 +235,7 @@ const ROLE_LIST: CollectionShape = {
 const ASSIGNMENT_LIST: CollectionShape = {
   command: "entra role-assignment list",
   key: "roleAssignments",
+  noun: "role assignments",
   known: ASSIGNMENT_KNOWN,
   knownList: KNOWN_ASSIGNMENT_FIELDS,
   defaultSelect: DEFAULT_ASSIGNMENT_SELECT,
@@ -244,6 +248,7 @@ const ASSIGNMENT_LIST: CollectionShape = {
 const PIM_ELIGIBLE: CollectionShape = {
   command: "entra pim eligible list",
   key: "eligibleAssignments",
+  noun: "eligible assignments",
   known: ELIGIBLE_KNOWN,
   knownList: KNOWN_ELIGIBLE_FIELDS,
   defaultSelect: DEFAULT_ELIGIBLE_SELECT,
@@ -256,6 +261,7 @@ const PIM_ELIGIBLE: CollectionShape = {
 const PIM_ACTIVE: CollectionShape = {
   command: "entra pim active list",
   key: "activeAssignments",
+  noun: "active assignments",
   known: ACTIVE_KNOWN,
   knownList: KNOWN_ACTIVE_FIELDS,
   defaultSelect: DEFAULT_ACTIVE_SELECT,
@@ -315,16 +321,17 @@ async function listCollection(
   if (!result.complete) {
     return {
       [shape.key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, shape.noun, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, `Resume losslessly with the same flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`, ...standing],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
-    return { [shape.key]: rows, count, help: [shape.emptyNote, ...standing] };
+    return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [shape.emptyNote, ...standing] };
   }
-  return { [shape.key]: rows, count, help: [...truncationHints, ...standing] };
+  return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.noun, true), complete: true, help: [...truncationHints, ...standing] };
 }
 
 export async function listDirectoryRoles(

@@ -197,7 +197,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: d2.id, displayName: "CONTOSO-ANDROID", operatingSystem: "Android", accountEnabled: false },
         { id: d3.id, displayName: "Stale device" },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 devices");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra device show --id <device-id>")));
       assert.ok(result.help.some(hint => hint.includes("Intune managed devices are a separately authorized surface")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
@@ -231,8 +233,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: au2.id, displayName: "US Sales", visibility: "HiddenMembership", membershipType: "Dynamic" },
         { id: au3.id, displayName: "Niche" },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("entra administrative-unit show --id <administrative-unit-id>")));
+      assert.deepEqual(result.count, "3 administrative units");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/directory/administrativeUnits?"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
     } finally {
@@ -269,7 +272,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { "@odata.type": "#microsoft.graph.servicePrincipal", id: mLimited.id },
         mNullName,
       ]);
-      assert.deepEqual(result.count, { returned: 5, complete: true });
+      assert.deepEqual(result.count, "5 members");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("Member.Read.Hidden")));
       assert.ok(result.help.some(hint => hint.includes("completion describes pagination, not visibility")));
       assert.ok(result.help.some(hint => hint.includes("2 of 5 rows have no non-null selected descriptive properties")));
@@ -285,11 +290,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "device", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.devices.map(row => row.id), [d1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "device", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.devices.map(row => row.id), [d2.id, d3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 devices");
+      assert.equal(second.total, null);
     } finally {
       teardownProfiles(state);
     }
@@ -302,7 +308,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const result = await executeArgv(["entra", "device", "list", "--profile", profile], overrides);
       assert.deepEqual(result.devices, []);
-      assert.deepEqual(result.count, { returned: 0, complete: true });
+      assert.deepEqual(result.count, "0 devices");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("0 devices matched; the absence of results is the answer, not an error")));
     } finally {
       teardownProfiles(state);
@@ -372,7 +380,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const devicesOut = decode(listed.stdout);
       assert.deepEqual(devicesOut.devices.map(device => device.id), [d1.id, d2.id, d3.id]);
-      assert.deepEqual(devicesOut.count, { returned: 3, complete: true });
+      assert.deepEqual(devicesOut.count, "3 devices");
+      assert.equal(devicesOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runDirectoryCli(["entra", "device", "show", "--id", d1.id, "--profile", profile], state, mode);
@@ -434,11 +443,11 @@ test("device list filtering carries count and consistency through resume", async
     const filtered = await executeArgv(["entra", "device", "list",
       "--profile", "soc", "--filter", "isCompliant eq true", "--limit", "1"], overrides);
     assert.equal(seen[0].headers.ConsistencyLevel, "eventual");
-    assert.equal(filtered.count.complete, false);
+    assert.equal(filtered.complete, false);
     const resumed = await executeArgv(["entra", "device", "list",
       "--profile", "soc", "--cursor", filtered.cursor], overrides);
     assert.equal(seen[1].headers.ConsistencyLevel, "eventual");
-    assert.deepEqual(resumed.count.complete, true);
+    assert.deepEqual(resumed.complete, true);
     await assert.rejects(executeArgv(["entra", "device", "list",
       "--profile", "soc", "--cursor", filtered.cursor, "--filter", "isCompliant eq false"], overrides),
     { code: "VALIDATION_ERROR" });
@@ -450,7 +459,8 @@ test("device list filtering carries count and consistency through resume", async
       overridesFor("delegated", plain).overrides);
     assert.equal(seen[seen.length - 1].headers.ConsistencyLevel, undefined);
     assert.equal(new URL(seen[seen.length - 1].url).searchParams.has("$count"), false);
-    assert.deepEqual(unfiltered.count, { returned: 1, complete: true });
+    assert.deepEqual(unfiltered.count, "1 devices");
+    assert.equal(unfiltered.total, null);
   } finally {
     teardownProfiles(state);
   }
@@ -470,7 +480,9 @@ test("AU member list filtering carries count and consistency through resume", as
       "--administrative-unit", au1.id, "--profile", "soc", "--filter", "startswith(displayName,'A')"], overrides);
     assert.equal(seen[0].headers.ConsistencyLevel, "eventual");
     assert.deepEqual(result.members, [{ "@odata.type": "#microsoft.graph.user", id: mUser.id, displayName: "Adele Vance" }]);
-    assert.deepEqual(result.count, { returned: 1, complete: true });
+    assert.deepEqual(result.count, "1 members");
+    assert.equal(result.total, null);
+    assert.equal(result.complete, true);
   } finally {
     teardownProfiles(state);
   }

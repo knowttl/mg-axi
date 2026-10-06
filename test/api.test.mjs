@@ -441,7 +441,7 @@ for (const profile of [delegatedProfile, appProfile]) {
           assert.equal(output.id, "ca-1");
           assert.equal(output.displayName, includeName ? "Root CA" : undefined);
           assert.equal(output.certificate, includeCertificate
-            ? (full ? certificate : `${certificate.slice(0, 4000)}... (truncated, 4100 chars total)`)
+            ? (full ? certificate : `${certificate.slice(0, 500)}... (truncated, 4100 chars total)`)
             : undefined);
           const selected = new URL(f.requests[0].url).searchParams.get("$select").split(",");
           assert.equal(selected.includes("certificate"), includeCertificate);
@@ -770,7 +770,8 @@ test("CLI resumes a cursor larger than the argv limit through stdin", async () =
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
-  assert.deepEqual(decode(result.stdout), { returned: 199, complete: true, value: rows.slice(1) });
+  const truncatedRows = rows.slice(1).map(row => ({ ...row, description: `${"x".repeat(500)}... (truncated, 1000 chars total)` }));
+  assert.deepEqual(decode(result.stdout), { returned: 199, complete: true, value: truncatedRows, help: ["Strings truncated at 500 chars; re-run with --full"] });
 });
 
 for (const token of ["", "invalid"]) test(`CLI stdin cursor refuses ${token || "empty input"}`, () => {

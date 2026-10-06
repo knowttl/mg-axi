@@ -12,7 +12,7 @@ API-01 executes `mg-axi api get <path>`, serving the reviewed v1.0 raw surface t
 READ-01 executes Entra user list/show through that session in both delegated and application modes; current usage follows below.
 READ-02 adds group list/show and direct or transitive member and parent-membership reads through the same session.
 READ-04 adds targeted per-user authentication-method reads and the tenant registration report through the same session, with phone numbers redacted.
-READ-09 adds directory-role list/show, current role-assignment inventory and active/eligible PIM reads through the same session.
+READ-09 adds directory-role list/show, directory-role-template list/show, directory-role member and scoped-member reads, scoped-role-membership reads, current role-assignment inventory and active/eligible PIM reads through the same session.
 READ-03 adds Conditional Access policy, named-location, authentication-strength-policy, combination-configuration, authentication-method-mode, template, auth-context, deleted-policy and deleted-named-location list/show as separate grammar through the same session; Conditional Access usage follows the device and administrative-unit usage below.
 READ-05 executes Entra sign-in and directory-audit list/show through that session; log usage follows the Conditional Access usage below.
 READ-07 adds application and service-principal list/show with credential expiry metadata and owner reads through the same session.
@@ -205,6 +205,13 @@ Read directory roles, current assignments and PIM activity through four views; d
 mg-axi login --profile soc --scopes https://graph.microsoft.com/RoleManagement.Read.Directory,https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory,https://graph.microsoft.com/RoleAssignmentSchedule.Read.Directory
 mg-axi entra directory-role list --profile soc --limit 10
 mg-axi entra directory-role show --profile soc --id <role-id>
+mg-axi entra directory-role-template list --profile soc
+mg-axi entra directory-role-template show --profile soc --id <template-id>
+mg-axi entra directory-role member list --profile soc --role <role-id>
+mg-axi entra directory-role scoped-member list --profile soc --role <role-id>
+mg-axi entra directory-role scoped-member show --profile soc --role <role-id> --id <scoped-membership-id>
+mg-axi entra scoped-role-membership list --profile soc
+mg-axi entra scoped-role-membership show --profile soc --id <scoped-membership-id>
 mg-axi entra role-assignment list --profile soc --filter "principalId eq '<principal-id>'"
 mg-axi entra pim eligible list --profile soc
 mg-axi entra pim active list --profile soc --filter "assignmentType eq 'Activated'"
@@ -212,6 +219,9 @@ mg-axi entra pim active list --profile soc --filter "assignmentType eq 'Activate
 
 `entra directory-role list` defaults to `id`, `displayName`, `description` and `roleTemplateId`; `entra directory-role show --id <role-id>` defaults to the full reviewed role set.
 Directory roles are activated instances only: a role appears after activation, never before, so an empty result never proves the role does not exist.
+`entra directory-role-template list` and `show` default to `id`, `displayName` and `description`; templates describe every role definition whether or not the role is activated.
+`entra directory-role member list --role <role-id>` defaults to `id` and `displayName` and carries each member kind in `@odata.type` (user, group, device or service principal); request `mail` or `userPrincipalName` with `--select` for richer member rows.
+`entra directory-role scoped-member list` and `show` and `entra scoped-role-membership list` and `show` default to `id`, `principalId`, `roleId` and `directoryScopeId` with the full reviewed set (`administrativeUnitId` included) on show; administrative-unit scopes need P1.
 `entra role-assignment list` defaults to `id`, `principalId`, `roleDefinitionId` and `directoryScopeId` and returns the current assignment inventory, including direct and PIM-activated assignments.
 Use `entra pim active list` to classify those assignments as described below.
 `entra pim eligible list` defaults to `id`, `principalId`, `roleDefinitionId` and `memberType`; it covers PIM-eligible assignments, which are not active, and eligible instances carry no `assignmentType`.
@@ -219,10 +229,10 @@ Use `entra pim active list` to classify those assignments as described below.
 For built-in roles the unified `roleDefinitionId` matches the directory-role `roleTemplateId`.
 `--select` requests properties from the [reviewed role property sets](src/entra-roles.ts); `--fields` must be a subset of the fetched selection.
 `--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; the named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply.
-Delegated directory-role and role-assignment reads default to `https://graph.microsoft.com/RoleManagement.Read.Directory`; eligible PIM reads default to `https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory` and active PIM reads to `https://graph.microsoft.com/RoleAssignmentSchedule.Read.Directory`, while application profiles use the configured `.default` audience.
+Delegated directory-role, template, member, scoped-member, scoped-membership and role-assignment reads default to `https://graph.microsoft.com/RoleManagement.Read.Directory`; eligible PIM reads default to `https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory` and active PIM reads to `https://graph.microsoft.com/RoleAssignmentSchedule.Read.Directory`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need a supported directory role per operation (for example Privileged Role Administrator, Global Reader or Security Reader for role reads, Directory Readers for assignments, Security Operator for PIM reads).
 Denied reads name that role requirement instead of only the generic grant/role/licence cause.
-Built-in roles are base inventory and custom role assignments need P1; PIM reads need P2 or ID Governance.
+Built-in roles are base inventory and custom role assignments need P1; administrative-unit-scoped memberships need P1; PIM reads need P2 or ID Governance.
 Role assignment, activation and every other PIM mutation belongs to later write slices, never to these reads.
 
 Read PIM-for-Groups assignment and eligibility through ten views; delegated profiles first need explicit login with the read scopes:

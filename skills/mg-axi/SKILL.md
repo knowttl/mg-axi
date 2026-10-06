@@ -53,6 +53,13 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra group member add` | native | write |
 | `mg-axi entra directory-role list` | native | read |
 | `mg-axi entra directory-role show` | native | read |
+| `mg-axi entra directory-role-template list` | native | read |
+| `mg-axi entra directory-role-template show` | native | read |
+| `mg-axi entra directory-role member list` | native | read |
+| `mg-axi entra directory-role scoped-member list` | native | read |
+| `mg-axi entra directory-role scoped-member show` | native | read |
+| `mg-axi entra scoped-role-membership list` | native | read |
+| `mg-axi entra scoped-role-membership show` | native | read |
 | `mg-axi entra role-assignment list` | native | read |
 | `mg-axi entra pim eligible list` | native | read |
 | `mg-axi entra pim active list` | native | read |

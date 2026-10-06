@@ -11,7 +11,7 @@ import { updateUserAccount } from "./entra-user-update.js";
 import { revokeUserSessions } from "./entra-user-revoke-sessions.js";
 import { createMutationCoordinator, mutationFetchTransport, type MutationTransport } from "./mutations.js";
 import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
-import { listDirectoryRoles, showDirectoryRole, listRoleAssignments, listPimEligible, listPimActive } from "./entra-roles.js";
+import { listDirectoryRoles, showDirectoryRole, listDirectoryRoleTemplates, showDirectoryRoleTemplate, listRoleMembers, listScopedMembers, showScopedMember, listScopedRoleMemberships, showScopedRoleMembership, listRoleAssignments, listPimEligible, listPimActive } from "./entra-roles.js";
 import { listGroupAssignmentSchedules, showGroupAssignmentSchedule, listGroupAssignmentInstances, showGroupAssignmentInstance, listGroupEligibilitySchedules, showGroupEligibilitySchedule, listGroupEligibilityInstances, showGroupEligibilityInstance, listGroupEligibilityRequests, showGroupEligibilityRequest } from "./entra-group-pim.js";
 import { listAdministrativeUnitMembers, listAdministrativeUnits, listDevices, showAdministrativeUnit, showDevice } from "./entra-directory.js";
 import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit } from "./entra-audit-logs.js";
@@ -598,7 +598,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       help: leafHelp(leaf),
     });
   }
-  if (leaf.path === "entra directory-role list" || leaf.path === "entra directory-role show" || leaf.path === "entra role-assignment list" || leaf.path === "entra pim eligible list" || leaf.path === "entra pim active list"
+  if (leaf.path === "entra directory-role list" || leaf.path === "entra directory-role show" || leaf.path === "entra directory-role-template list" || leaf.path === "entra directory-role-template show" || leaf.path === "entra directory-role member list" || leaf.path === "entra directory-role scoped-member list" || leaf.path === "entra directory-role scoped-member show" || leaf.path === "entra scoped-role-membership list" || leaf.path === "entra scoped-role-membership show" || leaf.path === "entra role-assignment list" || leaf.path === "entra pim eligible list" || leaf.path === "entra pim active list"
     || leaf.path === "entra pim group-assignment-schedule list" || leaf.path === "entra pim group-assignment-schedule show"
     || leaf.path === "entra pim group-assignment-instance list" || leaf.path === "entra pim group-assignment-instance show"
     || leaf.path === "entra pim group-eligibility-schedule list" || leaf.path === "entra pim group-eligibility-schedule show"
@@ -629,6 +629,13 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     switch (leaf.path) {
       case "entra directory-role list": return listDirectoryRoles(session, flags, selected.profile, operation, help, selected.name);
       case "entra directory-role show": return showDirectoryRole(session, flags, selected.profile, operation, help, selected.name);
+      case "entra directory-role-template list": return listDirectoryRoleTemplates(session, flags, selected.profile, operation, help, selected.name);
+      case "entra directory-role-template show": return showDirectoryRoleTemplate(session, flags, selected.profile, operation, help, selected.name);
+      case "entra directory-role member list": return listRoleMembers(session, flags, selected.profile, operation, help, selected.name);
+      case "entra directory-role scoped-member list": return listScopedMembers(session, flags, selected.profile, operation, help, selected.name);
+      case "entra directory-role scoped-member show": return showScopedMember(session, flags, selected.profile, operation, help, selected.name);
+      case "entra scoped-role-membership list": return listScopedRoleMemberships(session, flags, selected.profile, operation, help, selected.name);
+      case "entra scoped-role-membership show": return showScopedRoleMembership(session, flags, selected.profile, operation, help, selected.name);
       case "entra role-assignment list": return listRoleAssignments(session, flags, selected.profile, operation, help, selected.name);
       case "entra pim eligible list": return listPimEligible(session, flags, selected.profile, operation, help, selected.name);
       case "entra pim active list": return listPimActive(session, flags, selected.profile, operation, help, selected.name);

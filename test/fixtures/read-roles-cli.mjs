@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Socket } from "node:net";
 import { mock } from "node:test";
 
-const { mode, denied, scopes, roles, assignments, eligible, active } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const { mode, denied, scopes, roles, assignments, eligible, active, templates, members, scoped, memberships } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
 const expectedDelegated = scopes ?? "https://graph.microsoft.com/RoleManagement.Read.Directory";
 const [major, minor] = process.versions.node.split(".").map(Number);
 const exportOption = major >= 26 || (major === 25 && minor >= 9) || (major === 24 && minor >= 15)
@@ -67,6 +67,22 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
       body = { value: eligible };
     } else if (url.pathname === "/v1.0/roleManagement/directory/roleAssignmentScheduleInstances") {
       body = { value: active };
+    } else if (url.pathname === "/v1.0/directoryRoleTemplates") {
+      body = { value: templates };
+    } else if (templates.some(row => url.pathname === `/v1.0/directoryRoleTemplates/${row.id}`)) {
+      body = templates.find(row => url.pathname === `/v1.0/directoryRoleTemplates/${row.id}`);
+    } else if (url.pathname === "/v1.0/scopedRoleMemberships") {
+      body = { value: memberships };
+    } else if (memberships.some(row => url.pathname === `/v1.0/scopedRoleMemberships/${row.id}`)) {
+      body = memberships.find(row => url.pathname === `/v1.0/scopedRoleMemberships/${row.id}`);
+    } else if (/^\/v1\.0\/directoryRoles\/[^/]+\/members$/.test(url.pathname)) {
+      body = { value: members };
+    } else if (/^\/v1\.0\/directoryRoles\/[^/]+\/scopedMembers$/.test(url.pathname)) {
+      body = { value: scoped };
+    } else if (/^\/v1\.0\/directoryRoles\/[^/]+\/scopedMembers\/[^/]+$/.test(url.pathname)) {
+      const found = scoped.find(row => url.pathname.endsWith(`/${row.id}`));
+      assert.ok(found, "Unexpected scoped-member route");
+      body = found;
     } else {
       const role = roles.find(row => url.pathname === `/v1.0/directoryRoles/${row.id}`);
       assert.ok(role, "Unexpected directory-role route");

@@ -177,7 +177,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: policy2.id, groupLifetimeInDays: 365, managedGroupTypes: "All", alternateNotificationEmails: longEmails.slice(0, 500) + `... (truncated, ${longEmails.length} chars total)` },
         { id: policy3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 lifecycle policies");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra group-lifecycle-policy show --id <policy-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/groupLifecyclePolicies?"));
@@ -195,7 +197,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile,
         "--filter", "managedGroupTypes eq 'Selected'"], overrides);
-      assert.equal(result.count.returned, 3);
+      assert.equal(result.groupLifecyclePolicies.length, 3);
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$filter"), "managedGroupTypes eq 'Selected'");
       assert.equal(requests[0].headers.ConsistencyLevel, undefined);
@@ -210,11 +212,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.groupLifecyclePolicies.map(row => row.id), [policy1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.groupLifecyclePolicies.map(row => row.id), [policy2.id, policy3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 lifecycle policies");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -277,7 +281,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: template2.id, displayName: "Group.Unified", description: longDescription.slice(0, 500) + `... (truncated, ${longDescription.length} chars total)` },
         { id: template3.id },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 setting templates");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra group-setting-template show --id <template-id>")));
       assert.ok(result.help.some(hint => hint.includes("--filter is unsupported") || hint.includes("offer no --filter")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
@@ -295,11 +301,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "group-setting-template", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.groupSettingTemplates.map(row => row.id), [template1.id]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "group-setting-template", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.groupSettingTemplates.map(row => row.id), [template2.id, template3.id]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 setting templates");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -358,11 +366,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const listed = await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile], overrides);
       assert.deepEqual(listed.groupLifecyclePolicies, []);
-      assert.deepEqual(listed.count, { returned: 0, complete: true });
+      assert.deepEqual(listed.count, "0 lifecycle policies");
+      assert.equal(listed.total, null);
+      assert.equal(listed.complete, true);
       assert.ok(listed.help.some(hint => hint.includes("0 lifecycle policies matched")));
       const templated = await executeArgv(["entra", "group-setting-template", "list", "--profile", profile], overrides);
       assert.deepEqual(templated.groupSettingTemplates, []);
-      assert.deepEqual(templated.count, { returned: 0, complete: true });
+      assert.deepEqual(templated.count, "0 setting templates");
+      assert.equal(templated.total, null);
+      assert.equal(templated.complete, true);
       assert.ok(templated.help.some(hint => hint.includes("0 setting templates matched")));
     } finally {
       teardownProfiles(state);
@@ -428,7 +440,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const listOut = decode(listed.stdout);
       assert.deepEqual(listOut.groupLifecyclePolicies.map(row => row.id), [policy1.id, policy2.id]);
-      assert.deepEqual(listOut.count, { returned: 2, complete: true });
+      assert.deepEqual(listOut.count, "2 lifecycle policies");
+      assert.equal(listOut.total, null);
+      assert.equal(listOut.complete, true);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runLifecycleCli(["entra", "group-lifecycle-policy", "show", "--id", policy1.id, "--profile", profile], state, mode);
@@ -444,7 +458,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(templated.status, 0, templated.stdout);
       const templateOut = decode(templated.stdout);
       assert.deepEqual(templateOut.groupSettingTemplates.map(row => row.id), [template1.id, template2.id]);
-      assert.deepEqual(templateOut.count, { returned: 2, complete: true });
+      assert.deepEqual(templateOut.count, "2 setting templates");
+      assert.equal(templateOut.total, null);
+      assert.equal(templateOut.complete, true);
 
       const templateShown = runLifecycleCli(["entra", "group-setting-template", "show", "--id", template1.id, "--profile", profile], state, mode);
       assert.equal(templateShown.status, 0, templateShown.stdout);

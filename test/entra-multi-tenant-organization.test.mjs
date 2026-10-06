@@ -161,7 +161,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { tenantId: t2.tenantId, displayName: longDescription.slice(0, 500) + `... (truncated, ${longDescription.length} chars total)`, role: "member", state: "pending" },
         { tenantId: t3.tenantId },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 tenants");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra multi-tenant-organization tenant count")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/tenantRelationships/multiTenantOrganization/tenants?"));
@@ -179,7 +181,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "multi-tenant-organization", "tenant", "list", "--profile", profile,
         "--filter", "state eq 'active'"], overrides);
-      assert.equal(result.count.returned, 3);
+      assert.equal(result.multiTenantOrganizationTenants.length, 3);
       const sent = new URL(requests[0].url).searchParams;
       assert.equal(sent.get("$filter"), "state eq 'active'");
       assert.equal(requests[0].headers.ConsistencyLevel, undefined);
@@ -194,11 +196,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       const first = await executeArgv(["entra", "multi-tenant-organization", "tenant", "list", "--profile", profile, "--limit", "1"], overrides);
       assert.deepEqual(first.multiTenantOrganizationTenants.map(row => row.tenantId), [t1.tenantId]);
-      assert.equal(first.count.complete, false);
+      assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
       const second = await executeArgv(["entra", "multi-tenant-organization", "tenant", "list", "--profile", profile, "--cursor", first.cursor], overrides);
       assert.deepEqual(second.multiTenantOrganizationTenants.map(row => row.tenantId), [t2.tenantId, t3.tenantId]);
-      assert.deepEqual(second.count, { returned: 2, complete: true });
+      assert.deepEqual(second.count, "2 tenants");
+      assert.equal(second.total, null);
+      assert.equal(second.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -211,7 +215,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, empty);
       const result = await executeArgv(["entra", "multi-tenant-organization", "tenant", "list", "--profile", profile], overrides);
       assert.deepEqual(result.multiTenantOrganizationTenants, []);
-      assert.deepEqual(result.count, { returned: 0, complete: true });
+      assert.deepEqual(result.count, "0 tenants");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("0 tenants matched")));
       assert.ok(result.help.some(hint => hint.includes("outside any multitenant organization")));
     } finally {
@@ -325,7 +331,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(listed.stderr, "");
       const listOut = decode(listed.stdout);
       assert.deepEqual(listOut.multiTenantOrganizationTenants.map(row => row.tenantId), [t1.tenantId, t2.tenantId]);
-      assert.deepEqual(listOut.count, { returned: 2, complete: true });
+      assert.deepEqual(listOut.count, "2 tenants");
+      assert.equal(listOut.total, null);
+      assert.equal(listOut.complete, true);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runMtoCli(["entra", "multi-tenant-organization", "show", "--profile", profile], state, mode);

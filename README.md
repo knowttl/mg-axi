@@ -165,7 +165,7 @@ mg-axi entra service-principal app-role-assignment list --profile soc --service-
 `entra service-principal app-role-assignment list` defaults to `id`, `appRoleId`, `resourceDisplayName` and `resourceId`: the app-only roles granted to the client on each resource API.
 Both lists show actual granted consent records; the application's requested permissions (`requiredResourceAccess`) are declared on the application object and are never shown here, and grant creation, revocation and consent belong to later write slices, never to these reads.
 `--select` requests properties from the [reviewed grant property sets](src/entra-grants.ts); `--fields` must be a subset of the fetched selection.
-`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; the named-list caps, `count`, cursor resume rules and 500-character text truncation described above also apply.
+`--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; the named-list caps, uniform `count` totals, cursor resume rules and 500-character text truncation described above also apply.
 Resume either list with the same `--service-principal` object ID.
 Delegated oauth2-grant reads default to `https://graph.microsoft.com/Directory.Read.All` and app-role reads to `https://graph.microsoft.com/Application.Read.All`, while application profiles use the configured `.default` audience; reads never request a write-consent scope such as `DelegatedPermissionGrant.ReadWrite.All`, `Application.ReadWrite.All` or `Directory.ReadWrite.All`.
 Delegated callers additionally need a supported directory role per operation (for example Directory Readers, Global Reader or Application Administrator).
@@ -188,7 +188,7 @@ Relationship rows default to `id` and `displayName`; `--select` accepts only `id
 Returned `@odata.type` stays visible alongside any `--fields` projection.
 Group lists return `groups`, member lists return `members`, parent-membership lists return `memberOf`, and single-group reads return `group`.
 Group and relationship lists report uniform totals through the shared list-totals helper: `total` holds the server-supplied `@odata.count` when the query carries `$count` (filtered reads) and `null` otherwise, beside a `count` line such as `3 of 10 groups`, `3 groups` or, when the total is unknown and more pages remain, `3 groups shown, more available`.
-The same helper covers the other wired lists: users, applications, service principals, owners, devices, administrative units and unit members, contacts, direct reports and memberships, directory roles, role assignments and PIM eligible/active assignments, group PIM assignment/eligibility schedules, instances and eligibility requests, directory objects, deleted items, domains and DNS records, contracts, organizations and branding localizations, subscriptions, access-review definitions, instances, decisions, contacted reviewers and stages, sign-ins and directory audits, authentication methods and registration reports, PKI configurations and certificate authorities, Conditional Access policies, named locations, authentication-strength policies, combination configurations, authentication method modes and templates, attribute sets, custom-security-attribute definitions and allowed values, data-policy operations, delegated-admin customers, relationships and navigation lists, and entitlement catalogs, access packages, assignment policies, resource-role scopes, assignments and assignment requests. Remaining list families keep the previous `count: { returned, complete }` shape and follow the same helper in the next piece.
+The same helper covers the other wired core-directory lists: users, applications, service principals, owners, devices, administrative units and unit members, contacts, direct reports and memberships, directory roles, role assignments and PIM eligible/active assignments, group PIM assignment/eligibility schedules, instances and eligibility requests, directory objects, deleted items, domains and DNS records, contracts, organizations and branding localizations, subscriptions, access-review definitions, instances, decisions, contacted reviewers and stages, sign-ins and directory audits, authentication methods and registration reports, PKI configurations and certificate authorities, Conditional Access policies and named locations, attribute sets, custom-security-attribute definitions and allowed values, data-policy operations, delegated-admin customers, relationships and navigation lists, entitlement catalogs, access packages, assignment policies, resource-role scopes, assignments and assignment requests, federation configurations, oauth2 grants and app-role assignments, group lifecycle policies and setting templates, identity providers, lifecycle workflows, workflow templates, task definitions, runs, processing results and task reports, multi-tenant-organization tenants, on-premises synchronizations, risky users, risk detections, risky service principals and their history and detections, fraud-protection, web-application-firewall and verification providers, and agreements and acceptances. Every entra list command now reports through the same helper; only the dedicated `count` and `available-types` commands keep their `count` aggregates.
 `complete` names pagination state, with `reason` and an opaque `cursor` on partial reads.
 The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to group and relationship reads.
 Resume relationships with the same `--group` and direct or `--transitive` command, profile, scopes and API version; omit or repeat the original server query flags, and repeat local `--fields` and `--full` when wanted.
@@ -428,7 +428,7 @@ Workflow rows never carry tasks, runs, processing results or task reports: tasks
 `entra lifecycle settings show` returns the tenant schedule interval with the email and quarantine configuration; updating settings belongs to no read slice.
 `--select` requests properties from the [reviewed lifecycle property sets](src/entra-lifecycle-workflows.ts); `--fields` must be a subset of the fetched selection, and navigation names (`tasks`, `createdBy`, `lastModifiedBy`, `previewScope`) fail as unknown properties.
 `--filter` passes through as plain `$filter` with no `$count` or `ConsistencyLevel` contract; `$search`, `$orderby` and `$expand` stay unreviewed.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to lifecycle reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to lifecycle reads.
 Resume any lifecycle list with `--cursor -` and supply the returned cursor on stdin.
 Delegated workflow reads default to `https://graph.microsoft.com/LifecycleWorkflows-Workflow.ReadBasic.All` (richer detail may need `LifecycleWorkflows-Workflow.Read.All` or `LifecycleWorkflows.Read.All`), template, task-definition and settings reads to `https://graph.microsoft.com/LifecycleWorkflows.Read.All`, and run, processing-result and task-report reads to `https://graph.microsoft.com/LifecycleWorkflows-Reports.Read.All` (richer detail may need `LifecycleWorkflows.Read.All` or `LifecycleWorkflows.ReadWrite.All`), while application profiles use the configured `.default` audience.
 See the [lifecycle-workflows scope decisions](docs/coverage.md#ext-02-lifecycle-workflows-scope-decisions) for the scheduled nested-result and summary parts.
@@ -516,7 +516,7 @@ Lifecycle-policy lists accept `--filter` as plain `$filter` without adding `$cou
 Each `count` returns one scalar (`groupLifecyclePolicyCount`, `groupSettingTemplateCount`) from its text/plain `$count` route and takes no `--filter`, `--select`, `--limit` or `--cursor`.
 Raw `api get` supports `/groupLifecyclePolicies`, `/groupLifecyclePolicies/<policy-id>`, `/groupSettingTemplates` and `/groupSettingTemplates/<template-id>`; the `$count` routes are available only through the named count commands.
 Lifecycle-policy lists return `groupLifecyclePolicies`, single-policy reads return `groupLifecyclePolicy`, template lists return `groupSettingTemplates` and single-template reads return `groupSettingTemplate`.
-The named-list caps, `count`, cursors and null/missing preservation described above also apply to these reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to these reads.
 Named reads truncate top-level strings and strings in string arrays at 500 characters with a `--full` recovery hint; nested objects in template `values` pass through without text truncation.
 All six named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
 Delegated lifecycle-policy reads default to `https://graph.microsoft.com/Directory.Read.All` and delegated template reads default to `https://graph.microsoft.com/GroupSettings.Read.All`, while application profiles use the configured `.default` audience.
@@ -629,7 +629,7 @@ At most one multitenant organization exists per tenant; a tenant outside any mul
 `entra multi-tenant-organization tenant list` defaults to compact properties (`tenantId`, `displayName`, `role`, `state`); both show commands default to the full reviewed property set.
 `--select` requests properties from the reviewed multi-tenant-organization field sets; `--fields` projects locally and must be a subset of the fetched selection.
 The tenant list accepts `--filter` as plain `$filter` without adding `$count=true` or `ConsistencyLevel`.
-The named-list caps, `count`, cursors, null/missing preservation and 500-character text truncation described above also apply to multi-tenant-organization reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to multi-tenant-organization reads.
 All four named reads support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
 Delegated multi-tenant-organization reads default to `https://graph.microsoft.com/MultiTenantOrganization.Read.All` (the lower-privileged delegated `MultiTenantOrganization.ReadBasic.All` returns displayName and tenantId only) and additionally need Security Reader or Global Reader, while application profiles use the configured `.default` audience.
 Personal Microsoft accounts are not supported, and these reads run in the commercial Global service only.
@@ -742,7 +742,7 @@ mg-axi entra on-premises-synchronization show --profile soc --id <synchronizatio
 Both commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
 Neither leaf offers `--filter`: Graph documents `$select` only here, so strict input validation refuses the flag before credentials.
 Synchronization lists return `synchronizations` and single reads return `synchronization`; secret-shaped values inside `configuration` and `features` stay redacted by the shared session.
-The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to on-premises-synchronization reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to on-premises-synchronization reads.
 Delegated reads default to `https://graph.microsoft.com/OnPremDirectorySynchronization.Read.All`; application profiles are refused before credentials because Graph documents no supported application permission for this operation.
 Delegated callers additionally need Global Administrator, the only supported Entra role for this operation; personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for on-premises-synchronization reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
@@ -770,7 +770,7 @@ mg-axi entra agreement-acceptance show --id <acceptance-id> --profile soc
 
 Acceptance lists return `agreementAcceptances` and single reads return `agreementAcceptance`; default rows stay minimal (`id`, `agreementId`, `state`, `recordedDateTime`) because acceptance records are personal data, and identifying fields need an explicit `--select` naming them.
 All six commands support only `--api-version v1.0`; `--api-version beta` fails validation before credentials, including on preview-enabled profiles.
-The named-list caps, cursors, null/missing preservation and 500-character text truncation described above also apply to terms-of-use reads.
+The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to terms-of-use reads.
 Delegated agreement reads default to `https://graph.microsoft.com/Agreement.Read.All` and delegated acceptance reads default to `https://graph.microsoft.com/AgreementAcceptance.Read` (`AgreementAcceptance.Read.All` is the documented higher-privileged alternative); application profiles are refused before credentials because Graph documents no supported application permission for these operations.
 Delegated callers additionally need Security Reader, the least-privileged supported Entra role for these operations; personal Microsoft accounts are not supported.
 Terms of use needs Microsoft Entra ID P1; denied reads name the scope, role and licensing guidance instead of only the generic cause.
@@ -867,7 +867,7 @@ Provider lists accept `--filter` as plain `$filter`; counts accept `--filter` to
 Rows carry `@odata.type` naming the provider kind (social or built-in).
 The reviewed workforce fields are `id`, `displayName`, `identityProviderType`, and `clientId`.
 `clientSecret` and `certificateData` are never selectable and any row carrying them is scrubbed before output, so key material can never reach stdout, errors or logs.
-Provider lists use the named-list caps, `count` aggregate and cursors described above.
+Provider lists use the named-list caps, uniform `count` totals and cursors described above.
 List and show preserve null/missing properties and truncate text longer than 500 characters; `--full` restores complete text without lifting redaction or row caps.
 Delegated provider reads default to `https://graph.microsoft.com/IdentityProvider.Read.All`, while application profiles use the configured `.default` audience.
 Delegated callers additionally need a directory role that can read federation configuration (Global Reader is the least-privileged read-only directory role); personal Microsoft accounts are not supported.
@@ -892,7 +892,7 @@ Configuration lists return `federationConfigurations`, single-configuration read
 `signingCertificate` carries the public token-signing key only and is omitted from every default select; request it explicitly when rotation evidence is needed. No private key material exists on these resources.
 Configuration lists accept `--filter` as plain `$filter`; counts accept `--filter` to narrow the total server-side.
 Rows carry `@odata.type` naming the configuration kind.
-Configuration lists use the named-list caps, `count` aggregate and cursors described above.
+Configuration lists use the named-list caps, uniform `count` totals and cursors described above.
 List and show preserve null/missing properties and truncate text longer than 500 characters; `--full` restores complete text without lifting row caps.
 Delegated callers additionally need External Identity Provider Administrator, the least-privileged supported Entra role for these reads; personal Microsoft accounts are not supported.
 No per-operation licence prerequisite is stated for these reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
@@ -945,7 +945,7 @@ Verification rows never carry provider detail; `provider show --id <verification
 Fraud and WAF rows carry `@odata.type` naming the provider kind (Arkose or HUMAN; Akamai or Cloudflare).
 The reviewed fraud fields are `id`, `displayName`, `clientSubDomain`, `verifySubDomain` and `appId`; the reviewed WAF fields are `id`, `displayName`, `hostPrefix` and `zoneId`; the reviewed verification fields are `id`, `verifiedHost`, `providerType`, `verificationResult` and `verifiedDetails`.
 Arkose `privateKey`/`publicKey`, HUMAN `serverToken`, Akamai `clientSecret`/`clientToken`/`accessToken` and Cloudflare `apiToken` are never selectable and any row carrying them is scrubbed before output, so key material can never reach stdout, errors or logs.
-Risk-prevention lists use the named-list caps, `count` aggregate and cursors described above.
+Risk-prevention lists use the named-list caps, uniform `count` totals and cursors described above.
 List and show preserve null/missing properties and truncate text longer than 500 characters; `--full` restores complete text without lifting redaction or row caps.
 Delegated risk-prevention reads default to `https://graph.microsoft.com/RiskPreventionProviders.Read.All`; Graph documents no supported application permission, so application profiles are refused before credentials.
 Delegated callers additionally need a directory role that can read risk-prevention configuration (Security Reader is the least-privileged read-only role); personal Microsoft accounts are not supported.

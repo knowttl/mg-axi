@@ -165,7 +165,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: g2.id, consentType: "Principal", principalId: user, resourceId: graphResource, scope: "User.Read" },
         { id: g3.id, consentType: "AllPrincipals", resourceId: graphResource },
       ]);
-      assert.deepEqual(result.count, { returned: 3, complete: true });
+      assert.deepEqual(result.count, "3 oauth2 grants");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("requiredResourceAccess")));
       assert.ok(result.help.some(hint => hint.includes(`entra service-principal show --id ${sp}`)));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
@@ -189,7 +191,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: a1.id, appRoleId: a1.appRoleId, resourceDisplayName: "Microsoft Graph", resourceId: graphResource },
         { id: a2.id, appRoleId: a2.appRoleId, resourceDisplayName: "fixture-api", resourceId: a2.resourceId },
       ]);
-      assert.deepEqual(result.count, { returned: 2, complete: true });
+      assert.deepEqual(result.count, "2 app role assignments");
+      assert.equal(result.total, null);
+      assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("requiredResourceAccess")));
       assert.ok(new URL(requests[0].url).pathname.endsWith(`/servicePrincipals/${sp}/appRoleAssignments`));
       assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,appRoleId,resourceDisplayName,resourceId");
@@ -245,7 +249,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.stderr, "");
       const output = decode(result.stdout);
       assert.equal(output.oauth2PermissionGrants.length, 3);
-      assert.deepEqual(output.count, { returned: 3, complete: true });
+      assert.deepEqual(output.count, "3 oauth2 grants");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -265,7 +271,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         { id: a1.id, appRoleId: a1.appRoleId, resourceDisplayName: "Microsoft Graph", resourceId: graphResource },
         { id: a2.id, appRoleId: a2.appRoleId, resourceDisplayName: "fixture-api", resourceId: a2.resourceId },
       ]);
-      assert.deepEqual(output.count, { returned: 2, complete: true });
+      assert.deepEqual(output.count, "2 app role assignments");
+      assert.equal(output.total, null);
+      assert.equal(output.complete, true);
     } finally {
       teardownProfiles(state);
     }
@@ -339,12 +347,17 @@ test("delegated grant reads resume a capped list through its opaque cursor", asy
     const first = await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
       "--service-principal", sp, "--profile", "soc", "--limit", "2"], overrides);
     assert.equal(first.oauth2PermissionGrants.length, 2);
-    assert.deepEqual(first.count, { returned: 2, complete: false, reason: first.count.reason });
+    assert.deepEqual(first.count, "2 oauth2 grants shown, more available");
+    assert.equal(first.total, null);
+    assert.equal(first.complete, false);
+    assert.match(first.reason, /row limit/);
     assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
     const second = await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
       "--service-principal", sp, "--profile", "soc", "--cursor", first.cursor], overrides);
     assert.deepEqual(second.oauth2PermissionGrants, [{ id: g3.id, consentType: "AllPrincipals", resourceId: graphResource }]);
-    assert.deepEqual(second.count, { returned: 1, complete: true });
+    assert.deepEqual(second.count, "1 oauth2 grants");
+    assert.equal(second.total, null);
+    assert.equal(second.complete, true);
   } finally {
     teardownProfiles(state);
   }

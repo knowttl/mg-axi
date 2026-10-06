@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-03 workforce identity-providers subfamily: the read mapping behind
@@ -244,20 +245,22 @@ export async function listIdentityProviders(
   if (!result.complete) {
     return {
       identityProviders: providers,
-      count: { returned: providers.length, complete: false, reason: result.reason },
+      ...listTotals(providers.length, result.total, "identity providers", false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, `Resume losslessly with the same flags plus --cursor <cursor-from-output> ${profileHint(profileName)}`, showHint, WORKFORCE_NOTE],
     };
   }
-  const count = { returned: providers.length, complete: true };
   if (!providers.length) {
     return {
       identityProviders: providers,
-      count,
+      ...listTotals(providers.length, result.total, "identity providers", true),
+      complete: true,
       help: [WORKFORCE_NOTE, "0 identity providers matched; the absence of results is the answer, not an error"],
     };
   }
-  return { identityProviders: providers, count, help: [...truncationHints, showHint, WORKFORCE_NOTE] };
+  return { identityProviders: providers, ...listTotals(providers.length, result.total, "identity providers", true), complete: true, help: [...truncationHints, showHint, WORKFORCE_NOTE] };
 }
 
 export async function showIdentityProvider(

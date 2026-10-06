@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-06: the Entra risky-user and risk-detection read mapping behind
@@ -339,6 +340,7 @@ function parentServicePrincipal(flags: RiskFlags, help: string): Record<string, 
 interface CollectionShape {
   noun: string;
   key: string;
+  totalsNoun: string;
   /** Time field bounding new queries; absent for state collections with no time bound. */
   dateField?: string;
   /** Parent path bindings for nested routes such as per-principal history. */
@@ -356,6 +358,7 @@ interface CollectionShape {
 const RISKY_USER_LIST: CollectionShape = {
   noun: "risky-user",
   key: "riskyUsers",
+  totalsNoun: "risky users",
   known: RISKY_USER_KNOWN,
   knownList: KNOWN_RISKY_USER_FIELDS,
   defaultSelect: DEFAULT_RISKY_USER_LIST_SELECT,
@@ -373,6 +376,7 @@ const RISKY_USER_LIST: CollectionShape = {
 const RISK_DETECTION_LIST: CollectionShape = {
   noun: "risk-detection",
   key: "riskDetections",
+  totalsNoun: "risk detections",
   dateField: "detectedDateTime",
   known: RISK_DETECTION_KNOWN,
   knownList: KNOWN_RISK_DETECTION_FIELDS,
@@ -400,6 +404,7 @@ const DEFAULT_SP_DETECTION_SHOW_SELECT = [...KNOWN_SP_DETECTION_FIELDS];
 const RISKY_SP_LIST: CollectionShape = {
   noun: "risky-service-principal",
   key: "riskyServicePrincipals",
+  totalsNoun: "risky service principals",
   known: RISKY_SP_KNOWN,
   knownList: KNOWN_RISKY_SP_FIELDS,
   defaultSelect: DEFAULT_RISKY_SP_LIST_SELECT,
@@ -417,6 +422,7 @@ const RISKY_SP_LIST: CollectionShape = {
 const RISKY_SP_HISTORY_LIST: CollectionShape = {
   noun: "risky-service-principal history",
   key: "riskyServicePrincipalHistory",
+  totalsNoun: "history items",
   pathParams: parentServicePrincipal,
   known: RISKY_SP_HISTORY_KNOWN,
   knownList: KNOWN_RISKY_SP_HISTORY_FIELDS,
@@ -434,6 +440,7 @@ const RISKY_SP_HISTORY_LIST: CollectionShape = {
 const SP_DETECTION_LIST: CollectionShape = {
   noun: "service-principal-risk-detection",
   key: "servicePrincipalRiskDetections",
+  totalsNoun: "service principal risk detections",
   dateField: "detectedDateTime",
   known: SP_DETECTION_KNOWN,
   knownList: KNOWN_SP_DETECTION_FIELDS,
@@ -518,16 +525,17 @@ async function listRisk(
   if (!result.complete) {
     return {
       [shape.key]: rows,
-      count: { returned: rows.length, complete: false, reason: result.reason },
+      ...listTotals(rows.length, result.total, shape.totalsNoun, false),
+      complete: false,
+      reason: result.reason,
       cursor: result.cursor,
       help: [...truncationHints, `Resume losslessly with the same flags plus --cursor - ${profileHint(profileName)} and supply the returned cursor on stdin`, showHint, ...shape.extraHelp(profileName)],
     };
   }
-  const count = { returned: rows.length, complete: true };
   if (!rows.length) {
-    return { [shape.key]: rows, count, help: shape.emptyHints(profileName) };
+    return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.totalsNoun, true), complete: true, help: shape.emptyHints(profileName) };
   }
-  return { [shape.key]: rows, count, help: [...truncationHints, showHint, ...shape.extraHelp(profileName)] };
+  return { [shape.key]: rows, ...listTotals(rows.length, result.total, shape.totalsNoun, true), complete: true, help: [...truncationHints, showHint, ...shape.extraHelp(profileName)] };
 }
 
 interface SingleShape {

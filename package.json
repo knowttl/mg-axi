@@ -1,6 +1,6 @@
 {
   "name": "@knowttl/mg-axi",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Agent-facing Microsoft Graph CLI, read-only by default",
   "type": "module",
   "bin": {

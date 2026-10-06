@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.2](https://github.com/knowttl/mg-axi/compare/v0.1.1...v0.1.2) (2026-10-06)
+
+
+### Features
+
+* add local-only session-start hook with setup installer ([#63](https://github.com/knowttl/mg-axi/issues/63)) ([6819bc9](https://github.com/knowttl/mg-axi/commit/6819bc926bf014345afb4dcf9dbb36ffb23776b9))
+* add read-only Entra delegated-admin count reads ([#66](https://github.com/knowttl/mg-axi/issues/66)) ([99f1efb](https://github.com/knowttl/mg-axi/commit/99f1efb0121a7753f0ae5863d6edaeda3a8d75bf))
+* add read-only Entra group PIM schedule reads ([#67](https://github.com/knowttl/mg-axi/issues/67)) ([4e55ba3](https://github.com/knowttl/mg-axi/commit/4e55ba30b744cfaffc384c0b66878c73133cc12e))
+* add read-only Entra lifecycle run-nested processing-result reads (#EXT-02i) ([#61](https://github.com/knowttl/mg-axi/issues/61)) ([f70e8a4](https://github.com/knowttl/mg-axi/commit/f70e8a496a936b9b4af2ac4682a5793acb4fccb9))
+* add read-only Entra risk-prevention fraud, WAF provider and verification reads ([#59](https://github.com/knowttl/mg-axi/issues/59)) ([3b271b1](https://github.com/knowttl/mg-axi/commit/3b271b1ef81dce6005442f73736454ccc8aa1260))
+* add read-only workload risk reads for risky service principals and SP detections ([#65](https://github.com/knowttl/mg-axi/issues/65)) ([85cf5dc](https://github.com/knowttl/mg-axi/commit/85cf5dcdc7515579e5b17c5fe67e98b5dc48624d))
+* report uniform N of M totals on core-directory list output ([#68](https://github.com/knowttl/mg-axi/issues/68)) ([2bb7802](https://github.com/knowttl/mg-axi/commit/2bb78027d36579d506f882a66f2d72f14c7fa580))
+* report uniform N of M totals on governance list output ([#71](https://github.com/knowttl/mg-axi/issues/71)) ([f3f683e](https://github.com/knowttl/mg-axi/commit/f3f683e99ce2a330ec190b3c8d64f15e5add0c94))
+* report uniform N of M totals on group list output ([#64](https://github.com/knowttl/mg-axi/issues/64)) ([483bb4a](https://github.com/knowttl/mg-axi/commit/483bb4a4e2c824062d26d19e3c8fafd8f9bef321))
+
+
+### Bug Fixes
+
+* align api get truncation with the 500-char rule used elsewhere ([#62](https://github.com/knowttl/mg-axi/issues/62)) ([36a799d](https://github.com/knowttl/mg-axi/commit/36a799d947b6a26fd04a5c91e5b309c92cb888c7))
+* cap node test runner at 4 concurrent files ([#70](https://github.com/knowttl/mg-axi/issues/70)) ([306355a](https://github.com/knowttl/mg-axi/commit/306355a4f7fa0543bded0255efc8182518ae15ea))
+
 ## [0.1.1](https://github.com/knowttl/mg-axi/compare/v0.1.0...v0.1.1) (2026-10-06)
 
 

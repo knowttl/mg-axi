@@ -24,6 +24,16 @@ scheduled work as complete.
 - inventory unavailable: 14
 - inventory excluded: 35056
 
+## FULL-01 audit record
+
+FULL-01 audit (2026-10-07): every agreed v1.0 read has a named command or an
+explicit reviewed blocked/unavailable/deprecated/deferred disposition, and no
+v1.0 row is left scheduled. The deferred tail is declared out of v1.
+- v1.0 named-command: 289, reviewed-raw-read: 5, scheduled: 0
+- v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
+- beta scheduled (never agreed for v1): 3717
+PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 289 named / 5 raw (294 backed).
+
 ## Commands
 
 | Command | Operation | Inventory (v1.0) | Owning slice |

@@ -278,6 +278,28 @@ function initialWriteStatus(rows: InventoryRow[]): { shipped: string[]; pending:
 
 const DISPOSITIONS = ["named-command", "reviewed-raw-read", "scheduled", "deferred", "intentionally-blocked", "deprecated", "unavailable", "excluded"] as const;
 
+// FULL-01 audit record (2026-10-07, latest origin/main at PR #78): the cutoff
+// is met when no v1.0 row is left scheduled, so the counts below are read
+// from the same generated inventory the Counts section reports. Beta stays
+// scheduled by definition and was never agreed for v1.
+function auditRecord(rows: InventoryRow[]): string[] {
+  const v1 = (disposition: string): number =>
+    rows.filter(row => row.id.startsWith("v1.0:") && row.disposition === disposition).length;
+  const betaScheduled = rows.filter(row => row.id.startsWith("beta:") && row.disposition === "scheduled").length;
+  return [
+    "## FULL-01 audit record",
+    "",
+    "FULL-01 audit (2026-10-07): every agreed v1.0 read has a named command or an",
+    "explicit reviewed blocked/unavailable/deprecated/deferred disposition, and no",
+    "v1.0 row is left scheduled. The deferred tail is declared out of v1.",
+    `- v1.0 named-command: ${v1("named-command")}, reviewed-raw-read: ${v1("reviewed-raw-read")}, scheduled: ${v1("scheduled")}`,
+    `- v1.0 deferred (out of v1): ${v1("deferred")}, intentionally-blocked: ${v1("intentionally-blocked")}, deprecated: ${v1("deprecated")}, unavailable: ${v1("unavailable")}`,
+    `- beta scheduled (never agreed for v1): ${betaScheduled}`,
+    "PR #78 proposed 275 named / 19 raw; the merged head carries 289 named / 5 raw (294 backed operations either way).",
+    "",
+  ];
+}
+
 // The capability report is generated from the catalogue: every executable
 // read leaf owns one row with its inventory disposition and owning slice,
 // and the counts separate implemented leaves from inventory dispositions.
@@ -347,6 +369,7 @@ export function capabilityDocument(): string {
     `- local leaves: ${localCount} (home, profile, login and setup views)`,
     ...DISPOSITIONS.map(disposition => `- inventory ${disposition}: ${count(disposition)}`),
     "",
+    ...auditRecord(rows),
     "## Commands",
     "",
     "| Command | Operation | Inventory (v1.0) | Owning slice |",

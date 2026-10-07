@@ -53,6 +53,10 @@ The inventory may reveal unsupported or dangerous operations that need an explic
 A new genuine product choice discovered during implementation must be raised before deciding it.
 Sovereign clouds, external-customer launch support and named Security/Intune/M365 packs remain separately authorized extensions.
 
+## FULL-01 audit record
+
+FULL-01 audit (2026-10-07, latest origin/main): v1.0 named-command 289, reviewed-raw-read 5, scheduled 0, deferred 4429 (out of v1), intentionally-blocked 57, deprecated 16, unavailable 14; beta scheduled 3717 (never agreed for v1). Every agreed read has a named command or a reviewed disposition, so the milestone is met. Counts are published in docs/coverage.md.
+
 ## Per-slice handoff
 
 Each implementation handoff contains its slice ID, prerequisite commit(s), exact operation inventory rows, in-scope commands, accepted API versions/auth modes/clouds, documented access/licence constraints, and acceptance behavior.

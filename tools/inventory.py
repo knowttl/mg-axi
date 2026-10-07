@@ -533,10 +533,10 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
         identity = f"v1.0:{effect}"
         if effect in shipped:
             disposition, reason = "named-command", f"Shipped as `mg-axi {shipped[effect]}`."
-        elif reviewed is not None and identity in reviewed:
-            disposition, reason = "reviewed-raw-read", "Reviewed raw route under API-01; see src/api.ts REVIEWED_ROUTES."
         elif alternates is not None and effect in alternates:
             disposition, reason = "named-command", f"Shipped as `mg-axi {alternates[effect]}` alternate route."
+        elif reviewed is not None and identity in reviewed:
+            disposition, reason = "reviewed-raw-read", "Reviewed raw route under API-01; see src/api.ts REVIEWED_ROUTES."
         else:
             disposition = "deferred"
             if not reason.startswith(DEFERRING_REASONS):
@@ -619,14 +619,14 @@ def validate(inventory, shipped=None, reviewed=None, alternates=None):
         row = by_id.get(identity)
         if row is None:
             raise ValueError(f"Shipped command owns {identity} but it has no inventory row")
-        if row["disposition"] == "scheduled":
-            raise ValueError(f"Shipped command owns {identity} but its disposition is still scheduled")
+        if row["disposition"] != "named-command":
+            raise ValueError(f"Shipped command owns {identity} but its disposition is not named-command")
     for identity in sorted(raw - backed):
         row = by_id.get(identity)
         if row is None:
             raise ValueError(f"Reviewed raw route {identity} has no inventory row")
-        if row["disposition"] == "scheduled":
-            raise ValueError(f"Reviewed raw route {identity} is still scheduled")
+        if row["disposition"] != "reviewed-raw-read":
+            raise ValueError(f"Reviewed raw route {identity} is not reviewed-raw-read")
 
 
 def main():

@@ -328,8 +328,12 @@ components:
     def test_validate_rejects_shipped_operations_still_scheduled(self):
         rows = [make_row("v1.0", "/users", "GET", {"operationId": "a"}),
                 make_row("beta", "/groups", "GET", {"operationId": "b"})]
-        with self.assertRaisesRegex(ValueError, "still scheduled"):
+        with self.assertRaisesRegex(ValueError, "not named-command"):
             validate(self._inventory(rows), shipped={"GET:/users": "entra user list"}, reviewed={}, alternates={})
+        with self.subTest(reason="a shipped operation left deferred fails"):
+            rows[0]["disposition"] = "deferred"
+            with self.assertRaisesRegex(ValueError, "not named-command"):
+                validate(self._inventory(rows), shipped={"GET:/users": "entra user list"}, reviewed={}, alternates={})
 
     def test_validate_accepts_review_backed_raw_reads(self):
         rows = [make_row("v1.0", "/contacts/{orgContact-id}/transitiveMemberOf", "GET", {"operationId": "a"}, {}, {"v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf"}),
@@ -339,8 +343,12 @@ components:
     def test_validate_rejects_reviewed_routes_still_scheduled(self):
         rows = [make_row("v1.0", "/users", "GET", {"operationId": "a"}),
                 make_row("beta", "/groups", "GET", {"operationId": "b"})]
-        with self.assertRaisesRegex(ValueError, "still scheduled"):
+        with self.assertRaisesRegex(ValueError, "not reviewed-raw-read"):
             validate(self._inventory(rows), shipped={}, reviewed={"v1.0:GET:/users"}, alternates={})
+        with self.subTest(reason="a reviewed route left deferred fails"):
+            rows[0]["disposition"] = "deferred"
+            with self.assertRaisesRegex(ValueError, "not reviewed-raw-read"):
+                validate(self._inventory(rows), shipped={}, reviewed={"v1.0:GET:/users"}, alternates={})
 
     def test_table_alternates_flip_to_named_command(self):
         alternates = {"GET:/groups/{group-id}/transitiveMembers": "entra group member list"}
@@ -350,6 +358,9 @@ components:
         with self.subTest(reason="a named command wins over a table alternate"):
             both = make_row("v1.0", "/users", "GET", {"operationId": "a"}, {"GET:/users": "entra user list"}, set(), {"GET:/users": "entra user list"})
             self.assertEqual(both["reason"], "Shipped as `mg-axi entra user list`.")
+        with self.subTest(reason="a table alternate wins over a reviewed raw route"):
+            overlap = make_row("v1.0", "/groups/{group-id}/transitiveMembers", "GET", {"operationId": "fixture"}, {}, {"v1.0:GET:/groups/{group-id}/transitiveMembers"}, alternates)
+            self.assertEqual(overlap["disposition"], "named-command")
 
     def test_validate_accepts_table_backed_alternates(self):
         alternates = {"GET:/groups/{group-id}/transitiveMembers": "entra group member list"}
@@ -358,7 +369,11 @@ components:
         validate(self._inventory(rows), shipped={}, reviewed={}, alternates=alternates)
         with self.subTest(reason="a table-backed alternate still scheduled fails"):
             rows[0]["disposition"] = "scheduled"
-            with self.assertRaisesRegex(ValueError, "still scheduled"):
+            with self.assertRaisesRegex(ValueError, "not named-command"):
+                validate(self._inventory(rows), shipped={}, reviewed={}, alternates=alternates)
+        with self.subTest(reason="a table-backed alternate left deferred fails"):
+            rows[0]["disposition"] = "deferred"
+            with self.assertRaisesRegex(ValueError, "not named-command"):
                 validate(self._inventory(rows), shipped={}, reviewed={}, alternates=alternates)
 
     def test_alternate_without_a_shipped_command_fails(self):

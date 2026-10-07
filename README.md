@@ -1265,6 +1265,25 @@ Provision that key through protected storage tooling; never put private keys in 
 Certificate acquisition fails if `keytar` or the referenced key is unavailable; there is no plaintext or session-only key fallback.
 For workload federation, configure the app registration's federated credential mapping for the workload and set `AZURE_FEDERATED_TOKEN_FILE` to its assertion file.
 The provider reads the file on each assertion request so projected tokens can rotate; missing or empty assertions fail authentication.
+`--federated-token-file-env <NAME>` names a different holder variable when the workload does not use the default.
+
+Headless systems (containers, CI, services) have no OS keychain, so application profiles also accept file and environment references that are read at acquisition time:
+
+```sh
+mg-axi profile create --name svc --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --client-secret-env MG_AXI_CLIENT_SECRET
+mg-axi profile create --name daemon-file --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --certificate-thumbprint <40-hex-digit-thumbprint> --certificate-key-file /run/secrets/mg-axi-key.pem
+mg-axi profile create --name daemon-env --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --certificate-thumbprint <40-hex-digit-thumbprint> --certificate-key-env MG_AXI_PRIVATE_KEY
+MG_AXI_CLIENT_SECRET=<secret> mg-axi doctor --profile svc
+```
+
+A profile stores only the reference (an env var name or a file path), never the value.
+The environment supplies the value on each acquisition, so rotation updates the env var or file contents with no profile change.
+Relative paths resolve against the working directory at acquisition time.
+Key and secret files must be regular files owned by the current user with mode 0600, never symlinks; Windows skips the ownership and mode checks.
+A missing, empty or exposed holder fails closed with `AUTH_REQUIRED` naming only the reference, never its value.
+PEM values from env vars may use escaped `\n` newlines; passphrase-protected keys are unsupported.
+A client secret is weaker than a certificate or federated credential: it is a bearer string with no proof of possession.
+Prefer certificates or federation where the platform allows them, and rotate secrets on a schedule.
 Application credentials remain in process memory and are reacquired at a 60-second expiry margin.
 The service requests only `https://graph.microsoft.com/.default`, representing the app registration's admin-consented Graph application permissions, with no signed-in user.
 Ask an administrator to grant those permissions on the configured app registration; per-command delegated scopes cannot narrow the application token.

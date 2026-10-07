@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.3](https://github.com/knowttl/mg-axi/compare/v0.1.2...v0.1.3) (2026-10-07)
+
+
+### Features
+
+* add read-only app/SP federated-credential and assignment reads ([#77](https://github.com/knowttl/mg-axi/issues/77)) ([0063a7a](https://github.com/knowttl/mg-axi/commit/0063a7ac444889f6571ed1fd98d447aed50e527d))
+* add read-only Conditional Access auth-context and deleted reads ([#74](https://github.com/knowttl/mg-axi/issues/74)) ([be0d82e](https://github.com/knowttl/mg-axi/commit/be0d82e54681f426c93984cd819c6c0ee355a983))
+* add read-only Conditional Access auth-strength, method-mode and template reads ([#69](https://github.com/knowttl/mg-axi/issues/69)) ([d4f14e0](https://github.com/knowttl/mg-axi/commit/d4f14e0795d765f0480831ac906c44793fc35c3f))
+* add read-only directory-role template, member and scoped-membership reads ([#75](https://github.com/knowttl/mg-axi/issues/75)) ([14f9ea9](https://github.com/knowttl/mg-axi/commit/14f9ea973f02c98019bbc19f4d7324ec2a0fd594))
+* add read-only Entra provisioning-log list/show reads ([#76](https://github.com/knowttl/mg-axi/issues/76)) ([696ab41](https://github.com/knowttl/mg-axi/commit/696ab41c1e1bf93c513c9dc04833432c94ce0ecf))
+* report uniform N of M totals on governance list output ([#73](https://github.com/knowttl/mg-axi/issues/73)) ([273718a](https://github.com/knowttl/mg-axi/commit/273718a0e1117715f79d884d7a5558ca353665ab))
+
 ## [0.1.2](https://github.com/knowttl/mg-axi/compare/v0.1.1...v0.1.2) (2026-10-06)
 
 

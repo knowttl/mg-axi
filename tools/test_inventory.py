@@ -6,7 +6,7 @@ from pathlib import Path
 
 from jsonschema import ValidationError
 
-from inventory import ROOT, build, make_row, scoped_slice, validate
+from inventory import CUTOFF_REASON, ROOT, build, make_row, scoped_slice, validate
 
 
 class InventoryTests(unittest.TestCase):
@@ -91,7 +91,7 @@ class InventoryTests(unittest.TestCase):
             if row["method"] == "POST" and row["disposition"] != "excluded" and action in actions:
                 with self.subTest(id=row["id"]):
                     self.assertFalse(row["owningSlice"].startswith("WRITE-"))
-                    self.assertIn(row["disposition"], {"scheduled", "deprecated"})
+                    self.assertIn(row["disposition"], {"scheduled", "deferred", "deprecated"})
                 observed.add(action)
         self.assertEqual(observed, actions)
 
@@ -225,8 +225,8 @@ components:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "fixture.yaml"
             source.write_text(fixture)
-            inventory = build({"v1.0": source, "beta": source})
-            validate(inventory)
+            inventory = build({"v1.0": source, "beta": source}, shipped={}, reviewed={}, alternates={})
+            validate(inventory, shipped={}, reviewed={}, alternates={})
         self.assertEqual([row["id"] for row in inventory["operations"]], [
             "beta:GET:/unscoped", "beta:GET:/users", "beta:GET:/users/{user-id}/messages",
             "beta:PATCH:/invitations/invitedUser/mailboxSettings", "beta:PATCH:/users/{user-id}",
@@ -269,6 +269,122 @@ components:
         inventory["operations"].pop()
         with self.assertRaisesRegex(ValueError, "Missing operation"):
             validate(inventory)
+
+    def test_shipped_v1_reads_carry_named_command(self):
+        shipped = {"GET:/users": "entra user list"}
+        row = make_row("v1.0", "/users", "GET", {"operationId": "fixture"}, shipped)
+        self.assertEqual((row["disposition"], row["owningSlice"], row["reason"]), ("named-command", "READ-01", "Shipped as `mg-axi entra user list`."))
+        with self.subTest(reason="beta never joins the shipped v1.0 command"):
+            beta = make_row("beta", "/users", "GET", {"operationId": "fixture"}, shipped)
+            self.assertEqual(beta["disposition"], "scheduled")
+        with self.subTest(reason="no shipped set means pure discovery"):
+            plain = make_row("v1.0", "/users", "GET", {"operationId": "fixture"})
+            self.assertEqual(plain["disposition"], "scheduled")
+
+    def test_unshipped_v1_reads_defer_out_of_v1(self):
+        row = make_row("v1.0", "/groups", "GET", {"operationId": "fixture"}, {})
+        self.assertEqual((row["disposition"], row["owningSlice"], row["reason"]), ("deferred", "READ-02", CUTOFF_REASON))
+        with self.subTest(reason="a firstmate deferral reason survives the flip"):
+            deferred = make_row("v1.0", "/organization/{organization-id}/branding/favicon", "GET", {"operationId": "fixture"}, {})
+            self.assertEqual(deferred["disposition"], "deferred")
+            self.assertTrue(deferred["reason"].startswith("Deferred by firstmate organization scope "))
+        with self.subTest(reason="a split note yields to the cutoff reason"):
+            split = make_row("v1.0", "/contacts/{orgContact-id}/memberOf", "GET", {"operationId": "fixture"}, {})
+            self.assertEqual((split["disposition"], split["reason"]), ("deferred", CUTOFF_REASON))
+
+    @staticmethod
+    def _inventory(rows):
+        def pin(version):
+            subset = [row for row in rows if row["version"] == version]
+            excluded = {}
+            for row in subset:
+                if row["disposition"] == "excluded":
+                    root = row["path"].split("/")[1].split("(")[0]
+                    excluded[root] = excluded.get(root, 0) + 1
+            return {"version": version, "path": f"openapi/{version}/openapi.yaml", "sha256": "0" * 64,
+                    "bytes": 1, "discoveredOperations": len(subset), "excludedByRoot": excluded}
+        return {"schemaVersion": 2, "repository": "microsoftgraph/msgraph-metadata", "revision": "0" * 40,
+                "checkedOn": "2026-10-03", "sources": [pin("v1.0"), pin("beta")], "operations": rows}
+
+    def test_validate_accepts_catalogue_backed_named_commands(self):
+        rows = [make_row("v1.0", "/users", "GET", {"operationId": "a"}, {"GET:/users": "entra user list"}),
+                make_row("beta", "/groups", "GET", {"operationId": "b"}, {})]
+        validate(self._inventory(rows), shipped={"GET:/users": "entra user list"}, reviewed={}, alternates={})
+
+    def test_reviewed_raw_routes_flip_to_reviewed_raw_read(self):
+        row = make_row("v1.0", "/contacts/{orgContact-id}/transitiveMemberOf", "GET", {"operationId": "fixture"}, {}, {"v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf"})
+        self.assertEqual((row["disposition"], row["owningSlice"]), ("reviewed-raw-read", "EXT-01"))
+        with self.subTest(reason="a named command wins over a reviewed raw route"):
+            both = make_row("v1.0", "/users", "GET", {"operationId": "a"}, {"GET:/users": "entra user list"}, {"v1.0:GET:/users"})
+            self.assertEqual(both["disposition"], "named-command")
+
+    def test_validate_rejects_unbacked_implementation_claims(self):
+        rows = [make_row("v1.0", "/users", "GET", {"operationId": "a"}, {}),
+                make_row("beta", "/groups", "GET", {"operationId": "b"}, {})]
+        rows[0]["disposition"] = "named-command"
+        with self.assertRaisesRegex(ValueError, "Discovery alone"):
+            validate(self._inventory(rows), shipped={}, reviewed={}, alternates={})
+
+    def test_validate_rejects_shipped_operations_still_scheduled(self):
+        rows = [make_row("v1.0", "/users", "GET", {"operationId": "a"}),
+                make_row("beta", "/groups", "GET", {"operationId": "b"})]
+        with self.assertRaisesRegex(ValueError, "not named-command"):
+            validate(self._inventory(rows), shipped={"GET:/users": "entra user list"}, reviewed={}, alternates={})
+        with self.subTest(reason="a shipped operation left deferred fails"):
+            rows[0]["disposition"] = "deferred"
+            with self.assertRaisesRegex(ValueError, "not named-command"):
+                validate(self._inventory(rows), shipped={"GET:/users": "entra user list"}, reviewed={}, alternates={})
+
+    def test_validate_accepts_review_backed_raw_reads(self):
+        rows = [make_row("v1.0", "/contacts/{orgContact-id}/transitiveMemberOf", "GET", {"operationId": "a"}, {}, {"v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf"}),
+                make_row("beta", "/groups", "GET", {"operationId": "b"}, {})]
+        validate(self._inventory(rows), shipped={}, reviewed={"v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf"}, alternates={})
+
+    def test_validate_rejects_reviewed_routes_still_scheduled(self):
+        rows = [make_row("v1.0", "/users", "GET", {"operationId": "a"}),
+                make_row("beta", "/groups", "GET", {"operationId": "b"})]
+        with self.assertRaisesRegex(ValueError, "not reviewed-raw-read"):
+            validate(self._inventory(rows), shipped={}, reviewed={"v1.0:GET:/users"}, alternates={})
+        with self.subTest(reason="a reviewed route left deferred fails"):
+            rows[0]["disposition"] = "deferred"
+            with self.assertRaisesRegex(ValueError, "not reviewed-raw-read"):
+                validate(self._inventory(rows), shipped={}, reviewed={"v1.0:GET:/users"}, alternates={})
+
+    def test_table_alternates_flip_to_named_command(self):
+        alternates = {"GET:/groups/{group-id}/transitiveMembers": "entra group member list"}
+        row = make_row("v1.0", "/groups/{group-id}/transitiveMembers", "GET", {"operationId": "fixture"}, {}, set(), alternates)
+        self.assertEqual((row["disposition"], row["owningSlice"], row["reason"]),
+                         ("named-command", "READ-02", "Shipped as `mg-axi entra group member list` alternate route."))
+        with self.subTest(reason="a named command wins over a table alternate"):
+            both = make_row("v1.0", "/users", "GET", {"operationId": "a"}, {"GET:/users": "entra user list"}, set(), {"GET:/users": "entra user list"})
+            self.assertEqual(both["reason"], "Shipped as `mg-axi entra user list`.")
+        with self.subTest(reason="a table alternate wins over a reviewed raw route"):
+            overlap = make_row("v1.0", "/groups/{group-id}/transitiveMembers", "GET", {"operationId": "fixture"}, {}, {"v1.0:GET:/groups/{group-id}/transitiveMembers"}, alternates)
+            self.assertEqual(overlap["disposition"], "named-command")
+
+    def test_validate_accepts_table_backed_alternates(self):
+        alternates = {"GET:/groups/{group-id}/transitiveMembers": "entra group member list"}
+        rows = [make_row("v1.0", "/groups/{group-id}/transitiveMembers", "GET", {"operationId": "a"}, {}, set(), alternates),
+                make_row("beta", "/groups", "GET", {"operationId": "b"}, {})]
+        validate(self._inventory(rows), shipped={}, reviewed={}, alternates=alternates)
+        with self.subTest(reason="a table-backed alternate still scheduled fails"):
+            rows[0]["disposition"] = "scheduled"
+            with self.assertRaisesRegex(ValueError, "not named-command"):
+                validate(self._inventory(rows), shipped={}, reviewed={}, alternates=alternates)
+        with self.subTest(reason="a table-backed alternate left deferred fails"):
+            rows[0]["disposition"] = "deferred"
+            with self.assertRaisesRegex(ValueError, "not named-command"):
+                validate(self._inventory(rows), shipped={}, reviewed={}, alternates=alternates)
+
+    def test_alternate_without_a_shipped_command_fails(self):
+        from inventory import alternate_operations
+        with self.assertRaisesRegex(ValueError, "no shipped command behind it"):
+            alternate_operations({})
+        with self.subTest(reason="attribution is deterministic"):
+            from inventory import shipped_operations
+            first = alternate_operations(shipped_operations())
+            self.assertEqual(first, alternate_operations(shipped_operations()))
+            self.assertEqual(len(first), 23)
 
     def test_discovery_cannot_claim_raw_coverage(self):
         inventory = json.loads((ROOT / "inventory/operations.json").read_text())

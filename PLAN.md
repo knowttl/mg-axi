@@ -6,7 +6,7 @@ See [README.md](README.md) for the current package, installation and CLI behavio
 ## Outcome and scope
 
 Build an agent-facing Microsoft Graph CLI with one shared Graph core and domain packs.
-Deliver the full Entra map first, with SOC-critical reads before the long tail.
+Deliver the agreed Entra coverage close first, with SOC-critical reads before the long tail.
 Preserve az-axi's familiar noun/subnoun/verb grammar and deliberate write gates while using Graph's actual identity, API, paging and permission contracts.
 
 The initial surface is `mg-axi entra …` plus a reviewed read-only `mg-axi api` escape hatch.
@@ -15,9 +15,9 @@ Permissions are requested per enabled pack and operation.
 Sensitive mail/files access stays disabled unless explicitly enabled.
 Raw reachability does not count as a named Entra command.
 
-Success has two milestones: a useful SOC read release and complete coverage of the agreed Entra inventory, including later named writes.
-A complete inventory must distinguish named commands, reviewed raw reads, scheduled work, intentionally blocked operations, deprecated operations and version/cloud unavailability.
-Scheduled work cannot be counted as finished.
+Success has two milestones: a useful SOC read release and the agreed Entra coverage close defined in docs/build-plan.md FULL-01/COMPLETE-01, including later named writes.
+A complete inventory must distinguish named commands, reviewed raw reads, deferred work, scheduled work, intentionally blocked operations, deprecated operations and version/cloud unavailability.
+Deferred or scheduled work cannot be counted as finished.
 The representative tables in this plan are research inputs, not a claim of an already enumerated full map.
 
 - [Dispatch-ready slices](docs/build-plan.md) define IDs, dependencies and acceptance.

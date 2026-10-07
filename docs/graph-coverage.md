@@ -117,4 +117,4 @@ Mail/files and other non-Entra content are disabled unless explicitly enabled fo
 The metadata inventory is not a substitute for permissions/licensing documentation.
 Report named coverage and raw reachability separately.
 No coverage percentage is claimed before a complete denominator exists.
-The final full-Entra milestone cannot close while agreed operations remain merely scheduled.
+The coverage close is defined in [the build plan](build-plan.md) FULL-01/COMPLETE-01: deferred or scheduled work cannot be counted as complete; see [the inventory contract](inventory.md) for disposition semantics.

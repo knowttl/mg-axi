@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -10,6 +11,11 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "7b2914c8ad1340129f52aa785f13c074cb46fd7c"
+# Deferred out of v1 by the approved read-family cutoff (mg-coverage-close):
+# the cutoff ships the agreed named reads and stops this long-tail operation.
+CUTOFF_REASON = "Deferred out of v1 by the approved read-family cutoff: no named command ships this operation and no later v1 slice claims it."
+# Reasons that already name the firstmate deferral decision survive the flip.
+DEFERRING_REASONS = ("Deferred by firstmate", "Deferred to a later")
 METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
 MAP_SOURCE = "https://learn.microsoft.com/en-us/graph/api/resources/identity-network-access-overview?view=graph-rest-1.0"
 LICENCE_SOURCE = "https://learn.microsoft.com/en-us/entra/fundamentals/licensing"
@@ -282,7 +288,95 @@ def parse_path(block):
             yield path, method.upper(), operation
 
 
-def make_row(version, path, method, operation):
+def shipped_operations():
+    """Catalogue-derived shipped operations: {"METHOD:/path": leaf-path}."""
+    text = (ROOT / "src/catalogue.ts").read_text()
+    leaves = [(match.group(1), match.start()) for match in re.finditer(r"\{\s*path:\s*\"([^\"]+)\"", text)]
+    shipped = {}
+    for index, (leaf, start) in enumerate(leaves):
+        end = leaves[index + 1][1] if index + 1 < len(leaves) else len(text)
+        found = re.findall(r"operation:\s*\"([A-Z]+:[^\"]+)\"", text[start:end])
+        if len(found) > 1:
+            raise ValueError(f"Catalogue leaf `{leaf}` carries more than one operation")
+        if found:
+            if found[0] in shipped:
+                raise ValueError(f"Catalogue operation {found[0]} is claimed by more than one leaf")
+            shipped[found[0]] = leaf
+    total = len(re.findall(r"operation:\s*\"[A-Z]+:[^\"]+\"", text))
+    if len(shipped) != total:
+        raise ValueError("Catalogue parse mismatch: every operation must pair with its leaf path")
+    return shipped
+
+
+def reviewed_raw_routes():
+    """API-01 reviewed raw routes from src/api.ts."""
+    text = (ROOT / "src/api.ts").read_text()
+    routes = re.findall(r'\{ id: "(v1\.0:[A-Z]+:[^"]+)"', text)
+    if not routes:
+        raise ValueError("API-01 must own at least one reviewed raw route")
+    if len(routes) != len(set(routes)):
+        raise ValueError("Reviewed raw routes must be unique")
+    return set(routes)
+
+
+# Alternate-routing tables whose values a shipped leaf reaches through cli
+# flag routing (--transitive/--as): {table constant: module file}.
+ALTERNATE_TABLES = (
+    ("TRANSITIVE_OPERATION", "src/entra-groups.ts"),
+    ("NAV_CASTS", "src/entra-contacts.ts"),
+    ("MEMBERSHIP_TRANSITIVE", "src/entra-contacts.ts"),
+    ("MEMBERSHIP_CASTS", "src/entra-contacts.ts"),
+)
+
+
+def alternate_operations(shipped):
+    """Leaf-attributed alternates: {"METHOD:/path": leaf-path}.
+
+    Every table value must walk through table keys to a catalogue operation;
+    the nearest catalogue ancestor supplies the owning leaf. A value with no
+    catalogue ancestor has no shipped command behind it and fails loudly.
+    """
+    edges = {}
+    for const, module in ALTERNATE_TABLES:
+        match = re.search(r"const " + const + r"[^=]*=\s*\{(.*?)\n\};", (ROOT / module).read_text(), re.S)
+        if not match:
+            raise ValueError(f"Alternate table {const} not found in {module}")
+        block = match.group(1)
+        # Nested "BASE": { flag: "VALUE", ... } groups: split on the group
+        # headers (brace matching would stop at template {placeholders}).
+        parts = re.split(r'"([A-Z]+:/[^"]+)":\s*\{', block)
+        for index in range(1, len(parts), 2):
+            base = parts[index]
+            inner = parts[index + 1] if index + 1 < len(parts) else ""
+            for flag, value in re.findall(r'(\w+):\s*"([A-Z]+:/[^"]+)"', inner):
+                if value in edges and edges[value] != base:
+                    raise ValueError(f"Alternate route {value} is attributed twice")
+                edges[value] = base
+        for key, value in re.findall(r'"([A-Z]+:/[^"]+)":\s*"([A-Z]+:/[^"]+)"', parts[0]):
+            if value in edges and edges[value] != key:
+                raise ValueError(f"Alternate route {value} is attributed twice")
+            edges[value] = key
+
+    def leaf_for(operation, seen):
+        if operation in shipped:
+            return shipped[operation]
+        if operation in seen:
+            raise ValueError(f"Alternate routing cycle at {operation}")
+        base = edges.get(operation)
+        if base is None:
+            return None
+        return leaf_for(base, seen | {operation})
+
+    attributed = {}
+    for value in sorted(edges):
+        leaf = leaf_for(value, set())
+        if leaf is None:
+            raise ValueError(f"Alternate table operation {value} has no shipped command behind it")
+        attributed[value] = leaf
+    return attributed
+
+
+def make_row(version, path, method, operation, shipped=None, reviewed=None, alternates=None):
     owner = scoped_slice(path)
     disposition, reason = "scheduled", "No implemented command or reviewed raw contract yet."
     action = path.rsplit("/", 1)[-1].rsplit(".", 1)[-1]
@@ -434,6 +528,19 @@ def make_row(version, path, method, operation):
             owner = "WRITE-04"
         elif path.endswith(("/riskyUsers/microsoft.graph.dismiss", "/riskyUsers/dismiss")):
             owner = "WRITE-05"
+    if version == "v1.0" and disposition == "scheduled" and shipped is not None:
+        effect = f"{method}:{path}"
+        identity = f"v1.0:{effect}"
+        if effect in shipped:
+            disposition, reason = "named-command", f"Shipped as `mg-axi {shipped[effect]}`."
+        elif alternates is not None and effect in alternates:
+            disposition, reason = "named-command", f"Shipped as `mg-axi {alternates[effect]}` alternate route."
+        elif reviewed is not None and identity in reviewed:
+            disposition, reason = "reviewed-raw-read", "Reviewed raw route under API-01; see src/api.ts REVIEWED_ROUTES."
+        else:
+            disposition = "deferred"
+            if not reason.startswith(DEFERRING_REASONS):
+                reason = CUTOFF_REASON
     doc = operation.get("externalDocs", {}).get("url")
     source = doc or (f"https://learn.microsoft.com/en-us/graph/api/{read_source}?view=graph-rest-{'beta' if version == 'beta' else '1.0'}" if read_source else MAP_SOURCE)
     return {
@@ -449,15 +556,21 @@ def make_row(version, path, method, operation):
     }
 
 
-def build(sources):
+def build(sources, shipped=None, reviewed=None, alternates=None):
     rows, pins = [], []
+    if shipped is None:
+        shipped = shipped_operations()
+    if reviewed is None:
+        reviewed = reviewed_raw_routes()
+    if alternates is None:
+        alternates = alternate_operations(shipped)
     for version, source in sources.items():
         raw = source.read_bytes()
         pins.append({"version": version, "path": f"openapi/{version}/openapi.yaml", "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)})
         discovered, excluded = 0, {}
         for path, method, operation in discover(source):
             discovered += 1
-            row = make_row(version, path, method, operation)
+            row = make_row(version, path, method, operation, shipped, reviewed, alternates)
             rows.append(row)
             if row["disposition"] == "excluded":
                 root = path.split("/")[1].split("(")[0]
@@ -468,16 +581,25 @@ def build(sources):
     return {"schemaVersion": 2, "repository": "microsoftgraph/msgraph-metadata", "revision": REVISION, "checkedOn": "2026-10-03", "sources": pins, "operations": rows}
 
 
-def validate(inventory):
+def validate(inventory, shipped=None, reviewed=None, alternates=None):
     schema = json.loads((ROOT / "inventory/schema.json").read_text())
     Draft202012Validator(schema).validate(inventory)
+    backed = {f"v1.0:{operation}" for operation in (shipped_operations() if shipped is None else shipped)}
+    raw = set(reviewed_raw_routes() if reviewed is None else reviewed)
+    if alternates is None:
+        alternates = alternate_operations(shipped_operations() if shipped is None else shipped)
+    backed |= {f"v1.0:{operation}" for operation in alternates}
     ids = set()
+    by_id = {}
     for row in inventory["operations"]:
         if row["id"] in ids or row["id"] != f'{row["version"]}:{row["method"]}:{row["path"]}':
             raise ValueError("Duplicate or inconsistent operation identity")
         ids.add(row["id"])
-        if row["disposition"] in {"named-command", "reviewed-raw-read"}:
-            raise ValueError("Discovery alone cannot claim implementation or reviewed raw access")
+        by_id[row["id"]] = row
+        if row["disposition"] == "named-command" and row["id"] not in backed:
+            raise ValueError("Discovery alone cannot claim a named command")
+        if row["disposition"] == "reviewed-raw-read" and row["id"] not in raw:
+            raise ValueError("Discovery alone cannot claim reviewed raw access")
         if (scoped_slice(row["path"]) is None) != (row["disposition"] == "excluded"):
             raise ValueError("Boundary mismatch: out-of-scope operations must be excluded")
     if {source["version"] for source in inventory["sources"]} != {"v1.0", "beta"}:
@@ -493,6 +615,18 @@ def validate(inventory):
                 excluded[root] = excluded.get(root, 0) + 1
         if excluded != source["excludedByRoot"]:
             raise ValueError("Excluded operation counts must reconcile with rows")
+    for identity in sorted(backed):
+        row = by_id.get(identity)
+        if row is None:
+            raise ValueError(f"Shipped command owns {identity} but it has no inventory row")
+        if row["disposition"] != "named-command":
+            raise ValueError(f"Shipped command owns {identity} but its disposition is not named-command")
+    for identity in sorted(raw - backed):
+        row = by_id.get(identity)
+        if row is None:
+            raise ValueError(f"Reviewed raw route {identity} has no inventory row")
+        if row["disposition"] != "reviewed-raw-read":
+            raise ValueError(f"Reviewed raw route {identity} is not reviewed-raw-read")
 
 
 def main():

@@ -339,7 +339,7 @@ Approval and subject reads carry personal data and belong to later parts, never 
 The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to entitlement reads.
 Resume any entitlement list with `--cursor -` and supply the returned cursor on stdin; resume policy and role-scope lists with the same `--access-package`, profile, scopes and API version.
 Delegated reads default to `https://graph.microsoft.com/EntitlementManagement.Read.All`, while application profiles use the configured `.default` audience.
-See the [entitlement-management scope decisions](docs/coverage.md#ext-02-entitlement-management-scope-decisions) for the scheduled personal-data part and deferred beta reads.
+See the [entitlement-management scope decisions](docs/coverage.md#ext-02-entitlement-management-scope-decisions) for the deferred personal-data part and scheduled beta reads.
 Delegated callers additionally need a supported Entra role with catalog visibility (Global Reader and Identity Governance Administrator are among the supported roles).
 Denied reads name that role requirement instead of only the generic grant/role/licence cause.
 Entitlement management needs P2 or ID Governance depending on capability, not one uniform licence, and delegated personal Microsoft accounts are not supported.
@@ -447,7 +447,7 @@ Workflow rows never carry tasks, runs, processing results or task reports: tasks
 The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to lifecycle reads.
 Resume any lifecycle list with `--cursor -` and supply the returned cursor on stdin.
 Delegated workflow reads default to `https://graph.microsoft.com/LifecycleWorkflows-Workflow.ReadBasic.All` (richer detail may need `LifecycleWorkflows-Workflow.Read.All` or `LifecycleWorkflows.Read.All`), template, task-definition and settings reads to `https://graph.microsoft.com/LifecycleWorkflows.Read.All`, and run, processing-result and task-report reads to `https://graph.microsoft.com/LifecycleWorkflows-Reports.Read.All` (richer detail may need `LifecycleWorkflows.Read.All` or `LifecycleWorkflows.ReadWrite.All`), while application profiles use the configured `.default` audience.
-See the [lifecycle-workflows scope decisions](docs/coverage.md#ext-02-lifecycle-workflows-scope-decisions) for the scheduled nested-result and summary parts.
+See the [lifecycle-workflows scope decisions](docs/coverage.md#ext-02-lifecycle-workflows-scope-decisions) for the deferred nested-result and summary parts.
 Delegated callers additionally need Global Reader or Lifecycle Workflows Administrator.
 Denied reads name that scope, role and licensing requirement instead of only the generic grant/role/licence cause.
 Lifecycle workflows need Microsoft Entra ID Governance or Microsoft Entra Suite (every governed user, not only administrators), and delegated personal Microsoft accounts are not supported.
@@ -650,7 +650,7 @@ All four named reads support only `--api-version v1.0`; `--api-version beta` fai
 Delegated multi-tenant-organization reads default to `https://graph.microsoft.com/MultiTenantOrganization.Read.All` (the lower-privileged delegated `MultiTenantOrganization.ReadBasic.All` returns displayName and tenantId only) and additionally need Security Reader or Global Reader, while application profiles use the configured `.default` audience.
 Personal Microsoft accounts are not supported, and these reads run in the commercial Global service only.
 Multi-tenant-organization participation needs Entra ID P1; denied reads name the scope, roles and licensing guidance instead of only the generic cause.
-No multi-tenant-organization mutation lives here; the single-member read stays scheduled because its documented least privilege is the write scope `MultiTenantOrganization.ReadWrite.All`, and tenant-lookup functions ship as `entra tenant-information show` in the tenant-information usage below; see the [multi-tenant-organization scope decisions](docs/coverage.md#ext-04-multi-tenant-organization-scope-decisions) for the deferred read.
+No multi-tenant-organization mutation lives here; the single-member read stays deferred because its documented least privilege is the write scope `MultiTenantOrganization.ReadWrite.All`, and tenant-lookup functions ship as `entra tenant-information show` in the tenant-information usage below; see the [multi-tenant-organization scope decisions](docs/coverage.md#ext-04-multi-tenant-organization-scope-decisions) for the deferred read.
 
 Log in with `https://graph.microsoft.com/CrossTenantInformation.ReadBasic.All`, then look up tenant information by domain name or tenant ID:
 
@@ -762,7 +762,7 @@ The named-list caps, uniform `count` totals, cursors, null/missing preservation 
 Delegated reads default to `https://graph.microsoft.com/OnPremDirectorySynchronization.Read.All`; application profiles are refused before credentials because Graph documents no supported application permission for this operation.
 Delegated callers additionally need Global Administrator, the only supported Entra role for this operation; personal Microsoft accounts are not supported.
 No P1/P2 prerequisite is stated for on-premises-synchronization reads; denied reads name the scope, role and licensing guidance instead of only the generic cause.
-No on-premises-synchronization mutation lives here; the `$count` scalar and beta operations stay scheduled; see the [on-premises-synchronization scope decisions](docs/coverage.md#ext-01-on-premises-synchronization-scope-decisions).
+No on-premises-synchronization mutation lives here; the `$count` scalar stays deferred and beta operations stay scheduled; see the [on-premises-synchronization scope decisions](docs/coverage.md#ext-01-on-premises-synchronization-scope-decisions).
 
 Log in with `https://graph.microsoft.com/Agreement.Read.All`, then inspect terms-of-use agreements (delegated profiles only):
 
@@ -791,7 +791,7 @@ Delegated agreement reads default to `https://graph.microsoft.com/Agreement.Read
 Delegated callers additionally need Security Reader, the least-privileged supported Entra role for these operations; personal Microsoft accounts are not supported.
 Terms of use needs Microsoft Entra ID P1; denied reads name the scope, role and licensing guidance instead of only the generic cause.
 Agreement file contents are never downloaded or printed; only agreement metadata is projected.
-No terms-of-use mutation lives here; the acceptances `$count` scalar, the agreement file/localization sub-reads and beta operations stay scheduled; see the [terms-of-use scope decisions](docs/coverage.md#ext-01-terms-of-use-scope-decisions).
+No terms-of-use mutation lives here; the acceptances `$count` scalar and the agreement file/localization sub-reads stay deferred and beta operations stay scheduled; see the [terms-of-use scope decisions](docs/coverage.md#ext-01-terms-of-use-scope-decisions).
 
 Log in with `https://graph.microsoft.com/Directory.Read.All`, then inspect directory objects:
 
@@ -810,7 +810,7 @@ Rows are polymorphic: only the base-type properties are ever requested or projec
 The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to directory-object reads.
 Reads default to `https://graph.microsoft.com/Directory.Read.All` for delegated access, while application profiles use the configured `.default` audience.
 No delegated role or P1/P2 prerequisite is stated for directory-object reads; personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
-No directory-object mutation lives here; the delta sync, the POST lookup/validation actions and beta operations stay scheduled; see the [directory-objects scope decisions](docs/coverage.md#ext-01-directory-objects-scope-decisions).
+No directory-object mutation lives here; the delta sync and the POST lookup/validation actions stay deferred and beta operations stay scheduled; see the [directory-objects scope decisions](docs/coverage.md#ext-01-directory-objects-scope-decisions).
 
 Log in with the scope matching the deleted type (`User.Read.All`, `Group.Read.All`, `Application.Read.All` or `AdministrativeUnit.Read.All`), then inspect the directory recycle bin:
 
@@ -834,7 +834,7 @@ Soft-deleted security groups report `securityEnabled` false through a known upst
 The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to deleted-item reads.
 List and count reads default to the type's least-privileged scope for delegated access (`User.Read.All`, `Group.Read.All`, `Application.Read.All` or `AdministrativeUnit.Read.All`, all read scopes already allowlisted), while application profiles use the configured `.default` audience.
 No delegated role or P1/P2 prerequisite is stated for deleted-item reads; personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
-No deleted-item mutation lives here; restore and permanent delete stay out entirely, and the POST lookup/validation actions and beta operations stay scheduled; see the [deleted-items scope decisions](docs/coverage.md#ext-01-deleted-items-scope-decisions).
+No deleted-item mutation lives here; restore and permanent delete stay out entirely, and the POST lookup/validation actions stay deferred and beta operations stay scheduled; see the [deleted-items scope decisions](docs/coverage.md#ext-01-deleted-items-scope-decisions).
 Log in with `https://graph.microsoft.com/OrgContact.Read.All`, then inspect organizational contacts:
 
 ```sh
@@ -861,7 +861,7 @@ Top-level list and show request and project only flat scalar properties (`$expan
 The named-list caps, uniform `count` totals, cursors, null/missing preservation and 500-character text truncation described above also apply to contact reads.
 Reads default to `https://graph.microsoft.com/OrgContact.Read.All` for delegated access, while application profiles use the configured `.default` audience; transitive member-of reads additionally need `https://graph.microsoft.com/Group.Read.All`.
 Delegated callers additionally need a supported Entra role (Directory Readers reads basic properties; Global Reader, Directory Writers, Intune Administrator or User Administrator also work); personal Microsoft accounts are not supported, and denied reads name the scope, role and licensing guidance instead of only the generic cause.
-No contact mutation lives here; the delta sync, the POST lookup actions and beta operations stay scheduled, and the error/sync navigation reads stay unavailable with no documented permission contract; see the [contacts scope decisions](docs/coverage.md#ext-01-contacts-scope-decisions).
+No contact mutation lives here; the delta sync and the POST lookup actions stay deferred and beta operations stay scheduled, and the error/sync navigation reads stay unavailable with no documented permission contract; see the [contacts scope decisions](docs/coverage.md#ext-01-contacts-scope-decisions).
 
 Log in with `https://graph.microsoft.com/IdentityProvider.Read.All`, then read workforce identity providers:
 
@@ -1117,7 +1117,7 @@ Non-array credential collections become empty arrays, and non-object entries are
 Secret-minting routes are never constructed.
 `entra application owner list --application <application-object-id>` and `entra service-principal owner list --service-principal <service-principal-object-id>` list owners; rows carry `@odata.type` naming the owner kind.
 `entra application federated-credential list` and `entra service-principal federated-credential list` default to `id`, `name`, `issuer` and `subject`: workload-identity trust metadata only, never secret material; each `show` defaults to the full reviewed set (`id`, `name`, `issuer`, `subject`, `description`, `audiences`).
-There is no named command for the parenthesised `(appId='...')` or `(name='...')` lookups; filter the list instead. Those rows stay scheduled as deferred (see the [READ-07 scope decisions](docs/coverage.md#read-07-application-lookups-scope-decisions)).
+There is no named command for the parenthesised `(appId='...')` or `(name='...')` lookups; filter the list instead. Those rows stay deferred (see the [READ-07 scope decisions](docs/coverage.md#read-07-application-lookups-scope-decisions)).
 For consent grants, use the service-principal grant commands described above.
 Application lists return `applications`, service-principal lists return `servicePrincipals`, owner lists return `owners`, federated lists return `federatedCredentials`, and single-object reads return `application`, `servicePrincipal` or `federatedCredential`.
 App and service-principal `--select` accepts the [reviewed property sets](src/entra-apps.ts); `--fields` must be a subset of the fetched selection.

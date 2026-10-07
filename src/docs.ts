@@ -242,7 +242,7 @@ export function skillDocument(): string {
     "Writes preview before sending and need `--execute` plus a typed `--confirm` repeating the target; an already-desired value is a no-op with exit 0, never an error.",
     "Output is TOON on stdout; diagnostics use stderr.",
     "Text truncates at 500 characters (`--full` restores text, never redaction); row caps resume through opaque cursors.",
-    "Secrets stay in protected storage references, never in argv, config files or output; credential fields carry expiry metadata only.",
+    "Secrets stay in credential references, never in argv, config files or output; credential fields carry expiry metadata only.",
     "Tests run offline with fixture credentials; never point tests at a real tenant.",
     "",
   ].join("\n");

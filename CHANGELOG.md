@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/knowttl/mg-axi/compare/v0.1.3...v0.1.4) (2026-10-07)
+
+
+### Features
+
+* **auth:** add headless application credential sources ([#82](https://github.com/knowttl/mg-axi/issues/82)) ([3dca8a6](https://github.com/knowttl/mg-axi/commit/3dca8a6a739870c3897bcfae97396b0afa1fd2d8))
+
 ## [0.1.3](https://github.com/knowttl/mg-axi/compare/v0.1.2...v0.1.3) (2026-10-07)
 
 

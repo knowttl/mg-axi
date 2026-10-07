@@ -73,7 +73,7 @@ The five initial write routes have their specific write owner where identified.
 Operation-level ownership does not authorize all writable properties on a PATCH route.
 
 Credential values, secret minting, LAPS credential detail and BitLocker recovery-key detail are intentionally blocked.
-Metadata collection/count routes remain scheduled for a future reviewed safe projection.
+Metadata collection/count routes carry the deferred disposition in v1.0 (out of v1) and remain scheduled in beta (never agreed for v1) for a future reviewed safe projection.
 Trust-framework key-set surfaces remain blocked because keys and secret-bearing operations require explicit safety contracts.
 Beta writes and external-customer-only user-flow surfaces remain intentionally blocked.
 Documented lookup, membership-check, evaluation and validation POST actions keep their family owner and are not denied as beta writes.
@@ -81,7 +81,7 @@ Documented lookup, membership-check, evaluation and validation POST actions keep
 Only explicitly listed POST actions are classified as reads; unknown POST actions remain writes, regardless of name prefixes.
 Multicloud permissions management and upstream-deprecated operations are recorded as deprecated.
 These route dispositions do not replace later field/query redaction or the Graph session's policy checks.
-For example, a scheduled application or user GET is not permission to project credential values from it.
+For example, a deferred or scheduled application or user GET is not permission to project credential values from it.
 
 Rows claim `named-command` only when the row matches a shipped operation in the named-command catalogue (`src/catalogue.ts`) or an alternate route a shipped leaf reaches through cli flag routing (`--transitive`/`--as`, from the `TRANSITIVE_OPERATION`, `NAV_CASTS`, `MEMBERSHIP_TRANSITIVE` and `MEMBERSHIP_CASTS` tables, attributed to the owning leaf), and `reviewed-raw-read` only when the row matches a reviewed raw route in the raw-route catalogue (`src/api.ts`); a shipped operation or table alternate that also matches a reviewed raw route is `named-command`; the generator derives those dispositions from the catalogues and routing tables and never from a hand list. Every table alternate must resolve through table keys to a catalogue operation; one with no shipped command behind it fails generation.
 The validator rejects unbacked claims, rejects any shipped catalogue operation or table-backed alternate whose disposition is not `named-command`, rejects any reviewed raw route outside backed whose disposition is not `reviewed-raw-read`, and rejects a missing inventory row for any shipped operation, reviewed raw route or table-backed alternate.

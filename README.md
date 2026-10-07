@@ -1271,7 +1271,6 @@ Ask an administrator to grant those permissions on the configured app registrati
 Acquisition failures return `AUTH_REQUIRED` with consent and certificate/federation guidance, without user or device-code fallback.
 
 Run `corepack pnpm build`, `corepack pnpm test` (test files run at most 4 at a time via `--test-concurrency=4` in the `test` script) and `corepack pnpm lint` for shell validation.
-The [CI workflow](.github/workflows/ci.yml) defines the platform/runtime matrix for shell build, test and lint checks, validates the Python inventory tooling separately, and rejects stale generated docs.
 The [implementation plan](PLAN.md) remains the design authority.
 
 The pinned [Entra operation inventory](docs/inventory.md) defines the INV-01 discovery boundary and schema for later build slices.
@@ -1309,5 +1308,5 @@ The hook makes no network, Graph or sign-in call, and prints a short `not config
 Restart the agent session after running the installer.
 No other ordinary command installs hooks, plugins or configuration.
 The skill file is generated in full from the template in [src/docs.ts](src/docs.ts) and the command catalogue; [docs/coverage.md](docs/coverage.md) also uses the discovery inventory.
-After building, regenerate both with `corepack pnpm run docs:generate` and verify freshness with `corepack pnpm run docs:check`; CI runs the freshness check.
+After building, regenerate both with `corepack pnpm run docs:generate` and verify freshness with `corepack pnpm run docs:check`; the release publish job runs the freshness check.
 Critical journeys stay packaged offline: `test/pack.test.mjs` drives setup, doctor and the user, group, Conditional Access and sign-in reads through the packaged executable with fixture credentials and blocked networking.

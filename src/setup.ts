@@ -117,7 +117,7 @@ export function setupView(store: Profiles): Record<string, unknown> {
       reads,
       writes,
       local: implemented.length - reads - writes,
-      api: `Entra ${families.slice(0, -1).join(", ")} and ${families.at(-1)} reads plus reviewed raw api get, one gated group-membership write, one gated account enable/disable write, one gated session-revocation write and one gated risky-user dismissal write; every other operation is scheduled, blocked, deprecated or excluded`,
+      api: `Entra ${families.slice(0, -1).join(", ")} and ${families.at(-1)} reads plus reviewed raw api get, one gated group-membership write, one gated account enable/disable write, one gated session-revocation write and one gated risky-user dismissal write; every other v1.0 operation is deferred out of v1, and every other beta operation remains scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded`,
       report: "docs/coverage.md",
     },
     integration: "Install skills/mg-axi/SKILL.md explicitly through your agent's skill installation mechanism; setup only shows guidance and installs no skills or hooks",

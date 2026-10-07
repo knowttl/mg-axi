@@ -57,14 +57,16 @@ An unreviewed value is never interpreted as unsupported, unrestricted, Free or s
 This discovery schema deliberately permits only unresolved evidence.
 API-01's [implementation catalogue](../src/api.ts) owns reviewed raw routes, query keys, fields and sourced access constraints.
 Later slices must extend the implementation catalogue's reviewed access contract explicitly, with sourced supported/unsupported auth modes, exact permission choices and role/licence constraints.
-The discovery inventory remains reproducible independently of that implementation catalogue.
+The discovery inventory remains reproducible from the pinned metadata; shipped-operation dispositions are joined from the implementation catalogue at generation time.
 
 ## Dispositions and ownership
 
-The disposition names are `named-command`, `reviewed-raw-read`, `scheduled`, `intentionally-blocked`, `deprecated`, `unavailable` and `excluded`.
+The disposition names are `named-command`, `reviewed-raw-read`, `scheduled`, `deferred`, `intentionally-blocked`, `deprecated`, `unavailable` and `excluded`.
 Every row has a nonempty `reason`; scoped rows have an `owningSlice` from the dispatch plan.
 An `excluded` row has `owningSlice: null`, carries no dispatch authorization, and remains visible solely for discovery accounting.
-`scheduled` means discovery is assigned to a later implementation slice, not that the operation works or its access is verified.
+`scheduled` means the operation is assigned to a later implementation slice, not that the operation works or its access is verified.
+Only beta operations may remain scheduled: beta was never agreed for v1, so `scheduled` no longer blocks the v1 milestone.
+`deferred` means the operation is explicitly out of v1 by a reviewed cutoff decision; the reason names that decision.
 Extended slice IDs are family dispatch templates and must be split into the approved small subfamily changes.
 `WRITE-N` is likewise a dispatch template rather than authorization to implement all mutations.
 The five initial write routes have their specific write owner where identified.
@@ -81,13 +83,13 @@ Multicloud permissions management and upstream-deprecated operations are recorde
 These route dispositions do not replace later field/query redaction or the Graph session's policy checks.
 For example, a scheduled application or user GET is not permission to project credential values from it.
 
-No row currently claims a named command or reviewed raw read.
-The validator rejects those dispositions for this discovery-only artifact.
+Rows claim `named-command` only when the row matches a shipped operation in the named-command catalogue (`src/catalogue.ts`) or an alternate route a shipped leaf reaches through cli flag routing (`--transitive`/`--as`, from the `TRANSITIVE_OPERATION`, `NAV_CASTS`, `MEMBERSHIP_TRANSITIVE` and `MEMBERSHIP_CASTS` tables, attributed to the owning leaf), and `reviewed-raw-read` only when the row matches a reviewed raw route in the raw-route catalogue (`src/api.ts`); the generator derives those dispositions from the catalogues and routing tables and never from a hand list. Every table alternate must resolve through table keys to a catalogue operation; one with no shipped command behind it fails generation.
+The validator rejects unbacked claims, rejects any shipped catalogue operation, reviewed raw route or table-backed alternate that is still `scheduled`, and rejects a missing inventory row for any shipped operation, reviewed raw route or table-backed alternate.
 `unavailable` records an explicitly sourced version/cloud limitation or a reviewed decision that the selected version has no documented operation contract.
 It is never inferred merely from a missing metadata route.
 See the generated [capability report](coverage.md) for operation-level dispositions and their sourced reasons.
 There is no completeness percentage.
-Future capability reports must count named, raw, scheduled, blocked, deprecated and unavailable scoped operations separately and cannot count scheduled work as complete.
+Future capability reports must count named, raw, deferred, scheduled, blocked, deprecated and unavailable scoped operations separately and cannot count deferred or scheduled work as complete.
 Excluded rows must be counted separately from scoped capabilities.
 
 ## Offline verification and refresh

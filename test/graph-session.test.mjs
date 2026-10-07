@@ -154,10 +154,12 @@ test("guest UPN remains bound across a same-resource redirect", async () => {
 
 for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) {
   for (const params of [{}, { appId: client }]) test(`${profile.mode} embedded path templates with ${Object.keys(params).length} bindings fail before credentials`, async () => {
-    const operation = resolveSessionOperation("v1.0", "GET", "/applications(appId='{appId}')");
+    // Embedded function-argument templates never bind: the beta row stays
+    // executable so the test pins template validation, not the gate.
+    const operation = resolveSessionOperation("beta", "GET", "/applications(appId='{appId}')");
     const f = fixture(json(200, {}));
     await assert.rejects(
-      f.session.execute({ profile, operation, params, ...scopeArgs }),
+      f.session.execute({ profile: { ...profile, preview: true }, operation, params, ...scopeArgs }),
       error => error.code === "VALIDATION_ERROR" && /Unsupported path template/.test(error.message),
     );
     assert.equal(f.credentialCalls.length, 0);
@@ -571,10 +573,10 @@ test("function routes refuse missing and unknown parameters before credentials",
 });
 
 test("a non-allowlisted parenthesised operation is still refused before credentials", async () => {
-  const operation = resolveSessionOperation("v1.0", "GET", "/servicePrincipals(appId='{appId}')");
+  const operation = resolveSessionOperation("beta", "GET", "/servicePrincipals(appId='{appId}')");
   const f = fixture(json(200, {}));
   await assert.rejects(
-    f.session.execute({ profile: delegatedProfile, operation, params: { appId: "00000000-0000-4000-8000-000000000000" }, scopes: ["https://graph.microsoft.com/Application.Read.All"] }),
+    f.session.execute({ profile: { ...delegatedProfile, preview: true }, operation, params: { appId: "00000000-0000-4000-8000-000000000000" }, scopes: ["https://graph.microsoft.com/Application.Read.All"] }),
     error => error.code === "VALIDATION_ERROR" && /Unsupported path template/.test(error.message),
   );
   assert.equal(f.credentialCalls.length, 0);

@@ -278,6 +278,79 @@ function initialWriteStatus(rows: InventoryRow[]): { shipped: string[]; pending:
 
 const DISPOSITIONS = ["named-command", "reviewed-raw-read", "scheduled", "deferred", "intentionally-blocked", "deprecated", "unavailable", "excluded"] as const;
 
+// FULL-01 audit record (2026-10-07, latest origin/main at PR #78): the cutoff
+// is met when no v1.0 row is left scheduled, so the counts below are read
+// from the same generated inventory the Counts section reports. Beta stays
+// scheduled by definition and was never agreed for v1.
+function auditRecord(rows: InventoryRow[]): string[] {
+  const v1 = (disposition: string): number =>
+    rows.filter(row => row.id.startsWith("v1.0:") && row.disposition === disposition).length;
+  const betaScheduled = rows.filter(row => row.id.startsWith("beta:") && row.disposition === "scheduled").length;
+  const named = v1("named-command");
+  const raw = v1("reviewed-raw-read");
+  const scheduled = v1("scheduled");
+  if (scheduled !== 0) throw new Error(`FULL-01 audit blocked: ${scheduled} v1.0 rows remain scheduled`);
+  return [
+    "## FULL-01 audit record",
+    "",
+    "FULL-01 audit (2026-10-07): every agreed v1.0 read has a named command or an",
+    "explicit reviewed blocked/unavailable/deprecated/deferred disposition, and no",
+    "v1.0 row is left scheduled. The deferred tail is declared out of v1.",
+    `- v1.0 named-command: ${named}, reviewed-raw-read: ${raw}, scheduled: ${scheduled}`,
+    `- v1.0 deferred (out of v1): ${v1("deferred")}, intentionally-blocked: ${v1("intentionally-blocked")}, deprecated: ${v1("deprecated")}, unavailable: ${v1("unavailable")}`,
+    `- beta scheduled (never agreed for v1): ${betaScheduled}`,
+    `PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries ${named} named / ${raw} raw (${named + raw} backed).`,
+    "",
+  ];
+}
+
+// COMPLETE-01 audit record (2026-10-07, latest origin/main at this change):
+// the full agreed Entra capability audit including later writes. Five writes
+// ship as named, gated commands through the WRITE-00 mutation coordinator,
+// WRITE-N carries explicit reviewed deferred/blocked/deprecated dispositions
+// rather than scheduled, and no agreed v1.0 operation, read or write, is
+// left merely scheduled. Beta stays scheduled by definition and was never
+// agreed for v1. The declined EXT-02c access-review history reads stay out.
+function completeAuditRecord(rows: InventoryRow[]): string[] {
+  const v1 = (disposition: string): number =>
+    rows.filter(row => row.id.startsWith("v1.0:") && row.disposition === disposition).length;
+  const betaScheduled = rows.filter(row => row.id.startsWith("beta:") && row.disposition === "scheduled").length;
+  const named = v1("named-command");
+  const raw = v1("reviewed-raw-read");
+  const scheduled = v1("scheduled");
+  const writeRows = rows.filter(row => row.id.startsWith("v1.0:") && row.disposition === "named-command" && !row.id.includes(":GET:"));
+  const writeN = (version: string, disposition: string): number =>
+    rows.filter(row => row.owningSlice === "WRITE-N" && row.id.startsWith(`${version}:`) && row.disposition === disposition).length;
+  const writeNScheduled = rows.filter(row => row.owningSlice === "WRITE-N" && row.disposition === "scheduled").length;
+  const declinedOut = rows.filter(row => row.owningSlice === "EXT-02c"
+    && (row.disposition === "named-command" || row.disposition === "reviewed-raw-read"));
+  if (scheduled !== 0) throw new Error(`COMPLETE-01 audit blocked: ${scheduled} v1.0 rows remain scheduled`);
+  if (writeNScheduled !== 0) throw new Error(`COMPLETE-01 audit blocked: ${writeNScheduled} WRITE-N rows remain scheduled`);
+  const writeStatus = initialWriteStatus(rows);
+  const expectedWrites = ["WRITE-01", "WRITE-02", "WRITE-03", "WRITE-04", "WRITE-05"];
+  const missing = expectedWrites.filter(slice => !writeStatus.shipped.some(entry => entry.startsWith(`${slice} `)));
+  if (writeStatus.pending.length > 0 || missing.length > 0) {
+    throw new Error(`COMPLETE-01 audit blocked: pending writes: ${[...missing, ...writeStatus.pending].join(", ")}`);
+  }
+  if (declinedOut.length > 0) throw new Error(`COMPLETE-01 audit blocked: declined EXT-02c rows ship: ${declinedOut.map(row => row.id).join(", ")}`);
+  return [
+    "## COMPLETE-01 audit record",
+    "",
+    "COMPLETE-01 audit (2026-10-07): the full agreed Entra capability audit including later writes.",
+    "Five writes ship as named, gated commands through the WRITE-00 mutation coordinator; WRITE-N carries explicit",
+    "reviewed deferred/blocked/deprecated dispositions rather than scheduled; no agreed v1.0 operation, read or",
+    "write, is left merely scheduled. Beta stays scheduled by definition and was never agreed for v1.",
+    "The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS URLs) stay out.",
+    `- v1.0 named-command: ${named} (${named - writeRows.length} reads plus ${writeRows.length} writes below), reviewed-raw-read: ${raw}, scheduled: ${scheduled}`,
+    `- v1.0 deferred (out of v1): ${v1("deferred")}, intentionally-blocked: ${v1("intentionally-blocked")}, deprecated: ${v1("deprecated")}, unavailable: ${v1("unavailable")}`,
+    `- beta scheduled (never agreed for v1): ${betaScheduled}`,
+    `- shipped writes: ${writeStatus.shipped.join(", ")}.`,
+    `- WRITE-N (remaining agreed mutations): deferred ${writeN("v1.0", "deferred")}, intentionally-blocked ${writeN("v1.0", "intentionally-blocked")} v1.0 plus ${writeN("beta", "intentionally-blocked")} beta, deprecated ${writeN("v1.0", "deprecated")} v1.0 plus ${writeN("beta", "deprecated")} beta, scheduled ${writeNScheduled}.`,
+    "- outstanding upstream limitations (already documented in the repo): P1 for Conditional Access and P2 for risk-based CA, PIM P2 or ID Governance, riskyUsers P2 and Workload Identities Premium for workload risk with hidden riskDetail/riskLevel without it (docs/graph-coverage.md); conservative P1/P2 Graph prerequisite for sign-in/audit logs, registration report excludes disabled users, no tenant-wide method enumeration (docs/graph-coverage.md); v1.0 group-members route omits service principals (README.md member-read warning); 14 unavailable rows with no documented v1.0 GET contract, invitation Create-only Methods table, org-scoped certificateBasedAuthConfiguration routes only, contacts sync-behavior reads without operation permission docs (inventory reasons); EXT-02c history reads need AccessReview.ReadWrite.All with no read scope and return SAS download URLs (docs/coverage.md); write-side limits beside each command, revoke lag/external-user scope/unknown outcome, CA update lockout gates with no concurrency promise, dismissal is not remediation (README.md, docs/execution.md).",
+    "",
+  ];
+}
+
 // The capability report is generated from the catalogue: every executable
 // read leaf owns one row with its inventory disposition and owning slice,
 // and the counts separate implemented leaves from inventory dispositions.
@@ -347,6 +420,8 @@ export function capabilityDocument(): string {
     `- local leaves: ${localCount} (home, profile, login and setup views)`,
     ...DISPOSITIONS.map(disposition => `- inventory ${disposition}: ${count(disposition)}`),
     "",
+    ...auditRecord(rows),
+    ...completeAuditRecord(rows),
     "## Commands",
     "",
     "| Command | Operation | Inventory (v1.0) | Owning slice |",

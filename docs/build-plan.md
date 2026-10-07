@@ -55,7 +55,7 @@ Sovereign clouds, external-customer launch support and named Security/Intune/M36
 
 ## FULL-01 audit record
 
-FULL-01 audit (2026-10-07, latest origin/main): v1.0 named-command 289, reviewed-raw-read 5, scheduled 0, deferred 4429 (out of v1), intentionally-blocked 57, deprecated 16, unavailable 14; beta scheduled 3717 (never agreed for v1). Every agreed read has a named command or a reviewed disposition, so the milestone is met. Counts are published in docs/coverage.md.
+FULL-01 audit snapshot (2026-10-07, historical point-in-time, latest origin/main at that time): v1.0 named-command 289, reviewed-raw-read 5, scheduled 0, deferred 4429 (out of v1), intentionally-blocked 57, deprecated 16, unavailable 14; beta scheduled 3717 (never agreed for v1). Every agreed read had a named command or a reviewed disposition, so the milestone was met at that time. See docs/coverage.md for current counts.
 
 ## Per-slice handoff
 

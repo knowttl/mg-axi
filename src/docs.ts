@@ -286,16 +286,20 @@ function auditRecord(rows: InventoryRow[]): string[] {
   const v1 = (disposition: string): number =>
     rows.filter(row => row.id.startsWith("v1.0:") && row.disposition === disposition).length;
   const betaScheduled = rows.filter(row => row.id.startsWith("beta:") && row.disposition === "scheduled").length;
+  const named = v1("named-command");
+  const raw = v1("reviewed-raw-read");
+  const scheduled = v1("scheduled");
+  if (scheduled !== 0) throw new Error(`FULL-01 audit blocked: ${scheduled} v1.0 rows remain scheduled`);
   return [
     "## FULL-01 audit record",
     "",
     "FULL-01 audit (2026-10-07): every agreed v1.0 read has a named command or an",
     "explicit reviewed blocked/unavailable/deprecated/deferred disposition, and no",
     "v1.0 row is left scheduled. The deferred tail is declared out of v1.",
-    `- v1.0 named-command: ${v1("named-command")}, reviewed-raw-read: ${v1("reviewed-raw-read")}, scheduled: ${v1("scheduled")}`,
+    `- v1.0 named-command: ${named}, reviewed-raw-read: ${raw}, scheduled: ${scheduled}`,
     `- v1.0 deferred (out of v1): ${v1("deferred")}, intentionally-blocked: ${v1("intentionally-blocked")}, deprecated: ${v1("deprecated")}, unavailable: ${v1("unavailable")}`,
     `- beta scheduled (never agreed for v1): ${betaScheduled}`,
-    "PR #78 proposed 275 named / 19 raw; the merged head carries 289 named / 5 raw (294 backed operations either way).",
+    `PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries ${named} named / ${raw} raw (${named + raw} backed).`,
     "",
   ];
 }

@@ -129,10 +129,12 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
   if (leaf.path === "home") return localHome(flags.profile as string | undefined);
   const profiles = new Profiles();
   if (leaf.path === "profile create") {
-    if (String(flags.mode ?? "delegated") !== "application" && (flags["certificate-thumbprint"] !== undefined || flags.federated)) throw new AxiError("Certificate and federated credentials belong to application profiles; pass --mode application", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    const credentialFlags = ["certificate-thumbprint", "client-secret-env", "client-secret-file", "certificate-key-file", "certificate-key-env", "federated-token-file-env"];
+    if (String(flags.mode ?? "delegated") !== "application" && (flags.federated || credentialFlags.some(name => flags[name] !== undefined))) throw new AxiError("Certificate, client-secret and federated credentials belong to application profiles; pass --mode application", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    const optional = (name: string) => flags[name] === undefined ? undefined : String(flags[name]);
     return profiles.create(String(flags.name), String(flags.tenant), String(flags.client), String(flags.cloud), !!flags["allow-device-code"],
     String(flags.mode ?? "delegated") === "application"
-      ? { certificateThumbprint: flags["certificate-thumbprint"] === undefined ? undefined : String(flags["certificate-thumbprint"]), federated: !!flags.federated }
+      ? { certificateThumbprint: optional("certificate-thumbprint"), federated: !!flags.federated, clientSecretEnv: optional("client-secret-env"), clientSecretFile: optional("client-secret-file"), certificateKeyFile: optional("certificate-key-file"), certificateKeyEnv: optional("certificate-key-env"), federatedTokenFileEnv: optional("federated-token-file-env") }
       : undefined);
   }
   if (leaf.path === "profile list") {

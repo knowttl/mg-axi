@@ -27,7 +27,12 @@ export class ApplicationAuth {
       this.cache.clear();
       this.cache.set(key, credential);
       return { ...credential };
-    } catch { throw this.failure(); }
+    } catch (error) {
+      // Provider AUTH_REQUIRED failures already name only the credential
+      // reference, never its value; everything else stays fully generic.
+      if (error instanceof AxiError && error.code === "AUTH_REQUIRED") throw error;
+      throw this.failure();
+    }
   }
   private audience(profile: ApplicationProfile, scopes: string[]) {
     const configured = [graphAudience(profile)];

@@ -346,6 +346,9 @@ npx -y @knowttl/mg-axi entra user list --profile soc --limit 10
 
 Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate file.
 `mg-axi setup` shows the selected path and writes nothing.
+Application profiles authenticate headlessly through credential references: the profile names an env var or file and the environment supplies the value at acquisition time.
+Container examples for client secrets, certificate keys and workload federation live in [README.md](../../README.md#mg-axi).
+A client secret is weaker than a certificate or federated credential and needs scheduled rotation.
 
 Agent discovery has two install paths, and either suffices alone.
 For ambient context at every agent session start instead of the skill, install the CLI globally and opt into the session hook:
@@ -374,5 +377,5 @@ Reads run through a session that authorizes only catalogued operations before si
 Writes preview before sending and need `--execute` plus a typed `--confirm` repeating the target; an already-desired value is a no-op with exit 0, never an error.
 Output is TOON on stdout; diagnostics use stderr.
 Text truncates at 500 characters (`--full` restores text, never redaction); row caps resume through opaque cursors.
-Secrets stay in protected storage references, never in argv, config files or output; credential fields carry expiry metadata only.
+Secrets stay in credential references, never in argv, config files or output; credential fields carry expiry metadata only.
 Tests run offline with fixture credentials; never point tests at a real tenant.

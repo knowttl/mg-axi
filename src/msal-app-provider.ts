@@ -30,8 +30,12 @@ export class MsalApplicationProvider implements ApplicationCredentialProvider {
     return { token: result.accessToken, expiresAt: result.expiresOn?.getTime() ?? NaN, tenantId: profile.tenantId, clientId: profile.clientId };
   }
   private async privateKey(ref: CertificateRef) {
-    if (ref.keyFile !== undefined) return this.normalizeKey(this.readProtectedFile(ref.keyFile), ref.keyFile);
+    if (ref.keyFile !== undefined) {
+      this.storage = "session-only";
+      return this.normalizeKey(this.readProtectedFile(ref.keyFile), ref.keyFile);
+    }
     if (ref.keyEnv !== undefined) {
+      this.storage = "session-only";
       const material = process.env[ref.keyEnv];
       if (typeof material !== "string" || !material.trim()) throw this.missing(ref.keyEnv);
       return this.normalizeKey(material, ref.keyEnv);
@@ -97,7 +101,7 @@ export class MsalApplicationProvider implements ApplicationCredentialProvider {
   // PEM material from files and env vars; env vars may carry escaped "\n".
   private normalizeKey(material: string, reference: string) {
     const normalized = material.includes("\n") ? material : material.replace(/\\n/g, "\n");
-    if (/ENCRYPTED PRIVATE KEY/.test(normalized)) throw new AxiError(`Application credential reference ${reference} is passphrase-protected; passphrase-protected keys are unsupported`, "AUTH_REQUIRED", ["mg-axi profile show --profile <name>", "Provision an unencrypted PEM through the referenced environment variable or file"]);
+    if (/ENCRYPTED PRIVATE KEY/.test(normalized) || /Proc-Type:\s*4,ENCRYPTED/.test(normalized)) throw new AxiError(`Application credential reference ${reference} is passphrase-protected; passphrase-protected keys are unsupported`, "AUTH_REQUIRED", ["mg-axi profile show --profile <name>", "Provision an unencrypted PEM through the referenced environment variable or file"]);
     if (!normalized.trim()) throw this.missing(reference);
     return normalized;
   }

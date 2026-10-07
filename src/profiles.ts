@@ -91,7 +91,7 @@ export function validateApplicationProfile(value: unknown): ApplicationProfile {
   }
   if (ref.provider === "certificate" && exact(ref, ["provider", "key", "thumbprint", "keyFile", "keyEnv"]) && typeof ref.key === "string" && guid.test(ref.key) &&
     typeof ref.thumbprint === "string" && thumbprint.test(ref.thumbprint) && exactlyOne([ref.keyFile, ref.keyEnv]) &&
-    (ref.keyFile === undefined || credentialPath(ref.keyFile)) && (typeof ref.keyEnv !== "string" || envName.test(ref.keyEnv))) {
+    (ref.keyFile === undefined || credentialPath(ref.keyFile)) && (ref.keyEnv === undefined || (typeof ref.keyEnv === "string" && envName.test(ref.keyEnv)))) {
     const keySource = ref.keyFile === undefined ? { keyEnv: ref.keyEnv as string } : { keyFile: ref.keyFile as string };
     return Object.freeze({ mode: "application" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const,
       preview: profile.preview, allowDeviceCode: false as const, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
@@ -99,7 +99,7 @@ export function validateApplicationProfile(value: unknown): ApplicationProfile {
   }
   if (ref.provider === "client-secret" && exact(ref, ["provider", "key", "secretEnv", "secretFile"]) && typeof ref.key === "string" && guid.test(ref.key) &&
     exactlyOne([ref.secretEnv, ref.secretFile]) &&
-    (typeof ref.secretEnv !== "string" || envName.test(ref.secretEnv)) && (ref.secretFile === undefined || credentialPath(ref.secretFile))) {
+    (ref.secretEnv === undefined || (typeof ref.secretEnv === "string" && envName.test(ref.secretEnv))) && (ref.secretFile === undefined || credentialPath(ref.secretFile))) {
     const secretSource = ref.secretEnv === undefined ? { secretFile: ref.secretFile as string } : { secretEnv: ref.secretEnv as string };
     return Object.freeze({ mode: "application" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const,
       preview: profile.preview, allowDeviceCode: false as const, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),

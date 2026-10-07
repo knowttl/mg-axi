@@ -339,7 +339,7 @@ Both firstmate decisions must also be stated in the PR body by the delivery phas
 ## EXT-03 identity-provider scope decisions
 
 This change covers the four v1.0 workforce identity-provider reads above (list, show, count, available-types).
-The four beta operations below remain scheduled with an explicit deferred disposition to a later EXT-03 subfamily.
+The four beta operations below remain scheduled (never agreed for v1) for a later EXT-03 subfamily.
 Identity-provider reads support v1.0 only; beta needs its own review.
 Workforce context only; no external-customer (B2C/External ID tenant) support is claimed.
 
@@ -353,10 +353,10 @@ Workforce context only; no external-customer (B2C/External ID tenant) support is
 ## EXT-01 federation-configuration scope decisions
 
 This change covers the four v1.0 workforce directory federation-configuration reads above (federation-configuration list, show, count and available-types).
-The four beta operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.
+The four beta operations below remain scheduled (never agreed for v1) for a later EXT-01 subfamily; no new commands or raw access are approved.
 Federation-configuration reads support v1.0 only; beta needs its own review.
 signingCertificate carries the public token-signing key only and is omitted from default selects; no private key material exists on these resources and the domains navigation property needs its own review.
-Workforce context only; domain federationConfiguration sub-reads (/domains/{domain-id}/federationConfiguration) stay scheduled in the later domain federation subfamily.
+Workforce context only; domain federationConfiguration sub-reads (/domains/{domain-id}/federationConfiguration) carry the deferred disposition in v1.0 (out of v1) and remain scheduled in beta (never agreed for v1) in the later domain federation subfamily.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|
@@ -368,7 +368,7 @@ Workforce context only; domain federationConfiguration sub-reads (/domains/{doma
 ## EXT-03 data-policy-operations scope decisions
 
 This change covers the three v1.0 workforce data-policy-operation reads above (data-policy-operation list, show and count).
-The three beta operations below remain scheduled with an explicit deferred disposition to a later EXT-03 subfamily; no new commands or raw access are approved.
+The three beta operations below remain scheduled (never agreed for v1) for a later EXT-03 subfamily; no new commands or raw access are approved.
 Data-policy-operation reads support v1.0 only; beta needs its own review.
 storageLocation always renders as the redaction marker; export submission (POST /users/{id}/exportPersonalData) belongs to no read slice.
 Workforce context only; no external-customer support is claimed.
@@ -382,7 +382,7 @@ Workforce context only; no external-customer support is claimed.
 ## EXT-03 risk-prevention scope decisions
 
 This change covers the ten v1.0 workforce risk-prevention reads above (fraud-protection-provider list, show and count; web-application-firewall-provider list, show and count; web-application-firewall-verification list, show, count and provider show).
-The eleven beta operations below remain scheduled with an explicit deferred disposition to a later EXT-03 subfamily; no new commands or raw access are approved.
+The eleven beta operations below remain scheduled (never agreed for v1) for a later EXT-03 subfamily; no new commands or raw access are approved.
 Risk-prevention reads support v1.0 only; beta needs its own review.
 API keys, client secrets and other key material (Arkose privateKey/publicKey, HUMAN serverToken, Akamai clientSecret/clientToken/accessToken, Cloudflare apiToken) are never selectable and never projected; application profiles are refused before credentials because Graph documents no supported application permission.
 Workforce context only; no external-customer support is claimed.
@@ -545,7 +545,7 @@ Beta policies and templates need their own review; delta-token sync needs its ow
 ## EXT-01 custom-security-attributes scope decisions
 
 This change covers the nine v1.0 attribute-set, custom-security-attribute-definition and allowed-value reads above (list, show, count per family).
-The nine beta operations below remain scheduled with an explicit deferred disposition to a later EXT-01 subfamily; no new commands or raw access are approved.
+The nine beta operations below remain scheduled (never agreed for v1) for a later EXT-01 subfamily; no new commands or raw access are approved.
 Beta attribute sets, definitions and allowed values need their own review; definition $expand (inline allowedValues) is not reviewed here and stays on the dedicated allowed-value list/show reads.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
@@ -1093,7 +1093,7 @@ No new commands or raw access are approved for any row below.
 ## EXT-02 entitlement-management scope decisions
 
 The entitlement-management scope covers the eighteen reads above (catalog, access-package, assignment-policy and resource-role-scope list/show/count reads plus assignment and assignment-request list/show/count reads).
-Approval and subject reads carry personal data and stay scheduled for later parts with no new commands or raw access approved; so do assignment and request navigation sub-reads (assignment target/accessPackage/assignmentPolicy, request accessPackage/assignment/requestor), the top-level assignment-policy and resource-role-scope lists, catalog navigation reads (accessPackages, resources, resourceScopes, resourceRoles, customWorkflowExtensions), package navigation reads (catalog, incompatible sets), policy navigation reads (questions, custom-extension stages), role/scope link expansion, filterByCurrentUser and additionalAccess functions (parenthesised function segments need their own session-guard binding review), and every beta operation below. Raw $expand review is a separate change: the named assignment and request reads flatten one fixed documented expansion in code, and no user-supplied $expand exists on any route.
+Approval and subject reads carry personal data and stay deferred (out of v1) for later parts with no new commands or raw access approved; so do assignment and request navigation sub-reads (assignment target/accessPackage/assignmentPolicy, request accessPackage/assignment/requestor), the top-level assignment-policy and resource-role-scope lists, catalog navigation reads (accessPackages, resources, resourceScopes, resourceRoles, customWorkflowExtensions), package navigation reads (catalog, incompatible sets), policy navigation reads (questions, custom-extension stages), role/scope link expansion, filterByCurrentUser and additionalAccess functions (parenthesised function segments need their own session-guard binding review), while every beta operation below remains scheduled (never agreed for v1). Raw $expand review is a separate change: the named assignment and request reads flatten one fixed documented expansion in code, and no user-supplied $expand exists on any route.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|
@@ -1107,7 +1107,7 @@ Approval and subject reads carry personal data and stay scheduled for later part
 ## EXT-02 lifecycle-workflows scope decisions
 
 This change covers the thirty-three v1.0 lifecycle-workflows first-, second-, third- and fourth-part reads above (workflow, workflow-template and task-definition list/show/count reads, the tenant settings show, top-level run and user/subject processing-result list/show/count reads, task-report list/show/count reads with the task and taskDefinition singles, plus run-nested user/subject/task processing-result list/show/count reads).
-Third-level processing results, taskProcessingResults sub-reads under a user or subject result, reprocessed runs, subject sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay scheduled for follow-up parts with no new commands or raw access approved; so do the six summary functions (the run user/subject summaries plus the four top-level ones), which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard cannot change beyond READ_SCOPES additions. Every beta operation and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.
+Third-level processing results, taskProcessingResults sub-reads under a user or subject result, reprocessed runs, subject sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay deferred (out of v1) for follow-up parts with no new commands or raw access approved; so do the six summary functions (the run user/subject summaries plus the four top-level ones), which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard cannot change beyond READ_SCOPES additions. Every beta operation below remains scheduled (never agreed for v1) and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.
 No new commands or raw access are approved for any lifecycle-workflows row outside the thirty-three above.
 
 ## READ-07 application lookups scope decisions

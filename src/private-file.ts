@@ -71,7 +71,7 @@ export class PrivateFiles {
     } catch (error) {
       if (error instanceof AxiError) throw error;
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === "EACCES" || code === "EPERM") this.insecure(path);
+      if (code === "EACCES" || code === "EPERM" || code === "ELOOP") this.insecure(path);
       throw error;
     }
     finally { if (fd !== undefined) try { closeSync(fd); } catch { /* original error preserved */ } }

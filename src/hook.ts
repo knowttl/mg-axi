@@ -1,6 +1,7 @@
 import { encode } from "@toon-format/toon";
 import { Profiles, type AnyProfile } from "./profiles.js";
 import { Credentials } from "./credentials.js";
+import { PrivateFiles } from "./private-file.js";
 import { resolveSecret } from "./secrets.js";
 import { redactSecrets } from "./redact.js";
 
@@ -18,14 +19,15 @@ export type HookOptions = {
   version: string;
   env?: NodeJS.ProcessEnv;
   configPath?: string;
+  files?: PrivateFiles;
   // Test seam over the true external boundary (the credential store).
   authPresence?: (profile: AnyProfile) => Promise<AuthPresence> | AuthPresence;
 };
 
-async function probeAuthPresence(profile: AnyProfile): Promise<AuthPresence> {
+async function probeAuthPresence(profile: AnyProfile, files = new PrivateFiles()): Promise<AuthPresence> {
   if (profile.mode !== "delegated") return "client-credentials";
   try {
-    return ("stored" in profile.token ? new Credentials().read(profile) : resolveSecret(profile.token)) ? "cached" : "sign-in required";
+    return ("stored" in profile.token ? new Credentials(undefined, files).read(profile) : resolveSecret(profile.token, files)) ? "cached" : "sign-in required";
   } catch {
     return "unknown";
   }
@@ -45,11 +47,11 @@ export async function hookSummary(options: HookOptions): Promise<string> {
   }
 }
 
-async function renderHookSummary({ version, env = process.env, configPath, authPresence = probeAuthPresence }: HookOptions): Promise<string> {
+async function renderHookSummary({ version, env = process.env, configPath, files = new PrivateFiles(), authPresence = profile => probeAuthPresence(profile, files) }: HookOptions): Promise<string> {
   let store: Profiles;
   let names: string[];
   try {
-    store = new Profiles(configPath !== undefined && configPath.trim() !== "" ? configPath.trim() : env.MG_AXI_CONFIG !== undefined && env.MG_AXI_CONFIG.trim() !== "" ? env.MG_AXI_CONFIG.trim() : undefined);
+    store = new Profiles(configPath !== undefined && configPath.trim() !== "" ? configPath.trim() : env.MG_AXI_CONFIG !== undefined && env.MG_AXI_CONFIG.trim() !== "" ? env.MG_AXI_CONFIG.trim() : undefined, files);
     names = store.list().map(item => item.name);
   } catch {
     return `${encode({ mg: "configuration invalid", help: ["Check the selected config file's path, permissions and JSON syntax"] })}\n`;

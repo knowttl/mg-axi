@@ -9,6 +9,7 @@ import { DelegatedAuth } from "../dist/auth.js";
 import { LEAVES } from "../dist/catalogue.js";
 import { runApiGet } from "../dist/api.js";
 import { createMutationCoordinator, createMutationSender } from "../dist/mutations.js";
+import { PrivateFiles } from "../dist/private-file.js";
 
 // Skipped on Windows pending a fix for a pending-promise hang tracked as follow-up mg-win-hang-followup.
 const test = process.platform === "win32" ? (name, fn) => runTest(name, { skip: true }, fn) : runTest;
@@ -78,6 +79,16 @@ async function withEnv(key, value, action) {
 }
 
 const readState = (current = { notes: ["previous synthetic note"] }) => async () => current;
+
+test("the audit journal honors the coordinator files instead of host defaults", async () => {
+  const f = fixture();
+  const files = new PrivateFiles("win32", () => { throw new Error("fixture ACL failure"); });
+  await assert.rejects(
+    f.coordinator(enabledDelegated, { files }).execute(mutation, { readState: readState(), scopes, execute: true }),
+    { code: "INTENT_NOT_RECORDED" },
+  );
+  assert.equal(f.requests.length, 0);
+});
 
 for (const path of ["/v1.0/fixture/$count", "/v1.0/fixture/%24value", "/v1.0/fixture/notes/$ref"]) {
   test(`mutation path rejects reserved resource binding ${path} before credentials`, async () => {

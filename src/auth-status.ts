@@ -10,7 +10,7 @@ export function authStatus(name: string, profile: AnyProfile, credentials = new 
   const sources = Object.entries(fields).map(([field, ref]) => {
     let available = false;
     try {
-      available = "stored" in ref && profile.mode === "delegated" ? credentials.read(profile, true) !== undefined : !!resolveSecret(ref, undefined, true);
+      available = "stored" in ref && profile.mode === "delegated" ? credentials.read(profile, true) !== undefined : !!resolveSecret(ref, credentials.files, true);
     } catch (error) {
       if (!(error instanceof AxiError) || error.code !== "AUTH_REQUIRED") throw error;
     }

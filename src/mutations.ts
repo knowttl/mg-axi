@@ -514,7 +514,6 @@ export function createMutationCoordinator(args: {
     const line = JSON.stringify({ ...safe, intentKey: record.intentKey });
     try {
       const directory = dirname(journalPath);
-      const files = new PrivateFiles();
       const firstCreated = files.directory(directory);
       if (firstCreated) {
         let path = directory;

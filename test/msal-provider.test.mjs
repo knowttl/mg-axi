@@ -8,7 +8,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mock } from "node:test";
-import { Profiles } from "./dist/profiles.js";
+import { Profiles, validateDelegatedProfile } from "./dist/profiles.js";
 import { Credentials } from "./dist/credentials.js";
 import { PrivateFiles } from "./dist/private-file.js";
 const tenant = "11111111-1111-4111-8111-111111111111";
@@ -107,6 +107,13 @@ mock.method(store, "write", () => { throw new Error("fixture-private-diagnostic"
 await assert.rejects(new DelegatedAuth(new MsalProvider(store)).login(profile, "browser", scopes), error => error.code === "LOGIN_FAILED" && !JSON.stringify(error).includes("fixture-private-diagnostic"));
 assert.equal(store.read(profile), undefined);
 assert.deepEqual(prompts, ["browser"]);
+`);
+});
+
+test("file-holder delegated tokens resolve through the injected store files", () => {
+  run(`
+const fileProfile = validateDelegatedProfile({ mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", token: { file: "C:\\\\creds\\\\key.pem" } }, files);
+await assert.rejects(new MsalProvider(store).silent(fileProfile, scopes), { code: "AUTH_REQUIRED" });
 `);
 });
 

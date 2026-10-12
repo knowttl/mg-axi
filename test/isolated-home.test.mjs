@@ -17,10 +17,10 @@ test("validation commands cannot write to the inherited home or XDG config", () 
         mkdirSync(dir, { recursive: true });
         writeFileSync(join(dir, "validation-write"), "test");
       }
-      if (process.env.MG_AXI_CONFIG !== undefined || process.env.MG_AXI_TOKEN !== undefined) throw new Error("Credential environment leaked");
+      if (process.env.MG_AXI_CONFIG !== undefined || process.env.MG_AXI_TOKEN !== undefined || process.env.AZURE_FEDERATED_TOKEN_FILE !== undefined) throw new Error("Credential environment leaked");
     `], {
       encoding: "utf8", timeout: 10000,
-      env: { ...process.env, HOME: sentinel, USERPROFILE: sentinel, XDG_CONFIG_HOME: sentinel, XDG_STATE_HOME: sentinel, XDG_CACHE_HOME: sentinel, APPDATA: sentinel, LOCALAPPDATA: sentinel, MG_AXI_CONFIG: join(sentinel, "owner-config.json"), MG_AXI_TOKEN: "fixture-owner-token" },
+      env: { ...process.env, HOME: sentinel, USERPROFILE: sentinel, XDG_CONFIG_HOME: sentinel, XDG_STATE_HOME: sentinel, XDG_CACHE_HOME: sentinel, APPDATA: sentinel, LOCALAPPDATA: sentinel, MG_AXI_CONFIG: join(sentinel, "owner-config.json"), MG_AXI_TOKEN: "fixture-owner-token", AZURE_FEDERATED_TOKEN_FILE: join(sentinel, "owner-assertion") },
     });
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(readdirSync(sentinel), ["owner"]);

@@ -25,7 +25,7 @@ export class MsalProvider implements CredentialProvider {
       cache: { cachePlugin: {
         beforeCacheAccess: async context => {
           if (!loaded) {
-            snapshot = "stored" in profile.token ? this.store.read(profile) : resolveSecret(profile.token);
+            snapshot = "stored" in profile.token ? this.store.read(profile) : resolveSecret(profile.token, this.store.files);
             loaded = true;
           }
           // MSAL overwrites its cache from the plugin snapshot before a silent lookup.

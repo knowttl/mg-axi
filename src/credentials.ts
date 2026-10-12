@@ -11,7 +11,7 @@ const object = (value: unknown): value is Record<string, unknown> => !!value && 
 
 // The only persistent credential backend. Access tokens never leave memory.
 export class Credentials {
-  constructor(readonly path = statePath("credentials.json"), private files = new PrivateFiles()) {}
+  constructor(readonly path = statePath("credentials.json"), readonly files = new PrivateFiles()) {}
   private load(verifyAcl = false): Store {
     try {
       const value: unknown = JSON.parse(this.files.read(this.path, true, verifyAcl));

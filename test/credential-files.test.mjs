@@ -8,7 +8,7 @@ import { decode } from "@toon-format/toon";
 import { toolDirectory } from "../dist/paths.js";
 import { PrivateFiles } from "../dist/private-file.js";
 import { readOnlyForced, resolveWriteLogPath } from "../dist/mutations.js";
-import { Profiles } from "../dist/profiles.js";
+import { Profiles, validateApplicationProfile } from "../dist/profiles.js";
 import { Credentials } from "../dist/credentials.js";
 import { authStatus } from "../dist/auth-status.js";
 import { registerSecret, redactSecrets } from "../dist/redact.js";
@@ -181,6 +181,19 @@ test("partial env profiles fail before falling through to a file default", () =>
   } finally { f.clean(); }
 });
 
+test("secret-only environment falls through to the only file profile", () => {
+  const f = fixture();
+  try {
+    const config = join(f.dir, "config.json");
+    const created = f.run(["profile", "create", "--config", config, "--name", "soc", "--tenant", "11111111-1111-4111-8111-111111111111", "--client", "22222222-2222-4222-8222-222222222222", "--cloud", "commercial", "--mode", "application", "--federated"]);
+    assert.equal(created.status, 0, created.stdout);
+    const shown = f.run(["profile", "show", "--config", config], { MG_AXI_TOKEN: "fixture-headless-assertion" });
+    assert.equal(shown.status, 0, shown.stdout);
+    assert.equal(decode(shown.stdout).name, "soc");
+    assert.doesNotMatch(shown.stdout + shown.stderr, /fixture-headless-assertion/);
+  } finally { f.clean(); }
+});
+
 for (const patch of [{ token: "fixture-inline-secret" }, { token: { env: "1INVALID" } }, { token: { env: "GOOD", stored: true } }, { token: { file: "relative" } }, { preview: null }, { enabledPacks: null }, { credentialRef: { provider: "os-or-session" } }]) test(`config rejects invalid credential or policy fields on load: ${JSON.stringify(patch)}`, () => {
   const f = fixture();
   try {
@@ -228,6 +241,25 @@ test("Unix reads reject exposed secrets, writable configs, links and wrong owner
     assert.throws(() => new PrivateFiles("linux", undefined, process.getuid() + 1).read(path), { code: "CONFIG_INSECURE" });
     symlinkSync(path, join(f.dir, "link"));
     assert.throws(() => files.read(join(f.dir, "link")), { code: "CONFIG_INSECURE" });
+  } finally { f.clean(); }
+});
+
+test("Unix symlink loops fail as insecure, never a raw ELOOP", { skip: process.platform === "win32" }, () => {
+  const f = fixture();
+  try {
+    const loop = join(f.dir, "loop");
+    symlinkSync(loop, loop);
+    assert.throws(() => new PrivateFiles().read(join(loop, "entry")), error => error.code === "CONFIG_INSECURE" && error.message.includes(join(loop, "entry")));
+  } finally { f.clean(); }
+});
+
+test("auth status resolves Windows file holders through the injected store files", () => {
+  const f = fixture();
+  try {
+    const files = new PrivateFiles("win32", () => {});
+    const profile = validateApplicationProfile({ mode: "application", tenantId: "11111111-1111-4111-8111-111111111111", clientId: "22222222-2222-4222-8222-222222222222", cloud: "commercial", auth: "federated", token: { file: "C:\\creds\\assertion" } }, files);
+    const status = authStatus("win", profile, new Credentials(join(f.dir, "credentials.json"), files));
+    assert.deepEqual(status.sources, [{ field: "token", source: "file:C:\\creds\\assertion", available: false }]);
   } finally { f.clean(); }
 });
 

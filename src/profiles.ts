@@ -90,7 +90,7 @@ export function validateProfile(value: unknown, files?: PrivateFiles): AnyProfil
 }
 
 function envProfile(env: NodeJS.ProcessEnv): AnyProfile | undefined {
-  const fields = ["MODE", "TENANT_ID", "CLIENT_ID", "AUTH", "CLIENT_SECRET", "PRIVATE_KEY", "THUMBPRINT_SHA256", "TOKEN", "CLOUD", "PREVIEW", "ALLOW_DEVICE_CODE", "ENABLED_PACKS", "SENSITIVE_AREAS", "WRITES"];
+  const fields = ["MODE", "TENANT_ID", "CLIENT_ID", "AUTH", "CLOUD", "PREVIEW", "ALLOW_DEVICE_CODE", "ENABLED_PACKS", "SENSITIVE_AREAS", "WRITES"];
   if (!fields.some(field => env[`MG_AXI_${field}`] !== undefined)) return undefined;
   if (!env.MG_AXI_MODE || !env.MG_AXI_TENANT_ID || !env.MG_AXI_CLIENT_ID) invalid("Partial env profile; MG_AXI_MODE, MG_AXI_TENANT_ID and MG_AXI_CLIENT_ID are required");
   const json = (name: string) => {

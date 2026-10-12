@@ -2,12 +2,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import { AxiError } from "axi-sdk-js";
+import { redactSecrets } from "./redact.js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import {
   validateApplicationProfile,
   validateDelegatedProfile,
   validateProfile,
+  profileName,
   type AnyProfile,
 } from "./profiles.js";
 
@@ -238,7 +240,7 @@ export function redactGraphValue(value: unknown): unknown {
 }
 
 function redact(value: unknown): unknown {
-  if (typeof value === "string") return SECRET_VALUE.some(pattern => pattern.test(value)) ? REDACTED : value;
+  if (typeof value === "string") return SECRET_VALUE.some(pattern => pattern.test(value)) ? REDACTED : redactSecrets(value);
   if (Array.isArray(value)) return value.map(redact);
   if (value === null || typeof value !== "object") return value;
   return Object.fromEntries(
@@ -836,8 +838,8 @@ export class GraphSession {
     const signal = args.signal;
     const path = buildPath(operation.path, params);
     const context = createHash("sha256").update(JSON.stringify([
-      path, profile.mode, profile.tenantId.toLowerCase(), profile.clientId.toLowerCase(), profile.cloud,
-      profile.credentialRef, [...new Set(args.scopes ?? [])].sort(),
+      path, profileName(profile), profile.mode, profile.tenantId.toLowerCase(), profile.clientId.toLowerCase(), profile.cloud,
+      profile.mode === "delegated" ? profile.token : profile.auth === "certificate" ? [profile.privateKey, profile.thumbprintSha256] : profile.auth === "client-secret" ? profile.clientSecret : profile.token, [...new Set(args.scopes ?? [])].sort(),
     ])).digest("hex");
     if (resumed && resumed.context !== context) throw new AxiError("Collection cursor resource or authentication context does not match", "VALIDATION_ERROR", ["Resume under the original resource bindings, profile identity, credential reference and scopes"]);
     const startUrl = `https://${GRAPH_HOST}/${operation.version}/${path}${buildQuery(query)}`;

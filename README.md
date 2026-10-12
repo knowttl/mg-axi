@@ -10,6 +10,7 @@ Microsoft Graph CLI for agents, designed with AXI (Agent eXperience Interface).
 mg-axi provides reviewed Entra reads and explicitly gated named writes for workforce tenants in the commercial cloud.
 It emits compact TOON output, includes contextual next-step suggestions and keeps errors machine-readable on stdout.
 It is read-only by default; the shipped surface does not cover all of Microsoft Graph or Entra.
+The [AXI credential standard](https://github.com/knowttl/artium-axi/blob/main/docs/credential-standard.md) defines the shared profile, secret-reference and file-protection contract.
 
 ## Agent Ergonomics
 
@@ -86,13 +87,13 @@ Create a delegated profile using the tenant and app registration UUIDs, then exp
 
 ```sh
 mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
-mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All
+mg-axi auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All
 mg-axi doctor --profile soc
 mg-axi entra user list --profile soc --limit 10
 mg-axi entra user show --profile soc --id <user-id-or-upn>
 ```
 
-The first profile created becomes the default; `--profile` selects another identity.
+The first profile created becomes the default; `--profile` selects another identity, followed by `MG_AXI_PROFILE`, the default and the only-profile fallback.
 Profile creation does not overwrite existing identities or sign in.
 `doctor` performs one bounded user-list read per selected profile with silent credential acquisition.
 Without `--profile`, it checks the default profile, or all profiles if no default is set.
@@ -112,7 +113,7 @@ The [command table](skills/mg-axi/SKILL.md#orientation) lists every executable l
 
 | Area | Shipped surface |
 | --- | --- |
-| Local configuration | `profile create`, `profile list`, `profile show`, `login`, `home`, `setup`, `setup hooks`, `doctor` |
+| Local configuration | `profile create`, `profile list`, `profile show`, `config path`, `auth login`, `auth logout`, `auth status`, `home`, `setup`, `setup hooks`, `doctor` |
 | Directory | Users, groups and memberships, devices, administrative units, directory objects, deleted items, contacts, organizations and branding |
 | Applications and consent | Applications, service principals, owners, federated credentials, delegated grants and app-role assignments |
 | Roles and governance | Directory roles and assignments, PIM reads, access reviews, entitlement management and lifecycle workflows |
@@ -130,17 +131,17 @@ A 403 response alone does not identify which prerequisite is missing.
 
 ```sh
 # Group membership reads
-mg-axi login --profile soc --scopes https://graph.microsoft.com/GroupMember.Read.All
+mg-axi auth login --profile soc --scopes https://graph.microsoft.com/GroupMember.Read.All
 mg-axi entra group list --profile soc --limit 10
 mg-axi entra group member list --profile soc --group <group-id>
 
 # Conditional Access inspection
-mg-axi login --profile soc --scopes https://graph.microsoft.com/Policy.Read.All
+mg-axi auth login --profile soc --scopes https://graph.microsoft.com/Policy.Read.All
 mg-axi entra conditional-access policy list --profile soc
 mg-axi entra conditional-access policy show --profile soc --id <policy-id>
 
 # Reviewed raw reads
-mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All,https://graph.microsoft.com/GroupMember.Read.All
+mg-axi auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All,https://graph.microsoft.com/GroupMember.Read.All
 mg-axi api get /users --profile soc --scopes https://graph.microsoft.com/User.Read.All
 mg-axi api get /groups --profile soc --odata '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All
 ```
@@ -253,23 +254,47 @@ Unknown configuration fields, unsupported versions/clouds and inline credentials
 
 | Variable | Meaning |
 | --- | --- |
-| `MG_AXI_CONFIG` | Configuration file override; default `~/.mg-axi/config.json` |
-| `MG_AXI_READ_ONLY` | Set exactly `1` to refuse named writes regardless of profile policy |
-| `MG_AXI_WRITE_LOG` | Nonblank mutation journal path override; default `~/.mg-axi/writes.log` |
-| `AZURE_FEDERATED_TOKEN_FILE` | Default application workload-assertion file holder |
+| `MG_AXI_CONFIG` | Configuration file override; `--config` takes precedence |
+| `MG_AXI_PROFILE` | Profile selection override; `--profile` takes precedence |
+| `MG_AXI_READ_ONLY` | `1` or `true` refuses named writes; `0`, `false` or unset allows profile policy; other values fail |
+| `MG_AXI_WRITE_LOG` | Nonblank mutation journal path override; defaults to the state directory's `writes.log` |
+
+On Linux and macOS, configuration lives at `$XDG_CONFIG_HOME/mg-axi/config.json` (default `~/.config/mg-axi/config.json`) and state at `$XDG_STATE_HOME/mg-axi/` (default `~/.local/state/mg-axi/`).
+Only absolute XDG directory overrides are used.
+On Windows, XDG variables are ignored; configuration uses `%APPDATA%\mg-axi\config.json` and state uses `%LOCALAPPDATA%\mg-axi\`.
+Run `mg-axi config path` to see the selected configuration path.
+Legacy `~/.mg-axi/config.json` is never read; when it exists and the selected new config does not, `CONFIG_MOVED` reports both paths and the exact move command.
+
+Profile selection is `--profile`, `MG_AXI_PROFILE`, a complete env profile, `defaultProfile`, then the only configured profile.
+An env profile requires `MG_AXI_MODE`, `MG_AXI_TENANT_ID`, `MG_AXI_CLIENT_ID` and its credential fields, plus `MG_AXI_AUTH` for application mode.
+For example, client-secret auth requires `MG_AXI_CLIENT_SECRET`; certificate auth requires `MG_AXI_PRIVATE_KEY` and `MG_AXI_THUMBPRINT_SHA256`; federation requires `MG_AXI_TOKEN` containing the assertion.
+Delegated env profiles require `MG_AXI_TOKEN` containing a serialized MSAL cache.
+Optional `MG_AXI_ENABLED_PACKS`, `MG_AXI_SENSITIVE_AREAS` and `MG_AXI_WRITES` use JSON values; `MG_AXI_PREVIEW` and `MG_AXI_ALLOW_DEVICE_CODE` use the same boolean forms as `MG_AXI_READ_ONLY`.
+A partial env profile fails with `CONFIG_INVALID` instead of falling through to a file profile.
+Explicitly selected file profiles ignore the env profile fields and resolve only their own SecretRefs.
+
+The profile schema is shipped as `axi-credential.schema.json`.
+mg-axi retains `mode`; application profiles add `auth: "certificate" | "client-secret" | "federated"` and the corresponding `privateKey`, `clientSecret` or `token` SecretRef.
+Delegated profiles created by the CLI use `token: {"stored": true}` for their MSAL cache.
+Other SecretRefs are `{"env": "VARIABLE_NAME"}` and `{"file": "/absolute/local/path"}`.
+Omitted secret fields default to their `MG_AXI_<FIELD>` environment reference.
+Old `credentialRef` objects and SHA-1 `thumbprint` fields are rejected; update them to the flattened fields and 64-hex-digit `thumbprintSha256` after moving a legacy file.
 
 ### Delegated credential storage
 
-Delegated MSAL caches use the OS credential store through optional `keytar`, reported as `storage: os-protected`.
-If the native module cannot load, authentication is session-only and lasts only for that process; there is no plaintext cache fallback.
-Installing with `--ignore-scripts` can leave the native module unavailable.
-If the credential service loads but cannot read, write or invalidate the cache, authentication fails rather than silently changing storage modes.
-An inaccessible headless credential service can therefore block authentication.
+Explicit `auth login` stores a protected MSAL cache in the state directory's `credentials.json`, reported as `storage: protected-file`.
+Windows and Linux use the same backend, with no keyring dependency or 2,560-byte cache limit.
+Each entry is keyed by profile name and bound to its tenant and client IDs.
+Changing that binding requires a new explicit login.
 
 Each profile holds one account.
 Every explicit login wipes that profile's protected and in-memory cache before acquiring replacement credentials and fails if the wipe cannot be verified.
-Use separate profiles for separate identities; restore credential-store access before retrying a failed wipe.
-On Windows, caches larger than 2,560 UTF-8 bytes use session-only memory only after a verified protected-cache wipe.
+Use separate profiles for separate identities; restore file access before retrying a failed wipe.
+Only explicit login persists credentials; silent refresh keeps refreshed credentials in memory.
+Access tokens are excluded from the persisted MSAL cache.
+`auth logout` deletes the selected profile's cache and is idempotent; MSAL exposes no upstream token revocation API, so organizational revocation remains separate.
+`auth status` reports the selected identity, Graph endpoint, secret source names or paths, and local availability without signing in or making a live request.
+The old top-level `login` remains an alias for one minor release.
 Tokens remain opaque and never appear in profile views, stdout or authentication diagnostics.
 Credential acquisition is bound to the configured tenant/client and refreshes at a 60-second expiry margin.
 
@@ -283,7 +308,7 @@ Choose exactly one credential provider:
 
 ```sh
 # Certificate: register the matching public certificate on the app registration
-mg-axi profile create --name daemon --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --certificate-thumbprint <40-hex-digit-thumbprint>
+mg-axi profile create --name daemon --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --certificate-thumbprint-sha256 <64-hex-digit-thumbprint>
 
 # Workload federation: configure the app registration's federated credential mapping
 mg-axi profile create --name batch --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --federated
@@ -293,21 +318,24 @@ mg-axi profile create --name svc --tenant <tenant-id> --client <client-id> --clo
 mg-axi profile show --profile svc
 ```
 
-By default, certificate keys come from OS credential-store service `mg-axi`, with the account given by `credentialRef.key` in `profile show`.
+By default, certificate keys come from `privateKey: {"env": "MG_AXI_PRIVATE_KEY"}`.
 Profile creation records the reference and thumbprint; it does not import a key and there is no CLI key-import command.
 Provision keys through protected storage tooling, never argv or profile JSON.
-Certificate acquisition fails if the referenced key or credential store is unavailable.
+Certificate acquisition fails if the referenced key is unavailable.
 
 For headless certificate holders, add `--certificate-key-file <path>` or `--certificate-key-env <variable-name>`.
 Client secrets similarly accept `--client-secret-file <path>` instead of `--client-secret-env`.
-Key and secret files must be regular files, never symlinks, owned by the current user with mode 0600; Windows skips ownership and mode checks.
-Relative paths resolve at acquisition time.
+All credential files, including federated assertions, must use absolute local paths.
+On Unix, they must be regular files owned by the current user with no group or other permission bits; 0400 and 0600 are accepted.
+Configuration must not be writable by group or other.
+On Windows, writes apply a protected DACL for the current user, SYSTEM and Administrators; reads reject reparse points, and `auth status` and `doctor` verify the DACL.
+UNC and device paths are rejected.
 Missing, empty or exposed holders fail closed without disclosing values.
 PEM environment values may contain escaped `\n`; passphrase-protected keys are unsupported.
 Prefer certificates or federation over bearer client secrets, and rotate secrets on a schedule.
 
 Federation reads the assertion file on every acquisition so projected tokens can rotate.
-Use `--federated-token-file-env <variable-name>` to select another holder variable.
+Use `--federated-token-file <absolute-path>` for a projected assertion file, or set the default `MG_AXI_TOKEN` assertion value through the environment.
 References, rather than values, are stored in configuration; rotation updates the environment or file without changing the profile.
 Application credentials remain in process memory and are reacquired at a 60-second expiry margin.
 See [headless credential guidance](docs/headless-credentials.md) for holder examples.

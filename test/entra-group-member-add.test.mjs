@@ -16,7 +16,6 @@ import { addGroupMember, GROUP_MEMBER_ADD_OPERATION, GROUP_MEMBER_ADD_SCOPES } f
 // real credential or customer data exists.
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
-const key = "33333333-3333-4333-8333-333333333333";
 const gid = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const uid = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const other = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
@@ -26,9 +25,9 @@ const WRITE_SCOPE = "https://graph.microsoft.com/GroupMember.ReadWrite.All";
 const READ_SCOPE = "https://graph.microsoft.com/GroupMember.Read.All";
 
 const writes = { allowWrites: true, operations: [GROUP_MEMBER_ADD_OPERATION] };
-const delegatedBase = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key } };
+const delegatedBase = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
 const enabledDelegated = { ...delegatedBase, writes };
-const appBase = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "federated", key } };
+const appBase = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "federated", token: { env: "MG_AXI_TOKEN" } };
 const enabledApp = { ...appBase, writes };
 
 const plainGroup = {

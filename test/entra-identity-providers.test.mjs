@@ -11,7 +11,6 @@ import { runApiGet } from "../dist/api.js";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
-const key = "33333333-3333-4333-8333-333333333333";
 const providerScopes = ["https://graph.microsoft.com/IdentityProvider.Read.All"];
 const unsupportedProviderFields = ["issuerUri", "metadataExchangeUri", "passiveSignInUri", "preferredAuthenticationProtocol", "activeSignInUri", "signOutUri", "developerId", "serviceId", "keyId"];
 
@@ -468,7 +467,7 @@ function rawFixture(handler) {
   return { credentialCalls, requests, deps: { delegated, application, transport } };
 }
 
-const delegatedRawProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key } };
+const delegatedRawProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
 
 function rawBody(request) {
   const url = new URL(request.url);

@@ -220,7 +220,7 @@ for (const version of ["v1.0", "beta"]) test(`valid ${version} leaf resolves its
   assert.equal(result.stderr, "");
   const output = decode(result.stdout);
   assert.match(output.error, /No configured profile selected/);
-  assert.equal(output.code, "AUTH_REQUIRED");
+  assert.equal(output.code, "PROFILE_REQUIRED");
 });
 
 test("user list leaf help advertises the read journey flags", () => {
@@ -597,7 +597,7 @@ test("group member list without a profile fails operationally on stdout", () => 
   assert.equal(result.status, 1);
   assert.equal(result.stderr, "");
   const output = decode(result.stdout);
-  assert.equal(output.code, "AUTH_REQUIRED");
+  assert.equal(output.code, "PROFILE_REQUIRED");
   assert.ok(output.help.length);
 });
 
@@ -606,7 +606,7 @@ test("directory-role show without a profile fails operationally on stdout", () =
   assert.equal(result.status, 1);
   assert.equal(result.stderr, "");
   const output = decode(result.stdout);
-  assert.equal(output.code, "AUTH_REQUIRED");
+  assert.equal(output.code, "PROFILE_REQUIRED");
   assert.ok(output.help.length);
 });
 
@@ -615,7 +615,7 @@ test("user list without a profile fails operationally on stdout", () => {
   assert.equal(result.status, 1);
   assert.equal(result.stderr, "");
   const output = decode(result.stdout);
-  assert.equal(output.code, "AUTH_REQUIRED");
+  assert.equal(output.code, "PROFILE_REQUIRED");
   assert.ok(output.help.length);
 });
 

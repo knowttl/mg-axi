@@ -141,7 +141,7 @@ export function skillDescription(): string {
 // profile/login hints localHome() in cli.ts prepends to HOME_HELP; the
 // rest is HOME_HELP verbatim, so skill and home view cannot drift apart.
 export function skillHomeHints(): string[] {
-  return ["npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi login --help", ...HOME_HELP];
+  return ["npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi auth login --help", ...HOME_HELP];
 }
 
 // The full installable skill. Durable guidance only: read-only by default,
@@ -204,12 +204,12 @@ export function skillDocument(): string {
     "```sh",
     "npx -y @knowttl/mg-axi setup                    # build steps, config path and capabilities; writes nothing",
     "npx -y @knowttl/mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial",
-    "npx -y @knowttl/mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
+    "npx -y @knowttl/mg-axi auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
     "npx -y @knowttl/mg-axi doctor                   # one bounded read per selected profile",
     "npx -y @knowttl/mg-axi entra user list --profile soc --limit 10",
     "```",
     "",
-    "Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate file.",
+    "Configuration uses the XDG config directory (default `~/.config/mg-axi/config.json`), or `%APPDATA%\\mg-axi\\config.json` on Windows; `--config` overrides `MG_AXI_CONFIG`.",
     "`mg-axi setup` shows the selected path and writes nothing.",
     "Application profiles authenticate headlessly through credential references: the profile names an env var or file and the environment supplies the value at acquisition time.",
     "Container examples for client secrets, certificate keys and workload federation live in [README.md](../../README.md#mg-axi).",
@@ -420,7 +420,7 @@ export function capabilityDocument(): string {
     "",
     `- implemented read leaves: ${readCount} (${readLeaves.length} named Entra reads plus reviewed raw api get and doctor health check)`,
     `- implemented write leaves: ${writeLeaves.length} (named gated mutations below)`,
-    `- local leaves: ${localCount} (home, profile, login and setup views)`,
+    `- local leaves: ${localCount} (home, profile, config, auth, login alias and setup views)`,
     ...DISPOSITIONS.map(disposition => `- inventory ${disposition}: ${count(disposition)}`),
     "",
     ...auditRecord(rows),

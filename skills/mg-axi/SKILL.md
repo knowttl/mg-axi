@@ -36,7 +36,7 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi profile create` | native | local |
 | `mg-axi profile list` | native | local |
 | `mg-axi profile show` | native | local |
-| `mg-axi login` | native | local |
+| `mg-axi auth login` | native | local |
 | `mg-axi setup` | native | local |
 | `mg-axi setup hooks` | native | local |
 | `mg-axi doctor` | native | read |
@@ -307,6 +307,10 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra lifecycle run task-processing-result show` | native | read |
 | `mg-axi entra lifecycle run task-processing-result count` | native | read |
 | `mg-axi api get` | native | read |
+| `mg-axi login` | native | local |
+| `mg-axi config path` | native | local |
+| `mg-axi auth status` | native | local |
+| `mg-axi auth logout` | native | local |
 <!-- command-registry:end -->
 
 Run `npx -y @knowttl/mg-axi <leaf-path> --help` for that leaf's accepted flags and reference.
@@ -318,7 +322,7 @@ The no-args home view prints these hints alongside live profile status:
 
 ```sh
 npx -y @knowttl/mg-axi profile list
-npx -y @knowttl/mg-axi login --help
+npx -y @knowttl/mg-axi auth login --help
 npx -y @knowttl/mg-axi setup
 npx -y @knowttl/mg-axi doctor
 npx -y @knowttl/mg-axi entra user list --help
@@ -339,12 +343,12 @@ Create profiles explicitly and keep secrets out of argv and config files:
 ```sh
 npx -y @knowttl/mg-axi setup                    # build steps, config path and capabilities; writes nothing
 npx -y @knowttl/mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
-npx -y @knowttl/mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All
+npx -y @knowttl/mg-axi auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All
 npx -y @knowttl/mg-axi doctor                   # one bounded read per selected profile
 npx -y @knowttl/mg-axi entra user list --profile soc --limit 10
 ```
 
-Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate file.
+Configuration uses the XDG config directory (default `~/.config/mg-axi/config.json`), or `%APPDATA%\mg-axi\config.json` on Windows; `--config` overrides `MG_AXI_CONFIG`.
 `mg-axi setup` shows the selected path and writes nothing.
 Application profiles authenticate headlessly through credential references: the profile names an env var or file and the environment supplies the value at acquisition time.
 Container examples for client secrets, certificate keys and workload federation live in [README.md](../../README.md#mg-axi).

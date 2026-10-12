@@ -5,13 +5,13 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
 import { decode } from "@toon-format/toon";
-import { Profiles } from "../dist/profiles.js";
+import { Profiles, profileName } from "../dist/profiles.js";
 import { DelegatedAuth } from "../dist/auth.js";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
 const scopes = ["https://graph.microsoft.com/User.Read"];
-const profile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "33333333-3333-4333-8333-333333333333" } };
+const profile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
 function fixture() {
   let time = 1000;
   const calls = [];
@@ -95,7 +95,7 @@ test("scope and identity changes cannot reuse a cached credential", async () => 
   const f = fixture();
   await f.auth.credential(profile, scopes);
   await f.auth.credential(profile, ["https://graph.microsoft.com/Group.Read.All"]);
-  await f.auth.credential({ ...profile, credentialRef: { ...profile.credentialRef, key: tenant } }, scopes);
+  await f.auth.credential({ ...profile, token: { env: "OTHER_CACHE" } }, scopes);
   assert.equal(f.calls.length, 3);
 });
 
@@ -131,9 +131,9 @@ for (const requested of [[], ["https://graph.microsoft.com/.default"], ["https:/
   assert.equal(f.calls.length, 0);
 });
 
-for (const patch of [{ mode: "application" }, { cloud: "government" }, { tenantId: "common" }, { clientId: "" }, { secret: "fixture" }, { credentialRef: { provider: "file", key: "fixture" } }]) test(`invalid profile ${JSON.stringify(patch)} fails before credentials`, async () => {
+for (const patch of [{ mode: "application" }, { cloud: "government" }, { tenantId: "common" }, { clientId: "" }, { secret: "fixture" }, { token: { env: "1-invalid" } }]) test(`invalid profile ${JSON.stringify(patch)} fails before credentials`, async () => {
   const f = fixture();
-  await assert.rejects(f.auth.credential({ ...profile, ...patch }, scopes), { code: "VALIDATION_ERROR" });
+  await assert.rejects(f.auth.credential({ ...profile, ...patch }, scopes), { code: "CONFIG_INVALID" });
   assert.equal(f.calls.length, 0);
 });
 
@@ -144,8 +144,8 @@ test("profiles persist only validated identity, policy and separate references",
     profiles.create("soc", tenant, client, "commercial", false);
     profiles.create("device", tenant, client, "commercial", true);
     assert.equal(profiles.resolve().name, "soc");
-    assert.notEqual(profiles.resolve("soc").profile.credentialRef.key, profiles.resolve("device").profile.credentialRef.key);
-    assert.throws(() => profiles.create("soc", client, tenant, "commercial", false), { code: "VALIDATION_ERROR" });
+    assert.notEqual(profileName(profiles.resolve("soc").profile), profileName(profiles.resolve("device").profile));
+    assert.throws(() => profiles.create("soc", client, tenant, "commercial", false), { code: "CONFIG_INVALID" });
     assert.equal(profiles.resolve("soc").profile.tenantId, tenant);
     assert.doesNotMatch(readFileSync(profiles.path, "utf8"), /opaque-fixture-secret/);
     if (process.platform !== "win32") assert.equal(statSync(profiles.path).mode & 0o777, 0o600);

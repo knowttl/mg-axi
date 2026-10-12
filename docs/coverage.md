@@ -14,7 +14,7 @@ scheduled work as complete.
 
 - implemented read leaves: 263 (261 named Entra reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
-- local leaves: 7 (home, profile, login and setup views)
+- local leaves: 11 (home, profile, config, auth, login alias and setup views)
 - inventory named-command: 289
 - inventory reviewed-raw-read: 5
 - inventory scheduled: 3717

@@ -1,12 +1,13 @@
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, openSync, unlinkSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-session.js";
-import { validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
+import { booleanEnv, validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
+import { statePath } from "./paths.js";
+import { PrivateFiles } from "./private-file.js";
 
 // Shared mutation coordinator for reviewed named mutation families.
 // The gate order follows az-axi's write gates as the reference: read-only default,
@@ -20,15 +21,15 @@ export const READ_ONLY_ENV = "MG_AXI_READ_ONLY";
 export const WRITE_LOG_ENV = "MG_AXI_WRITE_LOG";
 
 export function readOnlyForced(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env[READ_ONLY_ENV] === "1";
+  return booleanEnv(READ_ONLY_ENV, env);
 }
 
 // Mutation intents and outcomes are journaled here: MG_AXI_WRITE_LOG when
-// set, otherwise ~/.mg-axi/writes.log. A blank override falls back.
+// set, otherwise the machine-local state directory. A blank override falls back.
 export function resolveWriteLogPath(env: NodeJS.ProcessEnv = process.env): string {
   const override = env[WRITE_LOG_ENV]?.trim();
   if (override) return override;
-  return join(homedir(), ".mg-axi", "writes.log");
+  return statePath("writes.log", env);
 }
 
 export type MutationMethod = "POST" | "PUT" | "PATCH" | "DELETE";
@@ -383,8 +384,8 @@ type AuditRecord = {
 };
 
 function flushDirectory(path: string): void {
-  // Node cannot open directory handles on Windows; journal fsync still
-  // applies, and recordAudit pre-creates the journal file there instead.
+  // Node cannot open directory handles on Windows; atomic journal writes
+  // still fsync the file before replacement.
   if (process.platform === "win32") return;
   const fd = openSync(path, "r");
   try { fsyncSync(fd); } finally { closeSync(fd); }
@@ -511,7 +512,8 @@ export function createMutationCoordinator(args: {
     const line = JSON.stringify({ ...safe, intentKey: record.intentKey });
     try {
       const directory = dirname(journalPath);
-      const firstCreated = mkdirSync(directory, { recursive: true, mode: 0o700 });
+      const files = new PrivateFiles();
+      const firstCreated = files.directory(directory);
       if (firstCreated) {
         let path = directory;
         const parent = dirname(firstCreated);
@@ -521,38 +523,30 @@ export function createMutationCoordinator(args: {
         }
         flushDirectory(parent);
       }
-      if (process.platform === "win32" && !existsSync(journalPath)) {
-        const journal = openSync(journalPath, "a", 0o600);
-        try { fsyncSync(journal); } finally { closeSync(journal); }
-      }
       const lockPath = `${journalPath}.lock`;
       const lock = openSync(lockPath, "wx", 0o600);
       try {
-        const created = !existsSync(journalPath);
-        const journal = openSync(journalPath, "a+", 0o600);
-        try {
-          if (record.kind === "intent") {
-            const contents = readFileSync(journal, "utf8");
-            if (contents && !contents.endsWith("\n")) throw new Error("Incomplete mutation journal");
-            const records = contents.split("\n").filter(Boolean)
-              .map(entry => JSON.parse(entry) as AuditRecord);
-            if (records.some(entry => !entry || !["intent", "outcome"].includes(entry.kind)
-              || typeof entry.intentKey !== "string" || !/^[a-f0-9]{64}$/.test(entry.intentKey))) {
-              throw new Error("Invalid mutation journal");
-            }
-            // No automatic replay: a recreated coordinator refuses an intent
-            // recorded without a terminal outcome, and a duplicate intent id
-            // is never reserved twice.
-            if (records.some(entry => entry.kind === "intent" && entry.intentKey === record.intentKey)) {
-              throw new AxiError(`blocked: intent '${record.id}' was already reserved`, "ALREADY_EXECUTED", [
-                `Intent '${record.id}' requires manual reconciliation; read back its target and never resend it`,
-              ]);
-            }
+        files.protect(lockPath);
+        const contents = existsSync(journalPath) ? files.read(journalPath) : "";
+        if (record.kind === "intent") {
+          if (contents && !contents.endsWith("\n")) throw new Error("Incomplete mutation journal");
+          const records = contents.split("\n").filter(Boolean)
+            .map(entry => JSON.parse(entry) as AuditRecord);
+          if (records.some(entry => !entry || !["intent", "outcome"].includes(entry.kind)
+            || typeof entry.intentKey !== "string" || !/^[a-f0-9]{64}$/.test(entry.intentKey))) {
+            throw new Error("Invalid mutation journal");
           }
-          writeFileSync(journal, `${line}\n`);
-          fsyncSync(journal);
-          if (created) flushDirectory(directory);
-        } finally { closeSync(journal); }
+          // No automatic replay: a recreated coordinator refuses an intent
+          // recorded without a terminal outcome, and a duplicate intent id
+          // is never reserved twice.
+          if (records.some(entry => entry.kind === "intent" && entry.intentKey === record.intentKey)) {
+            throw new AxiError(`blocked: intent '${record.id}' was already reserved`, "ALREADY_EXECUTED", [
+              `Intent '${record.id}' requires manual reconciliation; read back its target and never resend it`,
+            ]);
+          }
+        }
+        files.write(journalPath, `${contents}${line}\n`);
+        flushDirectory(directory);
       } finally {
         closeSync(lock);
         unlinkSync(lockPath);

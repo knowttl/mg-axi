@@ -92,7 +92,7 @@ test("setup reports unconfigured state without writing configuration", () => {
     assert.ok(output.capabilities.implemented.includes("mg-axi setup") || output.capabilities.implemented.includes("setup"));
     assert.ok(output.capabilities.implemented.includes("entra user list"));
     assert.equal(output.capabilities.reads, 263);
-    assert.equal(output.capabilities.writes, 5);    assert.equal(output.capabilities.local, 7);
+    assert.equal(output.capabilities.writes, 5);    assert.equal(output.capabilities.local, 11);
     assert.ok(!existsSync(config), "setup writes nothing");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
@@ -165,7 +165,7 @@ test("doctor without profiles fails operationally before any HTTP", () => {
     assert.equal(result.stderr, "");
     const output = decode(result.stdout);
     assert.match(output.error, /No profiles are configured/);
-    assert.equal(output.code, "AUTH_REQUIRED");
+    assert.equal(output.code, "PROFILE_REQUIRED");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
@@ -254,16 +254,16 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
   });
 }
 
-function delegatedJson(key) {
+function delegatedJson() {
   return { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial",
     enabledPacks: ["entra"], preview: false, sensitiveAreas: [],
-    credentialRef: { provider: "os-or-session", key }, allowDeviceCode: false };
+    token: { stored: true }, allowDeviceCode: false };
 }
 
-function applicationJson(key) {
+function applicationJson() {
   return { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial",
     enabledPacks: ["entra"], preview: false, sensitiveAreas: [],
-    credentialRef: { provider: "federated", key }, allowDeviceCode: false };
+    auth: "federated", token: { env: "MG_AXI_TOKEN" }, allowDeviceCode: false };
 }
 
 // Hand-written configuration without a default profile, so doctor checks
@@ -273,8 +273,8 @@ function writeConfig(home) {
   process.env.MG_AXI_CONFIG = join(home, "config.json");
   writeFileSync(join(home, "config.json"), JSON.stringify({ version: 1,
     profiles: {
-      soc: delegatedJson("33333333-3333-4333-8333-333333333333"),
-      batch: applicationJson("44444444-4444-4333-8444-444444444444"),
+      soc: delegatedJson(),
+      batch: applicationJson(),
     } }));
   return { store: new Profiles(), restore: () => { process.env.MG_AXI_CONFIG = previous; } };
 }
@@ -299,8 +299,8 @@ test("doctorTargets selects explicit, default, sole and every profile", () => {
     process.env.MG_AXI_CONFIG = join(home, "undefaulted.json");
     writeFileSync(join(home, "undefaulted.json"), JSON.stringify({ version: 1,
       profiles: {
-        soc: delegatedJson("33333333-3333-4333-8333-333333333333"),
-        batch: applicationJson("44444444-4444-4333-8444-444444444444"),
+        soc: delegatedJson(),
+        batch: applicationJson(),
       } }));
     assert.deepEqual(doctorTargets(new Profiles()), ["soc", "batch"]);
   } finally {
@@ -520,7 +520,7 @@ test("skill next steps match the no-args home view hints", async () => {
     const skill = skillDocument();
     const output = await executeArgv([]);
     assert.ok(output && typeof output === "object" && Array.isArray(output.help));
-    assert.deepEqual(hints.slice(0, 2), ["npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi login --help"]);
+    assert.deepEqual(hints.slice(0, 2), ["npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi auth login --help"]);
     assert.equal(new Set(hints).size, hints.length);
     assert.deepEqual(output.help, hints);
     const repeated = await executeArgv([]);

@@ -77,7 +77,7 @@ test("hook never prints credential references", () => {
     const env = baseEnv(dir, config);
     createProfiles(env);
     const stored = JSON.parse(readFileSync(config, "utf8"));
-    const keys = Object.values(stored.profiles).map(profile => profile.credentialRef.key);
+    const keys = Object.values(stored.profiles).map(profile => JSON.stringify(profile.token));
     assert.ok(keys.length > 0);
     const result = runHook(env);
     assert.equal(result.status, 0);

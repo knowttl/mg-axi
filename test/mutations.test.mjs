@@ -18,15 +18,14 @@ const test = process.platform === "win32" ? (name, fn) => runTest(name, { skip: 
 // fixture mutation; no live instance, real credential or customer data exists.
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
-const key = "33333333-3333-4333-8333-333333333333";
 const scopes = ["https://graph.microsoft.com/Fixture.Write"];
 const NOW = 1_700_000_000_000;
 const TIME = new Date(NOW).toISOString();
 
 const writes = { allowWrites: true, operations: ["mg.fixture.write"] };
-const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key } };
+const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
 const enabledDelegated = { ...delegatedProfile, writes };
-const appProfile = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "federated", key } };
+const appProfile = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "federated", token: { env: "MG_AXI_TOKEN" } };
 const enabledApp = { ...appProfile, writes };
 const mutation = { operation: "mg.fixture.write", method: "POST", version: "v1.0", path: "/v1.0/fixture/notes", effect: "write", target: "fixture-note-1", payload: { text: "reviewed synthetic note" } };
 
@@ -473,7 +472,7 @@ test("recreated coordinator refuses an intent recorded without a terminal outcom
   const intentId = "crash-intent";
   const intentKey = createHash("sha256").update(intentId).digest("hex");
   mkdirSync(join(f.scratch, "nested"), { recursive: true });
-  writeFileSync(f.journalPath, `${JSON.stringify({ kind: "intent", id: intentId, intentKey, time: TIME, profile: tenant, operation: mutation.operation, method: "POST", url: "https://graph.microsoft.com/v1.0/fixture/notes", target: mutation.target, effect: "write" })}\n`);
+  writeFileSync(f.journalPath, `${JSON.stringify({ kind: "intent", id: intentId, intentKey, time: TIME, profile: tenant, operation: mutation.operation, method: "POST", url: "https://graph.microsoft.com/v1.0/fixture/notes", target: mutation.target, effect: "write" })}\n`, { mode: 0o600 });
   await assert.rejects(
     f.coordinator().execute(mutation, { execute: true, readState: readState(), scopes, intentId }),
     { code: "ALREADY_EXECUTED" },

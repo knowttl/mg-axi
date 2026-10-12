@@ -2,7 +2,8 @@ import { AxiError } from "axi-sdk-js";
 import { LEAVES, operationFor } from "./catalogue.js";
 import { listUsers } from "./entra-users.js";
 import type { GraphSession } from "./graph-session.js";
-import { Profiles } from "./profiles.js";
+import { Profiles, type AnyProfile } from "./profiles.js";
+import { authStatus } from "./auth-status.js";
 
 // PACK-01: explicit release health check over the reviewed read-only session.
 // Doctor performs one documented bounded read per profile (entra user list
@@ -11,7 +12,7 @@ import { Profiles } from "./profiles.js";
 // DelegatedAuth.credential and ApplicationAuth.credential never open a
 // browser or device-code flow, so doctor never signs in interactively.
 // Doctor never auto-installs, changes profiles or enables Graph writes;
-// silent token refresh may update the protected credential cache.
+// silent token refresh stays in memory.
 // See README.md for usage.
 export const DOCTOR_OPERATION = "GET:/users";
 export const DOCTOR_VERSION = "v1.0";
@@ -19,12 +20,11 @@ export const DOCTOR_CHECK = `entra user list --limit 1 (${DOCTOR_VERSION}:${DOCT
 
 export function doctorTargets(store: Profiles, flag?: string): string[] {
   if (flag !== undefined) return [store.resolve(flag).name];
-  const items = store.list();
-  if (!items.length) return [];
   try {
     return [store.resolve(undefined).name];
-  } catch {
-    return items.map(item => item.name);
+  } catch (error) {
+    if (!(error instanceof AxiError) || !["PROFILE_REQUIRED", "PROFILE_AMBIGUOUS"].includes(error.code)) throw error;
+    return store.list().map(item => item.name);
   }
 }
 
@@ -34,9 +34,10 @@ export async function runDoctor(args: {
   store: Profiles;
   names: string[];
   session: GraphSession;
+  selected?: { name: string; profile: AnyProfile };
 }): Promise<DoctorResult> {
   if (!args.names.length) {
-    throw new AxiError("No profiles are configured", "AUTH_REQUIRED", ["npx -y @knowttl/mg-axi profile create --help", "npx -y @knowttl/mg-axi setup"]);
+    throw new AxiError("No profiles are configured", "PROFILE_REQUIRED", ["npx -y @knowttl/mg-axi profile create --help", "npx -y @knowttl/mg-axi setup"]);
   }
   const leaf = LEAVES.find(item => item.path === "entra user list");
   const operation = leaf === undefined ? undefined : operationFor(leaf, DOCTOR_VERSION);
@@ -47,7 +48,9 @@ export async function runDoctor(args: {
   for (const name of args.names) {
     const rerun = `npx -y @knowttl/mg-axi doctor --profile ${name}`;
     try {
-      const selected = args.store.resolve(name);
+      args.store.verifyPermissions();
+      const selected = args.selected ?? args.store.resolve(name);
+      authStatus(name, selected.profile);
       // The same bounded read the named leaf serves: one fetched page, one
       // surfaced row, remainder buffered in a discarded cursor. Doctor keeps
       // no cursor and accepts none; recovery reruns doctor, not the read.

@@ -13,13 +13,14 @@ test("validation commands cannot write to the inherited home or XDG config", () 
       import { mkdirSync, writeFileSync } from "node:fs";
       import { homedir } from "node:os";
       import { join } from "node:path";
-      for (const dir of [homedir(), process.env.XDG_CONFIG_HOME]) {
+      for (const dir of [homedir(), process.env.XDG_CONFIG_HOME, process.env.XDG_STATE_HOME, process.env.XDG_CACHE_HOME, process.env.APPDATA, process.env.LOCALAPPDATA]) {
         mkdirSync(dir, { recursive: true });
         writeFileSync(join(dir, "validation-write"), "test");
       }
+      if (process.env.MG_AXI_CONFIG !== undefined || process.env.MG_AXI_TOKEN !== undefined) throw new Error("Credential environment leaked");
     `], {
       encoding: "utf8", timeout: 10000,
-      env: { ...process.env, HOME: sentinel, USERPROFILE: sentinel, XDG_CONFIG_HOME: sentinel },
+      env: { ...process.env, HOME: sentinel, USERPROFILE: sentinel, XDG_CONFIG_HOME: sentinel, XDG_STATE_HOME: sentinel, XDG_CACHE_HOME: sentinel, APPDATA: sentinel, LOCALAPPDATA: sentinel, MG_AXI_CONFIG: join(sentinel, "owner-config.json"), MG_AXI_TOKEN: "fixture-owner-token" },
     });
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(readdirSync(sentinel), ["owner"]);

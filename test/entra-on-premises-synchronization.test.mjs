@@ -412,8 +412,8 @@ test("raw on-premises-synchronization reads serve delegated callers and refuse a
     application: new ApplicationAuth({ storage: "session-only", acquire: async (...args) => { credentialCalls.push(args); return credential; } }),
     transport: async request => { requests.push(request); return { headers: {}, body: JSON.stringify({ value: [sync1] }) }; },
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "55555555-5555-4555-8555-555555555555" } };
-  const appProfile = { ...delegatedProfile, mode: "application", credentialRef: { provider: "federated", key: "55555555-5555-4555-8555-555555555555" } };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
+  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } };
   const listed = await runApiGet({ path: "/directory/onPremisesSynchronization", apiVersion: "v1.0", profile: delegatedProfile, scopes: syncScopes[0] }, deps);
   assert.equal(listed.returned, 1);
   await assert.rejects(

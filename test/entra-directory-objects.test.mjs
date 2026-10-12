@@ -414,8 +414,8 @@ test("raw directory-object reads keep the subtype discriminator and refuse unrev
     application: new ApplicationAuth({ storage: "session-only", acquire: async (...args) => { credentialCalls.push(args); return credential; } }),
     transport: async request => { requests.push(request); return { headers: {}, body: JSON.stringify({ value: [obj1, obj2] }) }; },
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "55555555-5555-4555-8555-555555555555" } };
-  const appProfile = { ...delegatedProfile, mode: "application", credentialRef: { provider: "federated", key: "55555555-5555-4555-8555-555555555555" } };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
+  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } };
   for (const profile of [delegatedProfile, appProfile]) {
     const listed = await runApiGet({ path: "/directoryObjects", apiVersion: "v1.0", profile,
       ...(profile.mode === "delegated" ? { scopes: directoryObjectScopes[0] } : {}) }, deps);
@@ -445,7 +445,7 @@ test("raw directory-object show keeps the discriminator without subtype secrets"
     application: new (await import("../dist/app-auth.js")).ApplicationAuth({ storage: "session-only", acquire: async () => credential }),
     transport: async () => ({ status: 200, headers: {}, body: JSON.stringify(obj2) }),
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "55555555-5555-4555-8555-555555555555" } };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
   const shown = await runApiGet({ path: `/directoryObjects/${obj2.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: directoryObjectScopes[0] }, deps);
   assert.deepEqual(shown, { id: obj2.id, "@odata.type": "#microsoft.graph.servicePrincipal" });
 });

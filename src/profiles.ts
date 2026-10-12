@@ -1,192 +1,192 @@
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { AxiError } from "axi-sdk-js";
+import { configPath, toolDirectory } from "./paths.js";
+import { PrivateFiles } from "./private-file.js";
+import { validateSecretRef, type SecretRef } from "./secrets.js";
 
-// WRITE-00 hand-edited write opt-in. Absent or allowWrites: false keeps
-// the profile read-only. No CLI command writes this object; it is added by
-// editing the configuration file, and later named writes bind to it.
-export type WritePolicy = Readonly<{
-  allowWrites: boolean;
-  operations: readonly string[];
-}>;
-export type DelegatedProfile = Readonly<{
-  mode: "delegated"; tenantId: string; clientId: string; cloud: "commercial";
+export type WritePolicy = Readonly<{ allowWrites: boolean; operations: readonly string[] }>;
+type SharedProfile = Readonly<{
+  tenantId: string; clientId: string; cloud: "commercial";
   enabledPacks: readonly "entra"[]; preview: boolean; sensitiveAreas: readonly string[];
-  credentialRef: Readonly<{ provider: "os-or-session"; key: string }>;
-  allowDeviceCode: boolean;
   writes?: WritePolicy;
 }>;
-// Application credential references name an environment variable or a file,
-// never a secret value. The process environment supplies the value at
-// acquisition time so rotation needs no profile change.
-export type ApplicationProfile = Readonly<{
-  mode: "application"; tenantId: string; clientId: string; cloud: "commercial";
-  enabledPacks: readonly "entra"[]; preview: boolean; sensitiveAreas: readonly string[];
-  credentialRef: Readonly<
-    | { provider: "certificate"; key: string; thumbprint: string; keyFile?: string; keyEnv?: string }
-    | { provider: "client-secret"; key: string; secretEnv?: string; secretFile?: string }
-    | { provider: "federated"; key: string; tokenFileEnv?: string }
-  >;
-  allowDeviceCode: false;
-  writes?: WritePolicy;
-}>;
+export type DelegatedProfile = SharedProfile & Readonly<{ mode: "delegated"; token: SecretRef; allowDeviceCode: boolean }>;
+export type ApplicationProfile = SharedProfile & Readonly<{ mode: "application"; allowDeviceCode: false }> & (
+  | Readonly<{ auth: "certificate"; privateKey: SecretRef; thumbprintSha256: string }>
+  | Readonly<{ auth: "client-secret"; clientSecret: SecretRef }>
+  | Readonly<{ auth: "federated"; token: SecretRef }>
+);
 export type AnyProfile = DelegatedProfile | ApplicationProfile;
 export type AppCredential = { token: string; expiresAt: number; tenantId: string; clientId: string };
 type Config = { version: 1; defaultProfile?: string; profiles: Record<string, AnyProfile> };
+const names = new WeakMap<object, string>();
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const namePattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
+const namePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const exact = (value: Record<string, unknown>, keys: string[]) => Object.keys(value).every(key => keys.includes(key));
 function invalid(message: string): never {
-  throw new AxiError(message, "VALIDATION_ERROR", ["mg-axi profile create --help", "Correct the version-1 profile configuration; no automatic migration is performed"]);
+  throw new AxiError(message, "CONFIG_INVALID", ["mg-axi profile create --help", "Correct the version-1 profile configuration; no automatic migration is performed"]);
 }
 
-const thumbprint = /^[0-9a-f]{40}$/i;
-const envName = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const credentialPath = (value: unknown): value is string => typeof value === "string" && !!value.trim();
-const exactlyOne = (values: readonly unknown[]) => values.filter(value => value !== undefined).length === 1;
-const sharedKeys = ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "credentialRef", "allowDeviceCode", "writes"];
-const MAX_WRITE_OPERATIONS = 64;
-const MAX_WRITE_OPERATION_LENGTH = 256;
-function validateWrites(value: unknown): WritePolicy | undefined {
-  if (value === undefined) return undefined;
-  if (!object(value) || !exact(value, ["allowWrites", "operations"]) || typeof value.allowWrites !== "boolean" ||
-    !Array.isArray(value.operations) || value.operations.length === 0 || value.operations.length > MAX_WRITE_OPERATIONS ||
-    value.operations.some(entry => typeof entry !== "string" || !entry.length || entry.length > MAX_WRITE_OPERATION_LENGTH)) {
-    invalid("Invalid write policy; hand-edit a writes object with boolean allowWrites and a nonempty operations array of nonempty operation names");
-  }
-  return Object.freeze({ allowWrites: value.allowWrites as boolean, operations: Object.freeze([...(value.operations as string[])]) });
+export function booleanEnv(name: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env[name]?.toLowerCase();
+  if (value === undefined || value === "0" || value === "false") return false;
+  if (value === "1" || value === "true") return true;
+  return invalid(`Invalid boolean for ${name}; use 1, true, 0 or false`);
 }
-const sharedIdentity = (value: Record<string, unknown>) =>
-  value.cloud === "commercial" && typeof value.tenantId === "string" && guid.test(value.tenantId) &&
-  typeof value.clientId === "string" && guid.test(value.clientId) && typeof value.preview === "boolean" &&
-  Array.isArray(value.enabledPacks) && value.enabledPacks.every(pack => pack === "entra") && new Set(value.enabledPacks).size === value.enabledPacks.length &&
-  Array.isArray(value.sensitiveAreas) && value.sensitiveAreas.length === 0;
+
+// Names belong to the selected configuration, never to its serialized profile schema.
+export function profileName(profile: AnyProfile) { return names.get(profile); }
+function validated<T extends AnyProfile>(source: object, profile: T): T {
+  const name = names.get(source);
+  if (name !== undefined) names.set(profile, name);
+  return Object.freeze(profile);
+}
+
+function shared(value: Record<string, unknown>): SharedProfile {
+  if (typeof value.tenantId !== "string" || !guid.test(value.tenantId) || typeof value.clientId !== "string" || !guid.test(value.clientId)) invalid("Explicit tenant and client UUIDs are required");
+  if (value.cloud !== undefined && value.cloud !== "commercial") invalid("Only commercial cloud is supported");
+  const packs = value.enabledPacks === undefined ? ["entra"] : value.enabledPacks;
+  const sensitive = value.sensitiveAreas === undefined ? [] : value.sensitiveAreas;
+  const preview = value.preview === undefined ? false : value.preview;
+  if (!Array.isArray(packs) || packs.some(pack => pack !== "entra") || new Set(packs).size !== packs.length ||
+    !Array.isArray(sensitive) || sensitive.length || typeof preview !== "boolean") invalid("Invalid profile policy");
+  let writes: WritePolicy | undefined;
+  if (value.writes !== undefined) {
+    const policy = value.writes;
+    if (!object(policy) || !exact(policy, ["allowWrites", "operations"]) || typeof policy.allowWrites !== "boolean" ||
+      !Array.isArray(policy.operations) || !policy.operations.length || policy.operations.length > 64 ||
+      policy.operations.some(entry => typeof entry !== "string" || !entry.length || entry.length > 256)) invalid("Invalid write policy; use boolean allowWrites and a nonempty operations array");
+    writes = Object.freeze({ allowWrites: policy.allowWrites, operations: Object.freeze([...policy.operations] as string[]) });
+  }
+  return { tenantId: value.tenantId as string, clientId: value.clientId as string, cloud: "commercial", enabledPacks: Object.freeze([...packs] as "entra"[]),
+    preview: preview as boolean, sensitiveAreas: Object.freeze([]), ...(writes === undefined ? {} : { writes }) };
+}
+const sharedKeys = ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "allowDeviceCode", "writes"];
 
 export function validateDelegatedProfile(value: unknown): DelegatedProfile {
-  if (!object(value) || !exact(value, sharedKeys) || value.mode !== "delegated" || !sharedIdentity(value) || typeof value.allowDeviceCode !== "boolean" ||
-    !object(value.credentialRef) || !exact(value.credentialRef, ["provider", "key"]) || value.credentialRef.provider !== "os-or-session" ||
-    typeof value.credentialRef.key !== "string" || !guid.test(value.credentialRef.key)) invalid("Invalid delegated profile; explicit tenant/client IDs and commercial cloud are required, with credentials only by reference");
-  const profile = value as unknown as DelegatedProfile;
-  const writes = validateWrites((value as Record<string, unknown>).writes);
-  return Object.freeze({ mode: "delegated" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const, preview: profile.preview,
-    allowDeviceCode: profile.allowDeviceCode, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
-    credentialRef: Object.freeze({ provider: "os-or-session" as const, key: profile.credentialRef.key }), ...(writes === undefined ? {} : { writes }) });
+  if (!object(value) || value.mode !== "delegated" || !exact(value, [...sharedKeys, "token"]) ||
+    (value.allowDeviceCode !== undefined && typeof value.allowDeviceCode !== "boolean")) invalid("Invalid delegated profile; token must be a SecretRef");
+  return validated(value, { ...shared(value), mode: "delegated", allowDeviceCode: value.allowDeviceCode === true, token: validateSecretRef(value.token, "token") });
 }
 
 export function validateApplicationProfile(value: unknown): ApplicationProfile {
-  if (!object(value) || !exact(value, sharedKeys) || value.mode !== "application" || !sharedIdentity(value) || value.allowDeviceCode !== false ||
-    !object(value.credentialRef)) invalid("Invalid application profile; explicit tenant/client IDs and commercial cloud are required, with credentials only by reference");
-  const profile = value as unknown as Omit<ApplicationProfile, "credentialRef"> & { credentialRef: Record<string, unknown> };
-  const ref = profile.credentialRef;
-  const writes = validateWrites((value as Record<string, unknown>).writes);
-  const writeFields = writes === undefined ? {} : { writes };
-  if (ref.provider === "certificate" && exact(ref, ["provider", "key", "thumbprint", "keyFile", "keyEnv"]) && typeof ref.key === "string" && guid.test(ref.key) &&
-    typeof ref.thumbprint === "string" && thumbprint.test(ref.thumbprint) && ref.keyFile === undefined && ref.keyEnv === undefined) {
-    return Object.freeze({ mode: "application" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const,
-      preview: profile.preview, allowDeviceCode: false as const, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
-      credentialRef: Object.freeze({ provider: "certificate" as const, key: ref.key, thumbprint: ref.thumbprint.toLowerCase() }), ...writeFields });
+  if (!object(value) || value.mode !== "application" || (value.allowDeviceCode !== undefined && value.allowDeviceCode !== false)) invalid("Invalid application profile; device code is unavailable");
+  const keys = value.auth === "certificate" ? ["privateKey", "thumbprintSha256"] : value.auth === "client-secret" ? ["clientSecret"] : value.auth === "federated" ? ["token"] : [];
+  if (!keys.length || !exact(value, [...sharedKeys, "auth", ...keys])) invalid("Invalid application profile; auth must be certificate, client-secret or federated with only its credential fields");
+  const base = { ...shared(value), mode: "application" as const, allowDeviceCode: false as const };
+  if (value.auth === "certificate") {
+    if (typeof value.thumbprintSha256 !== "string" || !/^[0-9a-f]{64}$/i.test(value.thumbprintSha256)) invalid("thumbprintSha256 must contain 64 hex digits");
+    return validated(value, { ...base, auth: "certificate", thumbprintSha256: (value.thumbprintSha256 as string).toLowerCase(), privateKey: validateSecretRef(value.privateKey, "privateKey", false) });
   }
-  if (ref.provider === "certificate" && exact(ref, ["provider", "key", "thumbprint", "keyFile", "keyEnv"]) && typeof ref.key === "string" && guid.test(ref.key) &&
-    typeof ref.thumbprint === "string" && thumbprint.test(ref.thumbprint) && exactlyOne([ref.keyFile, ref.keyEnv]) &&
-    (ref.keyFile === undefined || credentialPath(ref.keyFile)) && (ref.keyEnv === undefined || (typeof ref.keyEnv === "string" && envName.test(ref.keyEnv)))) {
-    const keySource = ref.keyFile === undefined ? { keyEnv: ref.keyEnv as string } : { keyFile: ref.keyFile as string };
-    return Object.freeze({ mode: "application" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const,
-      preview: profile.preview, allowDeviceCode: false as const, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
-      credentialRef: Object.freeze({ provider: "certificate" as const, key: ref.key, thumbprint: ref.thumbprint.toLowerCase(), ...keySource }), ...writeFields });
-  }
-  if (ref.provider === "client-secret" && exact(ref, ["provider", "key", "secretEnv", "secretFile"]) && typeof ref.key === "string" && guid.test(ref.key) &&
-    exactlyOne([ref.secretEnv, ref.secretFile]) &&
-    (ref.secretEnv === undefined || (typeof ref.secretEnv === "string" && envName.test(ref.secretEnv))) && (ref.secretFile === undefined || credentialPath(ref.secretFile))) {
-    const secretSource = ref.secretEnv === undefined ? { secretFile: ref.secretFile as string } : { secretEnv: ref.secretEnv as string };
-    return Object.freeze({ mode: "application" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const,
-      preview: profile.preview, allowDeviceCode: false as const, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
-      credentialRef: Object.freeze({ provider: "client-secret" as const, key: ref.key, ...secretSource }), ...writeFields });
-  }
-  if (ref.provider === "federated" && exact(ref, ["provider", "key", "tokenFileEnv"]) && typeof ref.key === "string" && guid.test(ref.key) &&
-    (ref.tokenFileEnv === undefined || (typeof ref.tokenFileEnv === "string" && envName.test(ref.tokenFileEnv)))) {
-    return Object.freeze({ mode: "application" as const, tenantId: profile.tenantId, clientId: profile.clientId, cloud: "commercial" as const,
-      preview: profile.preview, allowDeviceCode: false as const, enabledPacks: Object.freeze([...profile.enabledPacks]), sensitiveAreas: Object.freeze([] as string[]),
-      credentialRef: Object.freeze({ provider: "federated" as const, key: ref.key, ...(ref.tokenFileEnv === undefined ? {} : { tokenFileEnv: ref.tokenFileEnv as string }) }), ...writeFields });
-  }
-  invalid("Invalid application profile; credentialRef must be a certificate, client-secret or federated reference, never inlined key material");
+  if (value.auth === "client-secret") return validated(value, { ...base, auth: "client-secret", clientSecret: validateSecretRef(value.clientSecret, "clientSecret", false) });
+  return validated(value, { ...base, auth: "federated", token: validateSecretRef(value.token, "token", false) });
 }
 
 export function validateProfile(value: unknown): AnyProfile {
-  if (!!value && typeof value === "object" && !Array.isArray(value) && (value as Record<string, unknown>).mode === "application") return validateApplicationProfile(value);
-  return validateDelegatedProfile(value);
+  return object(value) && value.mode === "application" ? validateApplicationProfile(value) : validateDelegatedProfile(value);
+}
+
+function envProfile(env: NodeJS.ProcessEnv): AnyProfile | undefined {
+  const fields = ["MODE", "TENANT_ID", "CLIENT_ID", "AUTH", "CLIENT_SECRET", "PRIVATE_KEY", "THUMBPRINT_SHA256", "TOKEN", "CLOUD", "PREVIEW", "ALLOW_DEVICE_CODE", "ENABLED_PACKS", "SENSITIVE_AREAS", "WRITES"];
+  if (!fields.some(field => env[`MG_AXI_${field}`] !== undefined)) return undefined;
+  if (!env.MG_AXI_MODE || !env.MG_AXI_TENANT_ID || !env.MG_AXI_CLIENT_ID) invalid("Partial env profile; MG_AXI_MODE, MG_AXI_TENANT_ID and MG_AXI_CLIENT_ID are required");
+  const json = (name: string) => {
+    if (env[name] === undefined) return undefined;
+    try { return JSON.parse(env[name]!); } catch { return invalid(`Invalid JSON field ${name}`); }
+  };
+  const base = { mode: env.MG_AXI_MODE, tenantId: env.MG_AXI_TENANT_ID, clientId: env.MG_AXI_CLIENT_ID, cloud: env.MG_AXI_CLOUD,
+    preview: booleanEnv("MG_AXI_PREVIEW", env), allowDeviceCode: booleanEnv("MG_AXI_ALLOW_DEVICE_CODE", env),
+    enabledPacks: json("MG_AXI_ENABLED_PACKS"), sensitiveAreas: json("MG_AXI_SENSITIVE_AREAS"), writes: json("MG_AXI_WRITES"),
+    ...(env.MG_AXI_AUTH === undefined ? {} : { auth: env.MG_AXI_AUTH }),
+    ...(env.MG_AXI_THUMBPRINT_SHA256 === undefined ? {} : { thumbprintSha256: env.MG_AXI_THUMBPRINT_SHA256 }),
+    ...(env.MG_AXI_CLIENT_SECRET === undefined ? {} : { clientSecret: { env: "MG_AXI_CLIENT_SECRET" } }),
+    ...(env.MG_AXI_PRIVATE_KEY === undefined ? {} : { privateKey: { env: "MG_AXI_PRIVATE_KEY" } }),
+    ...(env.MG_AXI_TOKEN === undefined ? {} : { token: { env: "MG_AXI_TOKEN" } }) };
+  if (base.mode === "delegated") {
+    if (!env.MG_AXI_TOKEN) invalid("Partial env profile; MG_AXI_TOKEN must supply a delegated cache");
+    return validateDelegatedProfile(base);
+  }
+  const auth = env.MG_AXI_AUTH;
+  const required = auth === "certificate" ? ["PRIVATE_KEY", "THUMBPRINT_SHA256"] : auth === "client-secret" ? ["CLIENT_SECRET"] : auth === "federated" ? ["TOKEN"] : [];
+  if (!required.length || required.some(field => !env[`MG_AXI_${field}`])) invalid("Partial env profile; MG_AXI_AUTH and its required credential fields must be set");
+  return validateApplicationProfile(base);
 }
 
 export class Profiles {
-  constructor(readonly path = process.env.MG_AXI_CONFIG ?? join(homedir(), ".mg-axi", "config.json")) {}
+  constructor(readonly path = configPath(), private files = new PrivateFiles()) {}
+  private moved(): never {
+    const legacy = join(homedir(), ".mg-axi", "config.json");
+    const target = resolve(this.path) === resolve(legacy) ? join(toolDirectory("config"), "config.json") : this.path;
+    const quote = (path: string) => `'${path.replace(/'/g, "'\\''")}'`;
+    const move = process.platform === "win32"
+      ? `New-Item -ItemType Directory -Force -Path '${dirname(target).replace(/'/g, "''")}'; Move-Item -LiteralPath '${legacy.replace(/'/g, "''")}' -Destination '${target.replace(/'/g, "''")}'`
+      : `mkdir -p ${quote(dirname(target))} && mv ${quote(legacy)} ${quote(target)}`;
+    throw new AxiError(`Configuration moved from ${legacy} to ${target}`, "CONFIG_MOVED", [move, "Update credentialRef to the flattened SecretRef format described in the AXI credential standard"]);
+  }
   private load(): Config {
+    const legacy = join(homedir(), ".mg-axi", "config.json");
+    if (resolve(this.path) === resolve(legacy) && existsSync(legacy)) this.moved();
     let value: unknown;
-    try { value = JSON.parse(readFileSync(this.path, "utf8")); }
+    try { value = JSON.parse(this.files.read(this.path, false)); }
     catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { version: 1, profiles: {} };
-      invalid("Unable to read profile configuration; check the file permissions and version-1 JSON schema");
+      if (error instanceof AxiError) throw error;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        if (existsSync(legacy)) this.moved();
+        return { version: 1, profiles: {} };
+      }
+      invalid("Unable to read profile configuration; check the version-1 JSON schema");
     }
     if (!object(value) || value.version !== 1 || !exact(value, ["version", "defaultProfile", "profiles"]) || !object(value.profiles)) invalid("Unsupported profile configuration; explicitly migrate to version 1");
     const profiles: Record<string, AnyProfile> = Object.create(null);
     for (const [name, profile] of Object.entries(value.profiles)) {
       if (!namePattern.test(name)) invalid("Invalid profile name");
       profiles[name] = validateProfile(profile);
+      names.set(profiles[name], name);
     }
     if (value.defaultProfile !== undefined && (typeof value.defaultProfile !== "string" || !Object.hasOwn(profiles, value.defaultProfile))) invalid("Default profile does not exist");
-    if (new Set(Object.values(profiles).map(profile => profile.credentialRef.key)).size !== Object.keys(profiles).length) invalid("Each profile must have a separate credential reference");
     return { version: 1, profiles, defaultProfile: value.defaultProfile as string | undefined };
   }
   list() { return Object.entries(this.load().profiles).map(([name, profile]) => ({ name, mode: profile.mode, tenant: profile.tenantId, cloud: profile.cloud })); }
   resolve(name?: string) {
+    const explicit = name ?? process.env.MG_AXI_PROFILE;
+    if (explicit === undefined) {
+      const profile = envProfile(process.env);
+      if (profile) { names.set(profile, "env"); return { name: "env", profile }; }
+    }
     const config = this.load();
-    const selected = name ?? config.defaultProfile;
-    if (!selected || !Object.hasOwn(config.profiles, selected)) throw new AxiError("No configured profile selected", "AUTH_REQUIRED", ["mg-axi profile list", "mg-axi profile create --help"]);
+    const configured = Object.keys(config.profiles);
+    const selected = explicit ?? config.defaultProfile ?? (configured.length === 1 ? configured[0] : undefined);
+    if (!selected) throw new AxiError("No configured profile selected", configured.length ? "PROFILE_AMBIGUOUS" : "PROFILE_REQUIRED", ["mg-axi profile list", "mg-axi profile create --help"]);
+    if (!Object.hasOwn(config.profiles, selected)) throw new AxiError(`Profile ${selected} does not exist`, "PROFILE_NOT_FOUND", ["mg-axi profile list"]);
     return { name: selected, profile: config.profiles[selected]! };
   }
-  create(name: string, tenantId: string, clientId: string, cloud: string, allowDeviceCode: boolean, application?: { certificateThumbprint?: string; federated?: boolean; clientSecretEnv?: string; clientSecretFile?: string; certificateKeyFile?: string; certificateKeyEnv?: string; federatedTokenFileEnv?: string }) {
+  verifyPermissions() {
+    try { this.files.check(this.path, false, true); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  }
+  create(name: string, tenantId: string, clientId: string, cloud: string, allowDeviceCode: boolean, application?: { certificateThumbprint?: string; federated?: boolean; clientSecretEnv?: string; clientSecretFile?: string; certificateKeyFile?: string; certificateKeyEnv?: string; federatedTokenFile?: string }) {
     if (!namePattern.test(name)) invalid("Profile name must contain only letters, digits, underscores or hyphens");
-    const certificate = application?.certificateThumbprint;
-    const federated = application?.federated ?? false;
-    const secretEnv = application?.clientSecretEnv;
-    const secretFile = application?.clientSecretFile;
-    const keyFile = application?.certificateKeyFile;
-    const keyEnv = application?.certificateKeyEnv;
-    const tokenFileEnv = application?.federatedTokenFileEnv;
-    if (application && (certificate !== undefined && (typeof certificate !== "string" || !/^[0-9a-f]{40}$/i.test(certificate)))) invalid("Application certificate profiles name a 40-hex-digit thumbprint; the private key stays in referenced storage");
-    for (const [label, value] of [["--client-secret-env", secretEnv], ["--certificate-key-env", keyEnv], ["--federated-token-file-env", tokenFileEnv]] as const) {
-      if (application && value !== undefined && (typeof value !== "string" || !envName.test(value))) invalid(`Application profiles name the credential holder with ${label}; names match /^[A-Za-z_][A-Za-z0-9_]*$/`);
+    const base = { tenantId, clientId, cloud, allowDeviceCode };
+    let profile: AnyProfile;
+    if (!application) profile = validateDelegatedProfile({ ...base, mode: "delegated", token: { stored: true } });
+    else {
+      const { certificateThumbprint, federated, clientSecretEnv, clientSecretFile, certificateKeyFile, certificateKeyEnv, federatedTokenFile } = application;
+      if (clientSecretEnv !== undefined && clientSecretFile !== undefined || certificateKeyEnv !== undefined && certificateKeyFile !== undefined) invalid("Use exactly one env or file reference for each credential");
+      if ([certificateThumbprint !== undefined, federated === true, clientSecretEnv !== undefined || clientSecretFile !== undefined].filter(Boolean).length !== 1) invalid("Select exactly one application credential kind");
+      if ((certificateKeyEnv !== undefined || certificateKeyFile !== undefined) && certificateThumbprint === undefined || federatedTokenFile !== undefined && !federated) invalid("Credential holder does not match the selected application auth kind");
+      profile = validateApplicationProfile({ ...base, mode: "application",
+        ...(certificateThumbprint !== undefined ? { auth: "certificate", thumbprintSha256: certificateThumbprint, privateKey: certificateKeyFile !== undefined ? { file: certificateKeyFile } : { env: certificateKeyEnv ?? "MG_AXI_PRIVATE_KEY" } }
+          : federated ? { auth: "federated", ...(federatedTokenFile === undefined ? {} : { token: { file: federatedTokenFile } }) }
+            : { auth: "client-secret", clientSecret: clientSecretFile !== undefined ? { file: clientSecretFile } : { env: clientSecretEnv } }) });
     }
-    for (const [label, value] of [["--client-secret-file", secretFile], ["--certificate-key-file", keyFile]] as const) {
-      if (application && value !== undefined && !credentialPath(value)) invalid(`Application profiles name the credential holder with ${label}; paths must be nonempty`);
-    }
-    if (application && secretEnv !== undefined && secretFile !== undefined) invalid("Application client-secret profiles use exactly one holder: --client-secret-env or --client-secret-file");
-    if (application && keyFile !== undefined && keyEnv !== undefined) invalid("Application certificate profiles use exactly one key holder: --certificate-key-file or --certificate-key-env; omit both for the OS keychain");
-    if (application && (keyFile !== undefined || keyEnv !== undefined) && certificate === undefined) invalid("Certificate key holders need --certificate-thumbprint on the same profile");
-    if (application && tokenFileEnv !== undefined && !federated) invalid("Federated token-file holders need --federated on the same profile");
-    if (application && [certificate !== undefined, secretEnv !== undefined || secretFile !== undefined, federated].filter(Boolean).length !== 1) invalid("Application profiles use exactly one credential: --certificate-thumbprint, --client-secret-env/--client-secret-file or --federated");
-    if (application && allowDeviceCode) invalid("Application profiles never use device code; it is a delegated login method");
-    const credentialRef = certificate === undefined
-      ? secretEnv === undefined && secretFile === undefined
-        ? { provider: "federated" as const, key: randomUUID(), ...(tokenFileEnv === undefined ? {} : { tokenFileEnv }) }
-        : { provider: "client-secret" as const, key: randomUUID(), ...(secretEnv === undefined ? { secretFile: secretFile as string } : { secretEnv }) }
-      : { provider: "certificate" as const, key: randomUUID(), thumbprint: certificate, ...(keyFile === undefined && keyEnv === undefined ? {} : keyFile === undefined ? { keyEnv: keyEnv as string } : { keyFile }) };
-    const profile = application
-      ? validateApplicationProfile({ mode: "application", tenantId, clientId, cloud, enabledPacks: ["entra"], preview: false, sensitiveAreas: [],
-        credentialRef, allowDeviceCode: false })
-      : validateDelegatedProfile({ mode: "delegated", tenantId, clientId, cloud, enabledPacks: ["entra"], preview: false, sensitiveAreas: [], credentialRef: { provider: "os-or-session", key: randomUUID() }, allowDeviceCode });
     const config = this.load();
     if (Object.hasOwn(config.profiles, name)) invalid("Profile already exists; creation never replaces identity");
     config.profiles[name] = profile;
     config.defaultProfile ??= name;
-    mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
-    const temporary = `${this.path}.${randomUUID()}.tmp`;
-    try {
-      writeFileSync(temporary, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600, flag: "wx" });
-      renameSync(temporary, this.path);
-    } catch { throw new AxiError("Unable to save profile configuration", "CONFIG_ERROR", ["Check configuration directory permissions"]); }
-    finally { rmSync(temporary, { force: true }); }
+    this.files.write(this.path, `${JSON.stringify(config, null, 2)}\n`);
     return { name, mode: profile.mode, tenant: profile.tenantId, cloud: profile.cloud };
   }
 }

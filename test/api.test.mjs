@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { decode } from "@toon-format/toon";
 import { ApplicationAuth } from "../dist/app-auth.js";
 import { DelegatedAuth } from "../dist/auth.js";
+import { Profiles } from "../dist/profiles.js";
 import { REVIEWED_ROUTES, fetchTransport, matchReviewed, runApiGet } from "../dist/api.js";
 import { MAX_CURSOR_BYTES } from "../dist/graph-session.js";
 
@@ -17,9 +18,8 @@ import { MAX_CURSOR_BYTES } from "../dist/graph-session.js";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
-const key = "33333333-3333-4333-8333-333333333333";
-const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key } };
-const appProfile = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "federated", key } };
+const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
+const appProfile = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "federated", token: { env: "MG_AXI_TOKEN" } };
 const scopes = "https://graph.microsoft.com/User.Read.All";
 const membershipWarning = "Microsoft Graph v1.0 may omit service principals from group members; completed pagination does not establish complete membership.";
 
@@ -758,12 +758,16 @@ test("CLI passes --cursor to collection validation", () => {
 });
 
 test("CLI resumes a cursor larger than the argv limit through stdin", async () => {
-  const rows = Array.from({ length: 200 }, (_, i) => ({ id: String(i), description: "x".repeat(1000) }));
-  const f = read({ path: "/groups", limit: 1, odata: "$top=200&$select=id,description" }, json(200, { value: rows }));
-  const first = await f.run({});
-  assert.ok(Buffer.byteLength(first.cursor) > 265000);
-  assert.match(first.help.join("\n"), /--cursor -.*stdin/);
-  const bootstrap = `
+  const home = mkdtempSync(join(tmpdir(), "mg-axi-cursor-profile-"));
+  const config = join(home, "config.json");
+  writeFileSync(config, profileConfig, { mode: 0o600 });
+  try {
+    const rows = Array.from({ length: 200 }, (_, i) => ({ id: String(i), description: "x".repeat(1000) }));
+    const f = read({ path: "/groups", limit: 1, odata: "$top=200&$select=id,description" }, json(200, { value: rows }));
+    const first = await f.run({ profile: new Profiles(config).resolve("soc").profile });
+    assert.ok(Buffer.byteLength(first.cursor) > 265000);
+    assert.match(first.help.join("\n"), /--cursor -.*stdin/);
+    const bootstrap = `
     import { MsalProvider } from "./dist/msal-provider.js";
     MsalProvider.prototype.silent = async profile => ({
       token: "opaque-fixture-secret", expiresAt: Date.now() + 3600000,
@@ -772,13 +776,14 @@ test("CLI resumes a cursor larger than the argv limit through stdin", async () =
     globalThis.fetch = async () => { throw new Error("Unexpected network request"); };
     process.argv = [process.execPath, ${JSON.stringify(bin)}, ...process.argv.slice(1)];
     await (await import("./dist/cli.js")).main();
-  `;
-  const result = cli(["api", "get", "/groups", "--cursor", "-", "--all", "--scopes", scopes], profileConfig, `${first.cursor}\n`, bootstrap);
-  assert.equal(result.error, undefined);
-  assert.equal(result.status, 0);
-  assert.equal(result.stderr, "");
-  const truncatedRows = rows.slice(1).map(row => ({ ...row, description: `${"x".repeat(500)}... (truncated, 1000 chars total)` }));
-  assert.deepEqual(decode(result.stdout), { returned: 199, complete: true, value: truncatedRows, help: ["Strings truncated at 500 chars; re-run with --full"] });
+    `;
+    const result = cli(["api", "get", "/groups", "--cursor", "-", "--all", "--scopes", scopes], profileConfig, `${first.cursor}\n`, bootstrap);
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, "");
+    const truncatedRows = rows.slice(1).map(row => ({ ...row, description: `${"x".repeat(500)}... (truncated, 1000 chars total)` }));
+    assert.deepEqual(decode(result.stdout), { returned: 199, complete: true, value: truncatedRows, help: ["Strings truncated at 500 chars; re-run with --full"] });
+  } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
 for (const token of ["", "invalid"]) test(`CLI stdin cursor refuses ${token || "empty input"}`, () => {

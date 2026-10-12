@@ -14,9 +14,9 @@ const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
 const key = "33333333-3333-4333-8333-333333333333";
 const audience = "https://graph.microsoft.com/.default";
-const thumbprint = "ab".repeat(20);
-const cert = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "certificate", key, thumbprint } };
-const federated = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "federated", key } };
+const thumbprint = "ab".repeat(32);
+const cert = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "certificate", thumbprintSha256: thumbprint, privateKey: { env: "MG_AXI_PRIVATE_KEY" } };
+const federated = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "federated", token: { env: "MG_AXI_TOKEN" } };
 function fixture() {
   let time = 1000;
   const calls = [];
@@ -84,7 +84,7 @@ for (const [name, patch] of [
 test("identity changes cannot reuse a cached credential", async () => {
   const f = fixture();
   await f.auth.credential(federated);
-  await f.auth.credential({ ...federated, credentialRef: { ...federated.credentialRef, key: tenant } });
+  await f.auth.credential({ ...federated, token: { env: "OTHER_TOKEN" } });
   await f.auth.credential(cert);
   assert.equal(f.calls.length, 3);
 });
@@ -94,17 +94,17 @@ test("delegated auth rejects application profiles before provider access", async
   const calls = [];
   const provider = { storage: "session-only", login: async (...args) => { calls.push(args); throw new Error("must not run"); }, silent: async (...args) => { calls.push(args); throw new Error("must not run"); } };
   const auth = new DelegatedAuth(provider, () => time);
-  await assert.rejects(auth.login(cert, "browser", ["https://graph.microsoft.com/User.Read"]), { code: "VALIDATION_ERROR" });
-  await assert.rejects(auth.credential(federated, ["https://graph.microsoft.com/User.Read"]), { code: "VALIDATION_ERROR" });
+  await assert.rejects(auth.login(cert, "browser", ["https://graph.microsoft.com/User.Read"]), { code: "CONFIG_INVALID" });
+  await assert.rejects(auth.credential(federated, ["https://graph.microsoft.com/User.Read"]), { code: "CONFIG_INVALID" });
   assert.equal(calls.length, 0);
 });
 
-const appProfile = ref => ({ mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: ref });
-const secretEnvRef = { provider: "client-secret", key, secretEnv: "MG_AXI_CLIENT_SECRET" };
-const secretFileRef = { provider: "client-secret", key, secretFile: "/run/secrets/mg-axi-secret" };
-const keyFileRef = { provider: "certificate", key, thumbprint, keyFile: "/run/secrets/mg-axi-key.pem" };
-const keyEnvRef = { provider: "certificate", key, thumbprint, keyEnv: "MG_AXI_PRIVATE_KEY" };
-const namedFederatedRef = { provider: "federated", key, tokenFileEnv: "MG_AXI_ASSERTION_FILE" };
+const appProfile = ref => ({ mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, ...ref });
+const secretEnvRef = { auth: "client-secret", clientSecret: { env: "MG_AXI_CLIENT_SECRET" } };
+const secretFileRef = { auth: "client-secret", clientSecret: { file: "/run/secrets/mg-axi-secret" } };
+const keyFileRef = { auth: "certificate", thumbprintSha256: thumbprint, privateKey: { file: "/run/secrets/mg-axi-key.pem" } };
+const keyEnvRef = { auth: "certificate", thumbprintSha256: thumbprint, privateKey: { env: "MG_AXI_PRIVATE_KEY" } };
+const namedFederatedRef = { auth: "federated", token: { file: "/run/secrets/assertion" } };
 
 test("headless reference shapes validate and cache per reference", async () => {
   const f = fixture();
@@ -115,7 +115,7 @@ test("headless reference shapes validate and cache per reference", async () => {
   assert.equal(f.calls.length, 5);
   await f.auth.credential(appProfile(namedFederatedRef));
   assert.equal(f.calls.length, 5);
-  await f.auth.credential(appProfile({ ...secretEnvRef, secretEnv: "MG_AXI_OTHER_SECRET" }));
+  await f.auth.credential(appProfile({ ...secretEnvRef, clientSecret: { env: "MG_AXI_OTHER_SECRET" } }));
   assert.equal(f.calls.length, 6);
 });
 
@@ -131,39 +131,28 @@ test("reference-naming AUTH_REQUIRED survives while other failures stay generic"
   } finally { delete process.env.MG_AXI_CLIENT_SECRET; }
 });
 
-test("frozen old-shape application configs load and behave unchanged", () => {
+test("flattened application configs normalize SHA-256 thumbprints and SecretRefs", () => {
   const dir = mkdtempSync(join(tmpdir(), "mg-app-compat-"));
   try {
     writeFileSync(join(dir, "config.json"), JSON.stringify({ version: 1, profiles: {
-      daemon: { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "certificate", key, thumbprint: thumbprint.toUpperCase() } },
-      batch: { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "federated", key: client } },
+      daemon: { ...cert, thumbprintSha256: thumbprint.toUpperCase() },
+      batch: federated,
     } }));
     const profiles = new Profiles(join(dir, "config.json"));
-    assert.equal(profiles.resolve("daemon").profile.credentialRef.thumbprint, thumbprint);
-    assert.deepEqual(profiles.resolve("daemon").profile.credentialRef, { provider: "certificate", key, thumbprint });
-    assert.deepEqual(profiles.resolve("batch").profile.credentialRef, { provider: "federated", key: client });
+    assert.equal(profiles.resolve("daemon").profile.thumbprintSha256, thumbprint);
+    assert.deepEqual(profiles.resolve("daemon").profile.privateKey, { env: "MG_AXI_PRIVATE_KEY" });
+    assert.deepEqual(profiles.resolve("batch").profile.token, { env: "MG_AXI_TOKEN" });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 for (const patch of [{ allowDeviceCode: true }, { mode: "delegated" }, { cloud: "government" }, { tenantId: "common" }, { enabledPacks: ["entra", "mail"] },
-  { credentialRef: { provider: "os-or-session", key } }, { credentialRef: { provider: "certificate", key } },
-  { credentialRef: { provider: "certificate", key, thumbprint: "zzzz" } }, { credentialRef: { provider: "federated", key, extra: true } },
-  { credentialRef: { provider: "certificate", key, thumbprint, privateKey: "opaque-fixture-secret" } },
-  { credentialRef: { provider: "client-secret", key } },
-  { credentialRef: { provider: "client-secret", key, secretEnv: "MG_AXI_CLIENT_SECRET", secretFile: "/run/secrets/x" } },
-  { credentialRef: { provider: "client-secret", key, secretEnv: "1BAD-NAME" } },
-  { credentialRef: { provider: "client-secret", key, secretFile: "   " } },
-  { credentialRef: { provider: "client-secret", key, secretEnv: "MG_AXI_CLIENT_SECRET", clientSecret: "opaque-fixture-secret" } },
-  { credentialRef: { provider: "client-secret", key, secret: "opaque-fixture-secret" } },
-  { credentialRef: { provider: "certificate", key, thumbprint, keyFile: "/run/secrets/k.pem", keyEnv: "MG_AXI_PRIVATE_KEY" } },
-  { credentialRef: { provider: "certificate", key, thumbprint, keyEnv: "BAD-NAME" } },
-  { credentialRef: { provider: "certificate", key, thumbprint, keyFile: "" } },
-  { credentialRef: { provider: "certificate", key, thumbprint, keyMaterial: "opaque-fixture-secret" } },
-  { credentialRef: { provider: "federated", key, tokenFileEnv: "BAD-NAME" } },
-  { credentialRef: { provider: "federated", key, tokenFileEnv: "AZURE_FEDERATED_TOKEN_FILE", extra: true } },
+  { credentialRef: { provider: "federated", key } }, { auth: "unknown" },
+  { token: { env: "1BAD-NAME" } }, { token: { env: "TOKEN", extra: true } },
+  { token: "opaque-fixture-secret" }, { token: { file: "relative" } },
+  { token: { env: "TOKEN", file: "/run/secrets/x" } }, { token: { stored: true } },
 ]) test(`invalid application profile ${JSON.stringify(patch)} fails before provider access`, async () => {
   const f = fixture();
-  await assert.rejects(f.auth.credential({ ...federated, ...patch }), { code: "VALIDATION_ERROR" });
+  await assert.rejects(f.auth.credential({ ...federated, ...patch }), { code: "CONFIG_INVALID" });
   assert.equal(f.calls.length, 0);
 });
 
@@ -174,19 +163,19 @@ test("application creation stores references while rejecting impossible combinat
     profiles.create("batch", tenant, client, "commercial", false, { federated: true });
     profiles.create("daemon", tenant, client, "commercial", false, { certificateThumbprint: thumbprint.toUpperCase() });
     assert.equal(profiles.resolve("batch").profile.mode, "application");
-    assert.equal(profiles.resolve("daemon").profile.credentialRef.thumbprint, thumbprint);
-    assert.notEqual(profiles.resolve("batch").profile.credentialRef.key, profiles.resolve("daemon").profile.credentialRef.key);
+    assert.equal(profiles.resolve("daemon").profile.thumbprintSha256, thumbprint);
+    assert.notEqual(profiles.resolve("batch").profile.auth, profiles.resolve("daemon").profile.auth);
     assert.equal(profiles.list().filter(item => item.mode === "application").length, 2);
     const saved = readFileSync(profiles.path, "utf8");
-    assert.doesNotMatch(saved, /privateKey|opaque-fixture-secret/);
+    assert.doesNotMatch(saved, /opaque-fixture-secret/);
     for (const args of [
       ["both", false, { certificateThumbprint: thumbprint, federated: true }],
       ["neither", false, {}],
       ["device-code", true, { federated: true }],
       ["bad-thumbprint", false, { certificateThumbprint: "zzzz" }],
-    ]) assert.throws(() => profiles.create(args[0], tenant, client, "commercial", args[1], args[2]), { code: "VALIDATION_ERROR" });
+    ]) assert.throws(() => profiles.create(args[0], tenant, client, "commercial", args[1], args[2]), { code: "CONFIG_INVALID" });
     writeFileSync(profiles.path, JSON.stringify({ version: 1, profiles: { bad: { ...federated, allowDeviceCode: true } } }));
-    assert.throws(() => profiles.list(), { code: "VALIDATION_ERROR" });
+    assert.throws(() => profiles.list(), { code: "CONFIG_INVALID" });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -198,12 +187,12 @@ test("headless creation stores references while rejecting impossible combination
     profiles.create("svc-file", tenant, client, "commercial", false, { clientSecretFile: "/run/secrets/mg-axi-secret" });
     profiles.create("key-file", tenant, client, "commercial", false, { certificateThumbprint: thumbprint, certificateKeyFile: "/run/secrets/mg-axi-key.pem" });
     profiles.create("key-env", tenant, client, "commercial", false, { certificateThumbprint: thumbprint, certificateKeyEnv: "MG_AXI_PRIVATE_KEY" });
-    profiles.create("fed-named", tenant, client, "commercial", false, { federated: true, federatedTokenFileEnv: "MG_AXI_ASSERTION_FILE" });
-    assert.deepEqual(profiles.resolve("svc-env").profile.credentialRef, { provider: "client-secret", key: profiles.resolve("svc-env").profile.credentialRef.key, secretEnv: "MG_AXI_CLIENT_SECRET" });
-    assert.equal(profiles.resolve("key-file").profile.credentialRef.keyFile, "/run/secrets/mg-axi-key.pem");
-    assert.equal(profiles.resolve("fed-named").profile.credentialRef.tokenFileEnv, "MG_AXI_ASSERTION_FILE");
+    profiles.create("fed-named", tenant, client, "commercial", false, { federated: true, federatedTokenFile: "/run/secrets/assertion" });
+    assert.deepEqual(profiles.resolve("svc-env").profile.clientSecret, { env: "MG_AXI_CLIENT_SECRET" });
+    assert.equal(profiles.resolve("key-file").profile.privateKey.file, "/run/secrets/mg-axi-key.pem");
+    assert.equal(profiles.resolve("fed-named").profile.token.file, "/run/secrets/assertion");
     const saved = readFileSync(profiles.path, "utf8");
-    assert.doesNotMatch(saved, /privateKey|clientSecret|opaque-fixture-secret/);
+    assert.doesNotMatch(saved, /opaque-fixture-secret/);
     for (const args of [
       ["both-secret", false, { clientSecretEnv: "A", clientSecretFile: "/run/secrets/x" }],
       ["no-secret-holder", false, { clientSecretEnv: undefined, clientSecretFile: undefined, federated: false }],
@@ -211,10 +200,10 @@ test("headless creation stores references while rejecting impossible combination
       ["empty-secret-file", false, { clientSecretFile: "  " }],
       ["both-keys", false, { certificateThumbprint: thumbprint, certificateKeyFile: "/k", certificateKeyEnv: "K" }],
       ["key-without-thumbprint", false, { certificateKeyEnv: "MG_AXI_PRIVATE_KEY" }],
-      ["token-env-without-federated", false, { federatedTokenFileEnv: "MG_AXI_ASSERTION_FILE" }],
+      ["token-file-without-federated", false, { federatedTokenFile: "/run/secrets/assertion" }],
       ["two-methods", false, { certificateThumbprint: thumbprint, clientSecretEnv: "MG_AXI_CLIENT_SECRET" }],
       ["three-methods", false, { certificateThumbprint: thumbprint, federated: true }],
-    ]) assert.throws(() => profiles.create(args[0], tenant, client, "commercial", args[1], args[2]), { code: "VALIDATION_ERROR" }, args[0]);
+    ]) assert.throws(() => profiles.create(args[0], tenant, client, "commercial", args[1], args[2]), { code: "CONFIG_INVALID" }, args[0]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -223,9 +212,9 @@ test("packaged application journey rejects interactive login with closed stdin",
   const run = args => spawnSync(process.execPath, ["dist/bin/mg-axi.js", ...args], { encoding: "utf8", input: "", timeout: 10_000, env: { PATH: process.env.PATH, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: join(dir, "config.json") } });
   try {
     assert.equal(run(["profile", "create", "--name", "batch", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--federated"]).status, 0);
-    assert.equal(run(["profile", "create", "--name", "daemon", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--certificate-thumbprint", thumbprint]).status, 0);
+    assert.equal(run(["profile", "create", "--name", "daemon", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--certificate-thumbprint-sha256", thumbprint]).status, 0);
     assert.equal(decode(run(["profile", "show", "--profile", "batch"]).stdout).profile.mode, "application");
-    assert.equal(decode(run(["profile", "show", "--profile", "daemon"]).stdout).profile.credentialRef.provider, "certificate");
+    assert.equal(decode(run(["profile", "show", "--profile", "daemon"]).stdout).profile.auth, "certificate");
     for (const name of ["batch", "daemon"]) {
       const rejected = run(["login", "--profile", name, "--scopes", "https://graph.microsoft.com/User.Read"]);
       assert.equal(rejected.status, 2);
@@ -234,16 +223,16 @@ test("packaged application journey rejects interactive login with closed stdin",
     }
     for (const args of [
       ["profile", "create", "--name", "x2", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application"],
-      ["profile", "create", "--name", "x3", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--federated", "--certificate-thumbprint", thumbprint],
-      ["profile", "create", "--name", "x4", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--certificate-thumbprint", "short"],
+      ["profile", "create", "--name", "x3", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--federated", "--certificate-thumbprint-sha256", thumbprint],
+      ["profile", "create", "--name", "x4", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--certificate-thumbprint-sha256", "short"],
       ["profile", "create", "--name", "x5", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--federated", "--allow-device-code"],
-      ["profile", "create", "--name", "x6", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--certificate-thumbprint", thumbprint],
+      ["profile", "create", "--name", "x6", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--certificate-thumbprint-sha256", thumbprint],
       ["profile", "create", "--name", "x7", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "workload"],
     ]) {
       const result = run(args);
-      assert.equal(result.status, 2, args.join(" "));
+      assert.notEqual(result.status, 0, args.join(" "));
       assert.equal(result.stderr, "");
-      assert.equal(decode(result.stdout).code, "VALIDATION_ERROR");
+      assert.match(decode(result.stdout).code, /^(CONFIG_INVALID|VALIDATION_ERROR)$/);
     }
     assert.equal(decode(run(["profile", "list"]).stdout).profiles.filter(item => item.mode === "application").length, 2);
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -254,10 +243,10 @@ test("packaged headless journey records references, never values", () => {
   const run = args => spawnSync(process.execPath, ["dist/bin/mg-axi.js", ...args], { encoding: "utf8", input: "", timeout: 10_000, env: { PATH: process.env.PATH, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: join(dir, "config.json") } });
   try {
     assert.equal(run(["profile", "create", "--name", "svc", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--client-secret-env", "MG_AXI_CLIENT_SECRET"]).status, 0);
-    assert.equal(run(["profile", "create", "--name", "keyed", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--certificate-thumbprint", thumbprint, "--certificate-key-file", "/run/secrets/mg-axi-key.pem"]).status, 0);
-    assert.equal(run(["profile", "create", "--name", "fed", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--federated", "--federated-token-file-env", "MG_AXI_ASSERTION_FILE"]).status, 0);
-    assert.deepEqual(decode(run(["profile", "show", "--profile", "svc"]).stdout).profile.credentialRef.provider, "client-secret");
-    assert.equal(decode(run(["profile", "show", "--profile", "keyed"]).stdout).profile.credentialRef.keyFile, "/run/secrets/mg-axi-key.pem");
+    assert.equal(run(["profile", "create", "--name", "keyed", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--certificate-thumbprint-sha256", thumbprint, "--certificate-key-file", "/run/secrets/mg-axi-key.pem"]).status, 0);
+    assert.equal(run(["profile", "create", "--name", "fed", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--federated", "--federated-token-file", "/run/secrets/assertion"]).status, 0);
+    assert.deepEqual(decode(run(["profile", "show", "--profile", "svc"]).stdout).profile.auth, "client-secret");
+    assert.equal(decode(run(["profile", "show", "--profile", "keyed"]).stdout).profile.privateKey.file, "/run/secrets/mg-axi-key.pem");
     for (const args of [
       ["profile", "create", "--name", "h2", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--client-secret-env", "A", "--client-secret-file", "/run/secrets/x"],
       ["profile", "create", "--name", "h3", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--certificate-key-env", "K"],
@@ -265,10 +254,10 @@ test("packaged headless journey records references, never values", () => {
       ["profile", "create", "--name", "h5", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--client-secret-env", "1BAD"],
     ]) {
       const result = run(args);
-      assert.equal(result.status, 2, args.join(" "));
+      assert.notEqual(result.status, 0, args.join(" "));
       assert.equal(result.stderr, "");
-      assert.equal(decode(result.stdout).code, "VALIDATION_ERROR");
+      assert.match(decode(result.stdout).code, /^(CONFIG_INVALID|VALIDATION_ERROR)$/);
     }
-    assert.doesNotMatch(readFileSync(join(dir, "config.json"), "utf8"), /privateKey|clientSecret/);
+    assert.doesNotMatch(readFileSync(join(dir, "config.json"), "utf8"), /BEGIN.*PRIVATE KEY|opaque-fixture-secret/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

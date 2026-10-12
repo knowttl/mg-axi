@@ -1,5 +1,8 @@
 import { encode } from "@toon-format/toon";
 import { Profiles, type AnyProfile } from "./profiles.js";
+import { Credentials } from "./credentials.js";
+import { resolveSecret } from "./secrets.js";
+import { redactSecrets } from "./redact.js";
 
 // Session-start ambient summary behind the mg-axi-hook entry point.
 // Local configuration state only: every configured profile name with its
@@ -8,39 +11,21 @@ import { Profiles, type AnyProfile } from "./profiles.js";
 // sign-in call of any kind; every failure collapses to a short record with
 // exit code 0, so a missing or broken config never breaks agent startup.
 //
-// Auth-cache presence reads the OS credential store directly: delegated
-// profiles keep their MSAL session blob under the "mg-axi" service with the
-// session key below, so presence means a previous explicit login happened on
-// this machine. Only presence is reported; tokens and key material never
-// reach the output. Application profiles acquire tokens silently per run, so
-// they report the client-credentials mechanism instead of cache state.
-
-// Session cache key mirrors MsalProvider.application() in
-// src/msal-provider.ts; change both together.
-function delegatedSessionKey(profile: AnyProfile): string {
-  return JSON.stringify([profile.credentialRef.key, profile.tenantId, profile.clientId, profile.cloud]);
-}
+// Cache presence uses the same binding and private-file checks as authentication.
 
 export type AuthPresence = "cached" | "sign-in required" | "client-credentials" | "unknown";
 export type HookOptions = {
   version: string;
   env?: NodeJS.ProcessEnv;
   configPath?: string;
-  // Test seam over the true external boundary (the OS credential store).
+  // Test seam over the true external boundary (the credential store).
   authPresence?: (profile: AnyProfile) => Promise<AuthPresence> | AuthPresence;
 };
 
 async function probeAuthPresence(profile: AnyProfile): Promise<AuthPresence> {
   if (profile.mode !== "delegated") return "client-credentials";
-  let store: { getPassword(service: string, account: string): Promise<string | null> } | undefined;
   try {
-    store = await import("keytar").then(module => module.default).catch(() => undefined);
-  } catch {
-    return "unknown";
-  }
-  if (!store) return "unknown";
-  try {
-    return typeof await store.getPassword("mg-axi", delegatedSessionKey(profile)) === "string" ? "cached" : "sign-in required";
+    return ("stored" in profile.token ? new Credentials().read(profile) : resolveSecret(profile.token)) ? "cached" : "sign-in required";
   } catch {
     return "unknown";
   }
@@ -54,7 +39,7 @@ const SETUP_HINT = "Run npx -y @knowttl/mg-axi setup to find the config path and
 
 export async function hookSummary(options: HookOptions): Promise<string> {
   try {
-    return await renderHookSummary(options);
+    return redactSecrets(await renderHookSummary(options));
   } catch {
     return "mg: status unavailable\n";
   }

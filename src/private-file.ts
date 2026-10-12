@@ -110,7 +110,7 @@ export class PrivateFiles {
     } catch (error) {
       if (error instanceof AxiError) throw error;
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === "EACCES" || code === "EPERM") this.insecure(path);
+      if (code === "EACCES" || code === "EPERM" || code === "ELOOP") this.insecure(path);
       throw error;
     }
   }
@@ -132,7 +132,7 @@ export class PrivateFiles {
     } catch (error) {
       if (error instanceof AxiError) throw error;
       const code = (error as NodeJS.ErrnoException).code;
-      if (code === "EACCES" || code === "EPERM") this.insecure(path);
+      if (code === "EACCES" || code === "EPERM" || code === "ELOOP") this.insecure(path);
       throw error;
     }
   }
@@ -157,7 +157,7 @@ export class PrivateFiles {
       } catch (error) {
         if (error instanceof AxiError) throw error;
         const code = (error as NodeJS.ErrnoException).code;
-        if (code === "EACCES" || code === "EPERM") this.insecure(path);
+        if (code === "EACCES" || code === "EPERM" || code === "ELOOP") this.insecure(path);
         throw error;
       }
       const deadline = Date.now() + 1000;
@@ -165,6 +165,7 @@ export class PrivateFiles {
       for (;;) {
         try { renameSync(temporary, path); break; }
         catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ELOOP") this.insecure(path);
           if (this.platform !== "win32" || !["EPERM", "EBUSY", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "") || Date.now() >= deadline) throw error;
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(delay, deadline - Date.now()));
           delay = Math.min(delay * 2, 100);

@@ -286,6 +286,16 @@ test("Unix symlink loops fail as insecure, never a raw ELOOP", { skip: process.p
   } finally { f.clean(); }
 });
 
+test("protect maps symlink loops to CONFIG_INSECURE", { skip: process.platform === "win32" }, () => {
+  const f = fixture();
+  try {
+    const loop = join(f.dir, "loop");
+    symlinkSync(loop, loop);
+    const target = join(loop, "entry");
+    assert.throws(() => new PrivateFiles().protect(target), error => error.code === "CONFIG_INSECURE" && error.message.includes(target));
+  } finally { f.clean(); }
+});
+
 test("check rethrows non-permission filesystem errors with their original code", { skip: process.platform === "win32" }, () => {
   assert.throws(() => new PrivateFiles().check(`/${"x".repeat(5000)}`), { code: "ENAMETOOLONG" });
 });

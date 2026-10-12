@@ -51,12 +51,20 @@ export class PrivateFiles {
     try {
       const stat = lstatSync(path);
       if (!stat.isFile() || stat.isSymbolicLink()) this.insecure(path);
-      if (this.platform === "win32") this.acl(path, false, verifyAcl ? "verify" : "inspect");
+      if (this.platform === "win32") {
+        try { this.acl(path, false, verifyAcl ? "verify" : "inspect"); }
+        catch (error) {
+          if (error instanceof AxiError) throw error;
+          this.insecure(path);
+        }
+      }
       else if (stat.uid !== this.uid || (stat.mode & (secret ? 0o077 : 0o022)) !== 0) this.insecure(path);
       return stat;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw error;
-      return this.insecure(path);
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") throw error;
+      if (code === "EACCES" || code === "EPERM" || code === "ELOOP") return this.insecure(path);
+      throw error;
     }
   }
 

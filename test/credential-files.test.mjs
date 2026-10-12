@@ -8,7 +8,7 @@ import { decode } from "@toon-format/toon";
 import { toolDirectory } from "../dist/paths.js";
 import { PrivateFiles } from "../dist/private-file.js";
 import { readOnlyForced, resolveWriteLogPath } from "../dist/mutations.js";
-import { Profiles, validateApplicationProfile } from "../dist/profiles.js";
+import { Profiles, validateApplicationProfile, validateDelegatedProfile } from "../dist/profiles.js";
 import { Credentials } from "../dist/credentials.js";
 import { authStatus } from "../dist/auth-status.js";
 import { registerSecret, redactSecrets } from "../dist/redact.js";
@@ -284,6 +284,33 @@ test("Unix symlink loops fail as insecure, never a raw ELOOP", { skip: process.p
     symlinkSync(loop, loop);
     assert.throws(() => new PrivateFiles().read(join(loop, "entry")), error => error.code === "CONFIG_INSECURE" && error.message.includes(join(loop, "entry")));
   } finally { f.clean(); }
+});
+
+test("check rethrows non-permission filesystem errors with their original code", { skip: process.platform === "win32" }, () => {
+  assert.throws(() => new PrivateFiles().check(`/${"x".repeat(5000)}`), { code: "ENAMETOOLONG" });
+});
+
+test("check maps unreadable files to CONFIG_INSECURE", { skip: process.platform === "win32" || process.getuid?.() === 0 }, () => {
+  const f = fixture();
+  try {
+    const dir = join(f.dir, "locked");
+    mkdirSync(dir);
+    const path = join(dir, "secret");
+    writeFileSync(path, "fixture", { mode: 0o600 });
+    chmodSync(dir, 0o000);
+    try {
+      assert.throws(() => new PrivateFiles().check(path), error => error.code === "CONFIG_INSECURE" && error.message.includes(path));
+    } finally { chmodSync(dir, 0o700); }
+  } finally { f.clean(); }
+});
+
+test("profile loading rethrows filesystem errors instead of reporting a schema problem", { skip: process.platform === "win32" }, () => {
+  assert.throws(() => new Profiles(`/${"x".repeat(5000)}`).list(), { code: "ENAMETOOLONG" });
+});
+
+test("credential store loading rethrows filesystem errors instead of reporting an invalid store", { skip: process.platform === "win32" }, () => {
+  const profile = validateDelegatedProfile({ mode: "delegated", tenantId: "11111111-1111-4111-8111-111111111111", clientId: "22222222-2222-4222-8222-222222222222", cloud: "commercial" });
+  assert.throws(() => new Credentials(`/${"x".repeat(5000)}`).read(profile), { code: "ENAMETOOLONG" });
 });
 
 test("auth status resolves Windows file holders through the injected store files", () => {

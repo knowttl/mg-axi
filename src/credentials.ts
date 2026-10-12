@@ -13,8 +13,14 @@ const object = (value: unknown): value is Record<string, unknown> => !!value && 
 export class Credentials {
   constructor(readonly path = statePath("credentials.json"), readonly files = new PrivateFiles()) {}
   private load(verifyAcl = false): Store {
+    let text: string;
+    try { text = this.files.read(this.path, true, verifyAcl); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { version: 1, profiles: Object.create(null) };
+      throw error;
+    }
     try {
-      const value: unknown = JSON.parse(this.files.read(this.path, true, verifyAcl));
+      const value: unknown = JSON.parse(text);
       if (!object(value) || value.version !== 1 || !object(value.profiles) || Object.keys(value).some(key => !["version", "profiles"].includes(key))) throw new Error("Invalid store");
       for (const [name, entry] of Object.entries(value.profiles)) {
         if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(name) || !object(entry) || typeof entry.tenantId !== "string" || typeof entry.clientId !== "string" || typeof entry.cache !== "string" ||
@@ -22,7 +28,6 @@ export class Credentials {
       }
       return value as unknown as Store;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { version: 1, profiles: Object.create(null) };
       if (error instanceof AxiError) throw error;
       throw new AxiError(`Invalid credential store ${this.path}`, "CONFIG_INVALID", ["Restore a valid protected credentials.json before signing in again"]);
     }

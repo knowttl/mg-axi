@@ -136,16 +136,19 @@ export class Profiles {
   private load(): Config {
     const legacy = join(homedir(), ".mg-axi", "config.json");
     if (resolve(this.path) === resolve(legacy) && existsSync(legacy)) this.moved();
-    let value: unknown;
-    try { value = JSON.parse(this.files.read(this.path, false)); }
+    let text: string;
+    try { text = this.files.read(this.path, false); }
     catch (error) {
       if (error instanceof AxiError) throw error;
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         if (existsSync(legacy)) this.moved();
         return { version: 1, profiles: {} };
       }
-      invalid("Unable to read profile configuration; check the version-1 JSON schema");
+      throw error;
     }
+    let value: unknown;
+    try { value = JSON.parse(text); }
+    catch { invalid("Unable to read profile configuration; check the version-1 JSON schema"); }
     if (!object(value) || value.version !== 1 || !exact(value, ["version", "defaultProfile", "profiles"]) || !object(value.profiles)) invalid("Unsupported profile configuration; explicitly migrate to version 1");
     const profiles: Record<string, AnyProfile> = Object.create(null);
     for (const [name, profile] of Object.entries(value.profiles)) {

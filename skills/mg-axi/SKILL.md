@@ -17,13 +17,13 @@ See [README.md](../../README.md) for write usage, execution gates, identity pinn
 Run commands non-interactively as `npx -y @knowttl/mg-axi ...`: no global install needed and no interactive prompts.
 Version pinning is the installer's choice: use `npx -y @knowttl/mg-axi@<version> ...` to select a specific release.
 Run `npx -y @knowttl/mg-axi doctor` first.
-See [README.md](../../README.md#release) for doctor profile selection, checks and failure behavior.
+See [README.md](../../README.md#usage) for doctor profile selection, checks and failure behavior.
 
 ## Orientation
 
 The exact current leaf registry is `src/catalogue.ts`.
 Its capability label is `native` (implemented by an mg-axi handler).
-Its effect is `read` for Graph read leaves and the doctor health check, `write` for the gated named writes, or `local` for home, profile, login and setup views.
+Its effect is `read` for Graph read leaves and the doctor health check, `write` for the gated named writes, or `local` for home, profile, auth, config path, login-alias and setup views.
 Doctor acquires credentials silently and contacts Graph; only its help view stays offline.
 The list below records current executable leaves; it makes no coverage claim for other Graph operations.
 See `docs/coverage.md` for the per-operation disposition records.
@@ -337,7 +337,7 @@ npx -y @knowttl/mg-axi api get --help
 
 ## Setup (explicit only)
 
-Follow [release guidance](../../README.md#release) for npm installation and explicit skill installation; [README.md](../../README.md#mg-axi) also documents checkout builds.
+Follow [installation guidance](../../README.md#quick-start) for npm installation and explicit skill installation; [README.md](../../README.md#development--testing) also documents checkout builds.
 Create profiles explicitly and keep secrets out of argv and config files:
 
 ```sh
@@ -370,14 +370,13 @@ No other ordinary command installs hooks, plugins or configuration.
 ## Selecting a profile
 
 Read leaves accept `--profile <name>`.
-Selection uses `--profile` or the configured default.
-Without either, read leaves report `AUTH_REQUIRED`, even if only one profile exists.
-Doctor selection is documented in [README.md](../../README.md#release).
+Profile selection order and env-profile rules live in [README Configuration](../../README.md#configuration); an explicitly selected file profile ignores env fields.
+Doctor selection is documented in [README.md](../../README.md#usage).
 Without profiles, home, setup and profile list show unconfigured state; Graph read leaves report `AUTH_REQUIRED`.
 
 ## Safety
 
-Reads run through a session that authorizes only catalogued operations before silent credential acquisition; only explicit `login` opens a browser or prints a device-code challenge.
+Reads run through a session that authorizes only catalogued operations before silent credential acquisition; only explicit `auth login` opens a browser or prints a device-code challenge.
 Writes preview before sending and need `--execute` plus a typed `--confirm` repeating the target; an already-desired value is a no-op with exit 0, never an error.
 Output is TOON on stdout; diagnostics use stderr.
 Text truncates at 500 characters (`--full` restores text, never redaction); row caps resume through opaque cursors.

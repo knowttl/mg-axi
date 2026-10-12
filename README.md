@@ -336,6 +336,7 @@ Prefer certificates or federation over bearer client secrets, and rotate secrets
 
 Federation reads the assertion file on every acquisition so projected tokens can rotate.
 Use `--federated-token-file <absolute-path>` for a projected assertion file, or set the default `MG_AXI_TOKEN` assertion value through the environment.
+When the token reference is the default `MG_AXI_TOKEN` env holder and that variable is unset, `AZURE_FEDERATED_TOKEN_FILE` stays accepted as a deprecated alias for one minor release with a stderr notice; `MG_AXI_TOKEN` takes precedence and the alias must name an absolute file path.
 References, rather than values, are stored in configuration; rotation updates the environment or file without changing the profile.
 Application credentials remain in process memory and are reacquired at a 60-second expiry margin.
 See [headless credential guidance](docs/headless-credentials.md) for holder examples.

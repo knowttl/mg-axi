@@ -424,8 +424,8 @@ test("raw contact reads project reviewed fields and refuse unreviewed ones", asy
     application: new ApplicationAuth({ storage: "session-only", acquire: async (...args) => { credentialCalls.push(args); return credential; } }),
     transport: async request => { requests.push(request); return { headers: {}, body: JSON.stringify({ value: [c1, c2] }) }; },
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "55555555-5555-4555-8555-555555555555" } };
-  const appProfile = { ...delegatedProfile, mode: "application", credentialRef: { provider: "federated", key: "55555555-5555-4555-8555-555555555555" } };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
+  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } };
   for (const profile of [delegatedProfile, appProfile]) {
     const listed = await runApiGet({ path: "/contacts", apiVersion: "v1.0", profile,
       ...(profile.mode === "delegated" ? { scopes: contactScopes[0] } : {}) }, deps);
@@ -455,7 +455,7 @@ test("raw contact show projects the minimal set without navigation", async () =>
     application: new (await import("../dist/app-auth.js")).ApplicationAuth({ storage: "session-only", acquire: async () => credential }),
     transport: async () => ({ status: 200, headers: {}, body: JSON.stringify(c1) }),
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "55555555-5555-4555-8555-555555555555" } };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
   const shown = await runApiGet({ path: `/contacts/${c1.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0] }, deps);
   assert.deepEqual(shown, { id: c1.id, displayName: c1.displayName, mail: c1.mail, companyName: c1.companyName });
 });
@@ -836,7 +836,7 @@ test("raw navigation reads project reviewed fields and refuse unreviewed ones", 
     application: new (await import("../dist/app-auth.js")).ApplicationAuth({ storage: "session-only", acquire: async () => credential }),
     transport: async () => ({ status: 200, headers: {}, body: JSON.stringify({ value: [row] }) }),
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "55555555-5555-4555-8555-555555555555" } };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
   const listed = await runApiGet({ path: `/contacts/${c1.id}/directReports`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0] }, deps);
   assert.deepEqual(listed.value, [{ "@odata.type": "#microsoft.graph.user", id: r1.id, displayName: r1.displayName }]);
   const cast = await runApiGet({ path: `/contacts/${c1.id}/directReports/graph.user`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0] }, deps);
@@ -1104,7 +1104,7 @@ test("raw memberOf reads project reviewed fields and refuse unreviewed ones", as
     application: new (await import("../dist/app-auth.js")).ApplicationAuth({ storage: "session-only", acquire: async () => credential }),
     transport: async () => ({ status: 200, headers: {}, body: JSON.stringify({ value: [row] }) }),
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "55555555-5555-4555-8555-555555555555" } };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
   const listed = await runApiGet({ path: `/contacts/${c1.id}/memberOf`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0] }, deps);
   assert.deepEqual(listed.value, [{ "@odata.type": "#microsoft.graph.group", id: g1.id, displayName: g1.displayName }]);
   const cast = await runApiGet({ path: `/contacts/${c1.id}/memberOf/graph.group`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0] }, deps);

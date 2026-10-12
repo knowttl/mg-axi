@@ -17,13 +17,13 @@ See [README.md](../../README.md) for write usage, execution gates, identity pinn
 Run commands non-interactively as `npx -y @knowttl/mg-axi ...`: no global install needed and no interactive prompts.
 Version pinning is the installer's choice: use `npx -y @knowttl/mg-axi@<version> ...` to select a specific release.
 Run `npx -y @knowttl/mg-axi doctor` first.
-See [README.md](../../README.md#release) for doctor profile selection, checks and failure behavior.
+See [README.md](../../README.md#usage) for doctor profile selection, checks and failure behavior.
 
 ## Orientation
 
 The exact current leaf registry is `src/catalogue.ts`.
 Its capability label is `native` (implemented by an mg-axi handler).
-Its effect is `read` for Graph read leaves and the doctor health check, `write` for the gated named writes, or `local` for home, profile, login and setup views.
+Its effect is `read` for Graph read leaves and the doctor health check, `write` for the gated named writes, or `local` for home, profile, auth, config path, login-alias and setup views.
 Doctor acquires credentials silently and contacts Graph; only its help view stays offline.
 The list below records current executable leaves; it makes no coverage claim for other Graph operations.
 See `docs/coverage.md` for the per-operation disposition records.
@@ -36,7 +36,7 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi profile create` | native | local |
 | `mg-axi profile list` | native | local |
 | `mg-axi profile show` | native | local |
-| `mg-axi login` | native | local |
+| `mg-axi auth login` | native | local |
 | `mg-axi setup` | native | local |
 | `mg-axi setup hooks` | native | local |
 | `mg-axi doctor` | native | read |
@@ -307,6 +307,10 @@ See `docs/coverage.md` for the per-operation disposition records.
 | `mg-axi entra lifecycle run task-processing-result show` | native | read |
 | `mg-axi entra lifecycle run task-processing-result count` | native | read |
 | `mg-axi api get` | native | read |
+| `mg-axi login` | native | local |
+| `mg-axi config path` | native | local |
+| `mg-axi auth status` | native | local |
+| `mg-axi auth logout` | native | local |
 <!-- command-registry:end -->
 
 Run `npx -y @knowttl/mg-axi <leaf-path> --help` for that leaf's accepted flags and reference.
@@ -318,7 +322,7 @@ The no-args home view prints these hints alongside live profile status:
 
 ```sh
 npx -y @knowttl/mg-axi profile list
-npx -y @knowttl/mg-axi login --help
+npx -y @knowttl/mg-axi auth login --help
 npx -y @knowttl/mg-axi setup
 npx -y @knowttl/mg-axi doctor
 npx -y @knowttl/mg-axi entra user list --help
@@ -333,18 +337,18 @@ npx -y @knowttl/mg-axi api get --help
 
 ## Setup (explicit only)
 
-Follow [release guidance](../../README.md#release) for npm installation and explicit skill installation; [README.md](../../README.md#mg-axi) also documents checkout builds.
+Follow [installation guidance](../../README.md#quick-start) for npm installation and explicit skill installation; [README.md](../../README.md#development--testing) also documents checkout builds.
 Create profiles explicitly and keep secrets out of argv and config files:
 
 ```sh
 npx -y @knowttl/mg-axi setup                    # build steps, config path and capabilities; writes nothing
 npx -y @knowttl/mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
-npx -y @knowttl/mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read.All
+npx -y @knowttl/mg-axi auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All
 npx -y @knowttl/mg-axi doctor                   # one bounded read per selected profile
 npx -y @knowttl/mg-axi entra user list --profile soc --limit 10
 ```
 
-Configuration defaults to `~/.mg-axi/config.json`; `MG_AXI_CONFIG` selects a separate file.
+Configuration uses the XDG config directory (default `~/.config/mg-axi/config.json`), or `%APPDATA%\mg-axi\config.json` on Windows; `--config` overrides `MG_AXI_CONFIG`.
 `mg-axi setup` shows the selected path and writes nothing.
 Application profiles authenticate headlessly through credential references: the profile names an env var or file and the environment supplies the value at acquisition time.
 Container examples for client secrets, certificate keys and workload federation live in [README.md](../../README.md#mg-axi).
@@ -366,14 +370,13 @@ No other ordinary command installs hooks, plugins or configuration.
 ## Selecting a profile
 
 Read leaves accept `--profile <name>`.
-Selection uses `--profile` or the configured default.
-Without either, read leaves report `AUTH_REQUIRED`, even if only one profile exists.
-Doctor selection is documented in [README.md](../../README.md#release).
+Profile selection order and env-profile rules live in [README Configuration](../../README.md#configuration); an explicitly selected file profile ignores env fields.
+Doctor selection is documented in [README.md](../../README.md#usage).
 Without profiles, home, setup and profile list show unconfigured state; Graph read leaves report `AUTH_REQUIRED`.
 
 ## Safety
 
-Reads run through a session that authorizes only catalogued operations before silent credential acquisition; only explicit `login` opens a browser or prints a device-code challenge.
+Reads run through a session that authorizes only catalogued operations before silent credential acquisition; only explicit `auth login` opens a browser or prints a device-code challenge.
 Writes preview before sending and need `--execute` plus a typed `--confirm` repeating the target; an already-desired value is a no-op with exit 0, never an error.
 Output is TOON on stdout; diagnostics use stderr.
 Text truncates at 500 characters (`--full` restores text, never redaction); row caps resume through opaque cursors.

@@ -6,8 +6,7 @@ import { GraphSession, resolveSessionOperation } from "../dist/graph-session.js"
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
-const key = "33333333-3333-4333-8333-333333333333";
-const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key } };
+const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
 const scopes = ["https://graph.microsoft.com/User.Read"];
 const users = resolveSessionOperation("v1.0", "GET", "/users");
 
@@ -577,7 +576,7 @@ test("alternate nextLink capitalization is ignored", async () => {
   assert.equal(f.requests.length, 1);
 });
 
-for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "application", credentialRef: { provider: "federated", key } }]) {
+for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } }]) {
   for (const method of ["collect", "execute"]) {
     const args = { profile, operation: users, ...(profile.mode === "delegated" ? { scopes } : {}) };
 
@@ -696,13 +695,13 @@ for (const next of [undefined, "https://graph.microsoft.com/v1.0/groups/group-a/
   });
 }
 
-for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "application", credentialRef: { provider: "federated", key } }]) {
+for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } }]) {
   for (const next of [undefined, "https://graph.microsoft.com/v1.0/users?$skiptoken=next"]) {
     for (const [field, changedProfile, changedScopes] of [
       ["tenant", { ...profile, tenantId: "44444444-4444-4444-8444-444444444444" }, undefined],
       ["client", { ...profile, clientId: "55555555-5555-4555-8555-555555555555" }, undefined],
-      ["credential reference", { ...profile, credentialRef: { ...profile.credentialRef, key: "66666666-6666-4666-8666-666666666666" } }, undefined],
-      ["authentication mode", profile.mode === "delegated" ? { ...profile, mode: "application", credentialRef: { provider: "federated", key } } : delegatedProfile, undefined],
+      ["credential reference", { ...profile, token: { env: "OTHER_TOKEN" } }, undefined],
+      ["authentication mode", profile.mode === "delegated" ? { ...profile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } } : delegatedProfile, undefined],
       ["scopes", profile, ["https://graph.microsoft.com/Directory.Read.All"]],
     ]) {
       test(`${profile.mode} cursor rejects changed ${field}, nextLink: ${Boolean(next)}`, async () => {
@@ -761,9 +760,9 @@ for (const overrides of [{ context: null }, { identity: "invalid" }, { identity:
   });
 }
 
-for (const credentialRef of [{ provider: "federated", key }, { provider: "certificate", key, thumbprint: "a".repeat(40) }]) {
-  test(`application cursor resumes under the same ${credentialRef.provider} identity`, async () => {
-    const profile = { ...delegatedProfile, mode: "application", credentialRef };
+for (const credential of [{ auth: "federated", token: { env: "MG_AXI_TOKEN" } }, { auth: "certificate", privateKey: { env: "MG_AXI_PRIVATE_KEY" }, thumbprintSha256: "a".repeat(64) }]) {
+  test(`application cursor resumes under the same ${credential.auth} identity`, async () => {
+    const profile = { mode: "application", tenantId: tenant, clientId: client, ...credential };
     const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
     const first = await maker.session.collect({ profile, operation: users, limit: 1 });
     const f = fixture(json(200, { value: [] }), credential => ({ ...credential, token: "refreshed-app-token" }));
@@ -774,13 +773,13 @@ for (const credentialRef of [{ provider: "federated", key }, { provider: "certif
   });
 }
 
-for (const credentialRef of [{ provider: "federated", key }, { provider: "certificate", key, thumbprint: "b".repeat(40) }]) {
-  test(`certificate cursor rejects changed credential details: ${JSON.stringify(credentialRef)}`, async () => {
-    const profile = { ...delegatedProfile, mode: "application", credentialRef: { provider: "certificate", key, thumbprint: "a".repeat(40) } };
+for (const credential of [{ auth: "federated", token: { env: "MG_AXI_TOKEN" } }, { auth: "certificate", privateKey: { env: "MG_AXI_PRIVATE_KEY" }, thumbprintSha256: "b".repeat(64) }]) {
+  test(`certificate cursor rejects changed credential details: ${JSON.stringify(credential)}`, async () => {
+    const profile = { mode: "application", tenantId: tenant, clientId: client, auth: "certificate", privateKey: { env: "MG_AXI_PRIVATE_KEY" }, thumbprintSha256: "a".repeat(64) };
     const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
     const first = await maker.session.collect({ profile, operation: users, limit: 1 });
     const f = fixture(json(200, { value: [] }));
-    await assert.rejects(f.session.collect({ profile: { ...profile, credentialRef }, operation: users, cursor: first.cursor }), { code: "VALIDATION_ERROR" });
+    await assert.rejects(f.session.collect({ profile: { mode: "application", tenantId: tenant, clientId: client, ...credential }, operation: users, cursor: first.cursor }), { code: "VALIDATION_ERROR" });
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
   });

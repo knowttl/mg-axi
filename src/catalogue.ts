@@ -510,23 +510,23 @@ export const LEAVES: Leaf[] = [
     cloud: { value: "commercial", required: true, description: "Explicit cloud; only commercial is supported" },
     mode: { value: "delegated|application", default: "delegated", description: "Delegated analyst sign-in or application client credentials" },
     "allow-device-code": { description: "Delegated only: opt in only when permitted by organization policy; never enables fallback" },
-    "certificate-thumbprint": { value: "40-hex-digits", description: "Application only: certificate thumbprint; the private key stays in referenced storage" },
-    "certificate-key-file": { value: "path", description: "Application only: certificate PEM private key from this 0600 file; omit both key flags for the OS keychain" },
-    "certificate-key-env": { value: "env-var-name", description: "Application only: certificate PEM private key from this environment variable; omit both key flags for the OS keychain" },
+    "certificate-thumbprint-sha256": { value: "64-hex-digits", description: "Application only: SHA-256 certificate thumbprint" },
+    "certificate-key-file": { value: "absolute-path", description: "Application only: certificate PEM private key from this protected file" },
+    "certificate-key-env": { value: "env-var-name", description: "Application only: certificate PEM private key from this environment variable; defaults to MG_AXI_PRIVATE_KEY" },
     "client-secret-env": { value: "env-var-name", description: "Application only: client secret from this environment variable; exactly one of this or --client-secret-file" },
-    "client-secret-file": { value: "path", description: "Application only: client secret from this 0600 file; exactly one of this or --client-secret-env" },
-    federated: { description: "Application only: workload federation via the assertion file named by --federated-token-file-env" },
-    "federated-token-file-env": { value: "env-var-name", description: "Application only: environment variable naming the workload assertion file; defaults to AZURE_FEDERATED_TOKEN_FILE" },
-  }, examples: ["mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial", "mg-axi profile create --name batch --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --federated", "mg-axi profile create --name daemon --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --certificate-thumbprint <40-hex-digit-thumbprint> --certificate-key-file /run/secrets/mg-axi-key.pem", "mg-axi profile create --name svc --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --client-secret-env MG_AXI_CLIENT_SECRET", "mg-axi profile create --help"] },
+    "client-secret-file": { value: "absolute-path", description: "Application only: client secret from this protected file; exactly one of this or --client-secret-env" },
+    federated: { description: "Application only: workload federation; token defaults to env MG_AXI_TOKEN; AZURE_FEDERATED_TOKEN_FILE stays accepted as a deprecated alias" },
+    "federated-token-file": { value: "absolute-path", description: "Application only: workload assertion content from this protected file" },
+  }, examples: ["mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial", "mg-axi profile create --name batch --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --federated", "mg-axi profile create --name daemon --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --certificate-thumbprint-sha256 <64-hex-digit-thumbprint> --certificate-key-file /run/secrets/mg-axi-key.pem", "mg-axi profile create --name svc --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --client-secret-env MG_AXI_CLIENT_SECRET", "mg-axi profile create --help"] },
   { path: "profile list", description: "List configured profiles without accessing credentials", flags: {}, examples: ["mg-axi profile list", "mg-axi profile list --help"] },
   { path: "profile show", description: "Show profile policy and credential reference, never credentials", flags: {
     profile: common.profile,
   }, examples: ["mg-axi profile show --profile soc", "mg-axi profile show"] },
-  { path: "login", description: "Explicit delegated login; browser by default, no automatic device-code fallback", flags: {
+  { path: "auth login", description: "Explicit delegated login; browser by default, no automatic device-code fallback", flags: {
     profile: common.profile,
     method: { value: "browser|device-code", default: "browser", description: "Device code additionally requires profile opt-in" },
     scopes: { value: "comma-separated-Graph-scopes", required: true, description: "Explicit delegated permissions using full https://graph.microsoft.com/ scope names" },
-  }, examples: ["mg-axi login --profile soc --scopes https://graph.microsoft.com/User.Read", "mg-axi login --profile soc --method device-code --scopes https://graph.microsoft.com/User.Read"] },
+  }, examples: ["mg-axi auth login --profile soc --scopes https://graph.microsoft.com/User.Read", "mg-axi auth login --profile soc --method device-code --scopes https://graph.microsoft.com/User.Read"] },
   { path: "setup", description: "Show installation, configuration and capability guidance without signing in or writing anything", flags: {}, examples: ["mg-axi setup", "mg-axi setup --help"] },
   { path: "setup hooks", description: "Install or repair agent SessionStart hooks for mg-axi ambient context", flags: {}, examples: ["mg-axi setup hooks", "mg-axi setup hooks --help"] },
   { path: "doctor", description: "Check each selected profile with one bounded user-list read; never signs in interactively, installs nothing, enables no writes", flags: {
@@ -2795,6 +2795,12 @@ export const LEAVES: Leaf[] = [
   }, examples: ["mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All", "mg-axi api get /groups --odata '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All", "mg-axi api get /users --cursor - --all --scopes https://graph.microsoft.com/User.Read.All < cursor.txt"] },
 ];
 
+LEAVES.push({ ...LEAVES.find(leaf => leaf.path === "auth login")!, path: "login", description: "Deprecated alias for auth login (one minor release)" });
+LEAVES.push({ path: "config path", description: "Show the selected configuration path without reading credentials", flags: {}, examples: ["mg-axi config path", "mg-axi config path --config /absolute/path/config.json"] });
+LEAVES.push({ path: "auth status", description: "Show credential sources and verify local file permissions without a live request", flags: { profile: common.profile }, examples: ["mg-axi auth status", "mg-axi auth status --profile soc"] });
+LEAVES.push({ path: "auth logout", description: "Delete the selected delegated login cache without prompting", flags: { profile: common.profile }, examples: ["mg-axi auth logout", "mg-axi auth logout --profile soc"] });
+for (const leaf of LEAVES) leaf.flags.config = { value: "path", description: "Configuration file override; takes precedence over MG_AXI_CONFIG" };
+
 export function leafHelp(leaf: Leaf): string {
   return [
     `mg-axi ${leaf.path}${leaf.positional ? ` <${leaf.positional.name}>` : ""}`, leaf.description,
@@ -2830,7 +2836,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
   const flags: Record<string, string | boolean> = Object.create(null);
   for (let i = flagStart; i < argv.length; i++) {
     const arg = argv[i]!;
-    const match = /^--([a-z-]+)(?:=(.*))?$/.exec(arg);
+    const match = /^--([a-z][a-z0-9-]*)(?:=(.*))?$/.exec(arg);
     if (!match) fail("unexpected argument or short flag");
     const name = match![1]!;
     const flag = Object.hasOwn(leaf.flags, name) ? leaf.flags[name] : name === "help" ? { description: "Help" } : undefined;

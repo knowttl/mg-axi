@@ -6,6 +6,8 @@ import { AxiError, installSessionStartHooks, runAxiCli } from "axi-sdk-js";
 import { LEAVES, home, leafHelp, operationFor, resolveCommand, DESCRIPTION, TOP_LEVEL_HELP } from "./catalogue.js";
 import { VERSION } from "./version.js";
 import { Profiles } from "./profiles.js";
+import { authStatus } from "./auth-status.js";
+import { redactSecrets } from "./redact.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
 import { updateUserAccount } from "./entra-user-update.js";
@@ -52,20 +54,18 @@ import { setupView } from "./setup.js";
 import type { DelegatedAuth } from "./auth.js";
 import type { ApplicationAuth } from "./app-auth.js";
 
-function localHome(name?: string) {
+function localHome(name?: string, config?: string) {
   const output = home();
-  const store = new Profiles();
-  if (name || store.list().length) {
-    try {
-      const selected = store.resolve(name);
-      output.profile = selected.name;
-      output.tenant = selected.profile.tenantId;
-    } catch (error) {
-      if (name || !(error instanceof AxiError) || error.code !== "AUTH_REQUIRED") throw error;
-      output.profile = "unavailable: no default profile selected";
-    }
+  const store = new Profiles(config);
+  try {
+    const selected = store.resolve(name);
+    output.profile = selected.name;
+    output.tenant = selected.profile.tenantId;
+  } catch (error) {
+    if ((name?.trim() ? name : undefined) || !(error instanceof AxiError) || !["PROFILE_REQUIRED", "PROFILE_AMBIGUOUS"].includes(error.code)) throw error;
+    if (error.code === "PROFILE_AMBIGUOUS") output.profile = "unavailable: no default profile selected";
   }
-  output.help.unshift("npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi login --help");
+  output.help.unshift("npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi auth login --help");
   return output;
 }
 
@@ -143,22 +143,28 @@ async function readCursor(cursor: string | undefined): Promise<string | undefine
 export async function executeArgv(argv: string[], overrides: DispatchOverrides = {}): Promise<string | Record<string, unknown>> {
   const { leaf, flags, positional } = resolveCommand(argv);
   if (flags.help) return leafHelp(leaf);
-  if (leaf.path === "home") return localHome(flags.profile as string | undefined);
-  const profiles = new Profiles();
+  if (leaf.path === "home") return localHome(flags.profile as string | undefined, flags.config as string | undefined);
+  const profiles = new Profiles(flags.config as string | undefined);
+  if (leaf.path === "config path") return { config: profiles.path };
   if (leaf.path === "profile create") {
-    const credentialFlags = ["certificate-thumbprint", "client-secret-env", "client-secret-file", "certificate-key-file", "certificate-key-env", "federated-token-file-env"];
+    const credentialFlags = ["certificate-thumbprint-sha256", "client-secret-env", "client-secret-file", "certificate-key-file", "certificate-key-env", "federated-token-file"];
     if (String(flags.mode ?? "delegated") !== "application" && (flags.federated || credentialFlags.some(name => flags[name] !== undefined))) throw new AxiError("Certificate, client-secret and federated credentials belong to application profiles; pass --mode application", "VALIDATION_ERROR", [leafHelp(leaf)]);
     const optional = (name: string) => flags[name] === undefined ? undefined : String(flags[name]);
     return profiles.create(String(flags.name), String(flags.tenant), String(flags.client), String(flags.cloud), !!flags["allow-device-code"],
     String(flags.mode ?? "delegated") === "application"
-      ? { certificateThumbprint: optional("certificate-thumbprint"), federated: !!flags.federated, clientSecretEnv: optional("client-secret-env"), clientSecretFile: optional("client-secret-file"), certificateKeyFile: optional("certificate-key-file"), certificateKeyEnv: optional("certificate-key-env"), federatedTokenFileEnv: optional("federated-token-file-env") }
+      ? { certificateThumbprint: optional("certificate-thumbprint-sha256"), federated: !!flags.federated, clientSecretEnv: optional("client-secret-env"), clientSecretFile: optional("client-secret-file"), certificateKeyFile: optional("certificate-key-file"), certificateKeyEnv: optional("certificate-key-env"), federatedTokenFile: optional("federated-token-file") }
       : undefined);
   }
   if (leaf.path === "profile list") {
     const items = profiles.list();
-    return items.length ? { profiles: items, help: ["npx -y @knowttl/mg-axi profile show --profile <name>", "npx -y @knowttl/mg-axi login --help"] } : { profiles: "0 profiles configured", help: ["npx -y @knowttl/mg-axi profile create --help"] };
+    return items.length ? { profiles: items, help: ["npx -y @knowttl/mg-axi profile show --profile <name>", "npx -y @knowttl/mg-axi auth login --help"] } : { profiles: "0 profiles configured", help: ["npx -y @knowttl/mg-axi profile create --help"] };
   }
   if (leaf.path === "profile show") return profiles.resolve(flags.profile as string | undefined);
+  if (leaf.path === "auth status") {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    profiles.verifyPermissions();
+    return authStatus(selected.name, selected.profile);
+  }
   if (leaf.path === "setup") return setupView(profiles);
   if (leaf.path === "setup hooks") return runSetupHooks();
   if (leaf.path === "doctor") {
@@ -178,16 +184,18 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
     // A failing profile still reports its bounded read on stdout; the
     // nonzero exit travels through process state, never the payload.
-    const result = await runDoctor({ store: profiles, names, session });
+    const selected = names.length === 1 ? profiles.resolve(flags.profile as string | undefined) : undefined;
+    const result = await runDoctor({ store: profiles, names, session, selected });
     if (result.failed) process.exitCode = 1;
     return result.output;
   }
-  if (leaf.path === "login") {
+  if (leaf.path === "login" || leaf.path === "auth login" || leaf.path === "auth logout") {
     const selected = profiles.resolve(flags.profile as string | undefined);
     if (selected.profile.mode !== "delegated") throw new AxiError("Application profiles authenticate with client credentials; interactive login is unavailable", "VALIDATION_ERROR", ["mg-axi profile show --profile <name>", "Application tokens are acquired silently with the configured Graph .default audience"]);
     const { DelegatedAuth } = await import("./auth.js");
     const { MsalProvider } = await import("./msal-provider.js");
-    return { profile: selected.name, ...await new DelegatedAuth(new MsalProvider()).login(selected.profile, String(flags.method ?? "browser"), String(flags.scopes).split(",")) };
+    const service = overrides.delegated ?? new DelegatedAuth(new MsalProvider());
+    return { profile: selected.name, ...await (leaf.path === "auth logout" ? service.logout(selected.profile) : service.login(selected.profile, String(flags.method ?? "browser"), String(flags.scopes).split(","))) };
   }
   if (leaf.path === "entra conditional-access policy list" || leaf.path === "entra conditional-access policy show" || leaf.path === "entra conditional-access named-location list" || leaf.path === "entra conditional-access named-location show" || leaf.path === "entra conditional-access auth-strength-policy list" || leaf.path === "entra conditional-access auth-strength-policy show" || leaf.path === "entra conditional-access combination-configuration list" || leaf.path === "entra conditional-access combination-configuration show" || leaf.path === "entra conditional-access auth-method-mode list" || leaf.path === "entra conditional-access auth-method-mode show" || leaf.path === "entra conditional-access template list" || leaf.path === "entra conditional-access template show" || leaf.path === "entra conditional-access auth-context list" || leaf.path === "entra conditional-access auth-context show" || leaf.path === "entra conditional-access deleted-policy list" || leaf.path === "entra conditional-access deleted-policy show" || leaf.path === "entra conditional-access deleted-named-location list" || leaf.path === "entra conditional-access deleted-named-location show") {
     const selected = profiles.resolve(flags.profile as string | undefined);
@@ -1448,12 +1456,15 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
 }
 
 export async function main() {
+  const stderrWrite = process.stderr.write.bind(process.stderr) as (...args: unknown[]) => boolean;
+  process.stderr.write = ((chunk: string | Uint8Array, ...args: unknown[]) => stderrWrite(redactSecrets(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8")), ...args)) as typeof process.stderr.write;
   await runAxiCli({
     description: DESCRIPTION,
     version: VERSION,
     topLevelHelp: TOP_LEVEL_HELP,
     // Strict resolution owns leaf help, so SDK help cannot bypass validation.
     argv: ["dispatch"],
+    stdout: { write: (value: string) => process.stdout.write(redactSecrets(value)) },
     home: () => localHome(),
     commands: {
       dispatch: async () => {
@@ -1462,7 +1473,7 @@ export async function main() {
       },
     },
     formatError: error => ({
-      output: `${encode(error instanceof AxiError ? { error: error.message, code: error.code, help: error.suggestions } : { error: "Unable to run mg-axi", help: ["mg-axi --help"] })}\n`,
+      output: `${redactSecrets(encode(error instanceof AxiError ? { error: error.message, code: error.code, help: error.suggestions } : { error: "Unable to run mg-axi", help: ["mg-axi --help"] }))}\n`,
       exitCode: error instanceof AxiError && error.code === "VALIDATION_ERROR" ? 2 : 1,
     }),
   });

@@ -2,14 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import { AxiError } from "axi-sdk-js";
+import { redactSecrets } from "./redact.js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
-import {
-  validateApplicationProfile,
-  validateDelegatedProfile,
-  validateProfile,
-  type AnyProfile,
-} from "./profiles.js";
+import { PrivateFiles } from "./private-file.js";
+import { validateProfile, profileName, type AnyProfile } from "./profiles.js";
 
 // CORE-01: the single path that owns Graph URL construction, operation
 // authorization, credential attachment and response validation. Command
@@ -238,7 +235,7 @@ export function redactGraphValue(value: unknown): unknown {
 }
 
 function redact(value: unknown): unknown {
-  if (typeof value === "string") return SECRET_VALUE.some(pattern => pattern.test(value)) ? REDACTED : value;
+  if (typeof value === "string") return SECRET_VALUE.some(pattern => pattern.test(value)) ? REDACTED : redactSecrets(value);
   if (Array.isArray(value)) return value.map(redact);
   if (value === null || typeof value !== "object") return value;
   return Object.fromEntries(
@@ -764,6 +761,7 @@ export class GraphSession {
       application: ApplicationAuth;
       transport: GraphTransport;
     },
+    private files = new PrivateFiles(),
   ) {}
 
   cursorQuery(operation: SessionOperation, cursor: string): Readonly<Record<string, string>> {
@@ -780,7 +778,7 @@ export class GraphSession {
         "Use a route from inventory/operations.json; the session never builds uncatalogued URLs",
       ]);
     }
-    const profile = validateProfile(args.profile);
+    const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
     const query = args.query ?? {};
     checkQueryContext(query, args.consistencyLevel);
@@ -792,8 +790,8 @@ export class GraphSession {
     let token: string;
     try {
       token = await beforeDeadline(async () => profile.mode === "delegated"
-        ? (await this.deps.delegated.credential(validateDelegatedProfile(profile), this.readScopes(args.scopes))).token
-        : (await this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes))).token, clock, deadline, signal);
+        ? (await this.deps.delegated.credential(profile, this.readScopes(args.scopes))).token
+        : (await this.deps.application.credential(profile, this.applicationScopes(args.scopes))).token, clock, deadline, signal);
     } catch (error) {
       signal?.throwIfAborted();
       if (error instanceof DeadlineExceeded) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
@@ -817,7 +815,7 @@ export class GraphSession {
         "Use a route from inventory/operations.json; the session never builds uncatalogued URLs",
       ]);
     }
-    const profile = validateProfile(args.profile);
+    const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
     checkLimit(args.limit);
     const budget = checkBudget(args.budget);
@@ -836,8 +834,8 @@ export class GraphSession {
     const signal = args.signal;
     const path = buildPath(operation.path, params);
     const context = createHash("sha256").update(JSON.stringify([
-      path, profile.mode, profile.tenantId.toLowerCase(), profile.clientId.toLowerCase(), profile.cloud,
-      profile.credentialRef, [...new Set(args.scopes ?? [])].sort(),
+      path, profileName(profile), profile.mode, profile.tenantId.toLowerCase(), profile.clientId.toLowerCase(), profile.cloud,
+      profile.mode === "delegated" ? profile.token : profile.auth === "certificate" ? [profile.privateKey, profile.thumbprintSha256] : profile.auth === "client-secret" ? profile.clientSecret : profile.token, [...new Set(args.scopes ?? [])].sort(),
     ])).digest("hex");
     if (resumed && resumed.context !== context) throw new AxiError("Collection cursor resource or authentication context does not match", "VALIDATION_ERROR", ["Resume under the original resource bindings, profile identity, credential reference and scopes"]);
     const startUrl = `https://${GRAPH_HOST}/${operation.version}/${path}${buildQuery(query)}`;
@@ -876,8 +874,8 @@ export class GraphSession {
     let token: string;
     try {
       const credential = await beforeDeadline(async () => profile.mode === "delegated"
-        ? this.deps.delegated.credential(validateDelegatedProfile(profile), this.readScopes(args.scopes))
-        : this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes)), clock, deadline, signal);
+        ? this.deps.delegated.credential(profile, this.readScopes(args.scopes))
+        : this.deps.application.credential(profile, this.applicationScopes(args.scopes)), clock, deadline, signal);
       const acquiredIdentity = createHash("sha256").update(JSON.stringify([
         profile.mode, credential.tenantId.toLowerCase(), credential.clientId.toLowerCase(),
         profile.mode === "delegated" && "accountId" in credential ? credential.accountId : null,

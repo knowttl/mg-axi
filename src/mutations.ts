@@ -1,4 +1,4 @@
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, openSync, unlinkSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -6,7 +6,9 @@ import { AxiError } from "axi-sdk-js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-session.js";
-import { validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
+import { booleanEnv, movedError, validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
+import { statePath } from "./paths.js";
+import { PrivateFiles } from "./private-file.js";
 
 // Shared mutation coordinator for reviewed named mutation families.
 // The gate order follows az-axi's write gates as the reference: read-only default,
@@ -20,15 +22,18 @@ export const READ_ONLY_ENV = "MG_AXI_READ_ONLY";
 export const WRITE_LOG_ENV = "MG_AXI_WRITE_LOG";
 
 export function readOnlyForced(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env[READ_ONLY_ENV] === "1";
+  return booleanEnv(READ_ONLY_ENV, env);
 }
 
 // Mutation intents and outcomes are journaled here: MG_AXI_WRITE_LOG when
-// set, otherwise ~/.mg-axi/writes.log. A blank override falls back.
+// set, otherwise the machine-local state directory. A blank override falls back.
 export function resolveWriteLogPath(env: NodeJS.ProcessEnv = process.env): string {
   const override = env[WRITE_LOG_ENV]?.trim();
   if (override) return override;
-  return join(homedir(), ".mg-axi", "writes.log");
+  const target = statePath("writes.log", env);
+  const legacy = join(homedir(), ".mg-axi", "writes.log");
+  if (!existsSync(target) && existsSync(legacy)) movedError("Write log", legacy, target, "The moved journal keeps its intent and outcome history");
+  return target;
 }
 
 export type MutationMethod = "POST" | "PUT" | "PATCH" | "DELETE";
@@ -274,11 +279,12 @@ export function createMutationSender(args: {
   delegated: DelegatedAuth;
   application: ApplicationAuth;
   transport: MutationTransport;
+  files?: PrivateFiles;
 }): {
   send(authorization: MutationAuthorization, options?: { body?: string; ifMatch?: string; signal?: AbortSignal; scopes?: string[] }): Promise<MutationResponse>;
 } {
-  const { delegated, application, transport } = args;
-  const bound = args.profile.mode === "application" ? validateApplicationProfile(args.profile) : validateDelegatedProfile(args.profile);
+  const { delegated, application, transport, files = new PrivateFiles() } = args;
+  const bound = args.profile.mode === "application" ? validateApplicationProfile(args.profile, files) : validateDelegatedProfile(args.profile, files);
 
   async function credential(scopes: string[] | undefined, signal?: AbortSignal): Promise<string> {
     signal?.throwIfAborted();
@@ -288,14 +294,14 @@ export function createMutationSender(args: {
           "Pass the operation's documented delegated permission using full https://graph.microsoft.com/ scope names",
         ]);
       }
-      return (await delegated.credential(validateDelegatedProfile(bound), scopes)).token;
+      return (await delegated.credential(bound, scopes)).token;
     }
     if (scopes !== undefined) {
       throw new AxiError("Application profiles use the configured Graph .default audience; delegated scopes are unavailable", "VALIDATION_ERROR", [
         "mg-axi profile show --profile <name>",
       ]);
     }
-    return (await application.credential(validateApplicationProfile(bound))).token;
+    return (await application.credential(bound)).token;
   }
 
   async function send(
@@ -383,8 +389,8 @@ type AuditRecord = {
 };
 
 function flushDirectory(path: string): void {
-  // Node cannot open directory handles on Windows; journal fsync still
-  // applies, and recordAudit pre-creates the journal file there instead.
+  // Node cannot open directory handles on Windows; atomic journal writes
+  // still fsync the file before replacement.
   if (process.platform === "win32") return;
   const fd = openSync(path, "r");
   try { fsyncSync(fd); } finally { closeSync(fd); }
@@ -409,17 +415,18 @@ export function createMutationCoordinator(args: {
   transport: MutationTransport;
   clock?: () => number;
   journalPath?: string;
+  files?: PrivateFiles;
 }): MutationCoordinator {
-  const { profile, delegated, application, transport } = args;
+  const { profile, delegated, application, transport, files = new PrivateFiles() } = args;
   const clock = args.clock ?? Date.now;
   const journalPath = args.journalPath ?? resolveWriteLogPath();
-  const validated = profile.mode === "application" ? validateApplicationProfile(profile) : validateDelegatedProfile(profile);
+  const validated = profile.mode === "application" ? validateApplicationProfile(profile, files) : validateDelegatedProfile(profile, files);
   const scope: WriteScope = Object.freeze({
     tenantId: validated.tenantId,
     allowWrites: validated.writes?.allowWrites === true,
     operations: Object.freeze([...(validated.writes?.operations ?? [])]),
   });
-  const sender = createMutationSender({ profile: validated, delegated, application, transport });
+  const sender = createMutationSender({ profile: validated, delegated, application, transport, files });
 
   function enforceWriteGates(definition: MutationDefinition): void {
     // Gate 1: forced read-only overrides every profile.
@@ -511,7 +518,7 @@ export function createMutationCoordinator(args: {
     const line = JSON.stringify({ ...safe, intentKey: record.intentKey });
     try {
       const directory = dirname(journalPath);
-      const firstCreated = mkdirSync(directory, { recursive: true, mode: 0o700 });
+      const firstCreated = files.directory(directory);
       if (firstCreated) {
         let path = directory;
         const parent = dirname(firstCreated);
@@ -521,44 +528,36 @@ export function createMutationCoordinator(args: {
         }
         flushDirectory(parent);
       }
-      if (process.platform === "win32" && !existsSync(journalPath)) {
-        const journal = openSync(journalPath, "a", 0o600);
-        try { fsyncSync(journal); } finally { closeSync(journal); }
-      }
       const lockPath = `${journalPath}.lock`;
       const lock = openSync(lockPath, "wx", 0o600);
       try {
-        const created = !existsSync(journalPath);
-        const journal = openSync(journalPath, "a+", 0o600);
-        try {
-          if (record.kind === "intent") {
-            const contents = readFileSync(journal, "utf8");
-            if (contents && !contents.endsWith("\n")) throw new Error("Incomplete mutation journal");
-            const records = contents.split("\n").filter(Boolean)
-              .map(entry => JSON.parse(entry) as AuditRecord);
-            if (records.some(entry => !entry || !["intent", "outcome"].includes(entry.kind)
-              || typeof entry.intentKey !== "string" || !/^[a-f0-9]{64}$/.test(entry.intentKey))) {
-              throw new Error("Invalid mutation journal");
-            }
-            // No automatic replay: a recreated coordinator refuses an intent
-            // recorded without a terminal outcome, and a duplicate intent id
-            // is never reserved twice.
-            if (records.some(entry => entry.kind === "intent" && entry.intentKey === record.intentKey)) {
-              throw new AxiError(`blocked: intent '${record.id}' was already reserved`, "ALREADY_EXECUTED", [
-                `Intent '${record.id}' requires manual reconciliation; read back its target and never resend it`,
-              ]);
-            }
+        files.protect(lockPath);
+        const contents = existsSync(journalPath) ? files.read(journalPath) : "";
+        if (record.kind === "intent") {
+          if (contents && !contents.endsWith("\n")) throw new Error("Incomplete mutation journal");
+          const records = contents.split("\n").filter(Boolean)
+            .map(entry => JSON.parse(entry) as AuditRecord);
+          if (records.some(entry => !entry || !["intent", "outcome"].includes(entry.kind)
+            || typeof entry.intentKey !== "string" || !/^[a-f0-9]{64}$/.test(entry.intentKey))) {
+            throw new Error("Invalid mutation journal");
           }
-          writeFileSync(journal, `${line}\n`);
-          fsyncSync(journal);
-          if (created) flushDirectory(directory);
-        } finally { closeSync(journal); }
+          // No automatic replay: a recreated coordinator refuses an intent
+          // recorded without a terminal outcome, and a duplicate intent id
+          // is never reserved twice.
+          if (records.some(entry => entry.kind === "intent" && entry.intentKey === record.intentKey)) {
+            throw new AxiError(`blocked: intent '${record.id}' was already reserved`, "ALREADY_EXECUTED", [
+              `Intent '${record.id}' requires manual reconciliation; read back its target and never resend it`,
+            ]);
+          }
+        }
+        files.write(journalPath, `${contents}${line}\n`);
+        flushDirectory(directory);
       } finally {
         closeSync(lock);
         unlinkSync(lockPath);
       }
     } catch (error) {
-      if (error instanceof AxiError && error.code === "ALREADY_EXECUTED") throw error;
+      if (error instanceof AxiError && (error.code === "ALREADY_EXECUTED" || error.code === "CONFIG_INSECURE")) throw error;
       if (record.kind === "intent") {
         throw new AxiError(`Mutation intent '${record.id}' could not be recorded`, "INTENT_NOT_RECORDED", [
           "The mutation was not sent",

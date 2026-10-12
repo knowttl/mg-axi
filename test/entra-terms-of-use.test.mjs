@@ -595,8 +595,8 @@ test("raw agreement reads serve delegated callers and refuse application profile
     application: new ApplicationAuth({ storage: "session-only", acquire: async (...args) => { credentialCalls.push(args); return credential; } }),
     transport: async request => { requests.push(request); return { headers: {}, body: JSON.stringify({ value: [agreement1] }) }; },
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "55555555-5555-4555-8555-555555555555" } };
-  const appProfile = { ...delegatedProfile, mode: "application", credentialRef: { provider: "federated", key: "55555555-5555-4555-8555-555555555555" } };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
+  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } };
   const listed = await runApiGet({ path: "/agreements", apiVersion: "v1.0", profile: delegatedProfile, scopes: agreementScopes[0] }, deps);
   assert.equal(listed.returned, 1);
   for (const path of ["/agreements", `/agreements/${agreement1.id}`, `/agreements/${agreement1.id}/acceptances`, `/agreements/${agreement1.id}/acceptances/${acceptance1.id}`, "/agreementAcceptances", `/agreementAcceptances/${acceptance1.id}`]) {
@@ -622,7 +622,7 @@ test("raw acceptance reads project only reviewed fields with minimal defaults", 
     application: new ApplicationAuth({ storage: "session-only", acquire: async () => credential }),
     transport: async () => ({ status: 200, headers: {}, body: JSON.stringify({ ...acceptance1, fileData: "QUJD", unknownField: true }) }),
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key: "55555555-5555-4555-8555-555555555555" } };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
   const shown = await runApiGet({ path: `/agreementAcceptances/${acceptance1.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: acceptanceScopes[0] }, deps);
   assert.deepEqual(shown, minimalAcceptance1);
 });

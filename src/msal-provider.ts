@@ -1,78 +1,83 @@
 import { PublicClientApplication, type AuthenticationResult } from "@azure/msal-node";
 import open from "open";
+import { AxiError } from "axi-sdk-js";
 import type { CredentialProvider, LoginMethod } from "./auth.js";
-import type { DelegatedProfile } from "./profiles.js";
+import { profileName, type DelegatedProfile } from "./profiles.js";
+import { Credentials } from "./credentials.js";
+import { resolveSecret } from "./secrets.js";
+import { redactSecrets, registerCache, registerSecret } from "./redact.js";
 
-// Only this adapter touches Microsoft authentication and OS credential storage.
 export class MsalProvider implements CredentialProvider {
-  storage: "os-protected" | "session-only" = "session-only";
-  private sessions = new Map<string, { app: PublicClientApplication; store?: typeof import("keytar") }>();
-  private async application(profile: DelegatedProfile, fresh = false) {
-    const key = JSON.stringify([profile.credentialRef.key, profile.tenantId, profile.clientId, profile.cloud]);
+  storage: "protected-file" | "session-only" = "protected-file";
+  private sessions = new Map<string, PublicClientApplication>();
+  constructor(private store = new Credentials()) {}
+  private key(profile: DelegatedProfile) { return JSON.stringify([profileName(profile), profile.tenantId, profile.clientId, profile.cloud, profile.token]); }
+  private application(profile: DelegatedProfile, login = false) {
+    const key = this.key(profile);
+    this.storage = "stored" in profile.token ? "protected-file" : "session-only";
     const existing = this.sessions.get(key);
-    if (existing && !fresh) {
-      this.storage = existing.store ? "os-protected" : "session-only";
-      return existing.app;
-    }
-    const store = existing ? existing.store : await import("keytar").then(module => module.default).catch(() => undefined);
-    this.storage = store ? "os-protected" : "session-only";
-    if (fresh) {
-      this.sessions.delete(key);
-      if (store) {
-        await store.deletePassword("mg-axi", key);
-        if (await store.getPassword("mg-axi", key) !== null) throw new Error("Unable to wipe profile cache");
-      }
-    }
-    const configuration = {
+    if (existing && !login) return existing;
+    let loaded = false;
+    let snapshot: string | undefined;
+    const app = new PublicClientApplication({
       auth: { clientId: profile.clientId, authority: `https://login.microsoftonline.com/${profile.tenantId}` },
       system: { loggerOptions: { loggerCallback: () => {}, piiLoggingEnabled: false } },
-    };
-    const app = new PublicClientApplication({
-      ...configuration,
-      cache: store ? { cachePlugin: {
+      cache: { cachePlugin: {
         beforeCacheAccess: async context => {
-          const saved = await store.getPassword("mg-axi", key);
-          if (saved) context.tokenCache.deserialize(saved);
+          if (!loaded) {
+            snapshot = "stored" in profile.token ? this.store.read(profile) : resolveSecret(profile.token, this.store.files);
+            loaded = true;
+          }
+          // MSAL overwrites its cache from the plugin snapshot before a silent lookup.
+          if (snapshot) context.tokenCache.deserialize(registerCache(snapshot));
         },
         afterCacheAccess: async context => {
           if (!context.cacheHasChanged) return;
-          const saved = context.tokenCache.serialize();
-          if (process.platform === "win32" && Buffer.byteLength(saved, "utf8") > 2560) {
-            await store.deletePassword("mg-axi", key);
-            if (await store.getPassword("mg-axi", key) !== null) throw new Error("Unable to wipe profile cache");
-            const session = new PublicClientApplication(configuration);
-            session.getTokenCache().deserialize(saved);
-            this.sessions.set(key, { app: session });
-            this.storage = "session-only";
-            return;
-          }
-          await store.setPassword("mg-axi", key, saved);
+          snapshot = registerCache(context.tokenCache.serialize());
+          // Hosted commands keep refreshed tokens only in memory. Explicit login owns persistence.
+          if (login) this.store.write(profile, snapshot);
         },
-      } } : undefined,
+      } },
     });
-    this.sessions.set(key, { app, store });
+    this.sessions.set(key, app);
     return app;
   }
   async login(profile: DelegatedProfile, method: LoginMethod, scopes: string[]) {
-    // Each explicit login starts with a new client and a verified empty protected cache.
-    const app = await this.application(profile, true);
-    const result = method === "browser"
-      ? await app.acquireTokenInteractive({ scopes, openBrowser: async url => { await open(url); }, prompt: "select_account", errorTemplate: "Sign-in failed. Return to mg-axi for recovery guidance." })
-      : await app.acquireTokenByDeviceCode({ scopes, deviceCodeCallback: response => {
-        if (typeof response.userCode !== "string" || !response.userCode.trim() || typeof response.deviceCode !== "string" || !response.deviceCode.trim() || !Number.isFinite(response.expiresIn) || response.expiresIn <= 0) throw new Error("Invalid device-code challenge");
-        // The one-time user challenge belongs only to explicit login stderr.
-        process.stderr.write(`Open https://microsoft.com/devicelogin and enter ${response.userCode}\n`);
-      } });
-    return this.result(profile, result);
+    if (!("stored" in profile.token)) throw new AxiError("auth login requires token: {stored: true}", "CONFIG_INVALID");
+    this.sessions.delete(this.key(profile));
+    this.store.remove(profile);
+    const app = this.application(profile, true);
+    try {
+      const result = method === "browser"
+        ? await app.acquireTokenInteractive({ scopes, openBrowser: async url => { await open(url); }, prompt: "select_account", errorTemplate: "Sign-in failed. Return to mg-axi for recovery guidance." })
+        : await app.acquireTokenByDeviceCode({ scopes, deviceCodeCallback: response => {
+          if (typeof response.userCode !== "string" || !response.userCode.trim() || typeof response.deviceCode !== "string" || !response.deviceCode.trim() || !Number.isFinite(response.expiresIn) || response.expiresIn <= 0) throw new Error("Invalid device-code challenge");
+          process.stderr.write(redactSecrets(`Open https://microsoft.com/devicelogin and enter ${response.userCode}\n`));
+        } });
+      const credential = this.result(profile, result);
+      // Subsequent silent acquisitions must not retain a persistence-enabled plugin.
+      this.sessions.delete(this.key(profile));
+      return credential;
+    } catch (error) {
+      this.sessions.delete(this.key(profile));
+      this.store.remove(profile);
+      throw error;
+    }
   }
   async silent(profile: DelegatedProfile, scopes: string[]) {
-    const app = await this.application(profile);
+    const app = this.application(profile);
     const accounts = (await app.getTokenCache().getAllAccounts()).filter(account => account.tenantId.toLowerCase() === profile.tenantId.toLowerCase());
     if (accounts.length !== 1) throw new Error("Explicit login required");
-    return this.result(profile, await app.acquireTokenSilent({ scopes, account: accounts[0]! }));
+    const credential = this.result(profile, await app.acquireTokenSilent({ scopes, account: accounts[0]! }));
+    if (credential.accountId !== accounts[0]!.homeAccountId) throw new Error("Configured account mismatch");
+    return credential;
+  }
+  async logout(profile: DelegatedProfile) {
+    this.sessions.delete(this.key(profile));
+    if ("stored" in profile.token) this.store.remove(profile);
   }
   private result(profile: DelegatedProfile, result: AuthenticationResult | null) {
     if (!result?.account || result.tenantId.toLowerCase() !== profile.tenantId.toLowerCase()) throw new Error("Configured tenant mismatch");
-    return { token: result.accessToken, expiresAt: result.expiresOn?.getTime() ?? NaN, tenantId: result.tenantId, clientId: profile.clientId, accountId: result.account.homeAccountId };
+    return { token: registerSecret(result.accessToken), expiresAt: result.expiresOn?.getTime() ?? NaN, tenantId: result.tenantId, clientId: profile.clientId, accountId: result.account.homeAccountId };
   }
 }

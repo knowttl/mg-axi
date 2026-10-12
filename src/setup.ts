@@ -107,9 +107,9 @@ export function setupView(store: Profiles): Record<string, unknown> {
       "node dist/bin/mg-axi.js --version",
     ],
     guidance: [
-      `Hand-edit ${store.path} or set MG_AXI_CONFIG to a separate configuration file; a profile stores only a credential reference - an OS keychain entry, an environment variable name, or a file path - and never the secret value, never in argv or config`,
+      `Hand-edit ${store.path} or set MG_AXI_CONFIG to a separate configuration file; a profile stores only a SecretRef - an environment variable name, an absolute file path, or stored: true for delegated login - and never the secret value, never in argv or config`,
       "node dist/bin/mg-axi.js profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial",
-      "node dist/bin/mg-axi.js login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
+      "node dist/bin/mg-axi.js auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
       "node dist/bin/mg-axi.js doctor",
     ],
     capabilities: {

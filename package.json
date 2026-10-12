@@ -20,7 +20,8 @@
     "inventory/operations.json",
     "skills/mg-axi",
     "docs/coverage.md",
-    "README.md"
+    "README.md",
+    "axi-credential.schema.json"
   ],
   "engines": {
     "node": ">=22.12.0"
@@ -42,8 +43,5 @@
   "devDependencies": {
     "@types/node": "^22.20.5",
     "typescript": "^7.0.2"
-  },
-  "optionalDependencies": {
-    "keytar": "^7.9.0"
   }
 }

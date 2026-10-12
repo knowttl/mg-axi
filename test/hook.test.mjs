@@ -11,6 +11,7 @@ import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { LEAVES } from "../dist/catalogue.js";
 import { hookSummary } from "../dist/hook.js";
+import { PrivateFiles } from "../dist/private-file.js";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
@@ -77,7 +78,7 @@ test("hook never prints credential references", () => {
     const env = baseEnv(dir, config);
     createProfiles(env);
     const stored = JSON.parse(readFileSync(config, "utf8"));
-    const keys = Object.values(stored.profiles).map(profile => profile.credentialRef.key);
+    const keys = Object.values(stored.profiles).map(profile => JSON.stringify(profile.token));
     assert.ok(keys.length > 0);
     const result = runHook(env);
     assert.equal(result.status, 0);
@@ -120,6 +121,18 @@ test("hook maps injected auth presence without touching the credential store", a
     assert.match(cached, /cached/);
     const failing = await hookSummary({ version, configPath: config, authPresence: () => { throw new Error("store offline"); } });
     assert.match(failing, /unknown/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("hook resolves Windows file holders through injected files end to end", { skip: process.platform === "win32" }, async () => {
+  const { dir, config } = home();
+  try {
+    writeFileSync(config, JSON.stringify({ version: 1, profiles: { win: { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", token: { file: "C:\\creds\\key.pem" } } } }), { mode: 0o600 });
+    const files = new PrivateFiles("win32", () => {});
+    const summary = await hookSummary({ version, configPath: config, files });
+    assert.match(summary, /configured/);
+    assert.match(summary, /win/);
+    assert.match(await hookSummary({ version, configPath: config }), /configuration invalid/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

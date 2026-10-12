@@ -2,141 +2,155 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
-const cases = [
-  { name: "unavailable import uses session storage", failure: "import", storage: "session-only", persisted: [] },
-  { name: "wipe verification read failure blocks replacement", failure: "initial-read", error: "LOGIN_FAILED", persisted: [] },
-  { name: "wipe failure blocks replacement", failure: "delete", error: "LOGIN_FAILED", persisted: ["account-A"] },
-  { name: "retained protected cache blocks replacement", failure: "retained-cache", error: "LOGIN_FAILED", persisted: ["account-A"] },
-  { name: "ordinary token write failure blocks login", failure: "token-write", error: "LOGIN_FAILED", persisted: [] },
-  { name: "non-Windows oversized write errors fail closed", platform: "linux", large: true, failure: "token-write", error: "LOGIN_FAILED", persisted: [] },
-  { name: "refresh read failure requires authentication", failure: "initial-read", refresh: true, error: "AUTH_REQUIRED", persisted: ["account-A"] },
-  { name: "refresh write failure requires authentication", failure: "token-write", refresh: true, error: "AUTH_REQUIRED", persisted: ["account-A"] },
-  { name: "Windows oversized login uses session storage", large: true, storage: "session-only", persisted: [] },
-  { name: "Windows oversized refresh uses session storage", large: true, refresh: true, storage: "session-only", persisted: [] },
-  { name: "Windows cache limit measures UTF-8 bytes", unicode: true, storage: "session-only", persisted: [] },
-  ...[false, true].flatMap(refresh => [
-    { name: `Windows oversized ${refresh ? "refresh" : "login"} wipe failure blocks transition`, large: true, refresh, transitionFailure: "delete", error: refresh ? "AUTH_REQUIRED" : "LOGIN_FAILED", persisted: refresh ? ["account-A"] : [] },
-    { name: `Windows oversized ${refresh ? "refresh" : "login"} wipe verification failure blocks transition`, large: true, refresh, transitionFailure: "initial-read", error: refresh ? "AUTH_REQUIRED" : "LOGIN_FAILED", persisted: [] },
-  ]),
-  { name: "Windows oversized refresh retained cache blocks transition", large: true, refresh: true, transitionFailure: "retained-cache", error: "AUTH_REQUIRED", persisted: ["account-A"] },
-  { name: "Windows cache at the byte limit remains protected", limit: true, storage: "os-protected", persisted: ["account-B"] },
-  { name: "ordinary replacement persists the new account", storage: "os-protected", persisted: ["account-B"] },
-  { name: "replacement wipes every old account", multiple: true, storage: "os-protected", persisted: ["account-B"] },
-];
-
-for (const method of ["browser", "device-code"]) for (const scenario of cases) test(`${method}: ${scenario.name}`, () => {
-  const result = spawnSync(process.execPath, ["--experimental-test-module-mocks", "--input-type=module", "-e", `
-    import assert from "node:assert/strict";
-    import { registerHooks } from "node:module";
-    import { mock } from "node:test";
-    const scenario = ${JSON.stringify(scenario)};
-    const method = ${JSON.stringify(method)};
-    mock.timers.enable({ apis: ["Date"], now: 1700000000000 });
-    const tenant = "11111111-1111-4111-8111-111111111111";
-    const profile = { mode: "delegated", tenantId: tenant, clientId: "22222222-2222-4222-8222-222222222222", cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: true, credentialRef: { provider: "os-or-session", key: "33333333-3333-4333-8333-333333333333" } };
-    const scopes = ["https://graph.microsoft.com/User.Read"];
-    const saved = new Map();
-    let failure;
-    let large = false;
-    let unicode = false;
-    let limit = false;
-    let selectedAccount = "account-A";
-    const prompts = [];
-    mock.module("keytar", { defaultExport: {
-      getPassword: async (_, key) => {
-        if (failure === "initial-read") throw new Error("Read failed: secret diagnostics");
-        return saved.get(key) ?? null;
-      },
-      setPassword: async (_, key, value) => {
-        const cache = JSON.parse(value);
-        if (failure === "token-write" && cache.accounts.length) throw new Error("Write failed: secret diagnostics");
-        saved.set(key, value);
-      },
-      deletePassword: async (_, key) => {
-        if (failure === "delete") throw new Error("Delete failed: secret diagnostics");
-        if (failure === "retained-cache") return false;
-        return saved.delete(key);
-      },
-    } });
-    registerHooks({ resolve(specifier, context, nextResolve) {
-      if (specifier === "keytar" && failure === "import") throw new Error("Module unavailable");
-      return nextResolve(specifier, context);
-    } });
-    class Application {
-      constructor(config) {
-        this.plugin = config.cache?.cachePlugin;
-        this.accounts = [];
-        this.token = "";
-        this.cache = {
-          serialize: () => {
-            const cache = { accounts: this.accounts, token: this.token, padding: "" };
-            const bytes = this.accounts.length ? (large ? 3000 : limit ? 2560 : 500) : 500;
-            cache.padding = unicode && this.accounts.length ? "é".repeat(1300) : "x".repeat(bytes - Buffer.byteLength(JSON.stringify(cache)));
-            return JSON.stringify(cache);
-          },
-          deserialize: value => { const cache = JSON.parse(value); this.accounts = cache.accounts; this.token = cache.token; },
-          getAllAccounts: async () => { await this.access(false); return [...this.accounts]; },
-        };
-      }
-      getTokenCache() { return this.cache; }
-      async access(changed) {
-        const context = { tokenCache: this.cache, cacheHasChanged: changed };
-        if (!changed) await this.plugin?.beforeCacheAccess(context);
-        await this.plugin?.afterCacheAccess(context);
-      }
-      async acquireTokenInteractive() { prompts.push("browser"); return this.acquire("login-token", selectedAccount); }
-      async acquireTokenByDeviceCode() { prompts.push("device-code"); return this.acquire("login-token", selectedAccount); }
-      async acquireTokenSilent() { return this.acquire(this.token + "-refreshed", this.accounts[0].homeAccountId); }
-      async acquire(token, accountId) {
-        await this.access(false);
-        this.accounts = [{ tenantId: tenant, homeAccountId: accountId }];
-        this.token = token;
-        if (scenario.transitionFailure && large) failure = scenario.transitionFailure;
-        await this.access(true);
-        return { account: this.accounts[0], tenantId: tenant, accessToken: token, expiresOn: new Date(Date.now() + 120000) };
-      }
-    }
-    mock.module("@azure/msal-node", { namedExports: { PublicClientApplication: Application } });
-    const { MsalProvider } = await import("./dist/msal-provider.js");
-    const { DelegatedAuth } = await import("./dist/auth.js");
-    Object.defineProperty(process, "platform", { value: scenario.platform ?? "win32" });
-    if (scenario.failure !== "import") await new MsalProvider().login(profile, "browser", scopes);
-    if (scenario.multiple) {
-      for (const [key, value] of saved) {
-        const cache = JSON.parse(value);
-        cache.accounts.push({ tenantId: tenant, homeAccountId: "account-C" });
-        saved.set(key, JSON.stringify(cache));
-      }
-    }
-    prompts.length = 0;
-    failure = scenario.failure;
-    large = !!scenario.large;
-    unicode = !!scenario.unicode;
-    limit = !!scenario.limit;
-    selectedAccount = "account-B";
-    const provider = new MsalProvider();
-    const auth = new DelegatedAuth(provider);
-    const action = () => scenario.refresh ? auth.credential(profile, scopes) : auth.login(profile, method, scopes);
-    if (scenario.error) {
-      await assert.rejects(action(), error => error.code === scenario.error && error.suggestions.some(item => item.includes("OS credential store")) && !JSON.stringify(error).includes("secret diagnostics"));
-      assert.equal(provider.storage, "os-protected");
-    } else {
-      const result = await action();
-      if (!scenario.refresh) assert.equal(result.storage, scenario.storage);
-      assert.equal(provider.storage, scenario.storage);
-      assert.equal((await new DelegatedAuth(provider).credential(profile, scopes)).accountId, scenario.refresh ? "account-A" : "account-B");
-    }
-    const persisted = [...saved.values()].flatMap(value => JSON.parse(value).accounts.map(account => account.homeAccountId)).sort();
-    assert.deepEqual(persisted, scenario.persisted);
-    if (scenario.refresh || ["initial-read", "delete", "retained-cache"].includes(scenario.failure)) assert.deepEqual(prompts, []);
-    else assert.deepEqual(prompts, [method]);
-    failure = undefined;
-    large = unicode = limit = false;
-    if (scenario.error) {
-      const recovered = new DelegatedAuth(new MsalProvider());
-      assert.equal((await recovered.login(profile, method, scopes)).storage, "os-protected");
-      assert.equal((await new MsalProvider().silent(profile, scopes)).accountId, "account-B");
-    }
-  `], { encoding: "utf8", timeout: 10_000 });
+const harness = `
+import assert from "node:assert/strict";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { mock } from "node:test";
+import { Profiles, validateDelegatedProfile } from "./dist/profiles.js";
+import { Credentials } from "./dist/credentials.js";
+import { PrivateFiles } from "./dist/private-file.js";
+const tenant = "11111111-1111-4111-8111-111111111111";
+const client = "22222222-2222-4222-8222-222222222222";
+const dir = mkdtempSync(join(tmpdir(), "mg-msal-file-"));
+const profiles = new Profiles(join(dir, "config.json"));
+profiles.create("first", tenant, client, "commercial", true);
+profiles.create("second", tenant, client, "commercial", true);
+const profile = profiles.resolve("first").profile;
+const other = profiles.resolve("second").profile;
+const aclEvents = [];
+const files = new PrivateFiles("win32", (_path, directory, action) => { aclEvents.push({ directory, action }); });
+const store = new Credentials(join(dir, "credentials.json"), files);
+let account = "account-A";
+const prompts = [];
+const scopes = ["https://graph.microsoft.com/User.Read"];
+class Application {
+  constructor(config) {
+    this.plugin = config.cache.cachePlugin;
+    this.state = { Account: {}, AccessToken: {}, RefreshToken: {} };
+    this.cache = {
+      serialize: () => JSON.stringify(this.state),
+      deserialize: text => { this.state = JSON.parse(text); },
+      getAllAccounts: async () => { await this.plugin.beforeCacheAccess({ tokenCache: this.cache }); return Object.values(this.state.Account); },
+    };
+  }
+  getTokenCache() { return this.cache; }
+  async acquireTokenInteractive() { prompts.push("browser"); return this.acquire(account); }
+  async acquireTokenByDeviceCode() { prompts.push("device-code"); return this.acquire(account); }
+  async acquireTokenSilent() {
+    await this.plugin.beforeCacheAccess({ tokenCache: this.cache });
+    return this.acquire(Object.values(this.state.Account)[0].homeAccountId);
+  }
+  async acquire(id) {
+    await this.plugin.beforeCacheAccess({ tokenCache: this.cache });
+    this.state = { Account: { [id]: { tenantId: tenant, homeAccountId: id } },
+      AccessToken: { [id]: { secret: "fixture-access-" + id } },
+      RefreshToken: { [id]: { secret: "fixture-refresh-" + id + "é".repeat(2000) } } };
+    await this.plugin.afterCacheAccess({ tokenCache: this.cache, cacheHasChanged: true });
+    return { account: this.state.Account[id], tenantId: tenant, accessToken: "fixture-access-" + id, expiresOn: new Date(Date.now() + 120000) };
+  }
+}
+mock.module("@azure/msal-node", { namedExports: { PublicClientApplication: Application } });
+const { MsalProvider } = await import("./dist/msal-provider.js");
+const { DelegatedAuth } = await import("./dist/auth.js");
+try {
+`;
+const footer = `
+} finally { rmSync(dir, { recursive: true, force: true }); }
+`;
+function run(script) {
+  const result = spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "--experimental-test-module-mocks", "--input-type=module", "-e", harness + script + footer], { encoding: "utf8", timeout: 10000 });
   assert.equal(result.status, 0, result.stderr);
+}
+
+for (const method of ["browser", "device-code"]) test(`${method} persists a Windows cache larger than 2560 bytes across providers`, () => {
+  run(`
+const auth = new DelegatedAuth(new MsalProvider(store));
+assert.equal((await auth.login(profile, ${JSON.stringify(method)}, scopes)).storage, "protected-file");
+assert.equal((await new MsalProvider(store).silent(profile, scopes)).accountId, "account-A");
+const persisted = readFileSync(store.path, "utf8");
+assert.ok(Buffer.byteLength(persisted) > 2560);
+assert.doesNotMatch(persisted, /fixture-access-/);
+assert.ok(aclEvents.some(entry => entry.action === "restrict" && !entry.directory));
+assert.deepEqual(prompts, [${JSON.stringify(method)}]);
+`);
+});
+
+test("replacement wipes the selected account while preserving another profile", () => {
+  run(`
+const provider = new MsalProvider(store);
+await provider.login(profile, "browser", scopes);
+await provider.login(other, "browser", scopes);
+account = "account-B";
+await provider.login(profile, "browser", scopes);
+assert.equal((await new MsalProvider(store).silent(profile, scopes)).accountId, "account-B");
+assert.equal((await new MsalProvider(store).silent(other, scopes)).accountId, "account-A");
+assert.deepEqual(Object.keys(JSON.parse(store.read(profile)).Account), ["account-B"]);
+`);
+});
+
+test("failed wipe blocks replacement before interactive authentication", () => {
+  run(`
+await new MsalProvider(store).login(profile, "browser", scopes);
+prompts.length = 0;
+mock.method(store, "remove", () => { throw new Error("fixture-private-diagnostic"); });
+await assert.rejects(new DelegatedAuth(new MsalProvider(store)).login(profile, "browser", scopes), error => error.code === "LOGIN_FAILED" && !JSON.stringify(error).includes("fixture-private-diagnostic"));
+assert.deepEqual(prompts, []);
+assert.ok(store.read(profile));
+`);
+});
+
+test("failed persistent write fails login and removes the unusable cache", () => {
+  run(`
+mock.method(store, "write", () => { throw new Error("fixture-private-diagnostic"); });
+await assert.rejects(new DelegatedAuth(new MsalProvider(store)).login(profile, "browser", scopes), error => error.code === "LOGIN_FAILED" && !JSON.stringify(error).includes("fixture-private-diagnostic"));
+assert.equal(store.read(profile), undefined);
+assert.deepEqual(prompts, ["browser"]);
+`);
+});
+
+test("file-holder delegated tokens resolve through the injected store files", () => {
+  run(`
+const fileProfile = validateDelegatedProfile({ mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", token: { file: "C:\\\\creds\\\\key.pem" } }, files);
+await assert.rejects(new MsalProvider(store).silent(fileProfile, scopes), { code: "AUTH_REQUIRED" });
+`);
+});
+
+for (const field of ["tenantId", "clientId"]) test(`stored credentials refuse a changed ${field} without interactive fallback`, () => {
+  run(`
+await new MsalProvider(store).login(profile, "browser", scopes);
+const config = JSON.parse(readFileSync(profiles.path, "utf8"));
+config.profiles.first.${field} = "33333333-3333-4333-8333-333333333333";
+new PrivateFiles().write(profiles.path, JSON.stringify(config));
+prompts.length = 0;
+await assert.rejects(new DelegatedAuth(new MsalProvider(store)).credential(profiles.resolve("first").profile, scopes), { code: "AUTH_REQUIRED" });
+assert.deepEqual(prompts, []);
+`);
+});
+
+test("silent refresh never writes a new credential to disk", () => {
+  run(`
+await new MsalProvider(store).login(profile, "browser", scopes);
+const before = readFileSync(store.path, "utf8");
+mock.method(store, "write", () => { assert.fail("silent persistence is forbidden"); });
+const provider = new MsalProvider(store);
+assert.equal((await provider.silent(profile, scopes)).accountId, "account-A");
+assert.equal(readFileSync(store.path, "utf8"), before);
+`);
+});
+
+test("logout clears memory and the selected stored credential and is idempotent", () => {
+  run(`
+const auth = new DelegatedAuth(new MsalProvider(store));
+await auth.login(profile, "browser", scopes);
+await new MsalProvider(store).login(other, "browser", scopes);
+await auth.logout(profile);
+await auth.logout(profile);
+await assert.rejects(auth.credential(profile, scopes), { code: "AUTH_REQUIRED" });
+assert.ok(store.read(other));
+assert.equal(store.read(profile), undefined);
+await auth.logout(other);
+assert.equal(existsSync(store.path), false);
+`);
 });

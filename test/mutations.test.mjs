@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test as runTest } from "node:test";
@@ -9,6 +9,7 @@ import { DelegatedAuth } from "../dist/auth.js";
 import { LEAVES } from "../dist/catalogue.js";
 import { runApiGet } from "../dist/api.js";
 import { createMutationCoordinator, createMutationSender } from "../dist/mutations.js";
+import { PrivateFiles } from "../dist/private-file.js";
 
 // Skipped on Windows pending a fix for a pending-promise hang tracked as follow-up mg-win-hang-followup.
 const test = process.platform === "win32" ? (name, fn) => runTest(name, { skip: true }, fn) : runTest;
@@ -18,15 +19,14 @@ const test = process.platform === "win32" ? (name, fn) => runTest(name, { skip: 
 // fixture mutation; no live instance, real credential or customer data exists.
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
-const key = "33333333-3333-4333-8333-333333333333";
 const scopes = ["https://graph.microsoft.com/Fixture.Write"];
 const NOW = 1_700_000_000_000;
 const TIME = new Date(NOW).toISOString();
 
 const writes = { allowWrites: true, operations: ["mg.fixture.write"] };
-const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "os-or-session", key } };
+const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
 const enabledDelegated = { ...delegatedProfile, writes };
-const appProfile = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, credentialRef: { provider: "federated", key } };
+const appProfile = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "federated", token: { env: "MG_AXI_TOKEN" } };
 const enabledApp = { ...appProfile, writes };
 const mutation = { operation: "mg.fixture.write", method: "POST", version: "v1.0", path: "/v1.0/fixture/notes", effect: "write", target: "fixture-note-1", payload: { text: "reviewed synthetic note" } };
 
@@ -79,6 +79,28 @@ async function withEnv(key, value, action) {
 }
 
 const readState = (current = { notes: ["previous synthetic note"] }) => async () => current;
+
+test("the audit journal honors the coordinator files instead of host defaults", async () => {
+  const f = fixture();
+  const files = new PrivateFiles("win32", () => { throw new Error("fixture ACL failure"); });
+  await assert.rejects(
+    f.coordinator(enabledDelegated, { files }).execute(mutation, { readState: readState(), scopes, execute: true }),
+    { code: "CONFIG_INSECURE" },
+  );
+  assert.equal(f.requests.length, 0);
+});
+
+test("an insecure journal fails with CONFIG_INSECURE and sends nothing", async () => {
+  const f = fixture();
+  const journalPath = join(f.scratch, "writes.log");
+  writeFileSync(journalPath, "", { mode: 0o600 });
+  chmodSync(journalPath, 0o644);
+  const error = await f.coordinator(enabledDelegated, { journalPath }).execute(mutation, { readState: readState(), scopes, execute: true }).then(() => assert.fail("insecure journal must throw"), caught => caught);
+  assert.equal(error.code, "CONFIG_INSECURE");
+  assert.match(error.message, /writes\.log/);
+  assert.match(error.suggestions.join(" "), /chmod/);
+  assert.equal(f.requests.length, 0);
+});
 
 for (const path of ["/v1.0/fixture/$count", "/v1.0/fixture/%24value", "/v1.0/fixture/notes/$ref"]) {
   test(`mutation path rejects reserved resource binding ${path} before credentials`, async () => {
@@ -405,7 +427,7 @@ test("unavailable intent storage blocks the send", async () => {
   assert.equal(f.requests.length, 0);
 });
 
-test("outcome storage failure reports reconciliation with the send already made", async () => {
+test("outcome storage check failure surfaces insecure with the send already made", async () => {
   // Between intent journaling and outcome journaling the transport swaps the
   // journal file for a directory, so only the outcome record fails.
   const f = fixture({ handler: () => {
@@ -415,7 +437,7 @@ test("outcome storage failure reports reconciliation with the send already made"
   } });
   await assert.rejects(
     f.coordinator().execute(mutation, { execute: true, readState: readState(), scopes, intentId: "outcome-blocked" }),
-    { code: "OUTCOME_NOT_RECORDED" },
+    { code: "CONFIG_INSECURE" },
   );
   assert.equal(f.requests.length, 1);
 });
@@ -473,7 +495,7 @@ test("recreated coordinator refuses an intent recorded without a terminal outcom
   const intentId = "crash-intent";
   const intentKey = createHash("sha256").update(intentId).digest("hex");
   mkdirSync(join(f.scratch, "nested"), { recursive: true });
-  writeFileSync(f.journalPath, `${JSON.stringify({ kind: "intent", id: intentId, intentKey, time: TIME, profile: tenant, operation: mutation.operation, method: "POST", url: "https://graph.microsoft.com/v1.0/fixture/notes", target: mutation.target, effect: "write" })}\n`);
+  writeFileSync(f.journalPath, `${JSON.stringify({ kind: "intent", id: intentId, intentKey, time: TIME, profile: tenant, operation: mutation.operation, method: "POST", url: "https://graph.microsoft.com/v1.0/fixture/notes", target: mutation.target, effect: "write" })}\n`, { mode: 0o600 });
   await assert.rejects(
     f.coordinator().execute(mutation, { execute: true, readState: readState(), scopes, intentId }),
     { code: "ALREADY_EXECUTED" },

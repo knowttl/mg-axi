@@ -74,6 +74,39 @@ test("legacy config is never parsed and reports both paths and the move command"
   } finally { f.clean(); }
 });
 
+test("legacy journal is never read and reports both paths and the move command", () => {
+  const f = fixture();
+  try {
+    const created = f.run(["profile", "create", "--name", "soc", "--tenant", "11111111-1111-4111-8111-111111111111", "--client", "22222222-2222-4222-8222-222222222222", "--cloud", "commercial"]);
+    assert.equal(created.status, 0, created.stdout);
+    mkdirSync(join(f.dir, ".mg-axi"));
+    writeFileSync(join(f.dir, ".mg-axi/writes.log"), "fixture legacy journal");
+    const result = f.run(["entra", "user", "revoke-sessions", "--user", "44444444-4444-4444-8444-444444444444", "--profile", "soc"]);
+    assert.notEqual(result.status, 0);
+    const output = decode(result.stdout);
+    assert.equal(output.code, "CONFIG_MOVED");
+    assert.match(output.error, /\.mg-axi/);
+    assert.match(output.error, /writes\.log/);
+    assert.match(output.help.join(" "), /mv|Move-Item/);
+    assert.doesNotMatch(result.stdout + result.stderr, /fixture legacy journal/);
+  } finally { f.clean(); }
+});
+
+test("an existing state journal takes precedence over the legacy journal", () => {
+  const f = fixture();
+  try {
+    const created = f.run(["profile", "create", "--name", "soc", "--tenant", "11111111-1111-4111-8111-111111111111", "--client", "22222222-2222-4222-8222-222222222222", "--cloud", "commercial"]);
+    assert.equal(created.status, 0, created.stdout);
+    mkdirSync(join(f.dir, ".mg-axi"));
+    writeFileSync(join(f.dir, ".mg-axi/writes.log"), "fixture legacy journal");
+    const state = join(process.platform === "win32" ? f.env.LOCALAPPDATA : f.env.XDG_STATE_HOME, "mg-axi");
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(state, "writes.log"), "");
+    const result = f.run(["entra", "user", "revoke-sessions", "--user", "44444444-4444-4444-8444-444444444444", "--profile", "soc"]);
+    assert.notEqual(decode(result.stdout).code, "CONFIG_MOVED");
+  } finally { f.clean(); }
+});
+
 test("profile environment selects explicitly and the only-profile fallback works", () => {
   const f = fixture();
   try {

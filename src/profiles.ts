@@ -115,6 +115,14 @@ function envProfile(env: NodeJS.ProcessEnv): AnyProfile | undefined {
   return validateApplicationProfile(base);
 }
 
+export function movedError(kind: string, legacy: string, target: string, guidance: string): never {
+  const quote = (path: string) => `'${path.replace(/'/g, "'\\''")}'`;
+  const move = process.platform === "win32"
+    ? `New-Item -ItemType Directory -Force -Path '${dirname(target).replace(/'/g, "''")}'; Move-Item -LiteralPath '${legacy.replace(/'/g, "''")}' -Destination '${target.replace(/'/g, "''")}'`
+    : `mkdir -p ${quote(dirname(target))} && mv ${quote(legacy)} ${quote(target)}`;
+  throw new AxiError(`${kind} moved from ${legacy} to ${target}`, "CONFIG_MOVED", [move, guidance]);
+}
+
 export class Profiles {
   readonly path: string;
   constructor(path?: string, private files = new PrivateFiles()) {
@@ -123,11 +131,7 @@ export class Profiles {
   private moved(): never {
     const legacy = join(homedir(), ".mg-axi", "config.json");
     const target = resolve(this.path) === resolve(legacy) ? join(toolDirectory("config"), "config.json") : this.path;
-    const quote = (path: string) => `'${path.replace(/'/g, "'\\''")}'`;
-    const move = process.platform === "win32"
-      ? `New-Item -ItemType Directory -Force -Path '${dirname(target).replace(/'/g, "''")}'; Move-Item -LiteralPath '${legacy.replace(/'/g, "''")}' -Destination '${target.replace(/'/g, "''")}'`
-      : `mkdir -p ${quote(dirname(target))} && mv ${quote(legacy)} ${quote(target)}`;
-    throw new AxiError(`Configuration moved from ${legacy} to ${target}`, "CONFIG_MOVED", [move, "Update credentialRef to the flattened SecretRef format described in the AXI credential standard"]);
+    movedError("Configuration", legacy, target, "Update credentialRef to the flattened SecretRef format described in the AXI credential standard");
   }
   private load(): Config {
     const legacy = join(homedir(), ".mg-axi", "config.json");

@@ -1,11 +1,12 @@
 import { closeSync, existsSync, fsyncSync, openSync, unlinkSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { dirname } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-session.js";
-import { booleanEnv, validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
+import { booleanEnv, movedError, validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
 import { statePath } from "./paths.js";
 import { PrivateFiles } from "./private-file.js";
 
@@ -29,7 +30,10 @@ export function readOnlyForced(env: NodeJS.ProcessEnv = process.env): boolean {
 export function resolveWriteLogPath(env: NodeJS.ProcessEnv = process.env): string {
   const override = env[WRITE_LOG_ENV]?.trim();
   if (override) return override;
-  return statePath("writes.log", env);
+  const target = statePath("writes.log", env);
+  const legacy = join(homedir(), ".mg-axi", "writes.log");
+  if (!existsSync(target) && existsSync(legacy)) movedError("Write log", legacy, target, "The moved journal keeps its intent and outcome history");
+  return target;
 }
 
 export type MutationMethod = "POST" | "PUT" | "PATCH" | "DELETE";

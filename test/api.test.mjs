@@ -695,7 +695,7 @@ function cli(args, config = null, input = "", bootstrap) {
     if (config) writeFileSync(join(dir, "config.json"), config);
     return spawnSync(process.execPath, bootstrap === undefined ? [bin, ...args] : ["--input-type=module", "-e", bootstrap, ...args], {
       encoding: "utf8", input, timeout: 10000,
-      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, MG_AXI_CONFIG: join(dir, "config.json") },
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: join(dir, "config.json") },
     });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }

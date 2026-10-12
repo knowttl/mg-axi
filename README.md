@@ -65,6 +65,8 @@ Restart the agent session after installation.
 The session hook reports local profile names, tenant labels, authentication-cache presence, write policy and version.
 It makes no network, Graph or sign-in calls and exits successfully when unconfigured.
 Only the explicit hook installer changes agent integrations.
+The installer rejects targets in temporary directories, linked Git worktrees and validation pipeline builds.
+Install globally before running `mg-axi setup hooks`; ordinary CLI commands never auto-install hooks, including in tests and non-interactive sessions.
 
 ### Direct install
 

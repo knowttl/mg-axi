@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.5](https://github.com/knowttl/mg-axi/compare/v0.1.4...v0.1.5) (2026-10-12)
+
+
+### Features
+
+* adopt AXI credential profiles and protected state ([#87](https://github.com/knowttl/mg-axi/issues/87)) ([cceb21d](https://github.com/knowttl/mg-axi/commit/cceb21d8cd38db558450c60d505cba8481d6ecc6))
+
+
+### Bug Fixes
+
+* isolate validation homes and reject ephemeral hook targets ([#85](https://github.com/knowttl/mg-axi/issues/85)) ([f97c764](https://github.com/knowttl/mg-axi/commit/f97c764f4c6d0ab56af0fdf742c190a331ae3f35))
+
 ## [0.1.4](https://github.com/knowttl/mg-axi/compare/v0.1.3...v0.1.4) (2026-10-07)
 
 

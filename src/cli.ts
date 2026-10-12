@@ -1,6 +1,7 @@
 import { encode } from "@toon-format/toon";
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, isAbsolute, sep } from "node:path";
 import { AxiError, installSessionStartHooks, runAxiCli } from "axi-sdk-js";
 import { LEAVES, home, leafHelp, operationFor, resolveCommand, DESCRIPTION, TOP_LEVEL_HELP } from "./catalogue.js";
 import { VERSION } from "./version.js";
@@ -75,17 +76,33 @@ function localHome(name?: string) {
 // summary from src/hook.ts. Install failures throw loudly; hook failures
 // never do.
 function runSetupHooks(): Record<string, unknown> {
-  const hookPath = join(dirname(process.argv[1] ?? ""), "mg-axi-hook.js");
+  const hookPath = join(dirname(realpathSync(process.argv[1] ?? "")), "mg-axi-hook.js");
   if (!existsSync(hookPath)) {
     throw new AxiError("Cannot locate the mg-axi-hook entry point", "HOOK_INSTALL_FAILED", [
       "Reinstall @knowttl/mg-axi so dist/bin/mg-axi-hook.js sits next to the main entry point",
       "Run mg-axi setup hooks again after reinstalling",
     ]);
   }
+  const target = realpathSync(hookPath);
+  const temporaryRoots = [tmpdir(), "/tmp", "/var/tmp"].map(path => existsSync(path) ? realpathSync(path) : path);
+  const inTemporaryDirectory = temporaryRoots.some(root => {
+    const path = relative(root, target);
+    return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
+  });
+  let inWorktree = false;
+  for (let directory = dirname(target); directory !== dirname(directory); directory = dirname(directory)) {
+    const gitPath = join(directory, ".git");
+    if (existsSync(gitPath) && statSync(gitPath).isFile()) inWorktree = true;
+  }
+  if (inTemporaryDirectory || inWorktree || /(?:^|[/\\])(?:\.no-mistakes|\.treehouse|worktrees)(?:[/\\]|$)/.test(target)) {
+    throw new AxiError("Cannot install hooks from a temporary directory or worktree", "HOOK_INSTALL_FAILED", [
+      "Install @knowttl/mg-axi globally, then run mg-axi setup hooks from that installation",
+    ]);
+  }
   const failures: string[] = [];
   installSessionStartHooks({
     marker: "mg-axi-hook",
-    execPath: hookPath,
+    execPath: target,
     binaryNames: ["mg-axi-hook"],
     distEntrypoints: ["dist/bin/mg-axi-hook.js"],
     onError: (message) => { failures.push(message); },

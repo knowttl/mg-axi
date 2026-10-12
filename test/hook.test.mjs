@@ -4,7 +4,7 @@
 // proves the hook stays local even with configured profiles.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -26,7 +26,7 @@ function home() {
 }
 
 function baseEnv(dir, config) {
-  return { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: dir, USERPROFILE: dir, MG_AXI_CONFIG: config };
+  return { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: config };
 }
 
 function createProfiles(env) {
@@ -173,7 +173,7 @@ test("setup hooks shows help offline without installing anything", () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("setup hooks installs SessionStart entries idempotently", () => {
+test("setup hooks installs stable SessionStart entries idempotently", () => {
   const { dir, config } = home();
   try {
     const env = baseEnv(dir, config);
@@ -182,16 +182,65 @@ test("setup hooks installs SessionStart entries idempotently", () => {
       join(dir, ".codex", "hooks.json"),
       join(dir, ".config", "opencode", "plugins", "axi-mg-axi-hook.js"),
     ];
-    const first = spawnSync(process.execPath, [bin, "setup", "hooks"],
+    const linkedBin = join(dir, "mg-axi");
+    symlinkSync(bin, linkedBin);
+    const args = ["--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning", "--disable-warning=DeprecationWarning", "--import", pathToFileURL(resolve("test/fixtures/stable-hook-path.mjs")).href, linkedBin, "setup", "hooks"];
+    const first = spawnSync(process.execPath, args,
       { encoding: "utf8", input: "", timeout: 30000, env });
     assert.equal(first.status, 0, first.stdout);
     assert.equal(first.stderr, "");
     assert.match(first.stdout, /installed/);
-    for (const path of paths) assert.match(readFileSync(path, "utf8"), /mg-axi-hook/);
+    for (const path of paths) assert.match(readFileSync(path, "utf8"), /\/opt\/mg-axi\/dist\/bin\/mg-axi-hook.js/);
     const before = paths.map(path => readFileSync(path, "utf8"));
-    const second = spawnSync(process.execPath, [bin, "setup", "hooks"],
+    const second = spawnSync(process.execPath, args,
       { encoding: "utf8", input: "", timeout: 30000, env });
     assert.equal(second.status, 0);
     assert.deepEqual(paths.map(path => readFileSync(path, "utf8")), before);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("setup hooks refuses a worktree target without touching the selected home", () => {
+  const { dir, config } = home();
+  try {
+    const result = spawnSync(process.execPath, [bin, "setup", "hooks"],
+      { encoding: "utf8", timeout: 30000, env: baseEnv(dir, config) });
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stdout, /HOOK_INSTALL_FAILED/);
+    assert.match(result.stdout, /temporary directory or worktree/);
+    assert.deepEqual(readdirSync(dir), []);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const linked of [false, true]) {
+  test(`setup hooks refuses a ${linked ? "symlinked" : "copied"} temporary target`, () => {
+    const { dir, config } = home();
+    const build = mkdtempSync(join(tmpdir(), "mg-axi-build-"));
+    try {
+      if (linked) symlinkSync(resolve("dist"), join(build, "dist"), "dir");
+      else cpSync(resolve("dist"), join(build, "dist"), { recursive: true });
+      symlinkSync(resolve("node_modules"), join(build, "node_modules"), "dir");
+      cpSync(resolve("inventory"), join(build, "inventory"), { recursive: true });
+      cpSync(resolve("package.json"), join(build, "package.json"));
+      const result = spawnSync(process.execPath, [join(build, "dist/bin/mg-axi.js"), "setup", "hooks"],
+        { encoding: "utf8", timeout: 30000, env: baseEnv(dir, config) });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /HOOK_INSTALL_FAILED/, result.stderr);
+      assert.deepEqual(readdirSync(dir), []);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(build, { recursive: true, force: true });
+    }
+  });
+}
+
+test("ordinary non-interactive CLI commands leave agent configuration untouched", () => {
+  const { dir, config } = home();
+  try {
+    for (const args of [[], ["--help"], ["--version"], ["setup"], ["profile", "list"]]) {
+      const result = spawnSync(process.execPath, [bin, ...args],
+        { encoding: "utf8", input: "", timeout: 30000, env: { ...baseEnv(dir, config), NODE_ENV: "test", CI: "1" } });
+      assert.equal(result.status, 0, result.stdout);
+      assert.deepEqual(readdirSync(dir), []);
+    }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

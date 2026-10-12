@@ -156,7 +156,7 @@ test("profiles persist only validated identity, policy and separate references",
 
 test("packaged profile journey and rejected device login work with closed stdin", () => {
   const dir = mkdtempSync(join(tmpdir(), "mg-profile-cli-"));
-  const run = args => spawnSync(process.execPath, ["dist/bin/mg-axi.js", ...args], { encoding: "utf8", input: "", timeout: 10_000, env: { PATH: process.env.PATH, MG_AXI_CONFIG: join(dir, "config.json") } });
+  const run = args => spawnSync(process.execPath, ["dist/bin/mg-axi.js", ...args], { encoding: "utf8", input: "", timeout: 10_000, env: { PATH: process.env.PATH, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: join(dir, "config.json") } });
   try {
     assert.equal(run(["profile", "create", "--name", "soc", "--tenant", tenant, "--client", client, "--cloud", "commercial"]).status, 0);
     assert.equal(decode(run(["profile", "show"]).stdout).profile.clientId, client);

@@ -1,8 +1,8 @@
 agent: pi
 commands:
-  prepare: 'corepack pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false'
-  test: 'corepack pnpm run build && corepack pnpm test'
-  lint: 'corepack pnpm run lint'
+  prepare: 'node tools/isolated-home.mjs corepack pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false'
+  test: 'node tools/isolated-home.mjs corepack pnpm run build && corepack pnpm test'
+  lint: 'node tools/isolated-home.mjs corepack pnpm run lint'
 
 document:
   instructions: |

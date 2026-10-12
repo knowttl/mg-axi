@@ -220,7 +220,7 @@ test("headless creation stores references while rejecting impossible combination
 
 test("packaged application journey rejects interactive login with closed stdin", () => {
   const dir = mkdtempSync(join(tmpdir(), "mg-app-cli-"));
-  const run = args => spawnSync(process.execPath, ["dist/bin/mg-axi.js", ...args], { encoding: "utf8", input: "", timeout: 10_000, env: { PATH: process.env.PATH, MG_AXI_CONFIG: join(dir, "config.json") } });
+  const run = args => spawnSync(process.execPath, ["dist/bin/mg-axi.js", ...args], { encoding: "utf8", input: "", timeout: 10_000, env: { PATH: process.env.PATH, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: join(dir, "config.json") } });
   try {
     assert.equal(run(["profile", "create", "--name", "batch", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--federated"]).status, 0);
     assert.equal(run(["profile", "create", "--name", "daemon", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--certificate-thumbprint", thumbprint]).status, 0);
@@ -251,7 +251,7 @@ test("packaged application journey rejects interactive login with closed stdin",
 
 test("packaged headless journey records references, never values", () => {
   const dir = mkdtempSync(join(tmpdir(), "mg-app-headless-cli-"));
-  const run = args => spawnSync(process.execPath, ["dist/bin/mg-axi.js", ...args], { encoding: "utf8", input: "", timeout: 10_000, env: { PATH: process.env.PATH, MG_AXI_CONFIG: join(dir, "config.json") } });
+  const run = args => spawnSync(process.execPath, ["dist/bin/mg-axi.js", ...args], { encoding: "utf8", input: "", timeout: 10_000, env: { PATH: process.env.PATH, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: join(dir, "config.json") } });
   try {
     assert.equal(run(["profile", "create", "--name", "svc", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--client-secret-env", "MG_AXI_CLIENT_SECRET"]).status, 0);
     assert.equal(run(["profile", "create", "--name", "keyed", "--tenant", tenant, "--client", client, "--cloud", "commercial", "--mode", "application", "--certificate-thumbprint", thumbprint, "--certificate-key-file", "/run/secrets/mg-axi-key.pem"]).status, 0);

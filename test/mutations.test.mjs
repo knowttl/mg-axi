@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, test as runTest } from "node:test";
@@ -85,8 +85,20 @@ test("the audit journal honors the coordinator files instead of host defaults", 
   const files = new PrivateFiles("win32", () => { throw new Error("fixture ACL failure"); });
   await assert.rejects(
     f.coordinator(enabledDelegated, { files }).execute(mutation, { readState: readState(), scopes, execute: true }),
-    { code: "INTENT_NOT_RECORDED" },
+    { code: "CONFIG_INSECURE" },
   );
+  assert.equal(f.requests.length, 0);
+});
+
+test("an insecure journal fails with CONFIG_INSECURE and sends nothing", async () => {
+  const f = fixture();
+  const journalPath = join(f.scratch, "writes.log");
+  writeFileSync(journalPath, "", { mode: 0o600 });
+  chmodSync(journalPath, 0o644);
+  const error = await f.coordinator(enabledDelegated, { journalPath }).execute(mutation, { readState: readState(), scopes, execute: true }).then(() => assert.fail("insecure journal must throw"), caught => caught);
+  assert.equal(error.code, "CONFIG_INSECURE");
+  assert.match(error.message, /writes\.log/);
+  assert.match(error.suggestions.join(" "), /chmod/);
   assert.equal(f.requests.length, 0);
 });
 
@@ -415,7 +427,7 @@ test("unavailable intent storage blocks the send", async () => {
   assert.equal(f.requests.length, 0);
 });
 
-test("outcome storage failure reports reconciliation with the send already made", async () => {
+test("outcome storage check failure surfaces insecure with the send already made", async () => {
   // Between intent journaling and outcome journaling the transport swaps the
   // journal file for a directory, so only the outcome record fails.
   const f = fixture({ handler: () => {
@@ -425,7 +437,7 @@ test("outcome storage failure reports reconciliation with the send already made"
   } });
   await assert.rejects(
     f.coordinator().execute(mutation, { execute: true, readState: readState(), scopes, intentId: "outcome-blocked" }),
-    { code: "OUTCOME_NOT_RECORDED" },
+    { code: "CONFIG_INSECURE" },
   );
   assert.equal(f.requests.length, 1);
 });

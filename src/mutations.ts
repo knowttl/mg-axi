@@ -557,7 +557,7 @@ export function createMutationCoordinator(args: {
         unlinkSync(lockPath);
       }
     } catch (error) {
-      if (error instanceof AxiError && error.code === "ALREADY_EXECUTED") throw error;
+      if (error instanceof AxiError && (error.code === "ALREADY_EXECUTED" || error.code === "CONFIG_INSECURE")) throw error;
       if (record.kind === "intent") {
         throw new AxiError(`Mutation intent '${record.id}' could not be recorded`, "INTENT_NOT_RECORDED", [
           "The mutation was not sent",

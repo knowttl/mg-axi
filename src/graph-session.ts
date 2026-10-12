@@ -5,13 +5,8 @@ import { AxiError } from "axi-sdk-js";
 import { redactSecrets } from "./redact.js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
-import {
-  validateApplicationProfile,
-  validateDelegatedProfile,
-  validateProfile,
-  profileName,
-  type AnyProfile,
-} from "./profiles.js";
+import { PrivateFiles } from "./private-file.js";
+import { validateProfile, profileName, type AnyProfile } from "./profiles.js";
 
 // CORE-01: the single path that owns Graph URL construction, operation
 // authorization, credential attachment and response validation. Command
@@ -766,6 +761,7 @@ export class GraphSession {
       application: ApplicationAuth;
       transport: GraphTransport;
     },
+    private files = new PrivateFiles(),
   ) {}
 
   cursorQuery(operation: SessionOperation, cursor: string): Readonly<Record<string, string>> {
@@ -782,7 +778,7 @@ export class GraphSession {
         "Use a route from inventory/operations.json; the session never builds uncatalogued URLs",
       ]);
     }
-    const profile = validateProfile(args.profile);
+    const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
     const query = args.query ?? {};
     checkQueryContext(query, args.consistencyLevel);
@@ -794,8 +790,8 @@ export class GraphSession {
     let token: string;
     try {
       token = await beforeDeadline(async () => profile.mode === "delegated"
-        ? (await this.deps.delegated.credential(validateDelegatedProfile(profile), this.readScopes(args.scopes))).token
-        : (await this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes))).token, clock, deadline, signal);
+        ? (await this.deps.delegated.credential(profile, this.readScopes(args.scopes))).token
+        : (await this.deps.application.credential(profile, this.applicationScopes(args.scopes))).token, clock, deadline, signal);
     } catch (error) {
       signal?.throwIfAborted();
       if (error instanceof DeadlineExceeded) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
@@ -819,7 +815,7 @@ export class GraphSession {
         "Use a route from inventory/operations.json; the session never builds uncatalogued URLs",
       ]);
     }
-    const profile = validateProfile(args.profile);
+    const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
     checkLimit(args.limit);
     const budget = checkBudget(args.budget);
@@ -878,8 +874,8 @@ export class GraphSession {
     let token: string;
     try {
       const credential = await beforeDeadline(async () => profile.mode === "delegated"
-        ? this.deps.delegated.credential(validateDelegatedProfile(profile), this.readScopes(args.scopes))
-        : this.deps.application.credential(validateApplicationProfile(profile), this.applicationScopes(args.scopes)), clock, deadline, signal);
+        ? this.deps.delegated.credential(profile, this.readScopes(args.scopes))
+        : this.deps.application.credential(profile, this.applicationScopes(args.scopes)), clock, deadline, signal);
       const acquiredIdentity = createHash("sha256").update(JSON.stringify([
         profile.mode, credential.tenantId.toLowerCase(), credential.clientId.toLowerCase(),
         profile.mode === "delegated" && "accountId" in credential ? credential.accountId : null,

@@ -18,7 +18,7 @@ export class MsalApplicationProvider implements ApplicationCredentialProvider {
           ? { clientSecret: resolveSecret(profile.clientSecret, this.files) }
           : profile.auth === "certificate"
             ? { clientCertificate: { thumbprintSha256: profile.thumbprintSha256, privateKey: this.privateKey(profile) } }
-            : { clientAssertion: () => Promise.resolve(resolveSecret(profile.token, this.files)) }) },
+            : { clientAssertion: () => Promise.resolve(this.assertion(profile)) }) },
       system: { loggerOptions: { loggerCallback: () => {}, piiLoggingEnabled: false } },
     };
     const result: AuthenticationResult | null = await new ConfidentialClientApplication(configuration)
@@ -26,6 +26,17 @@ export class MsalApplicationProvider implements ApplicationCredentialProvider {
     if (!result) throw new Error("Empty application token response");
     if (result.authority.toLowerCase() !== `${configuration.auth.authority.toLowerCase()}/`) throw new Error("Configured application authority mismatch");
     return { token: registerSecret(result.accessToken), expiresAt: result.expiresOn?.getTime() ?? NaN, tenantId: profile.tenantId, clientId: profile.clientId };
+  }
+  private assertion(profile: Extract<ApplicationProfile, { auth: "federated" }>) {
+    if ("env" in profile.token && profile.token.env === "MG_AXI_TOKEN" && !process.env.MG_AXI_TOKEN?.trim()) {
+      const legacy = process.env.AZURE_FEDERATED_TOKEN_FILE?.trim();
+      if (legacy) {
+        process.stderr.write("AZURE_FEDERATED_TOKEN_FILE is deprecated; use MG_AXI_TOKEN instead\n");
+        if (!this.files.absolute(legacy)) throw new AxiError("AZURE_FEDERATED_TOKEN_FILE must name an absolute file path", "CONFIG_INVALID", ["Set MG_AXI_TOKEN to the workload assertion"]);
+        return resolveSecret({ file: legacy }, this.files);
+      }
+    }
+    return resolveSecret(profile.token, this.files);
   }
   private privateKey(profile: Extract<ApplicationProfile, { auth: "certificate" }>) {
     const material = resolveSecret(profile.privateKey, this.files);

@@ -1,4 +1,5 @@
 import { AxiError } from "axi-sdk-js";
+import { PrivateFiles } from "./private-file.js";
 import { profileName, validateDelegatedProfile, type DelegatedProfile } from "./profiles.js";
 import { registerSecret } from "./redact.js";
 
@@ -14,9 +15,9 @@ export interface CredentialProvider {
 // This service is the credential boundary for CORE-01; tokens never reach CLI output.
 export class DelegatedAuth {
   private cache = new Map<string, Credential>();
-  constructor(private provider: CredentialProvider, private now: () => number = Date.now) {}
+  constructor(private provider: CredentialProvider, private now: () => number = Date.now, private files = new PrivateFiles()) {}
   async login(profile: DelegatedProfile, method: string = "browser", scopes: string[] = []) {
-    profile = validateDelegatedProfile(profile);
+    profile = validateDelegatedProfile(profile, this.files);
     if (method !== "browser" && method !== "device-code") throw new AxiError("Login method must be browser or device-code", "VALIDATION_ERROR", ["mg-axi auth login --help"]);
     if (method === "device-code" && !profile.allowDeviceCode) throw new AxiError("Device code is disabled for this profile", "VALIDATION_ERROR", ["Enable device code only when organization policy permits it; browser login is the default"]);
     const requested = this.scopes(scopes);
@@ -32,7 +33,7 @@ export class DelegatedAuth {
     }
   }
   async credential(profile: DelegatedProfile, scopes: string[]) {
-    profile = validateDelegatedProfile(profile);
+    profile = validateDelegatedProfile(profile, this.files);
     const requested = this.scopes(scopes);
     const key = this.key(profile, requested);
     const hit = this.cache.get(key);
@@ -49,7 +50,7 @@ export class DelegatedAuth {
   }
   async logout(profile: DelegatedProfile) {
     this.cache.clear();
-    await this.provider.logout(validateDelegatedProfile(profile));
+    await this.provider.logout(validateDelegatedProfile(profile, this.files));
     return { status: "signed out", revocation: "MSAL provides no token revocation API; local credentials deleted" };
   }
   private scopes(scopes: string[]) {

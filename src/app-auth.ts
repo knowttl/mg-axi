@@ -1,4 +1,5 @@
 import { AxiError } from "axi-sdk-js";
+import { PrivateFiles } from "./private-file.js";
 import { validateApplicationProfile, type AppCredential, type ApplicationProfile } from "./profiles.js";
 import { registerSecret } from "./redact.js";
 
@@ -14,9 +15,9 @@ export interface ApplicationCredentialProvider {
 // It has no login method: application profiles never invoke interactive login or delegated fallback.
 export class ApplicationAuth {
   private cache = new Map<string, AppCredential>();
-  constructor(private provider: ApplicationCredentialProvider, private now: () => number = Date.now) {}
+  constructor(private provider: ApplicationCredentialProvider, private now: () => number = Date.now, private files = new PrivateFiles()) {}
   async credential(profile: ApplicationProfile, scopes: string[] = [graphAudience(profile)]) {
-    profile = validateApplicationProfile(profile);
+    profile = validateApplicationProfile(profile, this.files);
     const requested = this.audience(profile, scopes);
     const key = this.key(profile, requested);
     const hit = this.cache.get(key);

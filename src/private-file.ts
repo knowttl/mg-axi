@@ -68,8 +68,13 @@ export class PrivateFiles {
       const opened = fstatSync(fd);
       if (opened.dev !== checked.dev || opened.ino !== checked.ino) this.insecure(path);
       return readFileSync(fd, "utf8").replace(/^\uFEFF/, "");
-    } catch { return this.insecure(path); }
-    finally { if (fd !== undefined) closeSync(fd); }
+    } catch (error) {
+      if (error instanceof AxiError) throw error;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EACCES" || code === "EPERM") this.insecure(path);
+      throw error;
+    }
+    finally { if (fd !== undefined) try { closeSync(fd); } catch { /* original error preserved */ } }
   }
 
   directory(path: string): string | undefined {
@@ -83,25 +88,45 @@ export class PrivateFiles {
       }
       const stat = lstatSync(path);
       if (!stat.isDirectory() || stat.isSymbolicLink()) this.insecure(path);
-      if (this.platform === "win32") this.acl(path, true, "restrict");
-      else {
+      if (this.platform === "win32") {
+        try { this.acl(path, true, "restrict"); }
+        catch (error) {
+          if (error instanceof AxiError) throw error;
+          this.insecure(path);
+        }
+      } else {
         if (stat.uid !== this.uid) this.insecure(path);
         chmodSync(path, 0o700);
       }
       return firstCreated;
-    } catch { return this.insecure(path); }
+    } catch (error) {
+      if (error instanceof AxiError) throw error;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EACCES" || code === "EPERM") this.insecure(path);
+      throw error;
+    }
   }
 
   protect(path: string) {
     try {
       const stat = lstatSync(path);
       if (!stat.isFile() || stat.isSymbolicLink()) this.insecure(path);
-      if (this.platform === "win32") this.acl(path, false, "restrict");
-      else {
+      if (this.platform === "win32") {
+        try { this.acl(path, false, "restrict"); }
+        catch (error) {
+          if (error instanceof AxiError) throw error;
+          this.insecure(path);
+        }
+      } else {
         if (stat.uid !== this.uid) this.insecure(path);
         chmodSync(path, 0o600);
       }
-    } catch { this.insecure(path); }
+    } catch (error) {
+      if (error instanceof AxiError) throw error;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EACCES" || code === "EPERM") this.insecure(path);
+      throw error;
+    }
   }
 
   write(path: string, content: string) {

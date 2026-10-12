@@ -20,7 +20,10 @@ export function resolveSecret(ref: SecretRef, files = new PrivateFiles(), verify
   if ("env" in ref) value = process.env[ref.env];
   else if ("file" in ref) {
     try { value = files.read(ref.file, true, verifyAcl).trimEnd(); }
-    catch (error) { if (error instanceof AxiError) throw error; }
+    catch (error) {
+      if (error instanceof AxiError) throw error;
+      if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
+    }
   }
   if (!value?.trim()) throw new AxiError(`Credential unavailable from ${secretSource(ref)}`, "AUTH_REQUIRED", ["Supply the named credential reference; no interactive fallback was attempted"]);
   return registerSecret(value);

@@ -275,11 +275,12 @@ export function createMutationSender(args: {
   delegated: DelegatedAuth;
   application: ApplicationAuth;
   transport: MutationTransport;
+  files?: PrivateFiles;
 }): {
   send(authorization: MutationAuthorization, options?: { body?: string; ifMatch?: string; signal?: AbortSignal; scopes?: string[] }): Promise<MutationResponse>;
 } {
-  const { delegated, application, transport } = args;
-  const bound = args.profile.mode === "application" ? validateApplicationProfile(args.profile) : validateDelegatedProfile(args.profile);
+  const { delegated, application, transport, files = new PrivateFiles() } = args;
+  const bound = args.profile.mode === "application" ? validateApplicationProfile(args.profile, files) : validateDelegatedProfile(args.profile, files);
 
   async function credential(scopes: string[] | undefined, signal?: AbortSignal): Promise<string> {
     signal?.throwIfAborted();
@@ -289,14 +290,14 @@ export function createMutationSender(args: {
           "Pass the operation's documented delegated permission using full https://graph.microsoft.com/ scope names",
         ]);
       }
-      return (await delegated.credential(validateDelegatedProfile(bound), scopes)).token;
+      return (await delegated.credential(bound, scopes)).token;
     }
     if (scopes !== undefined) {
       throw new AxiError("Application profiles use the configured Graph .default audience; delegated scopes are unavailable", "VALIDATION_ERROR", [
         "mg-axi profile show --profile <name>",
       ]);
     }
-    return (await application.credential(validateApplicationProfile(bound))).token;
+    return (await application.credential(bound)).token;
   }
 
   async function send(
@@ -410,17 +411,18 @@ export function createMutationCoordinator(args: {
   transport: MutationTransport;
   clock?: () => number;
   journalPath?: string;
+  files?: PrivateFiles;
 }): MutationCoordinator {
-  const { profile, delegated, application, transport } = args;
+  const { profile, delegated, application, transport, files = new PrivateFiles() } = args;
   const clock = args.clock ?? Date.now;
   const journalPath = args.journalPath ?? resolveWriteLogPath();
-  const validated = profile.mode === "application" ? validateApplicationProfile(profile) : validateDelegatedProfile(profile);
+  const validated = profile.mode === "application" ? validateApplicationProfile(profile, files) : validateDelegatedProfile(profile, files);
   const scope: WriteScope = Object.freeze({
     tenantId: validated.tenantId,
     allowWrites: validated.writes?.allowWrites === true,
     operations: Object.freeze([...(validated.writes?.operations ?? [])]),
   });
-  const sender = createMutationSender({ profile: validated, delegated, application, transport });
+  const sender = createMutationSender({ profile: validated, delegated, application, transport, files });
 
   function enforceWriteGates(definition: MutationDefinition): void {
     // Gate 1: forced read-only overrides every profile.

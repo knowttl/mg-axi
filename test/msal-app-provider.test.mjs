@@ -276,3 +276,27 @@ rmSync(assertionPath);
 await failsClosed(profile, assertionPath, ["fixture-federated-assertion"]);
 ` + footer);
 });
+
+test("deprecated AZURE_FEDERATED_TOKEN_FILE alias resolves with a stderr notice; MG_AXI_TOKEN wins", () => {
+  runChild(harness + `
+const warnings = [];
+const originalWrite = process.stderr.write.bind(process.stderr);
+process.stderr.write = (chunk, ...rest) => { warnings.push(String(chunk)); return originalWrite(chunk, ...rest); };
+const legacyPath = dir + "/legacy-assertion";
+writeFileSync(legacyPath, "fixture-legacy-assertion\\n", { mode: 0o600 });
+delete process.env.MG_AXI_TOKEN;
+process.env.AZURE_FEDERATED_TOKEN_FILE = legacyPath;
+const profile = { ...base, auth: "federated", token: { env: "MG_AXI_TOKEN" } };
+const credential = await new ApplicationAuth(new MsalApplicationProvider()).credential(profile);
+assert.equal(credential.token, "opaque-app-token");
+assert.equal(seen[0].client_assertion, "fixture-legacy-assertion");
+assert.ok(warnings.some(line => line.includes("AZURE_FEDERATED_TOKEN_FILE") && line.includes("MG_AXI_TOKEN")), warnings.join(""));
+process.env.MG_AXI_TOKEN = "fixture-canonical-assertion";
+warnings.length = 0;
+await new ApplicationAuth(new MsalApplicationProvider()).credential(profile);
+assert.equal(seen[1].client_assertion, "fixture-canonical-assertion");
+assert.equal(warnings.length, 0);
+delete process.env.MG_AXI_TOKEN;
+delete process.env.AZURE_FEDERATED_TOKEN_FILE;
+` + footer);
+});

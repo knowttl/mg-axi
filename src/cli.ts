@@ -62,7 +62,7 @@ function localHome(name?: string, config?: string) {
     output.profile = selected.name;
     output.tenant = selected.profile.tenantId;
   } catch (error) {
-    if (name || !(error instanceof AxiError) || !["PROFILE_REQUIRED", "PROFILE_AMBIGUOUS"].includes(error.code)) throw error;
+    if ((name?.trim() ? name : undefined) || !(error instanceof AxiError) || !["PROFILE_REQUIRED", "PROFILE_AMBIGUOUS"].includes(error.code)) throw error;
     if (error.code === "PROFILE_AMBIGUOUS") output.profile = "unavailable: no default profile selected";
   }
   output.help.unshift("npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi auth login --help");
@@ -1456,6 +1456,8 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
 }
 
 export async function main() {
+  const stderrWrite = process.stderr.write.bind(process.stderr) as (...args: unknown[]) => boolean;
+  process.stderr.write = ((chunk: string | Uint8Array, ...args: unknown[]) => stderrWrite(redactSecrets(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8")), ...args)) as typeof process.stderr.write;
   await runAxiCli({
     description: DESCRIPTION,
     version: VERSION,

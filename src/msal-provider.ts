@@ -5,7 +5,7 @@ import type { CredentialProvider, LoginMethod } from "./auth.js";
 import { profileName, type DelegatedProfile } from "./profiles.js";
 import { Credentials } from "./credentials.js";
 import { resolveSecret } from "./secrets.js";
-import { registerCache, registerSecret } from "./redact.js";
+import { redactSecrets, registerCache, registerSecret } from "./redact.js";
 
 export class MsalProvider implements CredentialProvider {
   storage: "protected-file" | "session-only" = "protected-file";
@@ -52,7 +52,7 @@ export class MsalProvider implements CredentialProvider {
         ? await app.acquireTokenInteractive({ scopes, openBrowser: async url => { await open(url); }, prompt: "select_account", errorTemplate: "Sign-in failed. Return to mg-axi for recovery guidance." })
         : await app.acquireTokenByDeviceCode({ scopes, deviceCodeCallback: response => {
           if (typeof response.userCode !== "string" || !response.userCode.trim() || typeof response.deviceCode !== "string" || !response.deviceCode.trim() || !Number.isFinite(response.expiresIn) || response.expiresIn <= 0) throw new Error("Invalid device-code challenge");
-          process.stderr.write(`Open https://microsoft.com/devicelogin and enter ${response.userCode}\n`);
+          process.stderr.write(redactSecrets(`Open https://microsoft.com/devicelogin and enter ${response.userCode}\n`));
         } });
       const credential = this.result(profile, result);
       // Subsequent silent acquisitions must not retain a persistence-enabled plugin.

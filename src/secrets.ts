@@ -3,12 +3,12 @@ import { PrivateFiles } from "./private-file.js";
 import { registerSecret } from "./redact.js";
 
 export type SecretRef = Readonly<{ env: string } | { file: string } | { stored: true }>;
-export function validateSecretRef(value: unknown, field: string, stored = true): SecretRef {
+export function validateSecretRef(value: unknown, field: string, stored = true, files = new PrivateFiles()): SecretRef {
   if (value === undefined) return Object.freeze({ env: `MG_AXI_${field.replace(/[A-Z]/g, letter => `_${letter}`).toUpperCase()}` });
   if (value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1) {
     const ref = value as Record<string, unknown>;
     if (typeof ref.env === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(ref.env)) return Object.freeze({ env: ref.env });
-    if (typeof ref.file === "string" && new PrivateFiles().absolute(ref.file)) return Object.freeze({ file: ref.file });
+    if (typeof ref.file === "string" && files.absolute(ref.file)) return Object.freeze({ file: ref.file });
     if (stored && ref.stored === true) return Object.freeze({ stored: true });
   }
   throw new AxiError(`Invalid ${field}; use a SecretRef, never an inline secret`, "CONFIG_INVALID", ["Use exactly one validated env name, absolute local file path, or stored: true for a delegated login"]);

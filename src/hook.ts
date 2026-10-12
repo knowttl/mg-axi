@@ -49,7 +49,7 @@ async function renderHookSummary({ version, env = process.env, configPath, authP
   let store: Profiles;
   let names: string[];
   try {
-    store = new Profiles(configPath ?? env.MG_AXI_CONFIG);
+    store = new Profiles(configPath !== undefined && configPath.trim() !== "" ? configPath.trim() : env.MG_AXI_CONFIG !== undefined && env.MG_AXI_CONFIG.trim() !== "" ? env.MG_AXI_CONFIG.trim() : undefined);
     names = store.list().map(item => item.name);
   } catch {
     return `${encode({ mg: "configuration invalid", help: ["Check the selected config file's path, permissions and JSON syntax"] })}\n`;

@@ -66,27 +66,27 @@ function shared(value: Record<string, unknown>): SharedProfile {
 }
 const sharedKeys = ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "allowDeviceCode", "writes"];
 
-export function validateDelegatedProfile(value: unknown): DelegatedProfile {
+export function validateDelegatedProfile(value: unknown, files?: PrivateFiles): DelegatedProfile {
   if (!object(value) || value.mode !== "delegated" || !exact(value, [...sharedKeys, "token"]) ||
     (value.allowDeviceCode !== undefined && typeof value.allowDeviceCode !== "boolean")) invalid("Invalid delegated profile; token must be a SecretRef");
-  return validated(value, { ...shared(value), mode: "delegated", allowDeviceCode: value.allowDeviceCode === true, token: validateSecretRef(value.token, "token") });
+  return validated(value, { ...shared(value), mode: "delegated", allowDeviceCode: value.allowDeviceCode === true, token: validateSecretRef(value.token, "token", true, files) });
 }
 
-export function validateApplicationProfile(value: unknown): ApplicationProfile {
+export function validateApplicationProfile(value: unknown, files?: PrivateFiles): ApplicationProfile {
   if (!object(value) || value.mode !== "application" || (value.allowDeviceCode !== undefined && value.allowDeviceCode !== false)) invalid("Invalid application profile; device code is unavailable");
   const keys = value.auth === "certificate" ? ["privateKey", "thumbprintSha256"] : value.auth === "client-secret" ? ["clientSecret"] : value.auth === "federated" ? ["token"] : [];
   if (!keys.length || !exact(value, [...sharedKeys, "auth", ...keys])) invalid("Invalid application profile; auth must be certificate, client-secret or federated with only its credential fields");
   const base = { ...shared(value), mode: "application" as const, allowDeviceCode: false as const };
   if (value.auth === "certificate") {
     if (typeof value.thumbprintSha256 !== "string" || !/^[0-9a-f]{64}$/i.test(value.thumbprintSha256)) invalid("thumbprintSha256 must contain 64 hex digits");
-    return validated(value, { ...base, auth: "certificate", thumbprintSha256: (value.thumbprintSha256 as string).toLowerCase(), privateKey: validateSecretRef(value.privateKey, "privateKey", false) });
+    return validated(value, { ...base, auth: "certificate", thumbprintSha256: (value.thumbprintSha256 as string).toLowerCase(), privateKey: validateSecretRef(value.privateKey, "privateKey", false, files) });
   }
-  if (value.auth === "client-secret") return validated(value, { ...base, auth: "client-secret", clientSecret: validateSecretRef(value.clientSecret, "clientSecret", false) });
-  return validated(value, { ...base, auth: "federated", token: validateSecretRef(value.token, "token", false) });
+  if (value.auth === "client-secret") return validated(value, { ...base, auth: "client-secret", clientSecret: validateSecretRef(value.clientSecret, "clientSecret", false, files) });
+  return validated(value, { ...base, auth: "federated", token: validateSecretRef(value.token, "token", false, files) });
 }
 
-export function validateProfile(value: unknown): AnyProfile {
-  return object(value) && value.mode === "application" ? validateApplicationProfile(value) : validateDelegatedProfile(value);
+export function validateProfile(value: unknown, files?: PrivateFiles): AnyProfile {
+  return object(value) && value.mode === "application" ? validateApplicationProfile(value, files) : validateDelegatedProfile(value, files);
 }
 
 function envProfile(env: NodeJS.ProcessEnv): AnyProfile | undefined {
@@ -116,7 +116,10 @@ function envProfile(env: NodeJS.ProcessEnv): AnyProfile | undefined {
 }
 
 export class Profiles {
-  constructor(readonly path = configPath(), private files = new PrivateFiles()) {}
+  readonly path: string;
+  constructor(path?: string, private files = new PrivateFiles()) {
+    this.path = path?.trim() ? path.trim() : configPath();
+  }
   private moved(): never {
     const legacy = join(homedir(), ".mg-axi", "config.json");
     const target = resolve(this.path) === resolve(legacy) ? join(toolDirectory("config"), "config.json") : this.path;
@@ -143,7 +146,7 @@ export class Profiles {
     const profiles: Record<string, AnyProfile> = Object.create(null);
     for (const [name, profile] of Object.entries(value.profiles)) {
       if (!namePattern.test(name)) invalid("Invalid profile name");
-      profiles[name] = validateProfile(profile);
+      profiles[name] = validateProfile(profile, this.files);
       names.set(profiles[name], name);
     }
     if (value.defaultProfile !== undefined && (typeof value.defaultProfile !== "string" || !Object.hasOwn(profiles, value.defaultProfile))) invalid("Default profile does not exist");
@@ -151,7 +154,9 @@ export class Profiles {
   }
   list() { return Object.entries(this.load().profiles).map(([name, profile]) => ({ name, mode: profile.mode, tenant: profile.tenantId, cloud: profile.cloud })); }
   resolve(name?: string) {
-    const explicit = name ?? process.env.MG_AXI_PROFILE;
+    const flag = name !== undefined && name.trim() !== "" ? name.trim() : undefined;
+    const envName = process.env.MG_AXI_PROFILE !== undefined && process.env.MG_AXI_PROFILE.trim() !== "" ? process.env.MG_AXI_PROFILE.trim() : undefined;
+    const explicit = flag ?? envName;
     if (explicit === undefined) {
       const profile = envProfile(process.env);
       if (profile) { names.set(profile, "env"); return { name: "env", profile }; }
@@ -171,7 +176,7 @@ export class Profiles {
     if (!namePattern.test(name)) invalid("Profile name must contain only letters, digits, underscores or hyphens");
     const base = { tenantId, clientId, cloud, allowDeviceCode };
     let profile: AnyProfile;
-    if (!application) profile = validateDelegatedProfile({ ...base, mode: "delegated", token: { stored: true } });
+    if (!application) profile = validateDelegatedProfile({ ...base, mode: "delegated", token: { stored: true } }, this.files);
     else {
       const { certificateThumbprint, federated, clientSecretEnv, clientSecretFile, certificateKeyFile, certificateKeyEnv, federatedTokenFile } = application;
       if (clientSecretEnv !== undefined && clientSecretFile !== undefined || certificateKeyEnv !== undefined && certificateKeyFile !== undefined) invalid("Use exactly one env or file reference for each credential");
@@ -180,7 +185,7 @@ export class Profiles {
       profile = validateApplicationProfile({ ...base, mode: "application",
         ...(certificateThumbprint !== undefined ? { auth: "certificate", thumbprintSha256: certificateThumbprint, privateKey: certificateKeyFile !== undefined ? { file: certificateKeyFile } : { env: certificateKeyEnv ?? "MG_AXI_PRIVATE_KEY" } }
           : federated ? { auth: "federated", ...(federatedTokenFile === undefined ? {} : { token: { file: federatedTokenFile } }) }
-            : { auth: "client-secret", clientSecret: clientSecretFile !== undefined ? { file: clientSecretFile } : { env: clientSecretEnv } }) });
+            : { auth: "client-secret", clientSecret: clientSecretFile !== undefined ? { file: clientSecretFile } : { env: clientSecretEnv } }) }, this.files);
     }
     const config = this.load();
     if (Object.hasOwn(config.profiles, name)) invalid("Profile already exists; creation never replaces identity");

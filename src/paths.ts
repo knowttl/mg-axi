@@ -11,7 +11,8 @@ export function toolDirectory(kind: "config" | "state", env: NodeJS.ProcessEnv =
 }
 
 export function configPath(env: NodeJS.ProcessEnv = process.env): string {
-  return env.MG_AXI_CONFIG ?? join(toolDirectory("config", env), "config.json");
+  const override = env.MG_AXI_CONFIG?.trim();
+  return override ? override : join(toolDirectory("config", env), "config.json");
 }
 
 export function statePath(name: string, env: NodeJS.ProcessEnv = process.env): string {

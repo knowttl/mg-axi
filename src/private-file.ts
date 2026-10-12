@@ -109,12 +109,24 @@ export class PrivateFiles {
     const temporary = `${path}.${randomUUID()}.tmp`;
     let fd: number | undefined;
     try {
-      fd = openSync(temporary, "wx", this.platform === "win32" ? undefined : 0o600);
-      if (this.platform === "win32") this.acl(temporary, false, "restrict");
-      writeFileSync(fd, content);
-      fsyncSync(fd);
-      closeSync(fd);
-      fd = undefined;
+      try {
+        fd = openSync(temporary, "wx", this.platform === "win32" ? undefined : 0o600);
+        try {
+          if (this.platform === "win32") this.acl(temporary, false, "restrict");
+        } catch (error) {
+          if (error instanceof AxiError) throw error;
+          this.insecure(path);
+        }
+        writeFileSync(fd, content);
+        fsyncSync(fd);
+        closeSync(fd);
+        fd = undefined;
+      } catch (error) {
+        if (error instanceof AxiError) throw error;
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "EACCES" || code === "EPERM") this.insecure(path);
+        throw error;
+      }
       const deadline = Date.now() + 1000;
       let delay = 10;
       for (;;) {
@@ -125,9 +137,8 @@ export class PrivateFiles {
           delay = Math.min(delay * 2, 100);
         }
       }
-    } catch { this.insecure(path); }
-    finally {
-      if (fd !== undefined) closeSync(fd);
+    } finally {
+      if (fd !== undefined) try { closeSync(fd); } catch { /* original error preserved */ }
       rmSync(temporary, { force: true });
     }
   }

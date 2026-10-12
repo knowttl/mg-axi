@@ -300,7 +300,7 @@ for (const code of ["EPERM", "EBUSY", "EACCES"]) test(`Windows atomic rename ret
       assert.equal(fs.readFileSync(path, "utf8"), "first");
       assert.deepEqual(waits, [10]);
       failures = Infinity;
-      assert.throws(() => files.write(path, "replacement"), { code: "CONFIG_INSECURE" });
+      assert.throws(() => files.write(path, "replacement"), { code: ${JSON.stringify(code)} });
       assert.equal(fs.readFileSync(path, "utf8"), "first");
       assert.deepEqual(fs.readdirSync(dir), ["credentials.json"]);
       assert.equal(Date.now(), 2010);

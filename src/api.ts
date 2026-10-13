@@ -89,7 +89,7 @@ const AUTH_METHOD_FIELDS = ["id", "createdDateTime", "displayName", "phoneNumber
 const REGISTRATION_FIELDS = ["id", "userPrincipalName", "userDisplayName", "userType", "isAdmin", "isMfaRegistered", "isMfaCapable", "isPasswordlessCapable", "isSsprRegistered", "isSsprEnabled", "isSsprCapable", "userPreferredMethodForSecondaryAuthentication", "lastUpdatedDateTime"];
 const SIGNIN_FIELDS = ["id", "createdDateTime", "userId", "userPrincipalName", "userDisplayName", "appDisplayName", "appId", "ipAddress", "location", "status", "conditionalAccessStatus", "riskDetail", "riskLevelAggregated", "riskLevelDuringSignIn", "riskState", "resourceDisplayName", "resourceId", "clientAppUsed"];
 const AUDIT_FIELDS = ["id", "activityDateTime", "activityDisplayName", "category", "loggedByService", "operationType", "result", "resultReason", "correlationId", "initiatedBy", "targetResources"];
-const PROVISIONING_FIELDS = ["id", "activityDateTime", "tenantId", "jobId", "cycleId", "changeId", "action", "durationInMilliseconds", "sourceSystem", "sourceIdentity", "targetSystem", "targetIdentity", "provisioningStatusInfo", "provisioningSteps", "modifiedProperties", "servicePrincipal", "initiatedBy"];
+const PROVISIONING_FIELDS = ["id", "activityDateTime", "tenantId", "jobId", "cycleId", "changeId", "provisioningAction", "durationInMilliseconds", "sourceSystem", "sourceIdentity", "targetSystem", "targetIdentity", "provisioningStatusInfo", "provisioningSteps", "modifiedProperties", "servicePrincipal", "initiatedBy"];
 const RISKY_USER_FIELDS = ["id", "userPrincipalName", "userDisplayName", "riskDetail", "riskLastUpdatedDateTime", "riskLevel", "riskState"];
 const RISK_DETECTION_FIELDS = ["id", "detectedDateTime", "activityDateTime", "userId", "userPrincipalName", "userDisplayName", "ipAddress", "location", "riskDetail", "riskLevel", "riskState", "riskEventType", "detectionTimingType", "lastUpdatedDateTime", "source"];
 const RISKY_SP_FIELDS = ["id", "displayName", "appId", "servicePrincipalType", "riskDetail", "riskLastUpdatedDateTime", "riskLevel", "riskState", "isEnabled", "isProcessing"];
@@ -146,7 +146,7 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Policy.Read.AuthenticationMethod. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Security Administrator or Security Reader) is also required.",
     note: "Conditional Access needs P1.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/authenticationstrengthroot-list-policies?view=graph-rest-1.0"] },
-  { id: "v1.0:GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_STRENGTH_FIELDS,
+  { id: "v1.0:GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}", kind: "single", query: [], fields: KNOWN_STRENGTH_FIELDS,
     access: "D/A Policy.Read.AuthenticationMethod. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Security Administrator or Security Reader) is also required.",
     note: "Conditional Access needs P1.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/authenticationstrengthpolicy-get?view=graph-rest-1.0"] },
@@ -174,7 +174,7 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Policy.Read.All. Delegated callers pass it as --scopes; a supported administrator role (for example Security Reader) is also required.",
     note: "Conditional Access needs P1.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/conditionalaccesstemplate-get?view=graph-rest-1.0"] },
-  { id: "v1.0:GET:/identity/conditionalAccess/authenticationContextClassReferences", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_AUTH_CONTEXT_FIELDS,
+  { id: "v1.0:GET:/identity/conditionalAccess/authenticationContextClassReferences", kind: "collection", query: ["$filter", "$orderby", "$top"], fields: KNOWN_AUTH_CONTEXT_FIELDS,
     access: "D/A AuthenticationContext.Read.All. Delegated callers pass it as --scopes; a supported administrator role (Conditional Access Administrator, Global Reader, Global Secure Access Administrator, Security Administrator or Security Reader) is also required.",
     note: "Conditional Access needs P1.",
     sources: ["https://learn.microsoft.com/graph/api/conditionalaccessroot-list-authenticationcontextclassreferences?view=graph-rest-1.0"] },
@@ -216,7 +216,7 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
   { id: "v1.0:GET:/auditLogs/directoryAudits", kind: "collection", query: COLLECTION_QUERY, fields: AUDIT_FIELDS,
     access: "D/A AuditLog.Read.All. Delegated callers pass it as --scopes.",
     sources: ["https://learn.microsoft.com/graph/api/directoryaudit-list?view=graph-rest-1.0"] },
-  { id: "v1.0:GET:/auditLogs/provisioning", kind: "collection", query: COLLECTION_QUERY, fields: PROVISIONING_FIELDS,
+  { id: "v1.0:GET:/auditLogs/provisioning", kind: "collection", query: ["$filter", "$orderby", "$top"], fields: PROVISIONING_FIELDS,
     access: "D/A AuditLog.Read.All and Directory.Read.All. Delegated callers pass both as --scopes; Reports Reader is the least privileged directory role.",
     note: "Entra ID P1/P2 licence prerequisite; retention is 30 days on premium and 7 days on free.",
     sources: ["https://learn.microsoft.com/graph/api/provisioningobjectsummary-list?view=graph-rest-1.0"] },
@@ -342,14 +342,6 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A RoleManagement.Read.Directory. Delegated callers pass it as --scopes.",
     note: "Administrative-unit scopes need P1.",
     sources: ["https://learn.microsoft.com/graph/api/scopedrolemembership-get?view=graph-rest-1.0"] },
-  { id: "v1.0:GET:/scopedRoleMemberships", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_SCOPED_MEMBER_FIELDS,
-    access: "D/A RoleManagement.Read.Directory. Delegated callers pass it as --scopes.",
-    note: "Administrative-unit-scoped admin assignments; directory-wide assignments live on roleAssignments. Administrative-unit scopes need P1.",
-    sources: ["https://learn.microsoft.com/graph/api/scopedrolemembership-list?view=graph-rest-1.0"] },
-  { id: "v1.0:GET:/scopedRoleMemberships/{scopedRoleMembership-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_SCOPED_MEMBER_FIELDS,
-    access: "D/A RoleManagement.Read.Directory. Delegated callers pass it as --scopes.",
-    note: "Administrative-unit scopes need P1.",
-    sources: ["https://learn.microsoft.com/graph/api/scopedrolemembership-get?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/identityGovernance/privilegedAccess/group/assignmentSchedules", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_ASSIGNMENT_SCHEDULE_FIELDS,
     access: "D/A PrivilegedAssignmentSchedule.Read.AzureADGroup. Delegated callers pass it as --scopes.",
     note: "Assignment schedules govern group membership or ownership over time; PIM for Groups needs P2 or ID Governance; lists require $filter on groupId or principalId. AssignmentScheduleRequests stay out: their least privilege is the write scope PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup.",
@@ -444,10 +436,6 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
     note: "No operation-level documentation page; access follows the parent service-configuration contract and the domainDnsRecord resource reference.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list-serviceconfigurationrecords?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/domaindnsrecord?view=graph-rest-1.0"] },
-  { id: "v1.0:GET:/domainDnsRecords", kind: "collection", query: COLLECTION_QUERY, fields: DNS_RECORD_FIELDS,
-    access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
-    note: "No operation-level documentation page; access follows the documented domain/DNS-read contract and the domainDnsRecord resource reference.",
-    sources: ["https://learn.microsoft.com/en-us/graph/api/domain-list?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/domaindnsrecord?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/domainDnsRecords/{domainDnsRecord-id}", kind: "single", query: SINGLE_QUERY, fields: DNS_RECORD_FIELDS,
     access: "D/A Domain.Read.All. Delegated callers pass it as --scopes; Domain Name Administrator or Global Reader are the least-privileged delegated roles. No P1/P2 prerequisite is stated for DNS record reads.",
     note: "No operation-level documentation page; access follows the documented domain/DNS-read contract and the domainDnsRecord resource reference.",
@@ -518,10 +506,6 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     delegatedOnly: true,
     note: "No single-acceptance operation page; access follows the parent acceptance-list contract and the agreementAcceptance resource reference. Acceptance records are personal data: default rows carry id, agreementId, state and recordedDateTime only.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/agreement-list-acceptances?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/agreementacceptance?view=graph-rest-1.0"] },
-  { id: "v1.0:GET:/directoryObjects", kind: "collection", query: ["$select"], fields: KNOWN_DIRECTORY_OBJECT_FIELDS, defaultFields: ["id"], keepODataType: true,
-    access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for directory-object reads. Personal Microsoft accounts are not supported.",
-    note: "No List operation page exists; access follows the sibling directoryobject-get contract and the directoryObject resource reference. Graph documents no collection filter contract here, so only $select is reviewed. Rows are polymorphic: the @odata.type discriminator rides along automatically and subtype properties need the subtype's named reads, never raw $select of unreviewed fields.",
-    sources: ["https://learn.microsoft.com/en-us/graph/api/directoryobject-get?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/directoryobject?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/directoryObjects/{directoryObject-id}", kind: "single", query: SINGLE_QUERY, fields: KNOWN_DIRECTORY_OBJECT_FIELDS, defaultFields: ["id", "deletedDateTime"], keepODataType: true,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for this read. Personal Microsoft accounts are not supported.",
     note: "Single reads return the base-type properties plus the @odata.type discriminator; subtype detail needs the subtype's named reads. Only base properties are projected, so subtype secrets or credentials can never appear.",
@@ -634,7 +618,7 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
     access: "D/A OrgContact.Read.All and Group.Read.All together least-privileged (Directory.Read.All is the documented higher-privileged alternative). Delegated callers pass both as --scopes; delegated access additionally needs a supported Entra role (Directory Readers reads basic properties; Global Reader, Directory Writers, Intune Administrator or User Administrator also work). Personal Microsoft accounts are not supported.",
     note: "No operation-level documentation page; OData cast selects the administrativeUnit subtype and access follows the parent transitiveMemberOf contract and the administrativeUnit resource reference.",
     sources: ["https://learn.microsoft.com/en-us/graph/api/orgcontact-list-transitivememberof?view=graph-rest-1.0", "https://learn.microsoft.com/en-us/graph/api/resources/administrativeunit?view=graph-rest-1.0"] },
-  { id: "v1.0:GET:/groupLifecyclePolicies", kind: "collection", query: COLLECTION_QUERY, fields: KNOWN_LIFECYCLE_FIELDS,
+  { id: "v1.0:GET:/groupLifecyclePolicies", kind: "collection", query: ["$filter", "$orderby", "$top"], fields: KNOWN_LIFECYCLE_FIELDS,
     access: "D/A Directory.Read.All. Delegated callers pass it as --scopes; no delegated role prerequisite is stated for lifecycle-policy reads. Personal Microsoft accounts are not supported.",
     note: "Filtering uses plain $filter with no $count or ConsistencyLevel contract; no P1/P2 prerequisite is stated for lifecycle-policy reads.",
     sources: ["https://learn.microsoft.com/graph/api/grouplifecyclepolicy-list?view=graph-rest-1.0", "https://learn.microsoft.com/graph/api/resources/grouplifecyclepolicy?view=graph-rest-1.0"] },

@@ -210,18 +210,8 @@ const wired = [
     key: "scopedMembers",
     noun: "scoped members",
     rows: () => [
-      { id: ID_A, principalId: ID_A, roleId: ID_B },
-      { id: ID_B, principalId: ID_B, roleId: ID_A },
-    ],
-  },
-  {
-    name: "scoped-role-membership list",
-    argv: ["entra", "scoped-role-membership", "list", "--profile", "soc"],
-    key: "scopedRoleMemberships",
-    noun: "scoped role memberships",
-    rows: () => [
-      { id: ID_A, principalId: ID_A, roleId: ID_B },
-      { id: ID_B, principalId: ID_B, roleId: ID_A },
+      { id: ID_A, roleMemberInfo: { id: ID_A, displayName: "Adele Vance" }, roleId: ID_B, administrativeUnitId: AU_ID },
+      { id: ID_B, roleMemberInfo: { id: ID_B, displayName: "Alex Wilber" }, roleId: ID_A, administrativeUnitId: AU_ID },
     ],
   },
   {
@@ -252,16 +242,6 @@ const wired = [
     rows: () => [
       { id: ID_A, principalId: ID_A, roleDefinitionId: ID_B, assignmentType: "Assigned", memberType: "Direct" },
       { id: ID_B, principalId: ID_B, roleDefinitionId: ID_A, assignmentType: "Activated", memberType: "Direct" },
-    ],
-  },
-  {
-    name: "directory-object list",
-    argv: ["entra", "directory-object", "list", "--profile", "soc"],
-    key: "directoryObjects",
-    noun: "directory objects",
-    rows: () => [
-      { "@odata.type": "#microsoft.graph.user", id: ID_A, displayName: "Adele Vance" },
-      { "@odata.type": "#microsoft.graph.group", id: ID_B, displayName: "All Staff" },
     ],
   },
   {
@@ -467,16 +447,6 @@ const wired = [
       { "@odata.type": "#microsoft.graph.domainDnsTxtRecord", id: "rec2" },
     ],
   },
-  {
-    name: "domain-dns-record list",
-    argv: ["entra", "domain-dns-record", "list", "--profile", "soc"],
-    key: "domainDnsRecords",
-    noun: "DNS records",
-    rows: () => [
-      { "@odata.type": "#microsoft.graph.domainDnsTxtRecord", id: "rec1" },
-      { "@odata.type": "#microsoft.graph.domainDnsTxtRecord", id: "rec2" },
-    ],
-  },
   // Governance slice: access reviews, audit logs, authentication methods,
   // certificate auth, conditional access, custom security attributes, data
   // policy operations, delegated admin, entitlement management.
@@ -556,8 +526,8 @@ const wired = [
     key: "provisioning",
     noun: "provisioning events",
     rows: () => [
-      { id: ID_A, activityDateTime: "2026-09-10T12:00:00Z", action: "create", provisioningStatusInfo: { status: "success" } },
-      { id: ID_B, activityDateTime: "2026-09-10T12:05:00Z", action: "update", provisioningStatusInfo: { status: "failure" } },
+      { id: ID_A, activityDateTime: "2026-09-10T12:00:00Z", provisioningAction: "create", provisioningStatusInfo: { status: "success" } },
+      { id: ID_B, activityDateTime: "2026-09-10T12:05:00Z", provisioningAction: "update", provisioningStatusInfo: { status: "failure" } },
     ],
   },
   {
@@ -1202,11 +1172,41 @@ for (const entry of wired) {
   });
 }
 
-// Catalogue enumeration: every entra list leaf renders uniform totals. A
-// leaf counts as wired when its flag-free argv path appears in the table
-// above; the pending set names unwired leaves owned by concurrent pieces.
+// Catalogue enumeration: every entra list leaf either renders uniform totals
+// or fails locally as unsupported by Graph v1.0. A leaf counts as wired when
+// its flag-free argv path appears in the table above; the unsupported set names
+// leaves that refuse before credentials with supported alternatives.
 // Any other unwired leaf fails this test.
 const pendingTotals = new Set([]);
+const unsupportedTotals = [
+  { path: "entra scoped-role-membership list", argv: ["entra", "scoped-role-membership", "list", "--profile", "soc"], hint: /directory-role scoped-member list/ },
+  { path: "entra directory-object list", argv: ["entra", "directory-object", "list", "--profile", "soc"], hint: /directory-object show/ },
+  { path: "entra domain-dns-record list", argv: ["entra", "domain-dns-record", "list", "--profile", "soc"], hint: /verification-dns-record/ },
+];
+
+for (const entry of unsupportedTotals) {
+  test(`${entry.path} fails locally as unsupported before credentials`, async () => {
+    const state = setupProfiles();
+    try {
+      let requested = false;
+      let credentialed = false;
+      const overrides = {
+        transport: async () => { requested = true; return json(200, { value: [] }); },
+        delegated: { credential: async () => { credentialed = true; return { token: "opaque-fixture-delegated-token", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" }; } },
+        application: { credential: async () => { credentialed = true; return { token: "opaque-fixture-delegated-token", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" }; } },
+      };
+      await assert.rejects(executeArgv(entry.argv, overrides), error => {
+        assert.match(error.message, /not supported/);
+        assert.ok(error.suggestions.some(hint => entry.hint.test(hint)));
+        return true;
+      });
+      assert.equal(requested, false);
+      assert.equal(credentialed, false);
+    } finally {
+      teardownProfiles(state);
+    }
+  });
+}
 
 test("catalogue list leaves are all wired or explicitly pending", () => {
   // No list argv carries positionals: every value rides behind a flag, so
@@ -1217,7 +1217,7 @@ test("catalogue list leaves are all wired or explicitly pending", () => {
   }));
   const listPaths = LEAVES.map(leaf => leaf.path)
     .filter(path => path.startsWith("entra ") && path.split(" ").at(-1).startsWith("list"));
-  const covered = new Set([...wiredPaths, ...pendingTotals]);
+  const covered = new Set([...wiredPaths, ...pendingTotals, ...unsupportedTotals.map(entry => entry.path)]);
   const missing = listPaths.filter(path => !covered.has(path));
   const extra = [...covered].filter(path => !listPaths.includes(path));
   assert.deepEqual(missing, [], `unwired list leaves: ${missing.join(", ")}`);

@@ -4,7 +4,7 @@ import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 directory-objects subfamily: the read mapping behind
-// `mg-axi entra directory-object list/show/count`. Operation construction
+// `mg-axi entra directory-object show/count`. Operation construction
 // stays beside its command; the shared session owns URLs, credentials,
 // paging, retries and error translation, and the SDK owns TOON rendering.
 // This module only maps flags to session calls and projects rows for compact
@@ -13,10 +13,9 @@ import type { AnyProfile } from "./profiles.js";
 // Reviewed against the v1.0 directoryobject-get operation documentation and
 // the directoryObject resource reference on 2026-10-05. There is no dedicated
 // List operation page: the resource Methods table documents Get, delta,
-// Delete and the lookup/validation functions only, so the collection GET
-// follows the sibling get contract and the resource reference (both name
-// Directory.Read.All), with $select-only queries because collection filter
-// support is unreviewed. Both reads take delegated or application
+// Delete and the lookup/validation functions only. Graph rejects the root
+// collection GET, so the session refuses the legacy list command with
+// supported alternatives. Detail and count reads take delegated or application
 // Directory.Read.All, the documented least privilege in each mode; personal
 // Microsoft accounts are not supported. No delegated role and no P1/P2
 // prerequisite are stated for these reads. The $count scalar carries no

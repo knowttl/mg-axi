@@ -25,7 +25,7 @@ const p1 = {
   jobId: "job-1111",
   cycleId: "cycle-1111",
   changeId: "chg-1111",
-  action: "create",
+  provisioningAction: "create",
   durationInMilliseconds: 1200,
   sourceSystem: { id: "source-system", displayName: "Microsoft Entra ID", details: {} },
   sourceIdentity: { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", displayName: "Adele Vance", identityType: "user", details: {} },
@@ -44,7 +44,7 @@ const p2 = {
   jobId: "job-2222",
   cycleId: "cycle-2222",
   changeId: "chg-2222",
-  action: "update",
+  provisioningAction: "update",
   durationInMilliseconds: 3400,
   sourceSystem: { id: "source-system", displayName: "Microsoft Entra ID", details: {} },
   sourceIdentity: { id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", displayName: "Alex Wilber", identityType: "user", details: {} },
@@ -147,7 +147,7 @@ function runReadCli(args, state, mode, denied = false, input) {
   });
 }
 
-const compact = row => ({ id: row.id, activityDateTime: row.activityDateTime, action: row.action, provisioningStatusInfo: row.provisioningStatusInfo });
+const compact = row => ({ id: row.id, activityDateTime: row.activityDateTime, provisioningAction: row.provisioningAction, provisioningStatusInfo: row.provisioningStatusInfo });
 
 for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
   test(`${mode} executable lists bounded provisioning with compact rows`, () => {
@@ -206,7 +206,7 @@ test("delegated provisioning list requests both directory scopes with a bounded 
     const params = new URL(requests[0].url).searchParams;
     assert.equal(params.get("$filter"),
       "activityDateTime ge 2026-09-01T00:00:00.000Z and activityDateTime le 2026-09-08T00:00:00.000Z and (provisioningStatusInfo/status eq 'failure')");
-    assert.equal(params.get("$select"), "id,activityDateTime,action,provisioningStatusInfo");
+    assert.equal(params.has("$select"), false);
     assert.deepEqual(calls[0][1], provisionScopes);
     assert.deepEqual(result.provisioning.map(row => row.id), [p1.id, p2.id]);
     assert.deepEqual(result.count, "2 provisioning events");
@@ -282,7 +282,7 @@ test("unreviewed select properties fail before credentials, never as server quer
 test("long nested status text truncates with a --full replay hint", async () => {
   const state = setupProfiles();
   try {
-    const rows = [{ id: p1.id, activityDateTime: p1.activityDateTime, action: "update",
+    const rows = [{ id: p1.id, activityDateTime: p1.activityDateTime, provisioningAction: "update",
       provisioningStatusInfo: { status: "failure", errorInformation: "x".repeat(600) } }];
     const fixture = transport(() => json(200, { value: rows }));
     const { overrides } = overridesFor("delegated", fixture);
@@ -314,8 +314,8 @@ test("provisioning show projects --fields locally from the fetched selection", a
   try {
     const { overrides } = overridesFor("delegated");
     const result = await executeArgv(["entra", "provisioning", "show", "--profile", "soc",
-      "--id", p1.id, "--select", "id,action", "--fields", "action"], overrides);
-    assert.deepEqual(result.provisioning, { action: "create" });
+      "--id", p1.id, "--select", "id,provisioningAction", "--fields", "provisioningAction"], overrides);
+    assert.deepEqual(result.provisioning, { provisioningAction: "create" });
   } finally {
     teardownProfiles(state);
   }

@@ -5,7 +5,7 @@ import type { AnyProfile } from "./profiles.js";
 
 // EXT-01 domains subfamily: the read mapping behind `mg-axi entra domain
 // list/show`, the per-domain verification and service-configuration DNS
-// record reads, and the top-level domain DNS record reads. Operation
+// record reads, and the top-level domain DNS record show. Operation
 // construction stays beside its command; the shared session owns URLs,
 // credentials, paging, retries and error translation, and the SDK owns TOON
 // rendering. This module only maps flags to session calls and projects rows
@@ -20,7 +20,7 @@ import type { AnyProfile } from "./profiles.js";
 // domain list/get support those plus Directory Readers and other directory
 // roles). Personal Microsoft accounts are not supported. No P1/P2
 // prerequisite is stated for these reads. The single-record GETs and the
-// top-level /domainDnsRecords GETs carry no operation-level documentation
+// top-level /domainDnsRecords/{id} GET carries no operation-level documentation
 // page; they read the same domainDnsRecord resource through the same
 // permission contract, so the review cites the parent list documentation
 // alongside the domainDnsRecord resource reference. Domain ids are fully
@@ -31,6 +31,8 @@ import type { AnyProfile } from "./profiles.js";
 // no $count or ConsistencyLevel contract. No domain mutation exists in this
 // slice: verify, forceDelete, promote, federation and shared-email surfaces
 // belong to later pieces.
+// Graph rejects the root /domainDnsRecords collection. The session refuses
+// its legacy list command and points to the parent-domain DNS collections.
 
 // Every domain property this slice may request or display, matching the
 // reviewed raw surface. Anything else fails before credentials.

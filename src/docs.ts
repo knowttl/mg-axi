@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { DESCRIPTION, HOME_HELP, LEAVES } from "./catalogue.js";
 
+const UNSUPPORTED_READ_NOTE = "Graph v1.0 does not support the legacy `entra scoped-role-membership list/show`, `entra domain-dns-record list` or `entra directory-object list` routes; those commands fail locally with supported alternatives and their root routes are not available through `api get`.";
+
 // PACK-01: single source for generated release records. The committed
 // skills/mg-axi/SKILL.md and docs/coverage.md are generated from the templates
 // below, the executable catalogue and the discovery inventory, so help, skill
@@ -178,6 +180,7 @@ export function skillDocument(): string {
     "Its effect is `read` for Graph read leaves and the doctor health check, `write` for the gated named writes, or `local` for home, profile, auth, config path, login-alias and setup views.",
     "Doctor acquires credentials silently and contacts Graph; only its help view stays offline.",
     "The list below records current executable leaves; it makes no coverage claim for other Graph operations.",
+    UNSUPPORTED_READ_NOTE,
     "See `docs/coverage.md` for the per-operation disposition records.",
     "`docs/coverage.md` and this file are generated from the same catalogue and inventory sources; `node tools/generate-docs.mjs --check` fails when they are stale.",
     "",
@@ -432,9 +435,12 @@ export function capabilityDocument(): string {
     "| `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |",
     "| `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |",
     "",
+    UNSUPPORTED_READ_NOTE,
+    "",
     "## EXT-01 domain scope decisions",
     "",
     "Firstmate decision R1: approve narrowing this change to the eight v1.0 domain reads above.",
+    "The root domain-dns-record list is now explicitly unsupported; use verification-dns-record or service-configuration-record list with a parent domain.",
     "The v1.0 operations below carry the deferred disposition (out of v1) and the beta operations remain scheduled (never agreed for v1); no new commands or raw access are approved.",
     "Federation stays out because it can carry signing-certificate material.",
     "Firstmate decision R2: keep the write-family status section as the coverage fix added to scope (resolved-kept).",
@@ -573,10 +579,10 @@ export function capabilityDocument(): string {
     "",
     "## EXT-01 directory-objects scope decisions",
     "",
-    "This change covers the three v1.0 directory-object reads above (directory-object list, show and count).",
+    "Directory-object show and count are available. Graph v1.0 rejects directory-object list; the legacy command fails locally and points to show or a typed list command.",
     "The v1.0 operations below carry the deferred disposition (out of v1) and the beta operations remain scheduled (never agreed for v1); no new commands or raw access are approved.",
     "Directory-object reads support v1.0 only; beta needs its own review.",
-    "Delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads; the POST lookup and validation actions need their own request and projection review.",
+    "Delta-token sync needs its own change-tracking contract beyond the approved show/count reads; the POST lookup and validation actions need their own request and projection review.",
     "Rows are polymorphic: only the base-type properties plus the @odata.type discriminator are projected, so subtype secrets or credentials can never appear.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",

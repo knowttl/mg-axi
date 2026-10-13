@@ -681,7 +681,7 @@ export const LEAVES: Leaf[] = [
     cursor: roleRead.cursor,
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to RoleManagement.Read.Directory; delegated callers also need a supported directory role" },
   }, examples: ["mg-axi entra directory-role member list --role <role-id> --profile soc", "mg-axi entra directory-role member list --role <role-id> --profile soc --filter \"displayName eq 'Adele Vance'\""] },
-  { path: "entra directory-role scoped-member list", description: "List the scoped members of one activated directory role (id, principalId, roleId, directoryScopeId); administrative-unit scopes need P1", operation: "GET:/directoryRoles/{directoryRole-id}/scopedMembers", flags: {
+  { path: "entra directory-role scoped-member list", description: "List the scoped members of one activated directory role (id, roleMemberInfo, roleId, administrativeUnitId); administrative-unit scopes need P1", operation: "GET:/directoryRoles/{directoryRole-id}/scopedMembers", flags: {
     ...common, role: { value: "role-id", required: true, description: "Activated directory-role object ID whose scoped members are listed" },
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
     all: { description: "Follow pages within request, byte and deadline budgets" },
@@ -691,7 +691,7 @@ export const LEAVES: Leaf[] = [
     full: roleRead.full,
     cursor: roleRead.cursor,
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to RoleManagement.Read.Directory; delegated callers also need a supported directory role; administrative-unit scopes need P1" },
-  }, examples: ["mg-axi entra directory-role scoped-member list --role <role-id> --profile soc", "mg-axi entra directory-role scoped-member list --role <role-id> --profile soc --filter \"principalId eq '<principal-id>'\""] },
+  }, examples: ["mg-axi entra directory-role scoped-member list --role <role-id> --profile soc", "mg-axi entra directory-role scoped-member list --role <role-id> --profile soc --filter \"administrativeUnitId eq '<unit-id>'\""] },
   { path: "entra directory-role scoped-member show", description: "Show one scoped member of an activated directory role with richer default properties", operation: "GET:/directoryRoles/{directoryRole-id}/scopedMembers/{scopedRoleMembership-id}", flags: {
     ...common, role: { value: "role-id", required: true, description: "Activated directory-role object ID owning the scoped member" },
     id: { value: "scoped-membership-id", required: true, description: "Scoped membership object ID" },
@@ -700,7 +700,7 @@ export const LEAVES: Leaf[] = [
     full: roleRead.full,
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to RoleManagement.Read.Directory; delegated callers also need a supported directory role; administrative-unit scopes need P1" },
   }, examples: ["mg-axi entra directory-role scoped-member show --role <role-id> --id <scoped-membership-id> --profile soc", "mg-axi entra directory-role scoped-member show --role <role-id> --id <scoped-membership-id> --profile soc --full"] },
-  { path: "entra scoped-role-membership list", description: "List administrative-unit-scoped role memberships (id, principalId, roleId, directoryScopeId); directory-wide assignments live on roleAssignments", operation: "GET:/scopedRoleMemberships", flags: {
+  { path: "entra scoped-role-membership list", description: "Unsupported by Graph v1.0; use directory-role scoped-member list --role <role-id>", operation: "GET:/scopedRoleMemberships", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
     all: { description: "Follow pages within request, byte and deadline budgets" },
@@ -711,7 +711,7 @@ export const LEAVES: Leaf[] = [
     cursor: roleRead.cursor,
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to RoleManagement.Read.Directory; delegated callers also need a supported directory role; administrative-unit scopes need P1" },
   }, examples: ["mg-axi entra scoped-role-membership list --profile soc", "mg-axi entra scoped-role-membership list --profile soc --filter \"roleId eq '<role-id>'\""] },
-  { path: "entra scoped-role-membership show", description: "Show one administrative-unit-scoped role membership with richer default properties", operation: "GET:/scopedRoleMemberships/{scopedRoleMembership-id}", flags: {
+  { path: "entra scoped-role-membership show", description: "Unsupported by Graph v1.0; use directory-role scoped-member show --role <role-id> --id <scoped-membership-id>", operation: "GET:/scopedRoleMemberships/{scopedRoleMembership-id}", flags: {
     ...common, id: { value: "scoped-membership-id", required: true, description: "Scoped membership object ID" },
     select: roleRead.select,
     fields: roleRead.fields,
@@ -985,7 +985,7 @@ export const LEAVES: Leaf[] = [
     full: dnsRead.full,
     scopes: dnsRead.scopes,
   }, examples: ["mg-axi entra domain service-configuration-record show --domain contoso.com --id <record-id> --profile soc"] },
-  { path: "entra domain-dns-record list", description: "List domain DNS records from the top-level record set; rows carry @odata.type naming the derived record kind", operation: "GET:/domainDnsRecords", flags: {
+  { path: "entra domain-dns-record list", description: "Unsupported by Graph v1.0; use domain verification-dns-record list or domain service-configuration-record list with --domain <domain-id>", operation: "GET:/domainDnsRecords", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
     all: { description: "Follow pages within request, byte and deadline budgets" },
@@ -1149,7 +1149,7 @@ export const LEAVES: Leaf[] = [
     full: acceptanceRead.full,
     scopes: acceptanceRead.scopes,
   }, examples: ["mg-axi entra agreement-acceptance show --id <acceptance-id> --profile soc"] },
-  { path: "entra directory-object list", description: "List directory objects with compact rows (id plus the @odata.type subtype discriminator); Graph documents no List operation page, so no --filter", operation: "GET:/directoryObjects", flags: {
+  { path: "entra directory-object list", description: "Unsupported by Graph v1.0; use directory-object show --id <object-id> or a named user, group, device, application or service-principal list", operation: "GET:/directoryObjects", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
     all: { description: "Follow pages within request, byte and deadline budgets" },
@@ -1258,7 +1258,7 @@ export const LEAVES: Leaf[] = [
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
     all: { description: "Follow pages within request, byte and deadline budgets" },
     filter: lifecycleRead.filter,
-    select: lifecycleRead.select,
+    select: { value: "comma-separated-properties", description: "Select output properties locally; no $select is sent to Graph" },
     fields: lifecycleRead.fields,
     full: lifecycleRead.full,
     cursor: lifecycleRead.cursor,
@@ -1603,7 +1603,7 @@ export const LEAVES: Leaf[] = [
     since: { ...logRead.since, description: "Required for a new query (resume with --cursor instead): earliest activityDateTime bounding the server time range" },
     until: logRead.until,
     filter: logRead.filter,
-    select: { value: "comma-separated-properties", description: "Request server properties from the supported provisioning-log property set" },
+    select: { value: "comma-separated-properties", description: "Select output properties locally from the provisioning-log set, including provisioningAction; no $select is sent to Graph" },
     fields: logRead.fields,
     full: logRead.full,
     cursor: logRead.cursor,
@@ -1925,7 +1925,7 @@ export const LEAVES: Leaf[] = [
   }, examples: ["mg-axi entra conditional-access auth-strength-policy list --profile soc", "mg-axi entra conditional-access auth-strength-policy list --profile soc --limit 10", "mg-axi entra conditional-access auth-strength-policy list --profile soc --filter \"policyType eq 'builtIn'\" --select id,displayName,policyType"] },
   { path: "entra conditional-access auth-strength-policy show", description: "Show one authentication-strength policy with the full reviewed property set", operation: "GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}", flags: {
     ...common, id: { value: "auth-strength-policy-id", required: true, description: "Authentication-strength policy object ID" },
-    select: caStrengthRead.select,
+    select: { value: "comma-separated-properties", description: "Select output properties locally; no $select is sent to Graph" },
     fields: caStrengthRead.fields,
     full: caStrengthRead.full,
     scopes: caStrengthRead.scopes,
@@ -1991,7 +1991,7 @@ export const LEAVES: Leaf[] = [
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
     all: { description: "Follow pages within request, byte and deadline budgets" },
     filter: caAuthContextRead.filter,
-    select: caAuthContextRead.select,
+    select: { value: "comma-separated-properties", description: "Select output properties locally; no $select is sent to Graph" },
     fields: caAuthContextRead.fields,
     full: caAuthContextRead.full,
     cursor: caAuthContextRead.cursor,

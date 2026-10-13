@@ -76,7 +76,7 @@ export const KNOWN_PROVISIONING_FIELDS: readonly string[] = [
   "jobId",
   "cycleId",
   "changeId",
-  "action",
+  "provisioningAction",
   "durationInMilliseconds",
   "sourceSystem",
   "sourceIdentity",
@@ -93,7 +93,7 @@ const PROVISIONING_KNOWN = new Set(KNOWN_PROVISIONING_FIELDS);
 // Compact list rows: identifier, time, who/what happened, and outcome.
 const DEFAULT_SIGNIN_LIST_SELECT = ["id", "createdDateTime", "userPrincipalName", "appDisplayName"];
 const DEFAULT_AUDIT_LIST_SELECT = ["id", "activityDateTime", "activityDisplayName", "result"];
-const DEFAULT_PROVISIONING_LIST_SELECT = ["id", "activityDateTime", "action", "provisioningStatusInfo"];
+const DEFAULT_PROVISIONING_LIST_SELECT = ["id", "activityDateTime", "provisioningAction", "provisioningStatusInfo"];
 // Show rows: the full reviewed server set for one object.
 const DEFAULT_SIGNIN_SHOW_SELECT = [...KNOWN_SIGNIN_FIELDS];
 const DEFAULT_AUDIT_SHOW_SELECT = [...KNOWN_AUDIT_FIELDS];
@@ -403,7 +403,8 @@ async function listLogs(
   const scopes = scopesFor(flags, profile, help, shape.defaultScopes);
   const full = flags.full === true;
   const filter = boundedFilter(shape.dateField, flags, help);
-  const query: Record<string, string> = { $select: select.join(",") };
+  // Provisioning lists reject $select; selection remains a local projection.
+  const query: Record<string, string> = shape.noun === "provisioning" ? {} : { $select: select.join(",") };
   const explicitFilter = filter !== undefined;
   if (explicitFilter) query.$filter = filter;
   const args: CollectArgs = { profile, operation, query, scopes };
@@ -417,7 +418,7 @@ async function listLogs(
   // The hint replays the caller's own time flags (or the cursor alone, which
   // restores the saved query); copying back the composed $filter would wrap
   // it a second time and conflict with the cursor context.
-  const effectiveFlags: LogFlags = { ...flags, select: result.query.$select ?? shape.defaultSelect.join(",") };
+  const effectiveFlags: LogFlags = { ...flags, select: result.query.$select ?? select.join(",") };
   const rows: Record<string, unknown>[] = [];
   let truncated = false;
   for (const row of result.value) {

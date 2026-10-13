@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.6](https://github.com/knowttl/mg-axi/compare/v0.1.5...v0.1.6) (2026-10-13)
+
+
+### Bug Fixes
+
+* make hook installer tests independent of runner checkout ([#88](https://github.com/knowttl/mg-axi/issues/88)) ([3c2ebb8](https://github.com/knowttl/mg-axi/commit/3c2ebb8a20737a115c36f3e492cb52375b558492))
+
+
+### Miscellaneous Chores
+
+* release 0.1.6 ([0a4a657](https://github.com/knowttl/mg-axi/commit/0a4a657f2e5dc17a020c2e8113d3068bbfad0a08))
+
 ## [0.1.5](https://github.com/knowttl/mg-axi/compare/v0.1.4...v0.1.5) (2026-10-12)
 
 

@@ -1173,6 +1173,8 @@ export class GraphSession {
         "Narrow the query when throttling persists",
       ]);
     }
-    return new AxiError(`Graph failed ${operation.id} (${status})${fault}`, "GRAPH_ERROR", ["Server failures may be transient; retry safe reads within a bounded budget"]);
+    return new AxiError(`Graph failed ${operation.id} (${status})${fault}`, "GRAPH_ERROR", status >= 500 && status < 600
+      ? ["Server failures may be transient; retry safe reads within a bounded budget"]
+      : []);
   }
 }

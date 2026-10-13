@@ -55,6 +55,22 @@ test("PIM reads send a supported culture through both request builders", async (
   await assert.rejects(f.session.collect({ profile: appProfile, operation }), /AadPremiumLicenseRequired/);
 });
 
+test("PIM licence errors preserve the diagnosis without suggesting retries", async () => {
+  const operation = resolveSessionOperation("v1.0", "GET", "/roleManagement/directory/roleEligibilityScheduleInstances");
+  const message = "The tenant needs to have Microsoft Entra ID P2 or Microsoft Entra ID Governance license.";
+  const f = fixture(json(400, { error: { code: "AadPremiumLicenseRequired", message } }));
+  for (const method of ["execute", "collect"]) {
+    await assert.rejects(f.session[method]({ profile: appProfile, operation }), error => {
+      assert.equal(error.code, "GRAPH_ERROR");
+      assert.match(error.message, /\(400\): graph AadPremiumLicenseRequired/);
+      assert.ok(error.message.includes(message));
+      assert.deepEqual(error.suggestions, []);
+      return true;
+    });
+  }
+  assert.equal(f.requests.length, 2);
+});
+
 test("Graph preserves a query rejection message when the error code is empty", async () => {
   const f = fixture(json(400, { error: { code: "", message: "Query option 'Select' is not allowed" } }));
   const operation = resolveSessionOperation("v1.0", "GET", "/identity/conditionalAccess/authenticationContextClassReferences");

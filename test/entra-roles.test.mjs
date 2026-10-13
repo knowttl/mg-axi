@@ -105,9 +105,8 @@ const members = [m1, m2];
 
 const s1 = {
   id: "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-  principalId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  roleMemberInfo: { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", displayName: "Member" },
   roleId: "62e90394-69f5-4237-9190-012177145e10",
-  directoryScopeId: "/administrativeUnits/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   administrativeUnitId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 };
 const scoped = [s1];
@@ -402,7 +401,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, overrides } = overridesFor(mode);
       const result = await executeArgv(["entra", "directory-role", "scoped-member", "list", "--role", r1.id, "--profile", profile], overrides);
       assert.deepEqual(result.scopedMembers, [
-        { id: s1.id, principalId: s1.principalId, roleId: s1.roleId, directoryScopeId: s1.directoryScopeId },
+        { id: s1.id, roleMemberInfo: s1.roleMemberInfo, roleId: s1.roleId, administrativeUnitId: s1.administrativeUnitId },
       ]);
       assert.deepEqual(result.count, "1 scoped members");
       assert.equal(result.total, null);
@@ -426,31 +425,22 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
-  test(`${mode} lists scoped role memberships`, async () => {
+  test(`${mode} refuses unsupported direct scoped role membership lists`, async () => {
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "scoped-role-membership", "list", "--profile", profile], overrides);
-      assert.deepEqual(result.scopedRoleMemberships, [
-        { id: g1.id, principalId: g1.principalId, roleId: g1.roleId, directoryScopeId: g1.directoryScopeId },
-      ]);
-      assert.deepEqual(result.count, "1 scoped role memberships");
-      assert.equal(result.total, null);
-      assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("directory-wide assignments live on roleAssignments")));
-      assert.ok(new URL(requests[0].url).pathname.endsWith("/scopedRoleMemberships"));
+      await assert.rejects(executeArgv(["entra", "scoped-role-membership", "list", "--profile", profile], overrides), /not supported/);
+      assert.equal(requests.length, 0);
     } finally {
       teardownProfiles(state);
     }
   });
 
-  test(`${mode} shows a scoped role membership`, async () => {
+  test(`${mode} refuses unsupported direct scoped role membership lookups`, async () => {
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "scoped-role-membership", "show", "--id", g1.id, "--profile", profile], overrides);
-      assert.deepEqual(result.scopedRoleMembership, g1);
-      assert.equal(result.help, undefined);
+      await assert.rejects(executeArgv(["entra", "scoped-role-membership", "show", "--id", g1.id, "--profile", profile], overrides), /not supported/);
     } finally {
       teardownProfiles(state);
     }

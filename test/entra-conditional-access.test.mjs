@@ -991,7 +991,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.count, "2 auth contexts");
       assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("conditional-access auth-context show --id <auth-context-id>")));
-      assert.ok(requests[0].url.includes("%24select=id%2CdisplayName"));
+      assert.equal(new URL(requests[0].url).searchParams.has("$select"), false);
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
     } finally {
       teardownProfiles(state);

@@ -6,8 +6,8 @@ import type { AnyProfile } from "./profiles.js";
 // READ-09: the Entra directory-role and PIM read mapping behind
 // `mg-axi entra directory-role list/show`, `mg-axi entra directory-role-template
 // list/show`, `mg-axi entra directory-role member list`, `mg-axi entra
-// directory-role scoped-member list/show`, `mg-axi entra scoped-role-membership
-// list/show`, `mg-axi entra role-assignment list`, `mg-axi entra pim eligible
+// directory-role scoped-member list/show`, `mg-axi entra role-assignment
+// list`, `mg-axi entra pim eligible
 // list` and `mg-axi entra pim active list`.
 // Operation construction stays beside its command; the shared session owns
 // URLs, credentials, paging, retries and error translation, and the SDK owns
@@ -47,6 +47,8 @@ import type { AnyProfile } from "./profiles.js";
 // every other PIM mutation belongs to later write slices, never to these
 // reads. Built-in roles are base inventory; custom role assignments need P1;
 // PIM reads need P2 or ID Governance.
+// Direct /scopedRoleMemberships queries are unsupported by Graph v1.0;
+// the session refuses the legacy commands with parent-role alternatives.
 
 // Eligible and active instances need separate reviewed property sets:
 // only active instances expose assignmentType.
@@ -88,9 +90,8 @@ export const KNOWN_ROLE_MEMBER_FIELDS: readonly string[] = [
 ];
 export const KNOWN_SCOPED_MEMBER_FIELDS: readonly string[] = [
   "id",
-  "principalId",
+  "roleMemberInfo",
   "roleId",
-  "directoryScopeId",
   "administrativeUnitId",
 ];
 const ROLE_KNOWN = new Set(KNOWN_ROLE_FIELDS);
@@ -111,7 +112,7 @@ const DEFAULT_ACTIVE_SELECT = ["id", "principalId", "roleDefinitionId", "assignm
 const DEFAULT_TEMPLATE_LIST_SELECT = ["id", "displayName", "description"];
 const DEFAULT_TEMPLATE_SHOW_SELECT = [...KNOWN_TEMPLATE_FIELDS];
 const DEFAULT_MEMBER_SELECT = ["id", "displayName"];
-const DEFAULT_SCOPED_LIST_SELECT = ["id", "principalId", "roleId", "directoryScopeId"];
+const DEFAULT_SCOPED_LIST_SELECT = ["id", "roleMemberInfo", "roleId", "administrativeUnitId"];
 const DEFAULT_SCOPED_SHOW_SELECT = [...KNOWN_SCOPED_MEMBER_FIELDS];
 export const DEFAULT_ROLE_SCOPES = ["https://graph.microsoft.com/RoleManagement.Read.Directory"];
 export const DEFAULT_ELIGIBLE_SCOPES = ["https://graph.microsoft.com/RoleEligibilitySchedule.Read.Directory"];

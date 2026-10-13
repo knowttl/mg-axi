@@ -451,7 +451,8 @@ async function listCollection(
     shape.known, shape.knownList, shape.noun, help);
   const scopes = scopesFor(flags, profile, help, shape.defaultScopes);
   const full = flags.full === true;
-  const query: Record<string, string> = { $select: select.join(",") };
+  // Authentication contexts reject $select; selection remains a local projection.
+  const query: Record<string, string> = shape.noun === "auth-context" ? {} : { $select: select.join(",") };
   if (flags.filter !== undefined) query.$filter = String(flags.filter);
   const args: CollectArgs = { profile, operation, query, scopes };
   if (shape.parent !== undefined) {
@@ -468,7 +469,7 @@ async function listCollection(
     args.limit = flags.limit === undefined ? 100 : Number(flags.limit);
   }
   const result = await withGuidance(shape.denialHints, () => session.collect(args));
-  const effectiveFlags: ConditionalAccessFlags = { ...flags, select: result.query.$select ?? shape.defaultSelect.join(",") };
+  const effectiveFlags: ConditionalAccessFlags = { ...flags, select: result.query.$select ?? select.join(",") };
   if (result.query.$filter !== undefined) effectiveFlags.filter = result.query.$filter;
   const rows: Record<string, unknown>[] = [];
   let truncated = false;
@@ -568,7 +569,7 @@ async function showSingle(
     profile,
     operation,
     params,
-    query: { $select: select.join(",") },
+    query: shape.noun === "auth-strength-policy" ? {} : { $select: select.join(",") },
     scopes,
   }));
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {

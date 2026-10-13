@@ -318,7 +318,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
-  test(`${mode} shows one service record and lists top-level DNS records`, async () => {
+  test(`${mode} shows one service record and refuses top-level DNS lists`, async () => {
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
@@ -329,12 +329,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         id: s1.id,
         mailExchange: s1.mailExchange,
       });
-      const listed = await executeArgv(["entra", "domain-dns-record", "list", "--profile", profile], overrides);
-      assert.deepEqual(listed.domainDnsRecords, [
-        { "@odata.type": "#microsoft.graph.domainDnsCnameRecord", id: t1.id, label: t1.label, recordType: "CName", supportedService: "Email" },
-      ]);
-      assert.deepEqual(listed.count, "1 DNS records");
-      assert.equal(listed.total, null);
+      await assert.rejects(executeArgv(["entra", "domain-dns-record", "list", "--profile", profile], overrides), /not supported/);
       const top = await executeArgv(["entra", "domain-dns-record", "show", "--id", t1.id, "--profile", profile,
         "--select", "id,canonicalName"], overrides);
       assert.deepEqual(top.domainDnsRecord, {
@@ -428,8 +423,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(decode(serviceOut.stdout).serviceConfigurationRecords.length, 2);
 
       const topOut = runDomainCli(["entra", "domain-dns-record", "list", "--profile", profile], state, mode);
-      assert.equal(topOut.status, 0, topOut.stdout);
-      assert.equal(decode(topOut.stdout).domainDnsRecords.length, 1);
+      assert.equal(topOut.status, 2, topOut.stdout);
+      assert.match(decode(topOut.stdout).error, /not supported/);
       assert.ok(!topOut.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });

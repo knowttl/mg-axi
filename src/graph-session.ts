@@ -322,6 +322,14 @@ function checkOperation(operation: SessionOperation): void {
       "Resolve the operation from inventory/operations.json before executing it",
     ]);
   }
+  const unsupported: Record<string, string[]> = {
+    "/domainDnsRecords": ["mg-axi entra domain verification-dns-record list --domain <domain-id>", "mg-axi entra domain service-configuration-record list --domain <domain-id>"],
+    "/directoryObjects": ["mg-axi entra directory-object show --id <object-id>", "Use the named user, group, device, application or service-principal list command"],
+    "/scopedRoleMemberships": ["mg-axi entra directory-role scoped-member list --role <role-id>"],
+    "/scopedRoleMemberships/{scopedRoleMembership-id}": ["mg-axi entra directory-role scoped-member show --role <role-id> --id <scoped-membership-id>"],
+  };
+  const alternatives = unsupported[operation.path];
+  if (alternatives) throw new AxiError(`GET ${operation.path} is not supported by Microsoft Graph v1.0`, "VALIDATION_ERROR", alternatives);
 }
 
 const UNSAFE_PARAM = /[%/?\\{}()]/;
@@ -571,9 +579,9 @@ function faultBody(body: string): string {
   try {
     const parsed = redact(JSON.parse(body)) as { error?: { code?: unknown; message?: unknown } };
     const code = typeof parsed?.error?.code === "string" ? parsed.error.code : null;
-    if (!code) return "";
     const message = typeof parsed?.error?.message === "string" ? parsed.error.message.slice(0, 300) : "";
-    return `: graph ${code}${message ? ` ${message}` : ""}`;
+    if (!code && !message) return "";
+    return `: graph${code ? ` ${code}` : ""}${message ? ` ${message}` : ""}`;
   } catch {
     return "";
   }
@@ -765,6 +773,7 @@ export class GraphSession {
   ) {}
 
   cursorQuery(operation: SessionOperation, cursor: string): Readonly<Record<string, string>> {
+    checkOperation(operation);
     return decodeCursor(operation, cursor).query;
   }
 
@@ -891,6 +900,7 @@ export class GraphSession {
     const headersFor = (): Record<string, string> => ({
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
+      "Accept-Language": "en-US",
       "client-request-id": randomUUID(),
       ...(consistencyLevel === "eventual" ? { ConsistencyLevel: "eventual" } : {}),
     });
@@ -1053,6 +1063,7 @@ export class GraphSession {
     const headersFor = (): Record<string, string> => ({
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
+      "Accept-Language": "en-US",
       "client-request-id": randomUUID(),
       ...(opts.consistencyLevel === "eventual" ? { ConsistencyLevel: "eventual" } : {}),
       // The branding GET documents Accept-Language as required; 0 selects

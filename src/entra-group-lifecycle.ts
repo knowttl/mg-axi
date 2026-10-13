@@ -243,7 +243,8 @@ function collectArgs(
   flags: GroupLifecycleFlags,
   help: string,
 ): CollectArgs {
-  const query: Record<string, string> = { $select: common.select.join(",") };
+  // Lifecycle-policy lists reject $select; keep the selected output fields local.
+  const query: Record<string, string> = operation.path === "/groupLifecyclePolicies" ? {} : { $select: common.select.join(",") };
   if (common.filter !== undefined) query.$filter = common.filter;
   const args: CollectArgs = { profile, operation, query, scopes: common.scopes };
   if (common.cursor !== undefined) args.cursor = common.cursor;
@@ -296,7 +297,7 @@ export async function listLifecyclePolicies(
   const common = collectionCommon(session, flags, KNOWN_LIFECYCLE, KNOWN_LIFECYCLE_FIELDS,
     DEFAULT_LIFECYCLE_LIST_SELECT, DEFAULT_LIFECYCLE_SCOPES, operation, help, profile, true);
   const result = await withGuidance(LIFECYCLE_DENIAL_HINTS, () => session.collect(collectArgs(profile, operation, common, flags, help)));
-  const effectiveFlags: GroupLifecycleFlags = { ...flags, select: result.query.$select ?? DEFAULT_LIFECYCLE_LIST_SELECT.join(",") };
+  const effectiveFlags: GroupLifecycleFlags = { ...flags, select: result.query.$select ?? common.select.join(",") };
   if (result.query.$filter !== undefined) effectiveFlags.filter = result.query.$filter;
   const policies: Record<string, unknown>[] = [];
   let truncated = false;

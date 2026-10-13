@@ -182,7 +182,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.complete, true);
       assert.ok(result.help.some(hint => hint.includes("entra group-lifecycle-policy show --id <policy-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/groupLifecyclePolicies?"));
+      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/groupLifecyclePolicies");
       assert.ok(!new URL(requests[0].url).searchParams.has("$filter"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(lifecycleScopes)));

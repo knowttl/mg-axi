@@ -3,6 +3,10 @@ import { test } from "node:test";
 import { ApplicationAuth } from "../dist/app-auth.js";
 import { DelegatedAuth } from "../dist/auth.js";
 import { authorizeUrl, GraphSession, resolveSessionOperation } from "../dist/graph-session.js";
+import { listScopedMembers, showScopedMember } from "../dist/entra-roles.js";
+import { listAuthContexts, showAuthStrengthPolicy } from "../dist/entra-conditional-access.js";
+import { listLifecyclePolicies } from "../dist/entra-group-lifecycle.js";
+import { listProvisioning } from "../dist/entra-audit-logs.js";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
@@ -41,6 +45,79 @@ function fixture(handler) {
   };
   return { credentialCalls, requests, session: new GraphSession({ delegated, application, transport }) };
 }
+
+test("PIM reads send a supported culture through both request builders", async () => {
+  const operation = resolveSessionOperation("v1.0", "GET", "/roleManagement/directory/roleEligibilityScheduleInstances");
+  const f = fixture(request => request.headers["Accept-Language"] === "en-US"
+    ? json(400, { error: { code: "AadPremiumLicenseRequired", message: "Premium license required" } })
+    : json(400, { error: { code: "CultureNotFoundException", message: "* is an invalid culture identifier" } }));
+  await assert.rejects(f.session.execute({ profile: appProfile, operation }), /AadPremiumLicenseRequired/);
+  await assert.rejects(f.session.collect({ profile: appProfile, operation }), /AadPremiumLicenseRequired/);
+});
+
+test("Graph preserves a query rejection message when the error code is empty", async () => {
+  const f = fixture(json(400, { error: { code: "", message: "Query option 'Select' is not allowed" } }));
+  const operation = resolveSessionOperation("v1.0", "GET", "/identity/conditionalAccess/authenticationContextClassReferences");
+  await assert.rejects(f.session.execute({ profile: appProfile, operation, query: { $select: "id,displayName" } }), /Query option 'Select' is not allowed/);
+});
+
+test("unsupported root collections fail before credentials with supported alternatives", async () => {
+  const f = fixture(json(200, { value: [] }));
+  for (const [path, hint] of [["/domainDnsRecords", /verification-dns-record/], ["/directoryObjects", /directory-object show/]]) {
+    const operation = resolveSessionOperation("v1.0", "GET", path);
+    await assert.rejects(f.session.collect({ profile: appProfile, operation }), error => {
+      assert.match(error.message, /not supported/);
+      assert.ok(error.suggestions.some(value => hint.test(value)));
+      return true;
+    });
+  }
+  assert.equal(f.credentialCalls.length, 0);
+  assert.equal(f.requests.length, 0);
+});
+
+test("scoped membership reads select the v1.0 fields and refuse direct root queries", async () => {
+  const row = { id: "membership", roleId: "role", administrativeUnitId: "unit", roleMemberInfo: { id: "member", displayName: "Member" } };
+  const f = fixture(request => {
+    const url = new URL(request.url);
+    const select = url.searchParams.get("$select").split(",");
+    if (select.some(field => !Object.hasOwn(row, field))) return json(400, { error: { code: "Request_BadRequest", message: "Property does not exist" } });
+    return json(200, url.pathname.endsWith("/scopedMembers") ? { value: [row] } : row);
+  });
+  const list = resolveSessionOperation("v1.0", "GET", "/directoryRoles/{directoryRole-id}/scopedMembers");
+  const show = resolveSessionOperation("v1.0", "GET", "/directoryRoles/{directoryRole-id}/scopedMembers/{scopedRoleMembership-id}");
+  assert.deepEqual((await listScopedMembers(f.session, { role: "role" }, appProfile, list, "help", "batch")).scopedMembers, [row]);
+  assert.deepEqual((await showScopedMember(f.session, { role: "role", id: "membership" }, appProfile, show, "help", "batch")).scopedMember, row);
+  for (const path of ["/scopedRoleMemberships", "/scopedRoleMemberships/{scopedRoleMembership-id}"]) {
+    await assert.rejects(f.session.execute({ profile: appProfile, operation: resolveSessionOperation("v1.0", "GET", path), params: { "scopedRoleMembership-id": "membership" } }), /not supported/);
+  }
+  assert.equal(f.requests.length, 2);
+});
+
+test("select-rejecting policy reads project compact fields without sending $select", async () => {
+  for (const [run, path, flags, body, key, expected] of [
+    [listAuthContexts, "/identity/conditionalAccess/authenticationContextClassReferences", {}, { value: [{ id: "c1", displayName: "Context", description: "Detail" }] }, "authContexts", [{ id: "c1", displayName: "Context" }]],
+    [showAuthStrengthPolicy, "/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}", { id: "strength" }, { id: "strength", displayName: "Strength" }, "authStrengthPolicy", { id: "strength", displayName: "Strength" }],
+    [listLifecyclePolicies, "/groupLifecyclePolicies", {}, { value: [{ id: "policy", groupLifetimeInDays: 180, managedGroupTypes: "All", alternateNotificationEmails: "admin@example.com" }] }, "groupLifecyclePolicies", [{ id: "policy", groupLifetimeInDays: 180, managedGroupTypes: "All" }]],
+  ]) {
+    const f = fixture(request => new URL(request.url).searchParams.has("$select")
+      ? json(400, { error: { code: "", message: "Query option 'Select' is not allowed" } })
+      : json(200, body));
+    const result = await run(f.session, flags, appProfile, resolveSessionOperation("v1.0", "GET", path), "help", "batch");
+    assert.deepEqual(result[key], expected);
+    assert.equal(f.requests.length, 1);
+  }
+});
+
+test("provisioning list keeps its time bound and projects provisioningAction without $select", async () => {
+  const row = { id: "log", activityDateTime: "2026-09-01T01:00:00Z", provisioningAction: "create", provisioningStatusInfo: { status: "success" }, jobId: "job" };
+  const f = fixture(request => new URL(request.url).searchParams.has("$select")
+    ? json(400, { error: { code: "", message: "Query option 'Select' is not allowed" } })
+    : json(200, { value: [row] }));
+  const operation = resolveSessionOperation("v1.0", "GET", "/auditLogs/provisioning");
+  const result = await listProvisioning(f.session, { since: "2026-09-01T00:00:00Z" }, appProfile, operation, "help", "batch");
+  assert.deepEqual(result.provisioning, [{ id: row.id, activityDateTime: row.activityDateTime, provisioningAction: "create", provisioningStatusInfo: row.provisioningStatusInfo }]);
+  assert.equal(new URL(f.requests[0].url).searchParams.get("$filter"), "activityDateTime ge 2026-09-01T00:00:00.000Z");
+});
 
 test("delegated read returns parsed JSON through the authorized URL", async () => {
   const f = fixture(json(200, { value: [{ id: "a" }] }));

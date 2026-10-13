@@ -132,26 +132,13 @@ function runDirectoryObjectCli(args, state, mode, denied = false) {
 }
 
 for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
-  test(`${mode} lists directory objects with compact rows naming each subtype`, async () => {
+  test(`${mode} refuses unsupported directory-object lists before credentials`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "directory-object", "list", "--profile", profile], overrides);
-      assert.deepEqual(result.directoryObjects, [
-        { id: obj1.id, "@odata.type": "#microsoft.graph.user" },
-        { id: obj2.id, "@odata.type": "#microsoft.graph.servicePrincipal" },
-        { id: obj3.id },
-      ]);
-      assert.deepEqual(result.count, "3 directory objects");
-      assert.equal(result.total, null);
-      assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra directory-object show --id <object-id>")));
-      assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/directoryObjects?"));
-      assert.ok(!new URL(requests[0].url).searchParams.has("$filter"));
-      assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
-      assert.ok(!JSON.stringify(result).includes("super-secret-value"), "subtype secrets never reach output");
-      if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(directoryObjectScopes)));
+      await assert.rejects(executeArgv(["entra", "directory-object", "list", "--profile", profile], overrides), /not supported/);
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
     } finally {
       teardownProfiles(state);
     }
@@ -172,18 +159,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
-  test(`${mode} resumes a capped directory-object list through its opaque cursor`, async () => {
+  test(`${mode} refuses directory-object list cursors before credentials`, async () => {
     const state = setupProfiles();
     try {
-      const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "directory-object", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.directoryObjects.map(row => row.id), [obj1.id]);
-      assert.equal(first.complete, false);
-      assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "directory-object", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.directoryObjects.map(row => row.id), [obj2.id, obj3.id]);
-      assert.deepEqual(second.count, "2 directory objects");
-      assert.equal(second.total, null);
+      const { overrides, requests, calls } = overridesFor(mode);
+      await assert.rejects(executeArgv(["entra", "directory-object", "list", "--profile", profile, "--cursor", "obsolete-cursor"], overrides), /not supported/);
+      assert.equal(calls.length, 0);
+      assert.equal(requests.length, 0);
     } finally {
       teardownProfiles(state);
     }
@@ -250,17 +232,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
-  test(`${mode} empty directory-object lists stay definitive`, async () => {
+  test(`${mode} unsupported directory-object lists never report an empty directory`, async () => {
     const state = setupProfiles();
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const listed = await executeArgv(["entra", "directory-object", "list", "--profile", profile], overrides);
-      assert.deepEqual(listed.directoryObjects, []);
-      assert.deepEqual(listed.count, "0 directory objects");
-      assert.equal(listed.total, null);
-      assert.equal(listed.complete, true);
-      assert.ok(listed.help.some(hint => hint.includes("verify the profile tenant")));
+      await assert.rejects(executeArgv(["entra", "directory-object", "list", "--profile", profile], overrides), /not supported/);
+      assert.equal(empty.requests.length, 0);
     } finally {
       teardownProfiles(state);
     }
@@ -285,7 +263,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const { overrides } = overridesFor(mode, denied);
-      await assert.rejects(executeArgv(["entra", "directory-object", "list", "--profile", profile], overrides), error => {
+      await assert.rejects(executeArgv(["entra", "directory-object", "show", "--id", obj1.id, "--profile", profile], overrides), error => {
         assert.equal(error.code, "GRAPH_ERROR");
         assert.ok(error.suggestions.some(hint => hint.includes("Directory.Read.All")));
         assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
@@ -306,13 +284,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const listed = runDirectoryObjectCli(["entra", "directory-object", "list", "--profile", profile], state, mode);
-      assert.equal(listed.status, 0, listed.stdout);
+      assert.equal(listed.status, 2, listed.stdout);
       assert.equal(listed.stderr, "");
       const listOut = decode(listed.stdout);
-      assert.deepEqual(listOut.directoryObjects.map(row => row.id), [obj1.id, obj2.id]);
-      assert.deepEqual(listOut.directoryObjects.map(row => row["@odata.type"]), ["#microsoft.graph.user", "#microsoft.graph.servicePrincipal"]);
-      assert.deepEqual(listOut.count, "2 directory objects");
-      assert.equal(listOut.total, null);
+      assert.equal(listOut.code, "VALIDATION_ERROR");
+      assert.match(listOut.error, /not supported/);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runDirectoryObjectCli(["entra", "directory-object", "show", "--id", obj1.id, "--profile", profile], state, mode);
@@ -329,7 +305,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
   test(`${mode} executable denied directory-object reads fail operationally on stdout`, () => {
     const state = setupProfiles();
     try {
-      const result = runDirectoryObjectCli(["entra", "directory-object", "list", "--profile", profile], state, mode, true);
+      const result = runDirectoryObjectCli(["entra", "directory-object", "show", "--id", obj1.id, "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
       const output = decode(result.stdout);
@@ -383,26 +359,26 @@ test("application directory-object reads refuse delegated scopes before credenti
   }
 });
 
-test("truncated directory-object text carries a --full hint without lifting caps", async () => {
+test("truncated directory-object detail carries a --full hint", async () => {
   const state = setupProfiles();
   try {
-    const longRow = transport(() => json(200, { value: [{ "@odata.type": "#microsoft.graph.group", id: longId }] }));
+    const longRow = transport(() => json(200, { "@odata.type": "#microsoft.graph.group", id: longId }));
     const { overrides } = overridesFor("delegated", longRow);
-    const partial = await executeArgv(["entra", "directory-object", "list", "--profile", "soc",
+    const partial = await executeArgv(["entra", "directory-object", "show", "--id", obj1.id, "--profile", "soc",
       "--select", "id"], overrides);
-    const truncated = partial.directoryObjects.find(row => row.id.startsWith("obj-"));
+    const truncated = partial.directoryObject;
     assert.match(truncated.id, /truncated, \d+ chars total/);
     assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "directory-object", "list", "--profile", "soc", "--full",
+    const full = await executeArgv(["entra", "directory-object", "show", "--id", obj1.id, "--profile", "soc", "--full",
       "--select", "id"], overrides);
-    assert.equal(full.directoryObjects.find(row => row.id.startsWith("obj-")).id, longId);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    assert.equal(full.directoryObject.id, longId);
+    assert.equal(full.help, undefined);
   } finally {
     teardownProfiles(state);
   }
 });
 
-test("raw directory-object reads keep the subtype discriminator and refuse unreviewed fields", async () => {
+test("raw directory-object lists refuse unsupported root queries before credentials", async () => {
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const { ApplicationAuth } = await import("../dist/app-auth.js");
@@ -417,23 +393,19 @@ test("raw directory-object reads keep the subtype discriminator and refuse unrev
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
   const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } };
   for (const profile of [delegatedProfile, appProfile]) {
-    const listed = await runApiGet({ path: "/directoryObjects", apiVersion: "v1.0", profile,
-      ...(profile.mode === "delegated" ? { scopes: directoryObjectScopes[0] } : {}) }, deps);
-    assert.equal(listed.returned, 2);
-    assert.deepEqual(listed.value, [
-      { id: obj1.id, "@odata.type": "#microsoft.graph.user" },
-      { id: obj2.id, "@odata.type": "#microsoft.graph.servicePrincipal" },
-    ]);
+    await assert.rejects(runApiGet({ path: "/directoryObjects", apiVersion: "v1.0", profile,
+      ...(profile.mode === "delegated" ? { scopes: directoryObjectScopes[0] } : {}) }, deps), /not in the reviewed raw inventory/);
     await assert.rejects(
       runApiGet({ path: "/directoryObjects", apiVersion: "v1.0", profile, odata: "$select=id,displayName",
         ...(profile.mode === "delegated" ? { scopes: directoryObjectScopes[0] } : {}) }, deps),
       error => {
         assert.equal(error.code, "VALIDATION_ERROR");
-        return /Unreviewed \$select field displayName/.test(error.message);
+        return /not in the reviewed raw inventory/.test(error.message);
       },
     );
   }
-  assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-secret"));
+  assert.equal(requests.length, 0);
+  assert.equal(credentialCalls.length, 0);
 });
 
 test("raw directory-object show keeps the discriminator without subtype secrets", async () => {

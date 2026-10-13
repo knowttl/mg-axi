@@ -197,10 +197,10 @@ test("setup hooks installs stable SessionStart entries idempotently", () => {
     ];
     const linkedBin = join(dir, "mg-axi");
     symlinkSync(bin, linkedBin);
-    const args = ["--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning", "--disable-warning=DeprecationWarning", "--import", pathToFileURL(resolve("test/fixtures/stable-hook-path.mjs")).href, linkedBin, "setup", "hooks"];
+    const args = ["--import", pathToFileURL(resolve("test/fixtures/stable-hook-path.mjs")).href, linkedBin, "setup", "hooks"];
     const first = spawnSync(process.execPath, args,
       { encoding: "utf8", input: "", timeout: 30000, env });
-    assert.equal(first.status, 0, first.stdout);
+    assert.equal(first.status, 0, first.stdout + first.stderr);
     assert.equal(first.stderr, "");
     assert.match(first.stdout, /installed/);
     for (const path of paths) assert.match(readFileSync(path, "utf8"), /\/opt\/mg-axi\/dist\/bin\/mg-axi-hook.js/);
@@ -215,8 +215,8 @@ test("setup hooks installs stable SessionStart entries idempotently", () => {
 test("setup hooks refuses a worktree target without touching the selected home", () => {
   const { dir, config } = home();
   try {
-    const result = spawnSync(process.execPath, [bin, "setup", "hooks"],
-      { encoding: "utf8", timeout: 30000, env: baseEnv(dir, config) });
+    const result = spawnSync(process.execPath, ["--import", pathToFileURL(resolve("test/fixtures/stable-hook-path.mjs")).href, bin, "setup", "hooks"],
+      { encoding: "utf8", timeout: 30000, env: { ...baseEnv(dir, config), MG_AXI_TEST_WORKTREE: "1" } });
     assert.equal(result.status, 1, result.stdout);
     assert.match(result.stdout, /HOOK_INSTALL_FAILED/);
     assert.match(result.stdout, /temporary directory or worktree/);
@@ -229,7 +229,10 @@ for (const linked of [false, true]) {
     const { dir, config } = home();
     const build = mkdtempSync(join(tmpdir(), "mg-axi-build-"));
     try {
-      if (linked) symlinkSync(resolve("dist"), join(build, "dist"), "dir");
+      if (linked) {
+        cpSync(resolve("dist"), join(build, "target"), { recursive: true });
+        symlinkSync(join(build, "target"), join(build, "dist"), "dir");
+      }
       else cpSync(resolve("dist"), join(build, "dist"), { recursive: true });
       symlinkSync(resolve("node_modules"), join(build, "node_modules"), "dir");
       cpSync(resolve("inventory"), join(build, "inventory"), { recursive: true });

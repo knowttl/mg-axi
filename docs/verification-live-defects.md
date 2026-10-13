@@ -21,3 +21,10 @@ For D, keep the legacy named list commands as explicit unsupported errors and re
 There is no equivalent global list to map to: DNS records require a parent domain, and directory objects have documented detail and typed list operations.
 The alternatives already exist as named commands.
 This follows the [domainDnsRecord reference](https://learn.microsoft.com/en-us/graph/api/resources/domaindnsrecord?view=graph-rest-1.0) and [directoryObject methods](https://learn.microsoft.com/en-us/graph/api/resources/directoryobject?view=graph-rest-1.0).
+
+Delivery checks:
+
+- Use gh-axi for GitHub operations, and include `--repo knowttl/mg-axi -B main` on every PR creation.
+- The PR body must state the problem, consequence, fix and scope, including the choice for D described above.
+- Keep all validation offline with the existing fakes; do not change GitHub Actions.
+- Confirm the PR is not a draft and is mergeable when checks pass; merging and the release PR belong to the supervising delivery process.

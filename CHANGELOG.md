@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/knowttl/mg-axi/compare/v0.1.6...v0.1.7) (2026-10-13)
+
+
+### Bug Fixes
+
+* correct Graph v1.0 read requests and error messages ([#91](https://github.com/knowttl/mg-axi/issues/91)) ([2bd936f](https://github.com/knowttl/mg-axi/commit/2bd936fab746dc7e423ff1e2ff7c4cd16ab417bf))
+
 ## [0.1.6](https://github.com/knowttl/mg-axi/compare/v0.1.5...v0.1.6) (2026-10-13)
 
 

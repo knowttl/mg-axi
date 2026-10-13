@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/knowttl/mg-axi/compare/v0.1.7...v0.1.8) (2026-10-13)
+
+
+### Bug Fixes
+
+* omit transient retry hints for Graph client errors ([#93](https://github.com/knowttl/mg-axi/issues/93)) ([e3d8515](https://github.com/knowttl/mg-axi/commit/e3d851552f670bce91faf06bfc7642a2a0a46adf))
+
 ## [0.1.7](https://github.com/knowttl/mg-axi/compare/v0.1.6...v0.1.7) (2026-10-13)
 
 

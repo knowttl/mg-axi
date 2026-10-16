@@ -8,12 +8,14 @@ import { performance } from "node:perf_hooks";
 import { decode } from "@toon-format/toon";
 
 const bin = resolve("dist/bin/mg-axi.js");
-function run(args, executable = bin) {
+function run(args, executable = bin, options = {}) {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-cli-"));
   try {
+    options.init?.(dir);
     return spawnSync(process.execPath, [executable, ...args], {
       encoding: "utf8", input: "", timeout: 10000,
-      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: join(dir, "config.json") },
+      cwd: options.cwd === undefined ? undefined : join(dir, options.cwd),
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: join(dir, "config.json"), ...options.env },
     });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
@@ -26,6 +28,48 @@ test("home reports unavailable tenant state on stdout without credentials", () =
   assert.equal(output.bin.replace(/^~(?=[/\\])/, homedir()), bin);
   assert.match(output.tenant, /unavailable/);
   assert.equal(output.domains[0].status, "scheduled");
+});
+
+const SKILL_HINT = "npx skills add knowttl/mg-axi --skill mg-axi";
+const SKILL_HOSTS = [
+  { name: "claude-code", env: { CLAUDECODE: "1" }, globalDir: join(".claude", "skills"), projectDir: join(".claude", "skills") },
+  { name: "codex", env: { CODEX_THREAD_ID: "thread-fixture" }, globalDir: join(".codex", "skills"), projectDir: join(".agents", "skills") },
+  { name: "pi", env: { PI_CODING_AGENT: "true" }, globalDir: join(".pi", "agent", "skills"), projectDir: join(".pi", "skills") },
+  { name: "opencode", env: { OPENCODE: "1" }, globalDir: join(".config", "opencode", "skills"), projectDir: join(".agents", "skills") },
+];
+
+function homeHelp(result) {
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  return decode(result.stdout).help;
+}
+
+for (const host of SKILL_HOSTS) test(`home appends the skill install hint for ${host.name} when the skill is missing`, () => {
+  assert.equal(homeHelp(run([], bin, { env: host.env })).at(-1), SKILL_HINT);
+});
+
+for (const host of SKILL_HOSTS) test(`home omits the skill install hint for ${host.name} once installed at user level`, () => {
+  const help = homeHelp(run([], bin, {
+    env: host.env,
+    init: dir => mkdirSync(join(dir, host.globalDir, "mg-axi"), { recursive: true }),
+  }));
+  assert.ok(!help.includes(SKILL_HINT));
+});
+
+for (const host of SKILL_HOSTS) test(`home omits the skill install hint for ${host.name} once installed at project level`, () => {
+  const help = homeHelp(run([], bin, {
+    env: host.env,
+    cwd: join("proj", "sub"),
+    init: dir => {
+      mkdirSync(join(dir, "proj", host.projectDir, "mg-axi"), { recursive: true });
+      mkdirSync(join(dir, "proj", "sub"), { recursive: true });
+    },
+  }));
+  assert.ok(!help.includes(SKILL_HINT));
+});
+
+test("home omits the skill install hint outside a known agent host", () => {
+  assert.ok(!homeHelp(run([])).includes(SKILL_HINT));
 });
 
 test("top help lists only the shell catalogue", () => {

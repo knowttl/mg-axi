@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.9](https://github.com/knowttl/mg-axi/compare/v0.1.8...v0.1.9) (2026-10-16)
+
+
+### Features
+
+* show skill install hint in no-args home view when missing ([#95](https://github.com/knowttl/mg-axi/issues/95)) ([751e0b5](https://github.com/knowttl/mg-axi/commit/751e0b5064e2b715a11b03880970bd908c5294a8))
+
 ## [0.1.8](https://github.com/knowttl/mg-axi/compare/v0.1.7...v0.1.8) (2026-10-13)
 
 

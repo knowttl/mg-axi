@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, cpSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -45,6 +45,11 @@ function homeHelp(result) {
   return decode(result.stdout).help;
 }
 
+function mkSkill(skillsDir) {
+  mkdirSync(join(skillsDir, "mg-axi"), { recursive: true });
+  writeFileSync(join(skillsDir, "mg-axi", "SKILL.md"), "---\nname: mg-axi\n---\n");
+}
+
 for (const host of SKILL_HOSTS) test(`home appends the skill install hint for ${host.name} when the skill is missing`, () => {
   assert.equal(homeHelp(run([], bin, { env: host.env })).at(-1), SKILL_HINT);
 });
@@ -52,7 +57,7 @@ for (const host of SKILL_HOSTS) test(`home appends the skill install hint for ${
 for (const host of SKILL_HOSTS) for (const userDir of host.userDirs) test(`home omits the skill install hint for ${host.name} once installed at user level (${userDir})`, () => {
   const help = homeHelp(run([], bin, {
     env: host.env,
-    init: dir => mkdirSync(join(dir, userDir, "mg-axi"), { recursive: true }),
+    init: dir => mkSkill(join(dir, userDir)),
   }));
   assert.ok(!help.includes(SKILL_HINT));
 });
@@ -62,7 +67,7 @@ for (const host of SKILL_HOSTS) for (const projectDir of host.projectDirs) test(
     env: host.env,
     cwd: join("proj", "sub"),
     init: dir => {
-      mkdirSync(join(dir, "proj", projectDir, "mg-axi"), { recursive: true });
+      mkSkill(join(dir, "proj", projectDir));
       mkdirSync(join(dir, "proj", "sub"), { recursive: true });
     },
   }));
@@ -72,7 +77,7 @@ for (const host of SKILL_HOSTS) for (const projectDir of host.projectDirs) test(
 test("home honours CLAUDE_CONFIG_DIR for the Claude Code personal skills folder", () => {
   const help = homeHelp(run([], bin, {
     env: dir => ({ CLAUDECODE: "1", CLAUDE_CONFIG_DIR: join(dir, "custom-claude") }),
-    init: dir => mkdirSync(join(dir, "custom-claude", "skills", "mg-axi"), { recursive: true }),
+    init: dir => mkSkill(join(dir, "custom-claude", "skills")),
   }));
   assert.ok(!help.includes(SKILL_HINT));
 });
@@ -80,7 +85,7 @@ test("home honours CLAUDE_CONFIG_DIR for the Claude Code personal skills folder"
 test("home honours CODEX_HOME for the Codex skills folder", () => {
   const help = homeHelp(run([], bin, {
     env: dir => ({ CODEX_THREAD_ID: "thread-fixture", CODEX_HOME: join(dir, "custom-codex") }),
-    init: dir => mkdirSync(join(dir, "custom-codex", "skills", "mg-axi"), { recursive: true }),
+    init: dir => mkSkill(join(dir, "custom-codex", "skills")),
   }));
   assert.ok(!help.includes(SKILL_HINT));
 });
@@ -88,7 +93,7 @@ test("home honours CODEX_HOME for the Codex skills folder", () => {
 test("home honours XDG_CONFIG_HOME for the OpenCode skills folder", () => {
   const help = homeHelp(run([], bin, {
     env: dir => ({ OPENCODE: "1", XDG_CONFIG_HOME: join(dir, "custom-config") }),
-    init: dir => mkdirSync(join(dir, "custom-config", "opencode", "skills", "mg-axi"), { recursive: true }),
+    init: dir => mkSkill(join(dir, "custom-config", "opencode", "skills")),
   }));
   assert.ok(!help.includes(SKILL_HINT));
 });
@@ -96,7 +101,7 @@ test("home honours XDG_CONFIG_HOME for the OpenCode skills folder", () => {
 test("home honours OPENCODE_CONFIG_DIR for the OpenCode skills folder", () => {
   const help = homeHelp(run([], bin, {
     env: dir => ({ OPENCODE: "1", OPENCODE_CONFIG_DIR: join(dir, "custom-opencode") }),
-    init: dir => mkdirSync(join(dir, "custom-opencode", "opencode", "skills", "mg-axi"), { recursive: true }),
+    init: dir => mkSkill(join(dir, "custom-opencode", "opencode", "skills")),
   }));
   assert.ok(!help.includes(SKILL_HINT));
 });
@@ -117,7 +122,7 @@ const CROSS_HOST = [
 for (const host of CROSS_HOST) test(`home still shows the skill install hint for ${host.name} when the skill lives only in another host's user folder (${host.userDir})`, () => {
   const help = homeHelp(run([], bin, {
     env: host.env,
-    init: dir => mkdirSync(join(dir, host.userDir, "mg-axi"), { recursive: true }),
+    init: dir => mkSkill(join(dir, host.userDir)),
   }));
   assert.equal(help.at(-1), SKILL_HINT);
 });
@@ -127,8 +132,43 @@ for (const host of CROSS_HOST) test(`home still shows the skill install hint for
     env: host.env,
     cwd: join("proj", "sub"),
     init: dir => {
-      mkdirSync(join(dir, "proj", host.projectDir, "mg-axi"), { recursive: true });
+      mkSkill(join(dir, "proj", host.projectDir));
       mkdirSync(join(dir, "proj", "sub"), { recursive: true });
+    },
+  }));
+  assert.equal(help.at(-1), SKILL_HINT);
+});
+
+test("home still shows the hint when mg-axi exists without a SKILL.md file", () => {
+  const help = homeHelp(run([], bin, {
+    env: { CLAUDECODE: "1" },
+    init: dir => mkdirSync(join(dir, ".claude", "skills", "mg-axi"), { recursive: true }),
+  }));
+  assert.equal(help.at(-1), SKILL_HINT);
+});
+
+test("home omits the hint in a linked worktree via the main checkout's project skills", () => {
+  const help = homeHelp(run([], bin, {
+    env: { CLAUDECODE: "1" },
+    cwd: join("wt", "sub"),
+    init: dir => {
+      mkSkill(join(dir, "main", ".claude", "skills"));
+      mkdirSync(join(dir, "wt", "sub"), { recursive: true });
+      writeFileSync(join(dir, "wt", ".git"), `gitdir: ${join(dir, "main", ".git", "worktrees", "wt")}\n`);
+    },
+  }));
+  assert.ok(!help.includes(SKILL_HINT));
+});
+
+test("home still shows the hint in a worktree that has its own .claude/skills folder", () => {
+  const help = homeHelp(run([], bin, {
+    env: { CLAUDECODE: "1" },
+    cwd: join("wt", "sub"),
+    init: dir => {
+      mkSkill(join(dir, "main", ".claude", "skills"));
+      mkdirSync(join(dir, "wt", ".claude", "skills"), { recursive: true });
+      mkdirSync(join(dir, "wt", "sub"), { recursive: true });
+      writeFileSync(join(dir, "wt", ".git"), `gitdir: ${join(dir, "main", ".git", "worktrees", "wt")}\n`);
     },
   }));
   assert.equal(help.at(-1), SKILL_HINT);

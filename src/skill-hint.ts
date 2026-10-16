@@ -10,7 +10,10 @@
 // - Claude Code reads its config directory ($CLAUDE_CONFIG_DIR or ~/.claude,
 //   per its binary) plus ~/.agents/skills and .agents/skills (per its
 //   binary); project .claude/skills loads from the working directory up to
-//   the repository root (per https://code.claude.com/docs/en/skills).
+//   the repository root (per https://code.claude.com/docs/en/skills). When
+//   the working directory is inside a linked git worktree whose root has no
+//   .claude/skills directory, Claude Code (v2.1.277+) falls back to the main
+//   checkout's project skills (per https://code.claude.com/docs/en/worktrees).
 // - Codex reads $HOME/.agents/skills and .agents/skills (cwd to repo root)
 //   per https://learn.chatgpt.com/docs/build-skills.md, plus
 //   $CODEX_HOME/skills (default ~/.codex/skills, per its binary and the
@@ -23,12 +26,21 @@
 //   ~/.claude/skills, ~/.agents/skills, .opencode/skills, .claude/skills and
 //   .agents/skills (project paths walk up to the git worktree) per
 //   https://opencode.ai/docs/skills/.
-import { existsSync } from "node:fs";
+//
+// Only a direct-child <folder>/mg-axi/SKILL.md counts as installed. Folders
+// listed in host settings files (for example Pi settings.json) and recursive
+// nested layouts are a documented limitation and are deliberately not
+// implemented.
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 export const SKILL_NAME = "mg-axi";
 export const SKILL_INSTALL_COMMAND = `npx skills add knowttl/${SKILL_NAME} --skill ${SKILL_NAME}`;
+
+function skillFile(dir: string): string {
+  return join(dir, SKILL_NAME, "SKILL.md");
+}
 
 export interface SkillHostRow {
   name: "claude-code" | "codex" | "pi" | "opencode";
@@ -89,12 +101,36 @@ export function detectSkillHost(env: NodeJS.ProcessEnv, home: string): SkillHost
   return undefined;
 }
 
-export function skillInstalled(row: SkillHostRow, fromDir: string): boolean {
-  if ([...row.userDirs, ...row.systemDirs].some(dir => existsSync(join(dir, SKILL_NAME)))) return true;
+// Main-checkout fallback for a linked git worktree: <worktree>/.git is a file
+// reading "gitdir: <main>/.git/worktrees/<name>". Applies only when the
+// worktree root has no .claude/skills directory of its own.
+function claudeWorktreeSkill(fromDir: string): boolean {
   for (let dir = resolve(fromDir); ; dir = dirname(dir)) {
-    if (row.projectDirs.some(projectDir => existsSync(join(dir, projectDir, SKILL_NAME)))) return true;
-    if (dirname(dir) === dir) return false;
+    let gitdir: string | undefined;
+    try {
+      const text = readFileSync(join(dir, ".git"), "utf8");
+      const prefix = "gitdir: ";
+      if (text.startsWith(prefix)) gitdir = resolve(dir, text.slice(prefix.length).trim());
+    } catch {
+      gitdir = undefined;
+    }
+    if (gitdir !== undefined) {
+      const splitAt = gitdir.replace(/\\/g, "/").indexOf("/.git/worktrees/");
+      if (splitAt === -1 || existsSync(join(dir, ".claude", "skills"))) return false;
+      return existsSync(skillFile(join(gitdir.slice(0, splitAt), ".claude", "skills")));
+    }
+    if (existsSync(join(dir, ".git")) || dirname(dir) === dir) return false;
   }
+}
+
+export function skillInstalled(row: SkillHostRow, fromDir: string): boolean {
+  if ([...row.userDirs, ...row.systemDirs].some(dir => existsSync(skillFile(dir)))) return true;
+  for (let dir = resolve(fromDir); ; dir = dirname(dir)) {
+    if (row.projectDirs.some(projectDir => existsSync(skillFile(join(dir, projectDir))))) return true;
+    if (dirname(dir) === dir) break;
+  }
+  if (row.name === "claude-code") return claudeWorktreeSkill(fromDir);
+  return false;
 }
 
 export function skillHint(env: NodeJS.ProcessEnv = process.env, fromDir: string = process.cwd()): string | undefined {

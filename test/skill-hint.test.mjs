@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -11,6 +11,7 @@ test("system folders count as installed without a walk-up", () => {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-skill-hint-"));
   try {
     mkdirSync(join(dir, "mg-axi"), { recursive: true });
+    writeFileSync(join(dir, "mg-axi", "SKILL.md"), "---\nname: mg-axi\n---\n");
     assert.equal(skillInstalled(row({ systemDirs: [dir] }), dir), true);
     assert.equal(skillInstalled(row({ systemDirs: [join(dir, "missing")] }), dir), false);
   } finally { rmSync(dir, { recursive: true, force: true }); }

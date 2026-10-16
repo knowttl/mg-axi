@@ -6,6 +6,7 @@ import { AxiError, installSessionStartHooks, runAxiCli } from "axi-sdk-js";
 import { LEAVES, home, leafHelp, operationFor, resolveCommand, DESCRIPTION, TOP_LEVEL_HELP } from "./catalogue.js";
 import { VERSION } from "./version.js";
 import { Profiles } from "./profiles.js";
+import { skillHint } from "./skill-hint.js";
 import { authStatus } from "./auth-status.js";
 import { redactSecrets } from "./redact.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
@@ -66,6 +67,9 @@ function localHome(name?: string, config?: string) {
     if (error.code === "PROFILE_AMBIGUOUS") output.profile = "unavailable: no default profile selected";
   }
   output.help.unshift("npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi auth login --help");
+  // Point agents at the installable skill until it is installed for their host.
+  const hint = skillHint();
+  if (hint !== undefined) output.help.push(hint);
   return output;
 }
 

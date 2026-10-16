@@ -139,9 +139,11 @@ export function skillDescription(): string {
   return `Inspect Microsoft Entra ${areas.join(", ")} and run ${writes.length} gated writes (${writes.join(", ")}) through token-efficient TOON output.`;
 }
 
-// Next-step hints printed by the no-args home view. The two leading entries mirror the
+// Base next-step hints printed by the no-args home view. The two leading entries mirror the
 // profile/login hints localHome() in cli.ts prepends to HOME_HELP; the
 // rest is HOME_HELP verbatim, so skill and home view cannot drift apart.
+// localHome() may append one conditional skill install hint from skill-hint.ts
+// when the skill is missing for the current host; the installed skill omits it.
 export function skillHomeHints(): string[] {
   return ["npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi auth login --help", ...HOME_HELP];
 }

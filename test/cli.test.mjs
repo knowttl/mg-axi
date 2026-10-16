@@ -77,8 +77,61 @@ test("home honours CLAUDE_CONFIG_DIR for the Claude Code personal skills folder"
   assert.ok(!help.includes(SKILL_HINT));
 });
 
+test("home honours CODEX_HOME for the Codex skills folder", () => {
+  const help = homeHelp(run([], bin, {
+    env: dir => ({ CODEX_THREAD_ID: "thread-fixture", CODEX_HOME: join(dir, "custom-codex") }),
+    init: dir => mkdirSync(join(dir, "custom-codex", "skills", "mg-axi"), { recursive: true }),
+  }));
+  assert.ok(!help.includes(SKILL_HINT));
+});
+
+test("home honours XDG_CONFIG_HOME for the OpenCode skills folder", () => {
+  const help = homeHelp(run([], bin, {
+    env: dir => ({ OPENCODE: "1", XDG_CONFIG_HOME: join(dir, "custom-config") }),
+    init: dir => mkdirSync(join(dir, "custom-config", "opencode", "skills", "mg-axi"), { recursive: true }),
+  }));
+  assert.ok(!help.includes(SKILL_HINT));
+});
+
+test("home honours OPENCODE_CONFIG_DIR for the OpenCode skills folder", () => {
+  const help = homeHelp(run([], bin, {
+    env: dir => ({ OPENCODE: "1", OPENCODE_CONFIG_DIR: join(dir, "custom-opencode") }),
+    init: dir => mkdirSync(join(dir, "custom-opencode", "opencode", "skills", "mg-axi"), { recursive: true }),
+  }));
+  assert.ok(!help.includes(SKILL_HINT));
+});
+
 test("home omits the skill install hint outside a known agent host", () => {
   assert.ok(!homeHelp(run([])).includes(SKILL_HINT));
+});
+
+// One host's copy never hides another host's hint: each entry installs the
+// skill only where the other host never looks, so the hint must still show.
+const CROSS_HOST = [
+  { name: "claude-code", env: { CLAUDECODE: "1" }, userDir: join(".pi", "agent", "skills"), projectDir: join(".pi", "skills") },
+  { name: "codex", env: { CODEX_THREAD_ID: "thread-fixture" }, userDir: join(".claude", "skills"), projectDir: join(".claude", "skills") },
+  { name: "pi", env: { PI_CODING_AGENT: "true" }, userDir: join(".config", "opencode", "skills"), projectDir: join(".opencode", "skills") },
+  { name: "opencode", env: { OPENCODE: "1" }, userDir: join(".codex", "skills"), projectDir: join(".pi", "skills") },
+];
+
+for (const host of CROSS_HOST) test(`home still shows the skill install hint for ${host.name} when the skill lives only in another host's user folder (${host.userDir})`, () => {
+  const help = homeHelp(run([], bin, {
+    env: host.env,
+    init: dir => mkdirSync(join(dir, host.userDir, "mg-axi"), { recursive: true }),
+  }));
+  assert.equal(help.at(-1), SKILL_HINT);
+});
+
+for (const host of CROSS_HOST) test(`home still shows the skill install hint for ${host.name} when the skill lives only in another host's project folder (${host.projectDir})`, () => {
+  const help = homeHelp(run([], bin, {
+    env: host.env,
+    cwd: join("proj", "sub"),
+    init: dir => {
+      mkdirSync(join(dir, "proj", host.projectDir, "mg-axi"), { recursive: true });
+      mkdirSync(join(dir, "proj", "sub"), { recursive: true });
+    },
+  }));
+  assert.equal(help.at(-1), SKILL_HINT);
 });
 
 test("top help lists only the shell catalogue", () => {

@@ -12,10 +12,11 @@ function run(args, executable = bin, options = {}) {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-cli-"));
   try {
     options.init?.(dir);
+    const extraEnv = typeof options.env === "function" ? options.env(dir) : options.env;
     return spawnSync(process.execPath, [executable, ...args], {
       encoding: "utf8", input: "", timeout: 10000,
       cwd: options.cwd === undefined ? undefined : join(dir, options.cwd),
-      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: join(dir, "config.json"), ...options.env },
+      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: join(dir, "config.json"), ...extraEnv },
     });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
@@ -32,10 +33,10 @@ test("home reports unavailable tenant state on stdout without credentials", () =
 
 const SKILL_HINT = "npx skills add knowttl/mg-axi --skill mg-axi";
 const SKILL_HOSTS = [
-  { name: "claude-code", env: { CLAUDECODE: "1" }, globalDir: join(".claude", "skills"), projectDir: join(".claude", "skills") },
-  { name: "codex", env: { CODEX_THREAD_ID: "thread-fixture" }, globalDir: join(".codex", "skills"), projectDir: join(".agents", "skills") },
-  { name: "pi", env: { PI_CODING_AGENT: "true" }, globalDir: join(".pi", "agent", "skills"), projectDir: join(".pi", "skills") },
-  { name: "opencode", env: { OPENCODE: "1" }, globalDir: join(".config", "opencode", "skills"), projectDir: join(".agents", "skills") },
+  { name: "claude-code", env: { CLAUDECODE: "1" }, userDirs: [join(".claude", "skills"), join(".agents", "skills")], projectDirs: [join(".claude", "skills"), join(".agents", "skills")] },
+  { name: "codex", env: { CODEX_THREAD_ID: "thread-fixture" }, userDirs: [join(".codex", "skills"), join(".agents", "skills")], projectDirs: [join(".agents", "skills")] },
+  { name: "pi", env: { PI_CODING_AGENT: "true" }, userDirs: [join(".pi", "agent", "skills"), join(".agents", "skills")], projectDirs: [join(".pi", "skills"), join(".agents", "skills")] },
+  { name: "opencode", env: { OPENCODE: "1" }, userDirs: [join(".config", "opencode", "skills"), join(".claude", "skills"), join(".agents", "skills")], projectDirs: [join(".opencode", "skills"), join(".claude", "skills"), join(".agents", "skills")] },
 ];
 
 function homeHelp(result) {
@@ -48,22 +49,30 @@ for (const host of SKILL_HOSTS) test(`home appends the skill install hint for ${
   assert.equal(homeHelp(run([], bin, { env: host.env })).at(-1), SKILL_HINT);
 });
 
-for (const host of SKILL_HOSTS) test(`home omits the skill install hint for ${host.name} once installed at user level`, () => {
+for (const host of SKILL_HOSTS) for (const userDir of host.userDirs) test(`home omits the skill install hint for ${host.name} once installed at user level (${userDir})`, () => {
   const help = homeHelp(run([], bin, {
     env: host.env,
-    init: dir => mkdirSync(join(dir, host.globalDir, "mg-axi"), { recursive: true }),
+    init: dir => mkdirSync(join(dir, userDir, "mg-axi"), { recursive: true }),
   }));
   assert.ok(!help.includes(SKILL_HINT));
 });
 
-for (const host of SKILL_HOSTS) test(`home omits the skill install hint for ${host.name} once installed at project level`, () => {
+for (const host of SKILL_HOSTS) for (const projectDir of host.projectDirs) test(`home omits the skill install hint for ${host.name} once installed at project level (${projectDir})`, () => {
   const help = homeHelp(run([], bin, {
     env: host.env,
     cwd: join("proj", "sub"),
     init: dir => {
-      mkdirSync(join(dir, "proj", host.projectDir, "mg-axi"), { recursive: true });
+      mkdirSync(join(dir, "proj", projectDir, "mg-axi"), { recursive: true });
       mkdirSync(join(dir, "proj", "sub"), { recursive: true });
     },
+  }));
+  assert.ok(!help.includes(SKILL_HINT));
+});
+
+test("home honours CLAUDE_CONFIG_DIR for the Claude Code personal skills folder", () => {
+  const help = homeHelp(run([], bin, {
+    env: dir => ({ CLAUDECODE: "1", CLAUDE_CONFIG_DIR: join(dir, "custom-claude") }),
+    init: dir => mkdirSync(join(dir, "custom-claude", "skills", "mg-axi"), { recursive: true }),
   }));
   assert.ok(!help.includes(SKILL_HINT));
 });

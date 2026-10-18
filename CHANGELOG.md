@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/knowttl/mg-axi/compare/v0.1.9...v0.1.10) (2026-10-18)
+
+
+### Bug Fixes
+
+* isolate validation and document project foundation ([#97](https://github.com/knowttl/mg-axi/issues/97)) ([a67f8cf](https://github.com/knowttl/mg-axi/commit/a67f8cf573219999bf66be4c76aa1e502bf9091b))
+
 ## [0.1.9](https://github.com/knowttl/mg-axi/compare/v0.1.8...v0.1.9) (2026-10-16)
 
 

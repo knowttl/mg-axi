@@ -9,7 +9,8 @@ process.umask(0o077);
 try {
   const [command, ...args] = process.argv.slice(2);
   if (!command) throw new Error("Expected a validation command");
-  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("MG_AXI_") && name !== "AZURE_FEDERATED_TOKEN_FILE"));
+  const excluded = new Set(["AZURE_FEDERATED_TOKEN_FILE", "CLAUDECODE", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "PI_CODING_AGENT", "OPENCODE"]);
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("MG_AXI_") && !excluded.has(name)));
   const result = spawnSync(command, args, {
     stdio: "inherit",
     env: {

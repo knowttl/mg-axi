@@ -294,7 +294,7 @@ Only explicit login persists credentials; silent refresh keeps refreshed credent
 Access tokens are excluded from the persisted MSAL cache.
 `auth logout` deletes the selected profile's cache and is idempotent; MSAL exposes no upstream token revocation API, so organizational revocation remains separate.
 `auth status` reports the selected identity, Graph endpoint, secret source names or paths, and local availability without signing in or making a live request.
-The old top-level `login` remains an alias for one minor release.
+The old top-level `login` remains an alias for one minor release; see [Versioning and releases](#versioning-and-releases).
 Tokens remain opaque and never appear in profile views, stdout or authentication diagnostics.
 Credential acquisition is bound to the configured tenant/client and refreshes at a 60-second expiry margin.
 
@@ -336,7 +336,7 @@ Prefer certificates or federation over bearer client secrets, and rotate secrets
 
 Federation reads the assertion file on every acquisition so projected tokens can rotate.
 Use `--federated-token-file <absolute-path>` for a projected assertion file, or set the default `MG_AXI_TOKEN` assertion value through the environment.
-When the token reference is the default `MG_AXI_TOKEN` env holder and that variable is unset, `AZURE_FEDERATED_TOKEN_FILE` stays accepted as a deprecated alias for one minor release with a stderr notice; `MG_AXI_TOKEN` takes precedence and the alias must name an absolute file path.
+When the token reference is the default `MG_AXI_TOKEN` env holder and that variable is unset, `AZURE_FEDERATED_TOKEN_FILE` stays accepted as a deprecated alias for one minor release with a stderr notice; see [Versioning and releases](#versioning-and-releases). `MG_AXI_TOKEN` takes precedence and the alias must name an absolute file path.
 References, rather than values, are stored in configuration; rotation updates the environment or file without changing the profile.
 Application credentials remain in process memory and are reacquired at a 60-second expiry margin.
 See [headless credential guidance](docs/headless-credentials.md) for holder examples.
@@ -358,9 +358,22 @@ corepack pnpm run docs:check
 
 Tests use fixture credentials and transports without signing in or contacting real tenants.
 The test script limits concurrency to four files.
+Pull requests rely on local validation; there is no GitHub test CI.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for isolated dependency installation, focused tests and contribution checks.
 To use the built checkout binary on PATH, run `npm link --ignore-scripts` from the checkout root.
 Otherwise substitute `node dist/bin/mg-axi.js` for `mg-axi` in examples.
 
 The agent skill and capability report are generated from the command catalogue, documentation template and discovery inventory.
 After changing their sources, run `corepack pnpm run docs:generate`, then `corepack pnpm run docs:check`.
 The [implementation plan](PLAN.md), [operation inventory](docs/inventory.md) and [execution contract](docs/execution.md) describe design and coverage boundaries.
+
+## Versioning and releases
+
+During 0.x development, feature changes continue to produce patch releases under the existing release configuration.
+A minor version is cut only intentionally.
+The deprecated top-level `login` and `AZURE_FEDERATED_TOKEN_FILE` aliases remain supported through the next intentionally cut minor release and become eligible for removal after that release.
+Patch releases do not expire either alias.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

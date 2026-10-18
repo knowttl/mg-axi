@@ -5,6 +5,22 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 
+for (const marker of ["CLAUDECODE", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "PI_CODING_AGENT", "OPENCODE"]) {
+  test(`validation commands do not inherit ${marker}`, () => {
+    const result = spawnSync(process.execPath, [resolve("tools/isolated-home.mjs"), process.execPath, "--input-type=module", "-e", `
+      import assert from "node:assert/strict";
+      import { executeArgv } from "./dist/cli.js";
+      import { skillHomeHints } from "./dist/docs.js";
+      assert.equal(process.env[${JSON.stringify(marker)}], undefined);
+      assert.deepEqual((await executeArgv([])).help, skillHomeHints());
+    `, resolve("dist/bin/mg-axi.js")], {
+      encoding: "utf8", timeout: 10000,
+      env: { ...process.env, [marker]: "fixture-agent-session" },
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  });
+}
+
 test("validation commands cannot write to the inherited home or XDG config", () => {
   const sentinel = mkdtempSync(join(tmpdir(), "mg-axi-owner-sentinel-"));
   try {

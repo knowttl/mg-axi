@@ -52,6 +52,7 @@ import { addGroupMember } from "./entra-group-member-add.js";
 import { fetchTransport } from "./api.js";
 import { doctorTargets, runDoctor } from "./doctor.js";
 import { setupView } from "./setup.js";
+import { invocation } from "./invocation.js";
 import type { DelegatedAuth } from "./auth.js";
 import type { ApplicationAuth } from "./app-auth.js";
 
@@ -62,9 +63,14 @@ function localHome(name?: string, config?: string) {
     const selected = store.resolve(name);
     output.profile = selected.name;
     output.tenant = selected.profile.tenantId;
+    output.domains = [{ name: "entra", status: selected.profile.enabledPacks.includes("entra") ? "enabled" : "disabled",
+      summary: "Local profile configuration only; no Graph request made" }];
   } catch (error) {
     if ((name?.trim() ? name : undefined) || !(error instanceof AxiError) || !["PROFILE_REQUIRED", "PROFILE_AMBIGUOUS"].includes(error.code)) throw error;
-    if (error.code === "PROFILE_AMBIGUOUS") output.profile = "unavailable: no default profile selected";
+    if (error.code === "PROFILE_AMBIGUOUS") {
+      output.profile = "unavailable: no default profile selected";
+      output.domains = [{ name: "entra", status: "unavailable", summary: "Local configuration only; select a profile to see enabled domains" }];
+    }
   }
   output.help.unshift("npx -y @knowttl/mg-axi profile list", "npx -y @knowttl/mg-axi auth login --help");
   // Point agents at the installable skill until it is installed for their host.
@@ -1473,6 +1479,13 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
 }
 
 export async function main() {
+  const { command } = invocation();
+  const hints = (values: string[]) => values.map(value => value.includes("\n") ? value
+    : value.replace(/(^|[ `])(?:npx -y @knowttl\/mg-axi|mg-axi)(?= )/g, (_match, prefix: string) => `${prefix}${command}`));
+  const withHints = (output: string | Record<string, unknown>) => {
+    if (typeof output !== "string" && Array.isArray(output.help)) return { ...output, help: hints(output.help) };
+    return output;
+  };
   const stderrWrite = process.stderr.write.bind(process.stderr) as (...args: unknown[]) => boolean;
   process.stderr.write = ((chunk: string | Uint8Array, ...args: unknown[]) => stderrWrite(redactSecrets(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8")), ...args)) as typeof process.stderr.write;
   await runAxiCli({
@@ -1482,15 +1495,15 @@ export async function main() {
     // Strict resolution owns leaf help, so SDK help cannot bypass validation.
     argv: ["dispatch"],
     stdout: { write: (value: string) => process.stdout.write(redactSecrets(value)) },
-    home: () => localHome(),
+    home: () => withHints(localHome()),
     commands: {
       dispatch: async () => {
         if (process.argv.length === 3 && process.argv[2] === "--help") return TOP_LEVEL_HELP;
-        return executeArgv(process.argv.slice(2));
+        return withHints(await executeArgv(process.argv.slice(2)));
       },
     },
     formatError: error => ({
-      output: `${redactSecrets(encode(error instanceof AxiError ? { error: error.message, code: error.code, help: error.suggestions } : { error: "Unable to run mg-axi", help: ["mg-axi --help"] }))}\n`,
+      output: `${redactSecrets(encode(error instanceof AxiError ? { error: error.message, code: error.code, help: hints(error.suggestions) } : { error: "Unable to run mg-axi", help: hints(["mg-axi --help"]) }))}\n`,
       exitCode: error instanceof AxiError && error.code === "VALIDATION_ERROR" ? 2 : 1,
     }),
   });

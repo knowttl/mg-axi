@@ -122,7 +122,7 @@ function skillReadAreas(): string[] {
   return areas;
 }
 
-function skillWriteLabels(): string[] {
+export function skillWriteLabels(): string[] {
   return LEAVES.filter(leaf => leafEffect(leaf) === "write").map(leaf => {
     const label = WRITE_LABELS[leaf.path];
     if (!label) throw new Error(`SKILL.md has no write label for write leaf: ${leaf.path}`);
@@ -168,12 +168,12 @@ export function skillDocument(): string {
     `Agent-ergonomic CLI for Microsoft Graph. ${DESCRIPTION}.`,
     "Entra SOC reads through token-efficient TOON output.",
     "The generated [command table](#orientation) lists supported named writes through the gated mutation coordinator; raw API remains read-only and every other mutation is refused.",
-    "See [README.md](../../README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.",
+    "See [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.",
     "",
     "Run commands non-interactively as `npx -y @knowttl/mg-axi ...`: no global install needed and no interactive prompts.",
     "Version pinning is the installer's choice: use `npx -y @knowttl/mg-axi@<version> ...` to select a specific release.",
     "Run `npx -y @knowttl/mg-axi doctor` first.",
-    "See [README.md](../../README.md#usage) for doctor profile selection, checks and failure behavior.",
+    "See [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#usage) for doctor profile selection, checks and failure behavior.",
     "",
     "## Orientation",
     "",
@@ -183,7 +183,7 @@ export function skillDocument(): string {
     "Doctor acquires credentials silently and contacts Graph; only its help view stays offline.",
     "The list below records current executable leaves; it makes no coverage claim for other Graph operations.",
     UNSUPPORTED_READ_NOTE,
-    "See `docs/coverage.md` for the per-operation disposition records.",
+    "See [coverage](https://github.com/knowttl/mg-axi/blob/main/docs/coverage.md) for the per-operation disposition records.",
     "`docs/coverage.md` and this file are generated from the same catalogue and inventory sources; `node tools/generate-docs.mjs --check` fails when they are stale.",
     "",
     "<!-- command-registry:start -->",
@@ -203,11 +203,11 @@ export function skillDocument(): string {
     "",
     "## Setup (explicit only)",
     "",
-    "Follow [installation guidance](../../README.md#quick-start) for npm installation and explicit skill installation; [README.md](../../README.md#development--testing) also documents checkout builds.",
+    "Follow [installation guidance](https://github.com/knowttl/mg-axi/blob/main/README.md#quick-start) for npm installation and explicit skill installation; [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#development--testing) also documents checkout builds.",
     "Create profiles explicitly and keep secrets out of argv and config files:",
     "",
     "```sh",
-    "npx -y @knowttl/mg-axi setup                    # build steps, config path and capabilities; writes nothing",
+    "npx -y @knowttl/mg-axi setup                    # invocation guidance, config path and capabilities; writes nothing",
     "npx -y @knowttl/mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial",
     "npx -y @knowttl/mg-axi auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
     "npx -y @knowttl/mg-axi doctor                   # one bounded read per selected profile",
@@ -217,7 +217,7 @@ export function skillDocument(): string {
     "Configuration uses the XDG config directory (default `~/.config/mg-axi/config.json`), or `%APPDATA%\\mg-axi\\config.json` on Windows; `--config` overrides `MG_AXI_CONFIG`.",
     "`mg-axi setup` shows the selected path and writes nothing.",
     "Application profiles authenticate headlessly through credential references: the profile names an env var or file and the environment supplies the value at acquisition time.",
-    "Container examples for client secrets, certificate keys and workload federation live in [README.md](../../README.md#mg-axi).",
+    "Container examples for client secrets, certificate keys and workload federation live in [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#mg-axi).",
     "A client secret is weaker than a certificate or federated credential and needs scheduled rotation.",
     "",
     "Agent discovery has two install paths, and either suffices alone.",
@@ -236,9 +236,9 @@ export function skillDocument(): string {
     "## Selecting a profile",
     "",
     "Read leaves accept `--profile <name>`.",
-    "Profile selection order and env-profile rules live in [README Configuration](../../README.md#configuration); an explicitly selected file profile ignores env fields.",
-    "Doctor selection is documented in [README.md](../../README.md#usage).",
-    "Without profiles, home, setup and profile list show unconfigured state; Graph read leaves report `AUTH_REQUIRED`.",
+    "Profile selection order and env-profile rules live in [README Configuration](https://github.com/knowttl/mg-axi/blob/main/README.md#configuration); an explicitly selected file profile ignores env fields.",
+    "Doctor selection is documented in [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#usage).",
+    "Without profiles, home, setup and profile list show unconfigured state; Graph read leaves report `PROFILE_REQUIRED`.",
     "",
     "## Safety",
     "",

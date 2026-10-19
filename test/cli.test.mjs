@@ -28,7 +28,7 @@ test("home reports unavailable tenant state on stdout without credentials", () =
   const output = decode(result.stdout);
   assert.equal(output.bin.replace(/^~(?=[/\\])/, homedir()), bin);
   assert.match(output.tenant, /unavailable/);
-  assert.equal(output.domains[0].status, "scheduled");
+  assert.equal(output.domains[0].status, "unconfigured");
 });
 
 const SKILL_HINT = "npx skills add knowttl/mg-axi --skill mg-axi";

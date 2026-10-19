@@ -79,6 +79,8 @@ mg-axi setup
 ```
 
 `setup` displays installation, configuration and capability guidance.
+Setup and diagnostic hints use the current global, npx or checkout invocation.
+The home view reports enabled domains from the selected local profile, without contacting Graph or claiming tenant health.
 It writes nothing, signs in nowhere and installs no hooks or skills.
 
 ## Usage

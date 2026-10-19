@@ -4,6 +4,7 @@ import { listUsers } from "./entra-users.js";
 import type { GraphSession } from "./graph-session.js";
 import { Profiles, type AnyProfile } from "./profiles.js";
 import { authStatus } from "./auth-status.js";
+import { invocation } from "./invocation.js";
 
 // PACK-01: explicit release health check over the reviewed read-only session.
 // Doctor performs one documented bounded read per profile (entra user list
@@ -36,17 +37,18 @@ export async function runDoctor(args: {
   session: GraphSession;
   selected?: { name: string; profile: AnyProfile };
 }): Promise<DoctorResult> {
+  const { command } = invocation();
   if (!args.names.length) {
-    throw new AxiError("No profiles are configured", "PROFILE_REQUIRED", ["npx -y @knowttl/mg-axi profile create --help", "npx -y @knowttl/mg-axi setup"]);
+    throw new AxiError("No profiles are configured", "PROFILE_REQUIRED", [`${command} profile create --help`, `${command} setup`]);
   }
   const leaf = LEAVES.find(item => item.path === "entra user list");
   const operation = leaf === undefined ? undefined : operationFor(leaf, DOCTOR_VERSION);
   if (!operation || operation.method !== "GET") {
-    throw new AxiError(`Unknown catalogued Graph operation for ${DOCTOR_CHECK}`, "VALIDATION_ERROR", ["npx -y @knowttl/mg-axi entra user list --help"]);
+    throw new AxiError(`Unknown catalogued Graph operation for ${DOCTOR_CHECK}`, "VALIDATION_ERROR", [`${command} entra user list --help`]);
   }
   const profiles: Record<string, unknown>[] = [];
   for (const name of args.names) {
-    const rerun = `npx -y @knowttl/mg-axi doctor --profile ${name}`;
+    const rerun = `${command} doctor --profile ${name}`;
     try {
       args.store.verifyPermissions();
       const selected = args.selected ?? args.store.resolve(name);
@@ -54,7 +56,7 @@ export async function runDoctor(args: {
       // The same bounded read the named leaf serves: one fetched page, one
       // surfaced row, remainder buffered in a discarded cursor. Doctor keeps
       // no cursor and accepts none; recovery reruns doctor, not the read.
-      const result = (await listUsers(args.session, { limit: "1" }, selected.profile, operation, `npx -y @knowttl/mg-axi ${DOCTOR_CHECK} --help`, name)) as {
+      const result = (await listUsers(args.session, { limit: "1" }, selected.profile, operation, `${command} entra user list --help`, name)) as {
         users: unknown[];
         complete: boolean;
         reason?: string;
@@ -67,7 +69,7 @@ export async function runDoctor(args: {
     } catch (error) {
       const failure = error instanceof AxiError
         ? error
-        : new AxiError("Unable to run the doctor check", "GRAPH_ERROR", ["npx -y @knowttl/mg-axi entra user list --help"]);
+        : new AxiError("Unable to run the doctor check", "GRAPH_ERROR", [`${command} entra user list --help`]);
       profiles.push({ name, check: DOCTOR_CHECK, status: "failed", code: failure.code, error: failure.message });
     }
   }
@@ -81,8 +83,8 @@ export async function runDoctor(args: {
       profiles,
       complete: failed.length === 0,
       help: failed.length
-        ? failed.map(row => `[${String(row.name)}] Check the reported failure, then rerun \`npx -y @knowttl/mg-axi doctor --profile ${String(row.name)}\``)
-        : [`Run \`npx -y @knowttl/mg-axi entra user list --profile ${String(ok[0]!.name)} --limit 1\` to start reading`],
+        ? failed.map(row => `[${String(row.name)}] Check the reported failure, then rerun \`${command} doctor --profile ${String(row.name)}\``)
+        : [`Run \`${command} entra user list --profile ${String(ok[0]!.name)} --limit 1\` to start reading`],
     },
     failed: failed.length > 0,
   };

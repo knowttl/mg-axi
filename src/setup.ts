@@ -1,5 +1,7 @@
 import { LEAVES } from "./catalogue.js";
 import { Profiles } from "./profiles.js";
+import { invocation } from "./invocation.js";
+import { skillWriteLabels } from "./docs.js";
 
 // PACK-01: explicit release setup guidance. The setup view is offline: it
 // reads the selected configuration file, describes installation and the
@@ -89,6 +91,8 @@ function shippedReadFamilies(): string[] {
 }
 
 export function setupView(store: Profiles): Record<string, unknown> {
+  const { command, checkout } = invocation();
+  const writeLabels = skillWriteLabels();
   const families = shippedReadFamilies();
   const items = store.list();
   const implemented = LEAVES.map(leaf => leaf.path);
@@ -101,26 +105,26 @@ export function setupView(store: Profiles): Record<string, unknown> {
     profiles: items.length
       ? items.map(item => ({ name: item.name, mode: item.mode }))
       : "0 profiles configured",
-    installation: [
+    installation: checkout ? [
       "corepack pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false",
       "corepack pnpm build",
       "node dist/bin/mg-axi.js --version",
-    ],
+    ] : [`${command} --version`, "npm install --global @knowttl/mg-axi"],
     guidance: [
       `Hand-edit ${store.path} or set MG_AXI_CONFIG to a separate configuration file; a profile stores only a SecretRef - an environment variable name, an absolute file path, or stored: true for delegated login - and never the secret value, never in argv or config`,
-      "node dist/bin/mg-axi.js profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial",
-      "node dist/bin/mg-axi.js auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All",
-      "node dist/bin/mg-axi.js doctor",
+      `${command} profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial`,
+      `${command} auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All`,
+      `${command} doctor`,
     ],
     capabilities: {
       implemented,
       reads,
       writes,
       local: implemented.length - reads - writes,
-      api: `Entra ${families.slice(0, -1).join(", ")} and ${families.at(-1)} reads plus reviewed raw api get, one gated group-membership write, one gated account enable/disable write, one gated session-revocation write and one gated risky-user dismissal write; every other v1.0 operation is deferred out of v1, and every other beta operation remains scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded`,
+      api: `Entra ${families.slice(0, -1).join(", ")} and ${families.at(-1)} reads plus reviewed raw api get and ${writeLabels.length} gated writes (${writeLabels.join(", ")}); every other v1.0 operation is deferred out of v1, and every other beta operation remains scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded`,
       report: "docs/coverage.md",
     },
     integration: "Install skills/mg-axi/SKILL.md explicitly through your agent's skill installation mechanism; setup only shows guidance and installs no skills or hooks",
-    help: ["node dist/bin/mg-axi.js doctor", "node dist/bin/mg-axi.js entra user list --help", "node dist/bin/mg-axi.js api get --help"],
+    help: [`${command} doctor`, `${command} entra user list --help`, `${command} api get --help`],
   };
 }

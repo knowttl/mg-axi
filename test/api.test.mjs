@@ -813,10 +813,13 @@ test("inline cursor input enforces the same size ceiling before credentials", as
   assert.equal(f.requests.length, 0);
 });
 
-test("top help lists the raw read leaf", () => {
+test("top help discovers the raw read leaf through its group", () => {
   const result = cli(["--help"]);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /api get/);
+  assert.match(result.stdout, /mg-axi api --help/);
+  const group = cli(["api", "--help"]);
+  assert.equal(group.status, 0);
+  assert.match(group.stdout, /mg-axi api get --help/);
 });
 
 // EXT-04e: reviewed raw reads for the three allowlisted function routes. A

@@ -148,10 +148,18 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
   if (argv.at(-1) === "--help" && argv.slice(0, -1).every(word => !word.startsWith("-"))) {
     const path = argv.slice(0, -1).join(" ");
     const help = groupHelp(path);
-    if (help && !LEAVES.some(leaf => leaf.path === path)) return help;
+    if (help) {
+      const found = LEAVES.find(item => item.path === path);
+      if (!found) return help;
+      return `${leafHelp(found)}\n${help.split("\n").slice(1).join("\n")}`;
+    }
   }
   const { leaf, flags, positional } = resolveCommand(argv);
-  if (flags.help) return leafHelp(leaf);
+  if (flags.help) {
+    const group = groupHelp(leaf.path);
+    if (!group) return leafHelp(leaf);
+    return `${leafHelp(leaf)}\n${group.split("\n").slice(1).join("\n")}`;
+  }
   if (leaf.path === "home") return localHome(flags.profile as string | undefined, flags.config as string | undefined);
   const profiles = new Profiles(flags.config as string | undefined);
   if (leaf.path === "config path") return { config: profiles.path };

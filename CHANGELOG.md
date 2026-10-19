@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.11](https://github.com/knowttl/mg-axi/compare/v0.1.10...v0.1.11) (2026-10-19)
+
+
+### Bug Fixes
+
+* align invocation hints, home domains, and skill links with local state ([#103](https://github.com/knowttl/mg-axi/issues/103)) ([bff7ecc](https://github.com/knowttl/mg-axi/commit/bff7eccca0a09eb263a5982ddaf41da76d096770))
+* hierarchical bounded CLI help with nearest-group error guidance ([#102](https://github.com/knowttl/mg-axi/issues/102)) ([06aa99f](https://github.com/knowttl/mg-axi/commit/06aa99f025a90652634096d31353fbe63bc6aa8b))
+
+
+### Performance Improvements
+
+* cache a compact runtime operation index ([#100](https://github.com/knowttl/mg-axi/issues/100)) ([dae971d](https://github.com/knowttl/mg-axi/commit/dae971d8a982564a89f08883430121fe51f8a6a9))
+
 ## [0.1.10](https://github.com/knowttl/mg-axi/compare/v0.1.9...v0.1.10) (2026-10-18)
 
 

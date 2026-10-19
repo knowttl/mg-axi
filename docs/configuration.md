@@ -18,6 +18,7 @@ Run `mg-axi config path` to see the selected configuration path.
 Legacy `~/.mg-axi/config.json` is never read; when it exists and the selected new config does not, `CONFIG_MOVED` reports both paths and the exact move command.
 
 Profile selection is `--profile`, `MG_AXI_PROFILE`, a complete env profile, `defaultProfile`, then the only configured profile.
+The first profile created becomes the default.
 An env profile requires `MG_AXI_MODE`, `MG_AXI_TENANT_ID`, `MG_AXI_CLIENT_ID` and its credential fields, plus `MG_AXI_AUTH` for application mode.
 For example, client-secret auth requires `MG_AXI_CLIENT_SECRET`; certificate auth requires `MG_AXI_PRIVATE_KEY` and `MG_AXI_THUMBPRINT_SHA256`; federation requires `MG_AXI_TOKEN` containing the assertion.
 Delegated env profiles require `MG_AXI_TOKEN` containing a serialized MSAL cache.

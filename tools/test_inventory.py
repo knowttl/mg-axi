@@ -25,7 +25,7 @@ class InventoryTests(unittest.TestCase):
             with self.subTest(suffix=suffix):
                 row = make_row("v1.0", f"/invitations{suffix}", "GET", {"operationId": "fixture"})
                 self.assertEqual((row["disposition"], row["owningSlice"]), ("unavailable", "EXT-03"))
-                self.assertTrue(row["reason"].startswith("Marked unavailable by firstmate EXT-03b decision: "))
+                self.assertTrue(row["reason"].startswith("Unavailable invitation reads: "))
         with self.subTest(suffix="beta stays scheduled"):
             row = make_row("beta", "/invitations", "GET", {"operationId": "fixture"})
             self.assertEqual((row["disposition"], row["owningSlice"], row["reason"]), ("scheduled", "EXT-03", "No implemented command or reviewed raw contract yet."))
@@ -284,10 +284,10 @@ components:
     def test_unshipped_v1_reads_defer_out_of_v1(self):
         row = make_row("v1.0", "/groups", "GET", {"operationId": "fixture"}, {})
         self.assertEqual((row["disposition"], row["owningSlice"], row["reason"]), ("deferred", "READ-02", CUTOFF_REASON))
-        with self.subTest(reason="a firstmate deferral reason survives the flip"):
+        with self.subTest(reason="a documented deferral reason survives the flip"):
             deferred = make_row("v1.0", "/organization/{organization-id}/branding/favicon", "GET", {"operationId": "fixture"}, {})
             self.assertEqual(deferred["disposition"], "deferred")
-            self.assertTrue(deferred["reason"].startswith("Deferred by firstmate organization scope "))
+            self.assertTrue(deferred["reason"].startswith("Deferred organization scope "))
         with self.subTest(reason="a split note yields to the cutoff reason"):
             split = make_row("v1.0", "/contacts/{orgContact-id}/memberOf", "GET", {"operationId": "fixture"}, {})
             self.assertEqual((split["disposition"], split["reason"]), ("deferred", CUTOFF_REASON))

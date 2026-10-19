@@ -15,14 +15,14 @@ Permissions are requested per enabled pack and operation.
 Sensitive mail/files access stays disabled unless explicitly enabled.
 Raw reachability does not count as a named Entra command.
 
-Success has two milestones: a useful SOC read release and the agreed Entra coverage close defined in docs/build-plan.md FULL-01/COMPLETE-01, including later named writes.
+Success has two milestones: a useful SOC read release and the agreed Entra coverage close defined in the [archived build plan](https://github.com/knowttl/mg-axi/blob/archive/internal-docs/docs/build-plan.md) FULL-01/COMPLETE-01, including later named writes.
 A complete inventory must distinguish named commands, reviewed raw reads, deferred work, scheduled work, intentionally blocked operations, deprecated operations and version/cloud unavailability.
 Deferred or scheduled work cannot be counted as finished.
 The representative tables in this plan are research inputs, not a claim of an already enumerated full map.
-FULL-01 audit snapshot (2026-10-07, historical point-in-time): v1.0 scheduled 0 (named-command 289, reviewed-raw-read 5, deferred 4429 out of v1, blocked 57, deprecated 16, unavailable 14), so the Entra coverage close was met per the docs/build-plan.md definition at that time; see docs/coverage.md for current counts.
-COMPLETE-01 audit snapshot (2026-10-07, historical point-in-time): five writes WRITE-01..05 ship as named, gated commands (v1.0 named-command 289: 284 reads plus 5 writes; scheduled 0) with WRITE-N deferred 1878, blocked 25 v1.0 plus 2937 beta, deprecated 6 v1.0 plus 398 beta and scheduled 0, so the full agreed capability audit was met per the docs/build-plan.md definition at that time; see docs/coverage.md for current counts and outstanding upstream limitations.
+FULL-01 audit snapshot (2026-10-07, historical point-in-time): v1.0 scheduled 0 (named-command 289, reviewed-raw-read 5, deferred 4429 out of v1, blocked 57, deprecated 16, unavailable 14), so the Entra coverage close was met per the archived build-plan definition at that time; see docs/coverage.md for current counts.
+COMPLETE-01 audit snapshot (2026-10-07, historical point-in-time): five writes WRITE-01..05 ship as named, gated commands (v1.0 named-command 289: 284 reads plus 5 writes; scheduled 0) with WRITE-N deferred 1878, blocked 25 v1.0 plus 2937 beta, deprecated 6 v1.0 plus 398 beta and scheduled 0, so the full agreed capability audit was met per the archived build-plan definition at that time; see docs/coverage.md for current counts and outstanding upstream limitations.
 
-- [Dispatch-ready slices](docs/build-plan.md) define IDs, dependencies and acceptance.
+- [Dispatch-ready slices](https://github.com/knowttl/mg-axi/blob/archive/internal-docs/docs/build-plan.md) define IDs, dependencies and acceptance.
 - [Graph coverage and access](docs/graph-coverage.md) records operations, permissions, licence distinctions and the full-map inventory gate.
 - [Execution contract](docs/execution.md) defines reads, write gates and initial mutations.
 - [Design evidence](docs/design-evidence.md) grounds az-axi comparisons in a pinned source revision.

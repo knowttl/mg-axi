@@ -54,7 +54,7 @@ Use request IDs and structured errors, never raw dependency noise or secrets.
 
 ## Initial later-write operations
 
-Slice IDs and dependencies are defined in the [dispatch plan](build-plan.md).
+Slice IDs and dependencies are defined in the [dispatch plan](https://github.com/knowttl/mg-axi/blob/archive/internal-docs/docs/build-plan.md).
 
 | Slice | Operation and permission | Material constraints |
 |---|---|---|

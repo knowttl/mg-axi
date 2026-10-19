@@ -12,12 +12,12 @@ user-invocable: false
 Agent-ergonomic CLI for Microsoft Graph. Inspect Microsoft Graph capabilities, read-only by default.
 Entra SOC reads through token-efficient TOON output.
 The generated [command table](#orientation) lists supported named writes through the gated mutation coordinator; raw API remains read-only and every other mutation is refused.
-See [README.md](../../README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.
+See [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.
 
 Run commands non-interactively as `npx -y @knowttl/mg-axi ...`: no global install needed and no interactive prompts.
 Version pinning is the installer's choice: use `npx -y @knowttl/mg-axi@<version> ...` to select a specific release.
 Run `npx -y @knowttl/mg-axi doctor` first.
-See [README.md](../../README.md#usage) for doctor profile selection, checks and failure behavior.
+See [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#usage) for doctor profile selection, checks and failure behavior.
 
 ## Orientation
 
@@ -27,7 +27,7 @@ Its effect is `read` for Graph read leaves and the doctor health check, `write` 
 Doctor acquires credentials silently and contacts Graph; only its help view stays offline.
 The list below records current executable leaves; it makes no coverage claim for other Graph operations.
 Graph v1.0 does not support the legacy `entra scoped-role-membership list/show`, `entra domain-dns-record list` or `entra directory-object list` routes; those commands fail locally with supported alternatives and their root routes are not available through `api get`.
-See `docs/coverage.md` for the per-operation disposition records.
+See [coverage](https://github.com/knowttl/mg-axi/blob/main/docs/coverage.md) for the per-operation disposition records.
 `docs/coverage.md` and this file are generated from the same catalogue and inventory sources; `node tools/generate-docs.mjs --check` fails when they are stale.
 
 <!-- command-registry:start -->
@@ -338,11 +338,11 @@ npx -y @knowttl/mg-axi api get --help
 
 ## Setup (explicit only)
 
-Follow [installation guidance](../../README.md#quick-start) for npm installation and explicit skill installation; [README.md](../../README.md#development--testing) also documents checkout builds.
+Follow [installation guidance](https://github.com/knowttl/mg-axi/blob/main/README.md#quick-start) for npm installation and explicit skill installation; [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#development--testing) also documents checkout builds.
 Create profiles explicitly and keep secrets out of argv and config files:
 
 ```sh
-npx -y @knowttl/mg-axi setup                    # build steps, config path and capabilities; writes nothing
+npx -y @knowttl/mg-axi setup                    # invocation guidance, config path and capabilities; writes nothing
 npx -y @knowttl/mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
 npx -y @knowttl/mg-axi auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All
 npx -y @knowttl/mg-axi doctor                   # one bounded read per selected profile
@@ -352,7 +352,7 @@ npx -y @knowttl/mg-axi entra user list --profile soc --limit 10
 Configuration uses the XDG config directory (default `~/.config/mg-axi/config.json`), or `%APPDATA%\mg-axi\config.json` on Windows; `--config` overrides `MG_AXI_CONFIG`.
 `mg-axi setup` shows the selected path and writes nothing.
 Application profiles authenticate headlessly through credential references: the profile names an env var or file and the environment supplies the value at acquisition time.
-Container examples for client secrets, certificate keys and workload federation live in [README.md](../../README.md#mg-axi).
+Container examples for client secrets, certificate keys and workload federation live in [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#mg-axi).
 A client secret is weaker than a certificate or federated credential and needs scheduled rotation.
 
 Agent discovery has two install paths, and either suffices alone.
@@ -371,9 +371,9 @@ No other ordinary command installs hooks, plugins or configuration.
 ## Selecting a profile
 
 Read leaves accept `--profile <name>`.
-Profile selection order and env-profile rules live in [README Configuration](../../README.md#configuration); an explicitly selected file profile ignores env fields.
-Doctor selection is documented in [README.md](../../README.md#usage).
-Without profiles, home, setup and profile list show unconfigured state; Graph read leaves report `AUTH_REQUIRED`.
+Profile selection order and env-profile rules live in [README Configuration](https://github.com/knowttl/mg-axi/blob/main/README.md#configuration); an explicitly selected file profile ignores env fields.
+Doctor selection is documented in [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#usage).
+Without profiles, home, setup and profile list show unconfigured state; Graph read leaves report `PROFILE_REQUIRED`.
 
 ## Safety
 

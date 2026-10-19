@@ -2900,7 +2900,7 @@ export function home() {
     description: DESCRIPTION,
     profile: "unavailable: no profile configured",
     tenant: "unavailable: no tenant selected",
-    domains: [{ name: "entra", status: "scheduled", summary: "Tenant summaries await Graph execution" }],
+    domains: [{ name: "entra", status: "unconfigured", summary: "Local configuration only; no profile selected and no Graph request made" }],
     help: [...HOME_HELP],
   };
 }

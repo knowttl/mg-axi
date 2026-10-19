@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -148,7 +148,7 @@ test("setup capability prose lists the shipped read families from the catalogue"
   try {
     const output = decode(runPlain(["setup"], home).stdout);
     assert.equal(output.capabilities.api,
-      "Entra user, registration, group, directory-role/PIM, device, administrative-unit, organization and branding, domain and domain DNS, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-in/directory-audit, application/service-principal and consent grants, risk, Conditional Access, identity-provider, federation configurations, deleted directory items, data policy operations, risk prevention, access-review, entitlement catalogs and access packages, entitlement assignments and requests and lifecycle workflows reads plus reviewed raw api get, one gated group-membership write, one gated account enable/disable write, one gated session-revocation write and one gated risky-user dismissal write; every other v1.0 operation is deferred out of v1, and every other beta operation remains scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded");
+      "Entra user, registration, group, directory-role/PIM, device, administrative-unit, organization and branding, domain and domain DNS, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-in/directory-audit, application/service-principal and consent grants, risk, Conditional Access, identity-provider, federation configurations, deleted directory items, data policy operations, risk prevention, access-review, entitlement catalogs and access packages, entitlement assignments and requests and lifecycle workflows reads plus reviewed raw api get and 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update); every other v1.0 operation is deferred out of v1, and every other beta operation remains scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
@@ -188,6 +188,83 @@ test("setup suggests runnable checkout commands", () => {
       assert.match(result.stdout, /mg-axi/);
     }
     assert.ok(!existsSync(join(home, "config.json")));
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+for (const mode of ["global", "npx"]) test(`setup and doctor preserve the ${mode} invocation`, () => {
+  const home = dir();
+  try {
+    const directory = mode === "npx" ? join(home, "_npx", "fixture", "node_modules", ".bin") : join(home, "bin");
+    mkdirSync(directory, { recursive: true });
+    const executable = join(directory, "mg-axi");
+    writeFileSync(executable, `#!/usr/bin/env node\nimport { main } from ${JSON.stringify(pathToFileURL(resolve("dist/cli.js")).href)}; await main();`, { mode: 0o755 });
+    const env = { PATH: `${directory}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}`,
+      HOME: home, USERPROFILE: home, MG_AXI_CONFIG: join(home, "config.json") };
+    const command = mode === "npx" ? "npx -y @knowttl/mg-axi" : "mg-axi";
+    const run = args => spawnSync(process.execPath, [executable, ...args], { env, encoding: "utf8", timeout: 30000 });
+    const setup = run(["setup"]);
+    assert.equal(setup.status, 0, setup.stdout + setup.stderr);
+    const output = decode(setup.stdout);
+    assert.equal(output.help[0], `${command} doctor`);
+    assert.equal(output.guidance[1], `${command} profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial`);
+    assert.equal(output.installation.some(item => item.includes("pnpm")), false);
+    const doctor = run(["doctor"]);
+    assert.equal(doctor.status, 1, doctor.stdout);
+    assert.ok(doctor.stdout.includes(`${command} setup`));
+    const localHome = run([]);
+    assert.equal(localHome.status, 0, localHome.stdout);
+    assert.equal(decode(localHome.stdout).help[0], `${command} profile list`);
+    const read = run(["entra", "user", "list"]);
+    assert.equal(read.status, 1, read.stdout);
+    assert.equal(decode(read.stdout).code, "PROFILE_REQUIRED");
+    assert.ok(decode(read.stdout).help.every(hint => hint.startsWith(`${command} `)));
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+for (const enabled of [true, false]) test(`home reports locally ${enabled ? "enabled" : "disabled"} Entra without credentials or Graph`, async () => {
+  const home = dir();
+  try {
+    writeFileSync(join(home, "config.json"), JSON.stringify({ version: 1,
+      profiles: { soc: { ...delegatedJson(), enabledPacks: enabled ? ["entra"] : [] } } }));
+    const forbidden = () => { assert.fail("Home must not acquire credentials or contact Graph"); };
+    const output = await executeArgv(["home", "--config", join(home, "config.json"), "--profile", "soc"], {
+      delegated: { credential: forbidden }, application: { credential: forbidden }, transport: forbidden,
+    });
+    assert.equal(output.profile, "soc");
+    assert.deepEqual(output.domains, [{ name: "entra", status: enabled ? "enabled" : "disabled",
+      summary: "Local profile configuration only; no Graph request made" }]);
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+test("installed skill links resolve independently of its installation directory", () => {
+  const skill = skillDocument();
+  const links = [...skill.matchAll(/\]\(([^)]+)\)/g)].map(match => match[1]).filter(link => !link.startsWith("#"));
+  assert.ok(links.length >= 8);
+  for (const link of links) {
+    const url = new URL(link);
+    assert.equal(url.origin, "https://github.com");
+    assert.ok(url.pathname.startsWith("/knowttl/mg-axi/blob/main/"));
+  }
+  assert.ok(skill.includes("Graph read leaves report `PROFILE_REQUIRED`"));
+});
+
+test("setup does not suggest a PATH binary shadowed by another installation", () => {
+  const home = dir();
+  try {
+    const shadow = join(home, "shadow");
+    const actual = join(home, "actual");
+    mkdirSync(shadow);
+    mkdirSync(actual);
+    writeFileSync(join(shadow, "mg-axi"), "#!/bin/sh\nexit 99\n", { mode: 0o755 });
+    const executable = join(actual, "mg-axi");
+    writeFileSync(executable, `#!/usr/bin/env node\nimport { main } from ${JSON.stringify(pathToFileURL(resolve("dist/cli.js")).href)}; await main();`, { mode: 0o755 });
+    const result = spawnSync(process.execPath, [executable, "setup"], {
+      encoding: "utf8", timeout: 30000,
+      env: { PATH: [shadow, actual, process.env.PATH].join(process.platform === "win32" ? ";" : ":"),
+        HOME: home, USERPROFILE: home, MG_AXI_CONFIG: join(home, "config.json") },
+    });
+    assert.equal(result.status, 0, result.stdout);
+    assert.equal(decode(result.stdout).help[0], `${process.execPath} ${executable} doctor`);
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
@@ -509,7 +586,7 @@ test("doctor reports mixed success with a nonzero exit and rerun guidance", asyn
       status: "failed", code: "GRAPH_ERROR", error: output.profiles[1].error,
     });
     assert.match(output.profiles[1].error, /grant, role, licence or policy/);
-    assert.ok(output.help.some(hint => hint.includes("mg-axi doctor --profile batch")));
+    assert.ok(output.help.some(hint => hint.includes("doctor --profile batch")));
     assert.equal(requests.length, 2);
   } finally {
     configured.restore();

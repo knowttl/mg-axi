@@ -200,7 +200,7 @@ function hintArgv(hint) {
   let escaped = false;
   let started = false;
   const push = () => { if (started) { argv.push(word); word = ""; started = false; } };
-  for (const char of hint.slice("mg-axi ".length)) {
+  for (const char of hint) {
     if (escaped) { word += char; escaped = false; }
     else if (quote === "'") { if (char === "'") quote = null; else word += char; }
     else if (quote === '"') {
@@ -214,7 +214,10 @@ function hintArgv(hint) {
     else { word += char; started = true; }
   }
   push();
-  return argv;
+  if (argv[0] === "mg-axi") return argv.slice(1);
+  assert.equal(argv[0], process.execPath);
+  assert.equal(resolve(argv[1]), resolve("dist/bin/mg-axi.js"));
+  return argv.slice(2);
 }
 
 function runReadCli(args, state, mode, denied = false, input) {

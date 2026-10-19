@@ -699,7 +699,7 @@ for (const scopes of [",", "https://example.invalid/IdentityRiskEvent.Read.All",
   });
 }
 
-test("richer selects dispatch the same mapping while beta stays preview-gated", async () => {
+test("richer selects dispatch the same mapping while unshipped beta stays blocked", async () => {
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
@@ -714,8 +714,8 @@ test("richer selects dispatch the same mapping while beta stays preview-gated", 
       ["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE, "--api-version", "beta", "--limit", "1"],
     ]) {
       await assert.rejects(executeArgv(argv, overrides), error => {
-        assert.equal(error.code, "POLICY_DENIED");
-        return /preview-enabled/.test(error.message);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        return /Unknown catalogued/.test(error.message);
       });
     }
   } finally {

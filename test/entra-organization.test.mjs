@@ -509,21 +509,21 @@ test("organization read flags validate before profiles or HTTP", async () => {
   await assert.rejects(executeArgv(["entra", "organization", "list", "--bogus"]), { code: "VALIDATION_ERROR" });
 });
 
-test("organization reads stay preview-gated on beta", async () => {
+test("organization reads refuse unshipped beta operations", async () => {
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
     await assert.rejects(
       executeArgv(["entra", "organization", "list", "--profile", "soc", "--api-version", "beta", "--limit", "1"], overrides),
       error => {
-        assert.equal(error.code, "POLICY_DENIED");
-        return /preview-enabled/.test(error.message);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        return /Unknown catalogued/.test(error.message);
       },
     );
     await assert.rejects(
       executeArgv(["entra", "organization", "branding", "show",
         "--organization", orgId, "--profile", "soc", "--api-version", "beta"], overrides),
-      { code: "POLICY_DENIED" },
+      { code: "VALIDATION_ERROR" },
     );
   } finally {
     teardownProfiles(state);

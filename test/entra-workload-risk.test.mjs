@@ -495,7 +495,7 @@ test("unknown workload properties and unfetched fields fail before HTTP", async 
   }
 });
 
-test("richer selects dispatch the same mapping while beta stays preview-gated", async () => {
+test("richer selects dispatch the same mapping while unshipped beta stays blocked", async () => {
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
@@ -511,8 +511,8 @@ test("richer selects dispatch the same mapping while beta stays preview-gated", 
       ["entra", "risky-service-principal", "history", "list", "--service-principal", s1.id, "--profile", "soc", "--api-version", "beta"],
     ]) {
       await assert.rejects(executeArgv(argv, overrides), error => {
-        assert.equal(error.code, "POLICY_DENIED");
-        return /preview-enabled/.test(error.message);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        return /Unknown catalogued/.test(error.message);
       });
     }
   } finally {

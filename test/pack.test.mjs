@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -22,8 +22,8 @@ function dir() {
   return mkdtempSync(join(tmpdir(), "mg-axi-pack-"));
 }
 
-function runPlain(args, home) {
-  return spawnSync(process.execPath, [bin, ...args], {
+function runPlain(args, home, executable = bin) {
+  return spawnSync(process.execPath, [executable, ...args], {
     encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000,
     env: {
       PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
@@ -32,19 +32,48 @@ function runPlain(args, home) {
   });
 }
 
-function runPack(args, home, mode, denied = false, throttled = false) {
+function runPack(args, home, mode, denied = false, throttled = false, packageRoot) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
-    "--import", pathToFileURL(resolve("test/fixtures/read-pack-cli.mjs")).href, bin, ...args,
+    "--import", pathToFileURL(resolve("test/fixtures/read-pack-cli.mjs")).href,
+    packageRoot ? join(packageRoot, "dist/bin/mg-axi.js") : bin, ...args,
   ], {
     encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000,
     env: {
       PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       HOME: home, USERPROFILE: home, MG_AXI_CONFIG: join(home, "config.json"),
       MG_AXI_READ_FIXTURE: JSON.stringify({ mode, denied, throttled }),
+      ...(packageRoot ? { MG_AXI_PACK_ROOT: packageRoot } : {}),
     },
   });
 }
+
+test("tarball runs named and raw reads without the full discovery inventory", () => {
+  const home = dir();
+  try {
+    const packed = spawnSync("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", home], {
+      encoding: "utf8", timeout: 60000,
+    });
+    assert.equal(packed.status, 0, packed.stderr);
+    const [manifest] = JSON.parse(packed.stdout);
+    assert.ok(manifest.size < 500_000, `tarball bytes: ${manifest.size}`);
+    assert.ok(manifest.unpackedSize < 3_000_000, `unpacked bytes: ${manifest.unpackedSize}`);
+    assert.equal(manifest.files.some(file => file.path === "inventory/operations.json"), false);
+    assert.ok(manifest.files.some(file => file.path === "inventory/runtime.json"));
+    const unpacked = spawnSync("tar", ["-xzf", join(home, manifest.filename), "-C", home], { encoding: "utf8", timeout: 30000 });
+    assert.equal(unpacked.status, 0, unpacked.stderr);
+    const root = join(home, "package");
+    assert.equal(existsSync(join(root, "inventory/operations.json")), false);
+    symlinkSync(resolve("node_modules"), join(root, "node_modules"), "dir");
+    const created = runPlain(["profile", "create", "--name", "soc", "--tenant", tenant, "--client", client, "--cloud", "commercial"], home, join(root, "dist/bin/mg-axi.js"));
+    assert.equal(created.status, 0, created.stdout);
+    for (const args of [["entra", "user", "list"], ["api", "get", "/users"]]) {
+      const result = runPack([...args, "--profile", "soc", "--scopes", "https://graph.microsoft.com/User.Read.All"], home, "delegated", false, false, root);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /Adele Vance/);
+    }
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
 
 function createProfiles(home) {
   for (const args of [

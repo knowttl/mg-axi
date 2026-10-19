@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { Socket } from "node:net";
 import { mock } from "node:test";
+import { pathToFileURL } from "node:url";
+import { join } from "node:path";
 
 // PACK-01 packaged offline journey: one fixture serving the critical SOC
 // read path (user, group, Conditional Access policy, sign-in) plus the
@@ -8,6 +10,9 @@ import { mock } from "node:test";
 // MSAL providers resolve synthetic credentials and every HTTP exchange is a
 // fixture response; unreachable code throws instead of touching a network.
 const { mode, denied, throttled } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const moduleUrl = name => process.env.MG_AXI_PACK_ROOT
+  ? pathToFileURL(join(process.env.MG_AXI_PACK_ROOT, "dist", name))
+  : new URL(`../../dist/${name}`, import.meta.url);
 const [major, minor] = process.versions.node.split(".").map(Number);
 const exportOption = major >= 26 || (major === 25 && minor >= 9) || (major === 24 && minor >= 15)
   ? "exports" : "namedExports";
@@ -26,14 +31,14 @@ function credential(profile, scopes) {
   };
 }
 
-mock.module(new URL("../../dist/msal-provider.js", import.meta.url), {
+mock.module(moduleUrl("msal-provider.js"), {
   [exportOption]: { MsalProvider: class {
     storage = "session-only";
     async login() { throw new Error("Interactive authentication is disabled"); }
     async silent(profile, scopes) { return credential(profile, scopes); }
   } },
 });
-mock.module(new URL("../../dist/msal-app-provider.js", import.meta.url), {
+mock.module(moduleUrl("msal-app-provider.js"), {
   [exportOption]: { MsalApplicationProvider: class {
     storage = "session-only";
     async acquire(profile, scopes) { return credential(profile, scopes); }
@@ -61,8 +66,8 @@ const signIn = {
   appDisplayName: "SOC console",
 };
 
-mock.module(new URL("../../dist/api.js", import.meta.url), {
-  [exportOption]: { ...await import("../../dist/api.js"), fetchTransport: async request => {
+mock.module(moduleUrl("api.js"), {
+  [exportOption]: { ...await import(moduleUrl("api.js")), fetchTransport: async request => {
     assert.equal(request.headers.Authorization, `Bearer opaque-fixture-${mode}-token`);
     const url = new URL(request.url);
     assert.equal(url.origin, "https://graph.microsoft.com");

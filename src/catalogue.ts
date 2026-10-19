@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve, sep } from "node:path";
 import { AxiError } from "axi-sdk-js";
+import { findOperation } from "./runtime-index.js";
 
 // Use INV-01 identities and evidence directly; discovery never grants access.
 const schema = JSON.parse(readFileSync(new URL("../inventory/schema.json", import.meta.url), "utf8"));
@@ -2861,8 +2862,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
 }
 
 export function operationFor(leaf: Leaf, version: string) {
-  const inventory = JSON.parse(readFileSync(new URL("../inventory/operations.json", import.meta.url), "utf8"));
-  return inventory.operations.find((row: { id: string }) => row.id === `${version}:${leaf.operation}`);
+  return findOperation(`${version}:${leaf.operation}`);
 }
 
 // Base next-step hints shared by the no-args home view and the installable

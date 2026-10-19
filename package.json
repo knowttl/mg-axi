@@ -18,7 +18,7 @@
   "files": [
     "dist",
     "inventory/schema.json",
-    "inventory/operations.json",
+    "inventory/runtime.json",
     "skills/mg-axi",
     "docs/coverage.md",
     "README.md",
@@ -29,11 +29,11 @@
   },
   "packageManager": "pnpm@10.34.6",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node tools/generate-runtime-index.mjs && tsc -p tsconfig.json",
     "test": "node tools/isolated-home.mjs node --test --test-concurrency=4 test/*.test.mjs",
     "lint": "tsc --noEmit -p tsconfig.json",
-    "docs:generate": "node tools/generate-docs.mjs",
-    "docs:check": "node tools/generate-docs.mjs --check"
+    "docs:generate": "node tools/generate-runtime-index.mjs && node tools/generate-docs.mjs",
+    "docs:check": "node tools/generate-runtime-index.mjs --check && node tools/generate-docs.mjs --check"
   },
   "dependencies": {
     "@azure/msal-node": "^7.0.1",

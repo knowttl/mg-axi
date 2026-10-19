@@ -1,114 +1,111 @@
-<h1 align="center">mg-axi</h1>
+# mg-axi
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/@knowttl/mg-axi"><img alt="npm" src="https://img.shields.io/npm/v/@knowttl/mg-axi?style=flat-square" /></a>
-  <a href="https://github.com/kunchenguid/axi"><img alt="AXI" src="https://img.shields.io/badge/AXI-Agent%20eXperience%20Interface-green?style=flat-square" /></a>
-</p>
+Microsoft Graph CLI for agents and the humans running them, with reviewed Entra reads, compact output and five explicitly gated writes.
 
-Microsoft Graph CLI for agents, designed with AXI (Agent eXperience Interface).
+[![npm](https://img.shields.io/npm/v/@knowttl/mg-axi)](https://www.npmjs.com/package/@knowttl/mg-axi)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22.12.0-green)](package.json)
+[![Provenance](https://img.shields.io/badge/npm-provenance-blue)](https://www.npmjs.com/package/@knowttl/mg-axi?activeTab=provenance)
+[![AXI](https://img.shields.io/badge/AXI-Agent%20eXperience%20Interface-green)](https://github.com/kunchenguid/axi)
 
-mg-axi provides reviewed Entra reads and explicitly gated named writes for workforce tenants in the commercial cloud.
-It emits compact TOON output, includes contextual next-step suggestions and keeps errors machine-readable on stdout.
-It is read-only by default; the shipped surface does not cover all of Microsoft Graph or Entra.
-The [AXI credential standard](https://github.com/knowttl/artium-axi/blob/main/docs/credential-standard.md) defines the shared profile, secret-reference and file-protection contract.
-
-## Agent Ergonomics
-
-- Compact list schemas keep the first response small.
-- Lists distinguish complete, empty and partial results, with server totals when available.
-- Opaque cursors preserve remaining rows for bounded reads.
-- `--full` removes text truncation while preserving redaction and row limits.
-- Leaf-level `--help` describes required arguments, flags and examples.
-- Version probes, help and the local home view require no tenant sign-in.
-
-## Quick Start
-
-Requires Node.js **22.12.0 or later**.
-Graph access also requires an organization-owned app registration, the appropriate consent and a configured profile.
-
-### Skill installation
-
-Install the agent skill:
-
-```sh
-npx skills add knowttl/mg-axi --skill mg-axi
+```console
+$ npx -y @knowttl/mg-axi@0.1.10 --version
+0.1.10
 ```
 
-The [skill](skills/mg-axi/SKILL.md) guides agents to use `npx -y @knowttl/mg-axi` and contains the full executable command table.
-The skill and session hooks below are alternative discovery paths; either can be used alone.
-Neither grants Graph access.
+[Quickstart](#quickstart) • [Use with your agent](#use-with-your-agent) • [Features](#features) • [Safety](#safety-and-permissions) • [Configuration](#configuration) • [Commands](#commands)
 
-### Zero setup
+## Why this exists
 
-Inspect local status and help without installing a global binary:
+Working directly with Graph REST requires agents to manage route selection, permissions, paging and response size.
+mg-axi exposes reviewed commands with bounded lists, TOON output and contextual next steps, without requiring an MCP server.
+It targets workforce Entra tenants in the commercial cloud; sovereign clouds, personal accounts and general Microsoft 365 mail/file access are outside its supported surface.
+
+## Features
+
+- **Entra reads** cover directory, applications, governance, security and tenant configuration.
+- **Bounded output** distinguishes empty, complete and partial lists, with opaque continuation cursors.
+- **Credential isolation** binds authentication to an explicit tenant and organization-owned app.
+- **Write gates** require manual profile enablement, an operation allowlist and exact target confirmation.
+- **Offline discovery** provides local status, group help and leaf references without sign-in.
+- **Redaction** protects sensitive fields in output, previews, errors and audit metadata, including with `--full`.
+
+## Quickstart
+
+Requires Node.js **22.12.0 or later**.
+Inspect local configuration without credentials:
 
 ```sh
-npx -y @knowttl/mg-axi
-npx -y @knowttl/mg-axi --version
+npx -y @knowttl/mg-axi profile list
 npx -y @knowttl/mg-axi entra user list --help
 ```
 
-Use `npx -y @knowttl/mg-axi` in place of `mg-axi` in the examples below when running without a global install.
-To pin a release, use `npx -y @knowttl/mg-axi@<version>`.
-
-## Other ways to install
-
-### Global install and session hooks
-
-Install optional ambient context for Claude Code, Codex and OpenCode:
-
-```sh
-npm install --global @knowttl/mg-axi
-mg-axi setup hooks
-```
-
-Restart the agent session after installation.
-The session hook reports local profile names, tenant labels, authentication-cache presence, write policy and version.
-It makes no network, Graph or sign-in calls and exits successfully when unconfigured.
-Only the explicit hook installer changes agent integrations.
-The installer rejects targets in temporary directories, linked Git worktrees and validation pipeline builds.
-Install globally before running `mg-axi setup hooks`; ordinary CLI commands never auto-install hooks, including in tests and non-interactive sessions.
-
-### Direct install
-
-For direct command entry, install globally and inspect setup guidance:
+An unconfigured installation reports `profiles: 0 profiles configured` and a next-step help command.
+Use `npx -y @knowttl/mg-axi` in place of `mg-axi` throughout these examples, or install globally:
 
 ```sh
 npm install --global @knowttl/mg-axi
 mg-axi setup
 ```
 
-`setup` displays installation, configuration and capability guidance.
-Setup and diagnostic hints use the current global, npx or checkout invocation.
-The home view reports enabled domains from the selected local profile, without contacting Graph or claiming tenant health.
-It writes nothing, signs in nowhere and installs no hooks or skills.
-
-## Usage
-
-Create a delegated profile using the tenant and app registration UUIDs, then explicitly sign in for user reads:
+For Graph reads, an administrator must first provision an organization-owned app registration and consent to the appropriate permissions.
+Replace the tenant and client placeholders with that registration's UUIDs:
 
 ```sh
 mg-axi profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial
 mg-axi auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All
 mg-axi doctor --profile soc
-mg-axi entra user list --profile soc --limit 10
-mg-axi entra user show --profile soc --id <user-id-or-upn>
+mg-axi entra user list --profile soc --limit 10 --fields id,displayName
 ```
 
-The first profile created becomes the default; `--profile` selects another identity, followed by `MG_AXI_PROFILE`, the default and the only-profile fallback.
-Profile creation does not overwrite existing identities or sign in.
+Browser login uses MSAL with PKCE.
+Authenticate in the browser; never paste credentials into commands or chat.
+Profile creation stores identity and credential references, never signs in and never overwrites an existing profile.
+See [configuration](docs/configuration.md) for application authentication and device-code opt-in.
+
+The data portion below was captured from the last command using a synthetic directory fixture; your tenant rows will differ.
+The CLI also emits a next-step `help` entry.
+
+```toon
+users[1]{id,displayName}:
+  aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa,Example User
+total: null
+count: 1 users
+complete: true
+```
+
+## Use with your agent
+
+Install the [generated skill](skills/mg-axi/SKILL.md), which includes the complete executable command table:
+
+```sh
+npx skills add knowttl/mg-axi --skill mg-axi
+```
+
+For optional session context in Claude Code, Codex and OpenCode, use the global installation:
+
+```sh
+mg-axi setup hooks
+```
+
+Restart the agent session.
+Hooks inject local profile names, tenant labels, authentication-cache presence, write policy and version; they make no Graph or sign-in calls.
+Skills and hooks are independent discovery options and grant no permissions.
+`setup` only displays guidance; only `setup hooks` installs integrations.
+The hook installer rejects temporary, linked-worktree and validation-build targets.
+
+There is no CLI hook-uninstall command.
+To remove the integration, delete only the `mg-axi-hook` SessionStart entries from `~/.claude/settings.json` and `~/.codex/hooks.json`, and `~/.config/opencode/plugins/axi-mg-axi-hook.js`.
+Preserve other hooks and shared Codex hook settings.
+
+## Usage
+
 `doctor` performs one bounded user-list read per selected profile with silent credential acquisition.
 Without `--profile`, it checks the default profile, or all profiles if no default is set.
-Missing configuration and failed reads return errors rather than suggesting that access succeeded.
+Missing configuration and failed reads return errors.
+Ordinary commands never initiate interactive login.
 
-Browser login is the default and uses MSAL with PKCE.
-Use full Graph scope names separated by commas; delegated login rejects `.default`.
-Device code requires both profile creation with `--allow-device-code` and login with `--method device-code`, subject to organization policy.
-Browser failure never falls back to device code.
-Ordinary reads acquire credentials silently and report when login, consent or policy intervention is required.
-Login does not modify app registration or automatically request blanket write consent.
-
-### Command surface and subcommands
+## Commands
 
 The [capability report](docs/coverage.md) distinguishes implemented operations from deferred or excluded ones.
 The [command table](skills/mg-axi/SKILL.md#orientation) lists every executable leaf; use its leaf-level help for exact flags and permission defaults.
@@ -186,8 +183,9 @@ Both raw cursor input forms have a 16 MB ceiling.
 Treat cursor tokens and output as tenant data.
 Denied reads return structured errors, not empty success results.
 
-### Named writes and safety
+## Safety and permissions
 
+Read-only by default: only the five named writes below can be enabled.
 **Writes require manual profile opt-in, an operation allowlist, `--execute` and exact target confirmation.**
 Without `--execute`, a named write previews the change and journals nothing, but preview still requires the write-enabled profile and prerequisite read access.
 `MG_AXI_READ_ONLY=1` overrides profile opt-in.
@@ -251,102 +249,43 @@ Fresh reads do not make writes atomic, and account and policy updates send no ET
 Do not assume rollback.
 The [execution contract](docs/execution.md#named-writes) describes the shared guarantees.
 
+| Read journey | Delegated Graph permission |
+| --- | --- |
+| Users and `doctor` | `User.Read.All` |
+| Group membership | `GroupMember.Read.All` |
+| Conditional Access policies | `Policy.Read.All` |
+| Reviewed raw reads | Explicit approved `--scopes` for the requested route |
+
+Use full `https://graph.microsoft.com/` scope names with `auth login`.
+Application profiles use the app registration's consented `.default` permissions; delegated scopes cannot narrow them.
+The v1.0 group-members route omits service principals.
+
+Credentials live in protected environment/file holders or the delegated MSAL cache in the state directory.
+Secret values are never printed; diagnostics may show holder names and paths.
+Explicit login contacts Microsoft identity endpoints, and Graph commands send the requested tenant operation to Microsoft Graph.
+Local home, setup, help and profile inspection make no tenant calls.
+Treat returned directory data, cursors and mutation journals as sensitive tenant data.
+
 ## Configuration
 
-Profiles store tenant/client/cloud identity, authentication mode, policy and credential references, never secret values.
-Only commercial-cloud workforce profiles are supported.
-Unknown configuration fields, unsupported versions/clouds and inline credentials are rejected.
+The full [configuration reference](docs/configuration.md) covers paths, profile selection, environment profiles, credential storage and headless authentication.
+The [AXI credential standard](https://github.com/knowttl/artium-axi/blob/main/docs/credential-standard.md) defines SecretRefs and file protection.
 
-| Variable | Meaning |
+| Flag, environment variable or key | Purpose |
 | --- | --- |
-| `MG_AXI_CONFIG` | Configuration file override; `--config` takes precedence |
-| `MG_AXI_PROFILE` | Profile selection override; `--profile` takes precedence |
-| `MG_AXI_READ_ONLY` | `1` or `true` refuses named writes; `0`, `false` or unset allows profile policy; other values fail |
-| `MG_AXI_WRITE_LOG` | Nonblank mutation journal path override; defaults to the state directory's `writes.log` |
+| `--config` / `MG_AXI_CONFIG` | Config path; flag wins |
+| `--profile` / `MG_AXI_PROFILE` | Profile selection; flag wins |
+| `MG_AXI_READ_ONLY=1` | Force read-only regardless of profile policy |
+| `MG_AXI_WRITE_LOG` | Mutation journal path override |
+| `defaultProfile` | Default file profile when no explicit or env profile is selected |
+| `writes.allowWrites`, `writes.operations` | Manual per-profile opt-in and exact operation allowlist |
 
-On Linux and macOS, configuration lives at `$XDG_CONFIG_HOME/mg-axi/config.json` (default `~/.config/mg-axi/config.json`) and state at `$XDG_STATE_HOME/mg-axi/` (default `~/.local/state/mg-axi/`).
-Only absolute XDG directory overrides are used.
-On Windows, XDG variables are ignored; configuration uses `%APPDATA%\mg-axi\config.json` and state uses `%LOCALAPPDATA%\mg-axi\`.
-Run `mg-axi config path` to see the selected configuration path.
-Legacy `~/.mg-axi/config.json` is never read; when it exists and the selected new config does not, `CONFIG_MOVED` reports both paths and the exact move command.
+Run `mg-axi config path` to see the effective config location.
+The default is `~/.config/mg-axi/config.json` on Linux/macOS or `%APPDATA%\mg-axi\config.json` on Windows.
+State defaults to `~/.local/state/mg-axi/` or `%LOCALAPPDATA%\mg-axi\`.
+No secrets belong in profile JSON or argv.
 
-Profile selection is `--profile`, `MG_AXI_PROFILE`, a complete env profile, `defaultProfile`, then the only configured profile.
-An env profile requires `MG_AXI_MODE`, `MG_AXI_TENANT_ID`, `MG_AXI_CLIENT_ID` and its credential fields, plus `MG_AXI_AUTH` for application mode.
-For example, client-secret auth requires `MG_AXI_CLIENT_SECRET`; certificate auth requires `MG_AXI_PRIVATE_KEY` and `MG_AXI_THUMBPRINT_SHA256`; federation requires `MG_AXI_TOKEN` containing the assertion.
-Delegated env profiles require `MG_AXI_TOKEN` containing a serialized MSAL cache.
-Optional `MG_AXI_ENABLED_PACKS`, `MG_AXI_SENSITIVE_AREAS` and `MG_AXI_WRITES` use JSON values; `MG_AXI_PREVIEW` and `MG_AXI_ALLOW_DEVICE_CODE` use the same boolean forms as `MG_AXI_READ_ONLY`.
-A partial env profile fails with `CONFIG_INVALID` instead of falling through to a file profile.
-Explicitly selected file profiles ignore the env profile fields and resolve only their own SecretRefs.
-
-The profile schema is shipped as `axi-credential.schema.json`.
-mg-axi retains `mode`; application profiles add `auth: "certificate" | "client-secret" | "federated"` and the corresponding `privateKey`, `clientSecret` or `token` SecretRef.
-Delegated profiles created by the CLI use `token: {"stored": true}` for their MSAL cache.
-Other SecretRefs are `{"env": "VARIABLE_NAME"}` and `{"file": "/absolute/local/path"}`.
-Omitted secret fields default to their `MG_AXI_<FIELD>` environment reference.
-Old `credentialRef` objects and SHA-1 `thumbprint` fields are rejected; update them to the flattened fields and 64-hex-digit `thumbprintSha256` after moving a legacy file.
-
-### Delegated credential storage
-
-Explicit `auth login` stores a protected MSAL cache in the state directory's `credentials.json`, reported as `storage: protected-file`.
-Windows and Linux use the same backend, with no keyring dependency or 2,560-byte cache limit.
-Each entry is keyed by profile name and bound to its tenant and client IDs.
-Changing that binding requires a new explicit login.
-
-Each profile holds one account.
-Every explicit login wipes that profile's protected and in-memory cache before acquiring replacement credentials and fails if the wipe cannot be verified.
-Use separate profiles for separate identities; restore file access before retrying a failed wipe.
-Only explicit login persists credentials; silent refresh keeps refreshed credentials in memory.
-Access tokens are excluded from the persisted MSAL cache.
-`auth logout` deletes the selected profile's cache and is idempotent; MSAL exposes no upstream token revocation API, so organizational revocation remains separate.
-`auth status` reports the selected identity, Graph endpoint, secret source names or paths, and local availability without signing in or making a live request.
-The old top-level `login` remains an alias for one minor release; see [Versioning and releases](#versioning-and-releases).
-Tokens remain opaque and never appear in profile views, stdout or authentication diagnostics.
-Credential acquisition is bound to the configured tenant/client and refreshes at a 60-second expiry margin.
-
-### Application credentials and headless use
-
-Application profiles use client credentials without a signed-in user and request the configured Graph `.default` audience.
-An administrator must grant Graph application permissions on the app registration; delegated `--scopes` cannot narrow an application token.
-Application profiles reject device-code opt-in and `login`, and acquisition failures never fall back to user authentication.
-
-Choose exactly one credential provider:
-
-```sh
-# Certificate: register the matching public certificate on the app registration
-mg-axi profile create --name daemon --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --certificate-thumbprint-sha256 <64-hex-digit-thumbprint>
-
-# Workload federation: configure the app registration's federated credential mapping
-mg-axi profile create --name batch --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --federated
-
-# Headless client secret: supply the value through the named environment variable
-mg-axi profile create --name svc --tenant <tenant-id> --client <client-id> --cloud commercial --mode application --client-secret-env MG_AXI_CLIENT_SECRET
-mg-axi profile show --profile svc
-```
-
-By default, certificate keys come from `privateKey: {"env": "MG_AXI_PRIVATE_KEY"}`.
-Profile creation records the reference and thumbprint; it does not import a key and there is no CLI key-import command.
-Provision keys through protected storage tooling, never argv or profile JSON.
-Certificate acquisition fails if the referenced key is unavailable.
-
-For headless certificate holders, add `--certificate-key-file <path>` or `--certificate-key-env <variable-name>`.
-Client secrets similarly accept `--client-secret-file <path>` instead of `--client-secret-env`.
-All credential files, including federated assertions, must use absolute local paths.
-On Unix, they must be regular files owned by the current user with no group or other permission bits; 0400 and 0600 are accepted.
-Configuration must not be writable by group or other.
-On Windows, writes apply a protected DACL for the current user, SYSTEM and Administrators; reads reject reparse points, and `auth status` and `doctor` verify the DACL.
-UNC and device paths are rejected.
-Missing, empty or exposed holders fail closed without disclosing values.
-PEM environment values may contain escaped `\n`; passphrase-protected keys are unsupported.
-Prefer certificates or federation over bearer client secrets, and rotate secrets on a schedule.
-
-Federation reads the assertion file on every acquisition so projected tokens can rotate.
-Use `--federated-token-file <absolute-path>` for a projected assertion file, or set the default `MG_AXI_TOKEN` assertion value through the environment.
-When the token reference is the default `MG_AXI_TOKEN` env holder and that variable is unset, `AZURE_FEDERATED_TOKEN_FILE` stays accepted as a deprecated alias for one minor release with a stderr notice; see [Versioning and releases](#versioning-and-releases). `MG_AXI_TOKEN` takes precedence and the alias must name an absolute file path.
-References, rather than values, are stored in configuration; rotation updates the environment or file without changing the profile.
-Application credentials remain in process memory and are reacquired at a 60-second expiry margin.
-See [headless credential guidance](docs/headless-credentials.md) for holder examples.
-
-## Development & Testing
+## Development and contributing
 
 Use Node.js 22.12.0 or later and the pinned pnpm 10.34.6 from [package.json](package.json).
 From a checkout root:
@@ -372,15 +311,30 @@ The agent skill and capability report are generated from the command catalogue, 
 The package includes a compact runtime index for shipped named and reviewed raw operations, cached once per process.
 The full discovery inventory stays in the repository; `pnpm build` regenerates the runtime index before compilation and `pnpm docs:check` checks it for drift.
 After changing their sources, run `corepack pnpm run docs:generate`, then `corepack pnpm run docs:check`.
-The [implementation plan](PLAN.md), [operation inventory](docs/inventory.md) and [execution contract](docs/execution.md) describe design and coverage boundaries.
+See the [operation inventory](docs/inventory.md) and [execution contract](docs/execution.md) for coverage and safety boundaries.
 
 ## Versioning and releases
 
-During 0.x development, feature changes continue to produce patch releases under the existing release configuration.
-A minor version is cut only intentionally.
+During 0.x development, feature changes produce patch releases under the current [release configuration](release-please-config.json).
+Minor versions are cut intentionally.
 The deprecated top-level `login` and `AZURE_FEDERATED_TOKEN_FILE` aliases remain supported through the next intentionally cut minor release and become eligible for removal after that release.
 Patch releases do not expire either alias.
 
+[GitHub releases](https://github.com/knowttl/mg-axi/releases) and [npm versions](https://www.npmjs.com/package/@knowttl/mg-axi?activeTab=versions) have two historical differences:
+npm has the initial `0.1.0` but GitHub has no `v0.1.0` release; GitHub has `v0.1.5` but its publish failed, so npm jumps from `0.1.4` to `0.1.6`.
+The `0.1.5` npm gap remains unfilled.
+Pin an existing npm version when reproducibility matters.
+
+The [release workflow](.github/workflows/release-please.yml) builds, lints, tests and checks generated docs before publishing with npm provenance.
+There is no GitHub test CI for pull requests; contributors run the local checks above.
+
+## Security reporting
+
+See [SECURITY.md](SECURITY.md) for reporting instructions.
+Never include credentials, tokens, cursors or tenant data in a public issue.
+
 ## License
 
-MIT. See [LICENSE](LICENSE).
+[MIT](LICENSE).
+
+If this project saved you time or helped your workflow, please consider giving it a ⭐ on GitHub to help others find it!

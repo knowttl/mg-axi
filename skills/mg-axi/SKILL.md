@@ -338,7 +338,7 @@ npx -y @knowttl/mg-axi api get --help
 
 ## Setup (explicit only)
 
-Follow [installation guidance](https://github.com/knowttl/mg-axi/blob/main/README.md#quick-start) for npm installation and explicit skill installation; [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#development--testing) also documents checkout builds.
+Follow [installation guidance](https://github.com/knowttl/mg-axi/blob/main/README.md#quickstart) for npm installation and explicit skill installation; [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#development-and-contributing) also documents checkout builds.
 Create profiles explicitly and keep secrets out of argv and config files:
 
 ```sh
@@ -352,7 +352,7 @@ npx -y @knowttl/mg-axi entra user list --profile soc --limit 10
 Configuration uses the XDG config directory (default `~/.config/mg-axi/config.json`), or `%APPDATA%\mg-axi\config.json` on Windows; `--config` overrides `MG_AXI_CONFIG`.
 `mg-axi setup` shows the selected path and writes nothing.
 Application profiles authenticate headlessly through credential references: the profile names an env var or file and the environment supplies the value at acquisition time.
-Container examples for client secrets, certificate keys and workload federation live in [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#mg-axi).
+Headless examples for client secrets, certificate keys and workload federation live in the [configuration reference](https://github.com/knowttl/mg-axi/blob/main/docs/configuration.md#application-credentials-and-headless-use).
 A client secret is weaker than a certificate or federated credential and needs scheduled rotation.
 
 Agent discovery has two install paths, and either suffices alone.

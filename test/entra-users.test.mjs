@@ -590,7 +590,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
   }
 }
 
-test("richer selects dispatch the same mapping while beta stays preview-gated", async () => {
+test("richer selects dispatch the same mapping while unshipped beta stays blocked", async () => {
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
@@ -602,8 +602,8 @@ test("richer selects dispatch the same mapping while beta stays preview-gated", 
     assert.deepEqual(richer.users[0], { id: u1.id, displayName: "Adele Vance" });
     const beta = executeArgv(["entra", "user", "list", "--profile", "soc", "--api-version", "beta", "--limit", "1"], overrides);
     await assert.rejects(beta, error => {
-      assert.equal(error.code, "POLICY_DENIED");
-      return /preview-enabled/.test(error.message);
+      assert.equal(error.code, "VALIDATION_ERROR");
+      return /Unknown catalogued/.test(error.message);
     });
   } finally {
     teardownProfiles(state);

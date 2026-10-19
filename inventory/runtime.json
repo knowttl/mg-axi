@@ -1,0 +1,2356 @@
+{
+  "operations": [
+    {
+      "id": "v1.0:GET:/agreementAcceptances",
+      "method": "GET",
+      "path": "/agreementAcceptances",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/agreementAcceptances/{agreementAcceptance-id}",
+      "method": "GET",
+      "path": "/agreementAcceptances/{agreementAcceptance-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/agreements",
+      "method": "GET",
+      "path": "/agreements",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/agreements/{agreement-id}",
+      "method": "GET",
+      "path": "/agreements/{agreement-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/agreements/{agreement-id}/acceptances",
+      "method": "GET",
+      "path": "/agreements/{agreement-id}/acceptances",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/agreements/{agreement-id}/acceptances/{agreementAcceptance-id}",
+      "method": "GET",
+      "path": "/agreements/{agreement-id}/acceptances/{agreementAcceptance-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/applications",
+      "method": "GET",
+      "path": "/applications",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/applications/{application-id}",
+      "method": "GET",
+      "path": "/applications/{application-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/applications/{application-id}/federatedIdentityCredentials",
+      "method": "GET",
+      "path": "/applications/{application-id}/federatedIdentityCredentials",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/applications/{application-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}",
+      "method": "GET",
+      "path": "/applications/{application-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/applications/{application-id}/owners",
+      "method": "GET",
+      "path": "/applications/{application-id}/owners",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/auditLogs/directoryAudits",
+      "method": "GET",
+      "path": "/auditLogs/directoryAudits",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-05"
+    },
+    {
+      "id": "v1.0:GET:/auditLogs/directoryAudits/{directoryAudit-id}",
+      "method": "GET",
+      "path": "/auditLogs/directoryAudits/{directoryAudit-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-05"
+    },
+    {
+      "id": "v1.0:GET:/auditLogs/provisioning",
+      "method": "GET",
+      "path": "/auditLogs/provisioning",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-05"
+    },
+    {
+      "id": "v1.0:GET:/auditLogs/provisioning/{provisioningObjectSummary-id}",
+      "method": "GET",
+      "path": "/auditLogs/provisioning/{provisioningObjectSummary-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-05"
+    },
+    {
+      "id": "v1.0:GET:/auditLogs/signIns",
+      "method": "GET",
+      "path": "/auditLogs/signIns",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-05"
+    },
+    {
+      "id": "v1.0:GET:/auditLogs/signIns/{signIn-id}",
+      "method": "GET",
+      "path": "/auditLogs/signIns/{signIn-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-05"
+    },
+    {
+      "id": "v1.0:GET:/contacts",
+      "method": "GET",
+      "path": "/contacts",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/$count",
+      "method": "GET",
+      "path": "/contacts/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/directReports",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/directReports",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/directReports/$count",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/directReports/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/directReports/graph.orgContact",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/directReports/graph.orgContact",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/directReports/graph.orgContact/$count",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/directReports/graph.orgContact/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/directReports/graph.user",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/directReports/graph.user",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/directReports/graph.user/$count",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/directReports/graph.user/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/directReports/{directoryObject-id}",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/directReports/{directoryObject-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/directReports/{directoryObject-id}/graph.orgContact",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/directReports/{directoryObject-id}/graph.orgContact",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/directReports/{directoryObject-id}/graph.user",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/directReports/{directoryObject-id}/graph.user",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/manager",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/manager",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/memberOf",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/memberOf",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/memberOf/$count",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/memberOf/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/memberOf/graph.administrativeUnit",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/memberOf/graph.administrativeUnit",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/memberOf/graph.administrativeUnit/$count",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/memberOf/graph.administrativeUnit/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/memberOf/graph.group",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/memberOf/graph.group",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/memberOf/graph.group/$count",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/memberOf/graph.group/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/memberOf/{directoryObject-id}",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/memberOf/{directoryObject-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/memberOf/{directoryObject-id}/graph.administrativeUnit",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/memberOf/{directoryObject-id}/graph.administrativeUnit",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/memberOf/{directoryObject-id}/graph.group",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/memberOf/{directoryObject-id}/graph.group",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/transitiveMemberOf",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf/$count",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/transitiveMemberOf/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf/graph.administrativeUnit",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/transitiveMemberOf/graph.administrativeUnit",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf/graph.administrativeUnit/$count",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/transitiveMemberOf/graph.administrativeUnit/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf/graph.group",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/transitiveMemberOf/graph.group",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf/graph.group/$count",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/transitiveMemberOf/graph.group/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf/{directoryObject-id}",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/transitiveMemberOf/{directoryObject-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf/{directoryObject-id}/graph.administrativeUnit",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/transitiveMemberOf/{directoryObject-id}/graph.administrativeUnit",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contacts/{orgContact-id}/transitiveMemberOf/{directoryObject-id}/graph.group",
+      "method": "GET",
+      "path": "/contacts/{orgContact-id}/transitiveMemberOf/{directoryObject-id}/graph.group",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/contracts",
+      "method": "GET",
+      "path": "/contracts",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/contracts/$count",
+      "method": "GET",
+      "path": "/contracts/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/contracts/{contract-id}",
+      "method": "GET",
+      "path": "/contracts/{contract-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/dataPolicyOperations",
+      "method": "GET",
+      "path": "/dataPolicyOperations",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/dataPolicyOperations/$count",
+      "method": "GET",
+      "path": "/dataPolicyOperations/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/dataPolicyOperations/{dataPolicyOperation-id}",
+      "method": "GET",
+      "path": "/dataPolicyOperations/{dataPolicyOperation-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/devices",
+      "method": "GET",
+      "path": "/devices",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-10"
+    },
+    {
+      "id": "v1.0:GET:/devices/{device-id}",
+      "method": "GET",
+      "path": "/devices/{device-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-10"
+    },
+    {
+      "id": "v1.0:GET:/directory/administrativeUnits",
+      "method": "GET",
+      "path": "/directory/administrativeUnits",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-10"
+    },
+    {
+      "id": "v1.0:GET:/directory/administrativeUnits/{administrativeUnit-id}",
+      "method": "GET",
+      "path": "/directory/administrativeUnits/{administrativeUnit-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-10"
+    },
+    {
+      "id": "v1.0:GET:/directory/administrativeUnits/{administrativeUnit-id}/members",
+      "method": "GET",
+      "path": "/directory/administrativeUnits/{administrativeUnit-id}/members",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-10"
+    },
+    {
+      "id": "v1.0:GET:/directory/attributeSets",
+      "method": "GET",
+      "path": "/directory/attributeSets",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/attributeSets/$count",
+      "method": "GET",
+      "path": "/directory/attributeSets/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/attributeSets/{attributeSet-id}",
+      "method": "GET",
+      "path": "/directory/attributeSets/{attributeSet-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/customSecurityAttributeDefinitions",
+      "method": "GET",
+      "path": "/directory/customSecurityAttributeDefinitions",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/customSecurityAttributeDefinitions/$count",
+      "method": "GET",
+      "path": "/directory/customSecurityAttributeDefinitions/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}",
+      "method": "GET",
+      "path": "/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues",
+      "method": "GET",
+      "path": "/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues/$count",
+      "method": "GET",
+      "path": "/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues/{allowedValue-id}",
+      "method": "GET",
+      "path": "/directory/customSecurityAttributeDefinitions/{customSecurityAttributeDefinition-id}/allowedValues/{allowedValue-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/deletedItems/graph.administrativeUnit",
+      "method": "GET",
+      "path": "/directory/deletedItems/graph.administrativeUnit",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/deletedItems/graph.administrativeUnit/$count",
+      "method": "GET",
+      "path": "/directory/deletedItems/graph.administrativeUnit/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/deletedItems/graph.application",
+      "method": "GET",
+      "path": "/directory/deletedItems/graph.application",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/deletedItems/graph.application/$count",
+      "method": "GET",
+      "path": "/directory/deletedItems/graph.application/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/deletedItems/graph.group",
+      "method": "GET",
+      "path": "/directory/deletedItems/graph.group",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/deletedItems/graph.group/$count",
+      "method": "GET",
+      "path": "/directory/deletedItems/graph.group/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/deletedItems/graph.servicePrincipal",
+      "method": "GET",
+      "path": "/directory/deletedItems/graph.servicePrincipal",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/deletedItems/graph.servicePrincipal/$count",
+      "method": "GET",
+      "path": "/directory/deletedItems/graph.servicePrincipal/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/deletedItems/graph.user",
+      "method": "GET",
+      "path": "/directory/deletedItems/graph.user",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/deletedItems/graph.user/$count",
+      "method": "GET",
+      "path": "/directory/deletedItems/graph.user/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/deletedItems/{directoryObject-id}",
+      "method": "GET",
+      "path": "/directory/deletedItems/{directoryObject-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/federationConfigurations",
+      "method": "GET",
+      "path": "/directory/federationConfigurations",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/federationConfigurations/$count",
+      "method": "GET",
+      "path": "/directory/federationConfigurations/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/federationConfigurations/availableProviderTypes()",
+      "method": "GET",
+      "path": "/directory/federationConfigurations/availableProviderTypes()",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/federationConfigurations/{identityProviderBase-id}",
+      "method": "GET",
+      "path": "/directory/federationConfigurations/{identityProviderBase-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/onPremisesSynchronization",
+      "method": "GET",
+      "path": "/directory/onPremisesSynchronization",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/onPremisesSynchronization/{onPremisesDirectorySynchronization-id}",
+      "method": "GET",
+      "path": "/directory/onPremisesSynchronization/{onPremisesDirectorySynchronization-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations",
+      "method": "GET",
+      "path": "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/$count",
+      "method": "GET",
+      "path": "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}",
+      "method": "GET",
+      "path": "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities",
+      "method": "GET",
+      "path": "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities/$count",
+      "method": "GET",
+      "path": "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities/{certificateAuthorityDetail-id}",
+      "method": "GET",
+      "path": "/directory/publicKeyInfrastructure/certificateBasedAuthConfigurations/{certificateBasedAuthPki-id}/certificateAuthorities/{certificateAuthorityDetail-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/subscriptions",
+      "method": "GET",
+      "path": "/directory/subscriptions",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')",
+      "method": "GET",
+      "path": "/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')",
+      "version": "v1.0",
+      "disposition": "reviewed-raw-read",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/subscriptions/$count",
+      "method": "GET",
+      "path": "/directory/subscriptions/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directory/subscriptions/{companySubscription-id}",
+      "method": "GET",
+      "path": "/directory/subscriptions/{companySubscription-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directoryObjects",
+      "method": "GET",
+      "path": "/directoryObjects",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directoryObjects/$count",
+      "method": "GET",
+      "path": "/directoryObjects/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directoryObjects/{directoryObject-id}",
+      "method": "GET",
+      "path": "/directoryObjects/{directoryObject-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/directoryRoleTemplates",
+      "method": "GET",
+      "path": "/directoryRoleTemplates",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/directoryRoleTemplates/{directoryRoleTemplate-id}",
+      "method": "GET",
+      "path": "/directoryRoleTemplates/{directoryRoleTemplate-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/directoryRoles",
+      "method": "GET",
+      "path": "/directoryRoles",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/directoryRoles/{directoryRole-id}",
+      "method": "GET",
+      "path": "/directoryRoles/{directoryRole-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/directoryRoles/{directoryRole-id}/members",
+      "method": "GET",
+      "path": "/directoryRoles/{directoryRole-id}/members",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/directoryRoles/{directoryRole-id}/scopedMembers",
+      "method": "GET",
+      "path": "/directoryRoles/{directoryRole-id}/scopedMembers",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/directoryRoles/{directoryRole-id}/scopedMembers/{scopedRoleMembership-id}",
+      "method": "GET",
+      "path": "/directoryRoles/{directoryRole-id}/scopedMembers/{scopedRoleMembership-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/domainDnsRecords",
+      "method": "GET",
+      "path": "/domainDnsRecords",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/domainDnsRecords/{domainDnsRecord-id}",
+      "method": "GET",
+      "path": "/domainDnsRecords/{domainDnsRecord-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/domains",
+      "method": "GET",
+      "path": "/domains",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/domains/{domain-id}",
+      "method": "GET",
+      "path": "/domains/{domain-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/domains/{domain-id}/serviceConfigurationRecords",
+      "method": "GET",
+      "path": "/domains/{domain-id}/serviceConfigurationRecords",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/domains/{domain-id}/serviceConfigurationRecords/{domainDnsRecord-id}",
+      "method": "GET",
+      "path": "/domains/{domain-id}/serviceConfigurationRecords/{domainDnsRecord-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/domains/{domain-id}/verificationDnsRecords",
+      "method": "GET",
+      "path": "/domains/{domain-id}/verificationDnsRecords",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/domains/{domain-id}/verificationDnsRecords/{domainDnsRecord-id}",
+      "method": "GET",
+      "path": "/domains/{domain-id}/verificationDnsRecords/{domainDnsRecord-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/groupLifecyclePolicies",
+      "method": "GET",
+      "path": "/groupLifecyclePolicies",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/groupLifecyclePolicies/$count",
+      "method": "GET",
+      "path": "/groupLifecyclePolicies/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/groupLifecyclePolicies/{groupLifecyclePolicy-id}",
+      "method": "GET",
+      "path": "/groupLifecyclePolicies/{groupLifecyclePolicy-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/groupSettingTemplates",
+      "method": "GET",
+      "path": "/groupSettingTemplates",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/groupSettingTemplates/$count",
+      "method": "GET",
+      "path": "/groupSettingTemplates/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/groupSettingTemplates/{groupSettingTemplate-id}",
+      "method": "GET",
+      "path": "/groupSettingTemplates/{groupSettingTemplate-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/groups",
+      "method": "GET",
+      "path": "/groups",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-02"
+    },
+    {
+      "id": "v1.0:GET:/groups/{group-id}",
+      "method": "GET",
+      "path": "/groups/{group-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-02"
+    },
+    {
+      "id": "v1.0:GET:/groups/{group-id}/memberOf",
+      "method": "GET",
+      "path": "/groups/{group-id}/memberOf",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-02"
+    },
+    {
+      "id": "v1.0:GET:/groups/{group-id}/members",
+      "method": "GET",
+      "path": "/groups/{group-id}/members",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-02"
+    },
+    {
+      "id": "v1.0:GET:/groups/{group-id}/transitiveMemberOf",
+      "method": "GET",
+      "path": "/groups/{group-id}/transitiveMemberOf",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-02"
+    },
+    {
+      "id": "v1.0:GET:/groups/{group-id}/transitiveMembers",
+      "method": "GET",
+      "path": "/groups/{group-id}/transitiveMembers",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-02"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/authenticationContextClassReferences",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/authenticationContextClassReferences",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/authenticationContextClassReferences/{authenticationContextClassReference-id}",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/authenticationContextClassReferences/{authenticationContextClassReference-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/authenticationStrength/authenticationMethodModes",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/authenticationStrength/authenticationMethodModes",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/authenticationStrength/authenticationMethodModes/{authenticationMethodModeDetail-id}",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/authenticationStrength/authenticationMethodModes/{authenticationMethodModeDetail-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/authenticationStrength/policies",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/authenticationStrength/policies",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}/combinationConfigurations",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}/combinationConfigurations",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}/combinationConfigurations/{authenticationCombinationConfiguration-id}",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}/combinationConfigurations/{authenticationCombinationConfiguration-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/deletedItems/namedLocations",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/deletedItems/namedLocations",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/deletedItems/namedLocations/{namedLocation-id}",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/deletedItems/namedLocations/{namedLocation-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/deletedItems/policies",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/deletedItems/policies",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/deletedItems/policies/{conditionalAccessPolicy-id}",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/deletedItems/policies/{conditionalAccessPolicy-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/namedLocations",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/namedLocations",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/namedLocations/{namedLocation-id}",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/namedLocations/{namedLocation-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/policies",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/policies",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/templates",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/templates",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/conditionalAccess/templates/{conditionalAccessTemplate-id}",
+      "method": "GET",
+      "path": "/identity/conditionalAccess/templates/{conditionalAccessTemplate-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/identityProviders",
+      "method": "GET",
+      "path": "/identity/identityProviders",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/identityProviders/$count",
+      "method": "GET",
+      "path": "/identity/identityProviders/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/identityProviders/availableProviderTypes()",
+      "method": "GET",
+      "path": "/identity/identityProviders/availableProviderTypes()",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/identityProviders/{identityProviderBase-id}",
+      "method": "GET",
+      "path": "/identity/identityProviders/{identityProviderBase-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/riskPrevention/fraudProtectionProviders",
+      "method": "GET",
+      "path": "/identity/riskPrevention/fraudProtectionProviders",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/riskPrevention/fraudProtectionProviders/$count",
+      "method": "GET",
+      "path": "/identity/riskPrevention/fraudProtectionProviders/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/riskPrevention/fraudProtectionProviders/{fraudProtectionProvider-id}",
+      "method": "GET",
+      "path": "/identity/riskPrevention/fraudProtectionProviders/{fraudProtectionProvider-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/riskPrevention/webApplicationFirewallProviders",
+      "method": "GET",
+      "path": "/identity/riskPrevention/webApplicationFirewallProviders",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/riskPrevention/webApplicationFirewallProviders/$count",
+      "method": "GET",
+      "path": "/identity/riskPrevention/webApplicationFirewallProviders/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/riskPrevention/webApplicationFirewallProviders/{webApplicationFirewallProvider-id}",
+      "method": "GET",
+      "path": "/identity/riskPrevention/webApplicationFirewallProviders/{webApplicationFirewallProvider-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/riskPrevention/webApplicationFirewallVerifications",
+      "method": "GET",
+      "path": "/identity/riskPrevention/webApplicationFirewallVerifications",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/riskPrevention/webApplicationFirewallVerifications/$count",
+      "method": "GET",
+      "path": "/identity/riskPrevention/webApplicationFirewallVerifications/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/riskPrevention/webApplicationFirewallVerifications/{webApplicationFirewallVerificationModel-id}",
+      "method": "GET",
+      "path": "/identity/riskPrevention/webApplicationFirewallVerifications/{webApplicationFirewallVerificationModel-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identity/riskPrevention/webApplicationFirewallVerifications/{webApplicationFirewallVerificationModel-id}/provider",
+      "method": "GET",
+      "path": "/identity/riskPrevention/webApplicationFirewallVerifications/{webApplicationFirewallVerificationModel-id}/provider",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-03"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/accessReviews/definitions",
+      "method": "GET",
+      "path": "/identityGovernance/accessReviews/definitions",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}",
+      "method": "GET",
+      "path": "/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances",
+      "method": "GET",
+      "path": "/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}",
+      "method": "GET",
+      "path": "/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/contactedReviewers",
+      "method": "GET",
+      "path": "/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/contactedReviewers",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/contactedReviewers/{accessReviewReviewer-id}",
+      "method": "GET",
+      "path": "/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/contactedReviewers/{accessReviewReviewer-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/decisions",
+      "method": "GET",
+      "path": "/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/decisions",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/decisions/{accessReviewInstanceDecisionItem-id}",
+      "method": "GET",
+      "path": "/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/decisions/{accessReviewInstanceDecisionItem-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/stages",
+      "method": "GET",
+      "path": "/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/stages",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/stages/{accessReviewStage-id}",
+      "method": "GET",
+      "path": "/identityGovernance/accessReviews/definitions/{accessReviewScheduleDefinition-id}/instances/{accessReviewInstance-id}/stages/{accessReviewStage-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/accessPackages",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/accessPackages",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/accessPackages/$count",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/accessPackages/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/assignmentPolicies",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/assignmentPolicies",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/assignmentPolicies/$count",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/assignmentPolicies/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/assignmentPolicies/{accessPackageAssignmentPolicy-id}",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/assignmentPolicies/{accessPackageAssignmentPolicy-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes/$count",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes/{accessPackageResourceRoleScope-id}",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/accessPackages/{accessPackage-id}/resourceRoleScopes/{accessPackageResourceRoleScope-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/assignmentRequests",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/assignmentRequests",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/assignmentRequests/$count",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/assignmentRequests/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/assignmentRequests/{accessPackageAssignmentRequest-id}",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/assignmentRequests/{accessPackageAssignmentRequest-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/assignments",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/assignments",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/assignments/$count",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/assignments/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/assignments/{accessPackageAssignment-id}",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/assignments/{accessPackageAssignment-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/catalogs",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/catalogs",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/catalogs/$count",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/catalogs/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/entitlementManagement/catalogs/{accessPackageCatalog-id}",
+      "method": "GET",
+      "path": "/identityGovernance/entitlementManagement/catalogs/{accessPackageCatalog-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/settings",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/settings",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/taskDefinitions",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/taskDefinitions",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/taskDefinitions/$count",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/taskDefinitions/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/taskDefinitions/{taskDefinition-id}",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/taskDefinitions/{taskDefinition-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflowTemplates",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflowTemplates",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflowTemplates/$count",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflowTemplates/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflowTemplates/{workflowTemplate-id}",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflowTemplates/{workflowTemplate-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/$count",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/$count",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/subjectProcessingResults",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/subjectProcessingResults",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/subjectProcessingResults/$count",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/subjectProcessingResults/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/subjectProcessingResults/{subjectProcessingResult-id}",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/subjectProcessingResults/{subjectProcessingResult-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults/$count",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults/{taskProcessingResult-id}",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults/{taskProcessingResult-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/userProcessingResults",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/userProcessingResults",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/userProcessingResults/$count",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/userProcessingResults/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/userProcessingResults/{userProcessingResult-id}",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/userProcessingResults/{userProcessingResult-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/subjectProcessingResults",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/subjectProcessingResults",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/subjectProcessingResults/$count",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/subjectProcessingResults/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/subjectProcessingResults/{subjectProcessingResult-id}",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/subjectProcessingResults/{subjectProcessingResult-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/$count",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/{taskReport-id}",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/{taskReport-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/{taskReport-id}/task",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/{taskReport-id}/task",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/{taskReport-id}/taskDefinition",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/taskReports/{taskReport-id}/taskDefinition",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/userProcessingResults",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/userProcessingResults",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/userProcessingResults/$count",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/userProcessingResults/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/userProcessingResults/{userProcessingResult-id}",
+      "method": "GET",
+      "path": "/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/userProcessingResults/{userProcessingResult-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/privilegedAccess/group/assignmentScheduleInstances",
+      "method": "GET",
+      "path": "/identityGovernance/privilegedAccess/group/assignmentScheduleInstances",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/privilegedAccess/group/assignmentScheduleInstances/{privilegedAccessGroupAssignmentScheduleInstance-id}",
+      "method": "GET",
+      "path": "/identityGovernance/privilegedAccess/group/assignmentScheduleInstances/{privilegedAccessGroupAssignmentScheduleInstance-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/privilegedAccess/group/assignmentSchedules",
+      "method": "GET",
+      "path": "/identityGovernance/privilegedAccess/group/assignmentSchedules",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/privilegedAccess/group/assignmentSchedules/{privilegedAccessGroupAssignmentSchedule-id}",
+      "method": "GET",
+      "path": "/identityGovernance/privilegedAccess/group/assignmentSchedules/{privilegedAccessGroupAssignmentSchedule-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/privilegedAccess/group/eligibilityScheduleInstances",
+      "method": "GET",
+      "path": "/identityGovernance/privilegedAccess/group/eligibilityScheduleInstances",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/privilegedAccess/group/eligibilityScheduleInstances/{privilegedAccessGroupEligibilityScheduleInstance-id}",
+      "method": "GET",
+      "path": "/identityGovernance/privilegedAccess/group/eligibilityScheduleInstances/{privilegedAccessGroupEligibilityScheduleInstance-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/privilegedAccess/group/eligibilityScheduleRequests",
+      "method": "GET",
+      "path": "/identityGovernance/privilegedAccess/group/eligibilityScheduleRequests",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/privilegedAccess/group/eligibilityScheduleRequests/{privilegedAccessGroupEligibilityScheduleRequest-id}",
+      "method": "GET",
+      "path": "/identityGovernance/privilegedAccess/group/eligibilityScheduleRequests/{privilegedAccessGroupEligibilityScheduleRequest-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/privilegedAccess/group/eligibilitySchedules",
+      "method": "GET",
+      "path": "/identityGovernance/privilegedAccess/group/eligibilitySchedules",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityGovernance/privilegedAccess/group/eligibilitySchedules/{privilegedAccessGroupEligibilitySchedule-id}",
+      "method": "GET",
+      "path": "/identityGovernance/privilegedAccess/group/eligibilitySchedules/{privilegedAccessGroupEligibilitySchedule-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-02"
+    },
+    {
+      "id": "v1.0:GET:/identityProtection/riskDetections",
+      "method": "GET",
+      "path": "/identityProtection/riskDetections",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-06"
+    },
+    {
+      "id": "v1.0:GET:/identityProtection/riskDetections/{riskDetection-id}",
+      "method": "GET",
+      "path": "/identityProtection/riskDetections/{riskDetection-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-06"
+    },
+    {
+      "id": "v1.0:GET:/identityProtection/riskyServicePrincipals",
+      "method": "GET",
+      "path": "/identityProtection/riskyServicePrincipals",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-06"
+    },
+    {
+      "id": "v1.0:GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}",
+      "method": "GET",
+      "path": "/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-06"
+    },
+    {
+      "id": "v1.0:GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}/history",
+      "method": "GET",
+      "path": "/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}/history",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-06"
+    },
+    {
+      "id": "v1.0:GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}/history/{riskyServicePrincipalHistoryItem-id}",
+      "method": "GET",
+      "path": "/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}/history/{riskyServicePrincipalHistoryItem-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-06"
+    },
+    {
+      "id": "v1.0:GET:/identityProtection/riskyUsers",
+      "method": "GET",
+      "path": "/identityProtection/riskyUsers",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-06"
+    },
+    {
+      "id": "v1.0:GET:/identityProtection/riskyUsers/{riskyUser-id}",
+      "method": "GET",
+      "path": "/identityProtection/riskyUsers/{riskyUser-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-06"
+    },
+    {
+      "id": "v1.0:GET:/identityProtection/servicePrincipalRiskDetections",
+      "method": "GET",
+      "path": "/identityProtection/servicePrincipalRiskDetections",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-06"
+    },
+    {
+      "id": "v1.0:GET:/identityProtection/servicePrincipalRiskDetections/{servicePrincipalRiskDetection-id}",
+      "method": "GET",
+      "path": "/identityProtection/servicePrincipalRiskDetections/{servicePrincipalRiskDetection-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-06"
+    },
+    {
+      "id": "v1.0:GET:/oauth2PermissionGrants",
+      "method": "GET",
+      "path": "/oauth2PermissionGrants",
+      "version": "v1.0",
+      "disposition": "reviewed-raw-read",
+      "owningSlice": "READ-08"
+    },
+    {
+      "id": "v1.0:GET:/oauth2PermissionGrants/{oAuth2PermissionGrant-id}",
+      "method": "GET",
+      "path": "/oauth2PermissionGrants/{oAuth2PermissionGrant-id}",
+      "version": "v1.0",
+      "disposition": "reviewed-raw-read",
+      "owningSlice": "READ-08"
+    },
+    {
+      "id": "v1.0:GET:/organization",
+      "method": "GET",
+      "path": "/organization",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/organization/{organization-id}",
+      "method": "GET",
+      "path": "/organization/{organization-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/organization/{organization-id}/branding",
+      "method": "GET",
+      "path": "/organization/{organization-id}/branding",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/organization/{organization-id}/branding/localizations",
+      "method": "GET",
+      "path": "/organization/{organization-id}/branding/localizations",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/organization/{organization-id}/branding/localizations/{organizationalBrandingLocalization-id}",
+      "method": "GET",
+      "path": "/organization/{organization-id}/branding/localizations/{organizationalBrandingLocalization-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-01"
+    },
+    {
+      "id": "v1.0:GET:/reports/authenticationMethods/userRegistrationDetails",
+      "method": "GET",
+      "path": "/reports/authenticationMethods/userRegistrationDetails",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-04"
+    },
+    {
+      "id": "v1.0:GET:/roleManagement/directory/roleAssignmentScheduleInstances",
+      "method": "GET",
+      "path": "/roleManagement/directory/roleAssignmentScheduleInstances",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/roleManagement/directory/roleAssignments",
+      "method": "GET",
+      "path": "/roleManagement/directory/roleAssignments",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/roleManagement/directory/roleEligibilityScheduleInstances",
+      "method": "GET",
+      "path": "/roleManagement/directory/roleEligibilityScheduleInstances",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/scopedRoleMemberships",
+      "method": "GET",
+      "path": "/scopedRoleMemberships",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/scopedRoleMemberships/{scopedRoleMembership-id}",
+      "method": "GET",
+      "path": "/scopedRoleMemberships/{scopedRoleMembership-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-09"
+    },
+    {
+      "id": "v1.0:GET:/servicePrincipals",
+      "method": "GET",
+      "path": "/servicePrincipals",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/servicePrincipals/{servicePrincipal-id}",
+      "method": "GET",
+      "path": "/servicePrincipals/{servicePrincipal-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo",
+      "method": "GET",
+      "path": "/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo/{appRoleAssignment-id}",
+      "method": "GET",
+      "path": "/servicePrincipals/{servicePrincipal-id}/appRoleAssignedTo/{appRoleAssignment-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignments",
+      "method": "GET",
+      "path": "/servicePrincipals/{servicePrincipal-id}/appRoleAssignments",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-08"
+    },
+    {
+      "id": "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/appRoleAssignments/{appRoleAssignment-id}",
+      "method": "GET",
+      "path": "/servicePrincipals/{servicePrincipal-id}/appRoleAssignments/{appRoleAssignment-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-08"
+    },
+    {
+      "id": "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials",
+      "method": "GET",
+      "path": "/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}",
+      "method": "GET",
+      "path": "/servicePrincipals/{servicePrincipal-id}/federatedIdentityCredentials/{federatedIdentityCredential-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/oauth2PermissionGrants",
+      "method": "GET",
+      "path": "/servicePrincipals/{servicePrincipal-id}/oauth2PermissionGrants",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/servicePrincipals/{servicePrincipal-id}/owners",
+      "method": "GET",
+      "path": "/servicePrincipals/{servicePrincipal-id}/owners",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-07"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminCustomers",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminCustomers",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminCustomers/$count",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminCustomers/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/$count",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/{delegatedAdminServiceManagementDetail-id}",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminCustomers/{delegatedAdminCustomer-id}/serviceManagementDetails/{delegatedAdminServiceManagementDetail-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/$count",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/$count",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/{delegatedAdminAccessAssignment-id}",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/accessAssignments/{delegatedAdminAccessAssignment-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/$count",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/{delegatedAdminRelationshipOperation-id}",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/operations/{delegatedAdminRelationshipOperation-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/$count",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/{delegatedAdminRelationshipRequest-id}",
+      "method": "GET",
+      "path": "/tenantRelationships/delegatedAdminRelationships/{delegatedAdminRelationship-id}/requests/{delegatedAdminRelationshipRequest-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')",
+      "method": "GET",
+      "path": "/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')",
+      "method": "GET",
+      "path": "/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')",
+      "version": "v1.0",
+      "disposition": "reviewed-raw-read",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/multiTenantOrganization",
+      "method": "GET",
+      "path": "/tenantRelationships/multiTenantOrganization",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/multiTenantOrganization/joinRequest",
+      "method": "GET",
+      "path": "/tenantRelationships/multiTenantOrganization/joinRequest",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/multiTenantOrganization/tenants",
+      "method": "GET",
+      "path": "/tenantRelationships/multiTenantOrganization/tenants",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/tenantRelationships/multiTenantOrganization/tenants/$count",
+      "method": "GET",
+      "path": "/tenantRelationships/multiTenantOrganization/tenants/$count",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "EXT-04"
+    },
+    {
+      "id": "v1.0:GET:/users",
+      "method": "GET",
+      "path": "/users",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-01"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}",
+      "method": "GET",
+      "path": "/users/{user-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-01"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}/authentication/methods",
+      "method": "GET",
+      "path": "/users/{user-id}/authentication/methods",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-04"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}/authentication/methods/{authenticationMethod-id}",
+      "method": "GET",
+      "path": "/users/{user-id}/authentication/methods/{authenticationMethod-id}",
+      "version": "v1.0",
+      "disposition": "reviewed-raw-read",
+      "owningSlice": "READ-04"
+    },
+    {
+      "id": "v1.0:PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}",
+      "method": "PATCH",
+      "path": "/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "WRITE-04"
+    },
+    {
+      "id": "v1.0:PATCH:/users/{user-id}",
+      "method": "PATCH",
+      "path": "/users/{user-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "WRITE-02"
+    },
+    {
+      "id": "v1.0:POST:/groups/{group-id}/members/$ref",
+      "method": "POST",
+      "path": "/groups/{group-id}/members/$ref",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "WRITE-01"
+    },
+    {
+      "id": "v1.0:POST:/identityProtection/riskyUsers/dismiss",
+      "method": "POST",
+      "path": "/identityProtection/riskyUsers/dismiss",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "WRITE-05"
+    },
+    {
+      "id": "v1.0:POST:/users/{user-id}/revokeSignInSessions",
+      "method": "POST",
+      "path": "/users/{user-id}/revokeSignInSessions",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "WRITE-03"
+    }
+  ]
+}

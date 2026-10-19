@@ -364,6 +364,8 @@ To use the built checkout binary on PATH, run `npm link --ignore-scripts` from t
 Otherwise substitute `node dist/bin/mg-axi.js` for `mg-axi` in examples.
 
 The agent skill and capability report are generated from the command catalogue, documentation template and discovery inventory.
+The package includes a compact runtime index for shipped named and reviewed raw operations, cached once per process.
+The full discovery inventory stays in the repository; `pnpm build` regenerates the runtime index before compilation and `pnpm docs:check` checks it for drift.
 After changing their sources, run `corepack pnpm run docs:generate`, then `corepack pnpm run docs:check`.
 The [implementation plan](PLAN.md), [operation inventory](docs/inventory.md) and [execution contract](docs/execution.md) describe design and coverage boundaries.
 

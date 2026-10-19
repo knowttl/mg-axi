@@ -882,7 +882,7 @@ for (const scopes of [",", "https://example.invalid/AuditLog.Read.All", "https:/
   });
 }
 
-test("richer selects dispatch the same mapping while beta stays preview-gated", async () => {
+test("richer selects dispatch the same mapping while unshipped beta stays blocked", async () => {
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
@@ -894,8 +894,8 @@ test("richer selects dispatch the same mapping while beta stays preview-gated", 
     assert.deepEqual(richer.signIns[0], { id: s1.id, riskState: "none" });
     const beta = executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE, "--api-version", "beta", "--limit", "1"], overrides);
     await assert.rejects(beta, error => {
-      assert.equal(error.code, "POLICY_DENIED");
-      return /preview-enabled/.test(error.message);
+      assert.equal(error.code, "VALIDATION_ERROR");
+      return /Unknown catalogued/.test(error.message);
     });
   } finally {
     teardownProfiles(state);

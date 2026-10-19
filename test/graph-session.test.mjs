@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import { ApplicationAuth } from "../dist/app-auth.js";
 import { DelegatedAuth } from "../dist/auth.js";
 import { authorizeUrl, GraphSession, resolveSessionOperation } from "../dist/graph-session.js";
@@ -16,9 +17,16 @@ const appProfile = { mode: "application", tenantId: tenant, clientId: client, cl
 const scopes = ["https://graph.microsoft.com/User.Read"];
 const users = resolveSessionOperation("v1.0", "GET", "/users");
 const userById = resolveSessionOperation("v1.0", "GET", "/users/{user-id}");
-const blockedDeviceCredentials = resolveSessionOperation("v1.0", "GET", "/directory/deviceLocalCredentials/{deviceLocalCredentialInfo-id}");
-const me = resolveSessionOperation("v1.0", "GET", "/me");
-const betaUsers = resolveSessionOperation("beta", "GET", "/users");
+// Repository-only discovery rows exercise callers attempting to bypass the runtime index.
+const discovery = new Map(JSON.parse(readFileSync(new URL("../inventory/operations.json", import.meta.url))).operations.map(row => [row.id, row]));
+function discoveryOperation(version, method, path) {
+  const operation = discovery.get(`${version}:${method}:${path}`);
+  assert.ok(operation);
+  return { ...operation };
+}
+const blockedDeviceCredentials = discoveryOperation("v1.0", "GET", "/directory/deviceLocalCredentials/{deviceLocalCredentialInfo-id}");
+const me = discoveryOperation("v1.0", "GET", "/me");
+const betaUsers = discoveryOperation("beta", "GET", "/users");
 const revokeSessions = resolveSessionOperation("v1.0", "POST", "/users/{user-id}/revokeSignInSessions");
 
 function json(status, body, headers = {}) {
@@ -80,7 +88,7 @@ test("Graph preserves a query rejection message when the error code is empty", a
 test("unsupported root collections fail before credentials with supported alternatives", async () => {
   const f = fixture(json(200, { value: [] }));
   for (const [path, hint] of [["/domainDnsRecords", /verification-dns-record/], ["/directoryObjects", /directory-object show/]]) {
-    const operation = resolveSessionOperation("v1.0", "GET", path);
+    const operation = discoveryOperation("v1.0", "GET", path);
     await assert.rejects(f.session.collect({ profile: appProfile, operation }), error => {
       assert.match(error.message, /not supported/);
       assert.ok(error.suggestions.some(value => hint.test(value)));
@@ -104,7 +112,7 @@ test("scoped membership reads select the v1.0 fields and refuse direct root quer
   assert.deepEqual((await listScopedMembers(f.session, { role: "role" }, appProfile, list, "help", "batch")).scopedMembers, [row]);
   assert.deepEqual((await showScopedMember(f.session, { role: "role", id: "membership" }, appProfile, show, "help", "batch")).scopedMember, row);
   for (const path of ["/scopedRoleMemberships", "/scopedRoleMemberships/{scopedRoleMembership-id}"]) {
-    await assert.rejects(f.session.execute({ profile: appProfile, operation: resolveSessionOperation("v1.0", "GET", path), params: { "scopedRoleMembership-id": "membership" } }), /not supported/);
+    await assert.rejects(f.session.execute({ profile: appProfile, operation: discoveryOperation("v1.0", "GET", path), params: { "scopedRoleMembership-id": "membership" } }), /not supported/);
   }
   assert.equal(f.requests.length, 2);
 });
@@ -246,13 +254,11 @@ test("guest UPN remains bound across a same-resource redirect", async () => {
 
 for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) {
   for (const params of [{}, { appId: client }]) test(`${profile.mode} embedded path templates with ${Object.keys(params).length} bindings fail before credentials`, async () => {
-    // Embedded function-argument templates never bind: the beta row stays
-    // executable so the test pins template validation, not the gate.
-    const operation = resolveSessionOperation("beta", "GET", "/applications(appId='{appId}')");
+    const operation = discoveryOperation("beta", "GET", "/applications(appId='{appId}')");
     const f = fixture(json(200, {}));
     await assert.rejects(
       f.session.execute({ profile: { ...profile, preview: true }, operation, params, ...scopeArgs }),
-      error => error.code === "VALIDATION_ERROR" && /Unsupported path template/.test(error.message),
+      error => error.code === "VALIDATION_ERROR" && /Unknown catalogued/.test(error.message),
     );
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
@@ -260,15 +266,15 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile,
 }
 
 for (const target of ["/v1.0/applications(appId='{appId}')", `/v1.0/applications(appId='${client}')`]) test(`embedded-template continuation ${target} is denied`, () => {
-  const operation = resolveSessionOperation("v1.0", "GET", "/applications(appId='{appId}')");
+  const operation = discoveryOperation("v1.0", "GET", "/applications(appId='{appId}')");
   assert.throws(() => authorizeUrl(operation, { appId: client }, target), { code: "POLICY_DENIED" });
 });
 
-test("uncatalogued operation ids fail before credential or HTTP", async () => {
+for (const method of ["execute", "collect"]) test(`${method} refuses uncatalogued operation ids before credential or HTTP`, async () => {
   assert.throws(() => resolveSessionOperation("v1.0", "GET", "/nope"), { code: "VALIDATION_ERROR" });
   const f = fixture(json(200, {}));
   await assert.rejects(
-    f.session.execute({ profile: delegatedProfile, operation: { id: "v1.0:GET:/nope", method: "GET", path: "/nope", version: "v1.0", disposition: "scheduled", owningSlice: "READ-01" }, scopes }),
+    f.session[method]({ profile: delegatedProfile, operation: { id: "v1.0:GET:/nope", method: "GET", path: "/nope", version: "v1.0", disposition: "scheduled", owningSlice: "READ-01" }, scopes }),
     { code: "VALIDATION_ERROR" },
   );
   assert.equal(f.credentialCalls.length, 0);
@@ -279,32 +285,28 @@ test("a fabricated executable disposition cannot widen a blocked operation", asy
   const f = fixture(json(200, {}));
   await assert.rejects(
     f.session.execute({ profile: delegatedProfile, operation: { ...blockedDeviceCredentials, disposition: "scheduled" }, params: { "deviceLocalCredentialInfo-id": "fixture-id" }, scopes }),
-    error => error.code === "POLICY_DENIED" && /intentionally-blocked/.test(error.message),
+    error => error.code === "VALIDATION_ERROR" && /Unknown catalogued/.test(error.message),
   );
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
 });
 
 test("mutating a resolved operation cannot change the authoritative inventory", async () => {
-  const operation = resolveSessionOperation("v1.0", "GET", blockedDeviceCredentials.path);
+  const operation = resolveSessionOperation("v1.0", "GET", "/users");
   operation.disposition = "scheduled";
-  operation.path = "/users";
+  operation.path = blockedDeviceCredentials.path;
   const f = fixture(json(200, {}));
-  await assert.rejects(
-    f.session.execute({ profile: delegatedProfile, operation, params: { "deviceLocalCredentialInfo-id": "fixture-id" }, scopes }),
-    error => error.code === "POLICY_DENIED" && /intentionally-blocked/.test(error.message),
-  );
-  assert.deepEqual(resolveSessionOperation("v1.0", "GET", blockedDeviceCredentials.path), blockedDeviceCredentials);
-  assert.equal(f.credentialCalls.length, 0);
-  assert.equal(f.requests.length, 0);
+  await f.session.execute({ profile: delegatedProfile, operation, scopes });
+  assert.deepEqual(resolveSessionOperation("v1.0", "GET", "/users"), users);
+  assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/users");
 });
 
 for (const [name, operation, params] of [
   ["intentionally-blocked route", blockedDeviceCredentials, { "deviceLocalCredentialInfo-id": "fixture-id" }],
-  ["excluded route", resolveSessionOperation("v1.0", "GET", "/me/messages"), {}],
+  ["excluded route", discoveryOperation("v1.0", "GET", "/me/messages"), {}],
 ]) test(`${name} is denied with no credential and no HTTP call`, async () => {
   const f = fixture(json(200, {}));
-  await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, params, scopes }), { code: "POLICY_DENIED" });
+  await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, params, scopes }), { code: "VALIDATION_ERROR" });
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
 });
@@ -324,21 +326,22 @@ for (const [area, id] of [
   ["files", "v1.0:GET:/drives"],
 ]) test(`sensitive ${area} area is denied without enablement`, async () => {
   const [version, method, ...route] = id.split(":");
-  const operation = resolveSessionOperation(version, method, route.join(":"));
+  const operation = discoveryOperation(version, method, route.join(":"));
   const f = fixture(json(200, {}));
-  await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, scopes }), error => error.code === "POLICY_DENIED" && new RegExp(area).test(error.message));
+  await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, scopes }), { code: "VALIDATION_ERROR" });
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
 });
 
-test("beta reads require a preview-enabled profile", async () => {
+test("unshipped beta reads stay absent even with a preview-enabled profile", async () => {
   const denied = fixture(json(200, {}));
-  await assert.rejects(denied.session.execute({ profile: delegatedProfile, operation: betaUsers, scopes }), { code: "POLICY_DENIED" });
+  await assert.rejects(denied.session.execute({ profile: delegatedProfile, operation: betaUsers, scopes }), { code: "VALIDATION_ERROR" });
   assert.equal(denied.credentialCalls.length, 0);
   assert.equal(denied.requests.length, 0);
   const allowed = fixture(json(200, { value: [] }));
-  await allowed.session.execute({ profile: { ...delegatedProfile, preview: true }, operation: betaUsers, scopes });
-  assert.equal(allowed.requests[0].url, "https://graph.microsoft.com/beta/users");
+  await assert.rejects(allowed.session.execute({ profile: { ...delegatedProfile, preview: true }, operation: betaUsers, scopes }), { code: "VALIDATION_ERROR" });
+  assert.equal(allowed.credentialCalls.length, 0);
+  assert.equal(allowed.requests.length, 0);
 });
 
 for (const [version, resource] of [["beta", "accessPackageResources"], ["v1.0", "resources"]]) {
@@ -348,7 +351,7 @@ for (const [version, resource] of [["beta", "accessPackageResources"], ["v1.0", 
     ["/{customDataProvidedResourceFile-id}", { "customDataProvidedResourceFile-id": "file-id" }],
     ["/{customDataProvidedResourceFile-id}/$value", { "customDataProvidedResourceFile-id": "file-id" }],
   ]) {
-    const operation = resolveSessionOperation(version, "GET", `/identityGovernance/entitlementManagement/${resource}/{accessPackageResource-id}/uploadSessions/{customDataProvidedResourceUploadSession-id}/files${suffix}`);
+    const operation = discoveryOperation(version, "GET", `/identityGovernance/entitlementManagement/${resource}/{accessPackageResource-id}/uploadSessions/{customDataProvidedResourceUploadSession-id}/files${suffix}`);
     for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) test(`${profile.mode} governance file route ${operation.id} is denied before credentials`, async () => {
       const f = fixture(json(200, {}));
       await assert.rejects(
@@ -361,7 +364,7 @@ for (const [version, resource] of [["beta", "accessPackageResources"], ["v1.0", 
           },
           ...scopeArgs,
         }),
-        error => error.code === "POLICY_DENIED" && /Sensitive area files/.test(error.message),
+        error => error.code === "VALIDATION_ERROR" && /Unknown catalogued/.test(error.message),
       );
       assert.equal(f.credentialCalls.length, 0);
       assert.equal(f.requests.length, 0);
@@ -377,12 +380,12 @@ for (const version of ["beta", "v1.0"]) {
         "agreement-id": "agreement-id", "agreementFileLocalization-id": "localization-id", "agreementFileVersion-id": "version-id",
       }],
     ]) {
-      const operation = resolveSessionOperation(version, "GET", `${root}/{agreement-id}${suffix}`);
+      const operation = discoveryOperation(version, "GET", `${root}/{agreement-id}${suffix}`);
       for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) test(`${profile.mode} agreement file route ${operation.id} is denied before credentials`, async () => {
         const f = fixture(json(200, {}));
         await assert.rejects(
           f.session.execute({ profile: { ...profile, preview: true }, operation, params, ...scopeArgs }),
-          error => error.code === "POLICY_DENIED" && /Sensitive area files/.test(error.message),
+          error => error.code === "VALIDATION_ERROR" && /Unknown catalogued/.test(error.message),
         );
         assert.equal(f.credentialCalls.length, 0);
         assert.equal(f.requests.length, 0);
@@ -393,7 +396,7 @@ for (const version of ["beta", "v1.0"]) {
 
 test("application profiles cannot use /me", async () => {
   const f = fixture(json(200, {}));
-  await assert.rejects(f.session.execute({ profile: appProfile, operation: me }), { code: "POLICY_DENIED" });
+  await assert.rejects(f.session.execute({ profile: appProfile, operation: me }), { code: "VALIDATION_ERROR" });
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
 });
@@ -665,11 +668,11 @@ test("function routes refuse missing and unknown parameters before credentials",
 });
 
 test("a non-allowlisted parenthesised operation is still refused before credentials", async () => {
-  const operation = resolveSessionOperation("beta", "GET", "/servicePrincipals(appId='{appId}')");
+  const operation = discoveryOperation("beta", "GET", "/servicePrincipals(appId='{appId}')");
   const f = fixture(json(200, {}));
   await assert.rejects(
     f.session.execute({ profile: { ...delegatedProfile, preview: true }, operation, params: { appId: "00000000-0000-4000-8000-000000000000" }, scopes: ["https://graph.microsoft.com/Application.Read.All"] }),
-    error => error.code === "VALIDATION_ERROR" && /Unsupported path template/.test(error.message),
+    error => error.code === "VALIDATION_ERROR" && /Unknown catalogued/.test(error.message),
   );
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);

@@ -529,20 +529,20 @@ test("group relationship flags validate before profiles or HTTP", async () => {
   await assert.rejects(executeArgv(["entra", "group", "show"]), { code: "VALIDATION_ERROR" });
 });
 
-test("group reads stay preview-gated on beta", async () => {
+test("group reads refuse unshipped beta operations", async () => {
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
     await assert.rejects(
       executeArgv(["entra", "group", "list", "--profile", "soc", "--api-version", "beta", "--limit", "1"], overrides),
       error => {
-        assert.equal(error.code, "POLICY_DENIED");
-        return /preview-enabled/.test(error.message);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        return /Unknown catalogued/.test(error.message);
       },
     );
     await assert.rejects(
       executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", "soc", "--api-version", "beta"], overrides),
-      { code: "POLICY_DENIED" },
+      { code: "VALIDATION_ERROR" },
     );
   } finally {
     teardownProfiles(state);

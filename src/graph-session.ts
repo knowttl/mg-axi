@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import { AxiError } from "axi-sdk-js";
 import { redactSecrets } from "./redact.js";
@@ -7,6 +6,7 @@ import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { PrivateFiles } from "./private-file.js";
 import { validateProfile, profileName, type AnyProfile } from "./profiles.js";
+import { findOperation } from "./runtime-index.js";
 
 // CORE-01: the single path that owns Graph URL construction, operation
 // authorization, credential attachment and response validation. Command
@@ -82,10 +82,8 @@ const READ_SCOPES = new Set([
 // consistency (see checkQueryContext); $skiptoken carries paging state.
 export const ALLOWED_QUERY_KEYS: readonly string[] = ["$select", "$filter", "$top", "$orderby", "$count", "$skiptoken", "$search", "$expand"];
 const ALLOWED_KEYS = new Set(ALLOWED_QUERY_KEYS);
-// Only these dispositions may execute. `scheduled` stays executable at this
-// layer so READ slices need no session change; catalogue/CLI gating still
-// keeps unshipped commands out of reach. Everything else fails closed.
-const EXECUTABLE_DISPOSITIONS = new Set(["named-command", "reviewed-raw-read", "scheduled"]);
+// Discovery alone never grants runtime access.
+const EXECUTABLE_DISPOSITIONS = new Set(["named-command", "reviewed-raw-read"]);
 const MAX_REDIRECTS = 3;
 const MAX_QUERY_VALUE = 1024;
 // CORE-02 ceilings: single Retry-After waits above this never retry; the
@@ -187,24 +185,12 @@ export interface CollectionResult {
   total: number | null;
 }
 
-let operationsById: Map<string, SessionOperation> | undefined;
-
-function findOperation(id: string): SessionOperation | undefined {
-  if (!operationsById) {
-    const inventory = JSON.parse(readFileSync(new URL("../inventory/operations.json", import.meta.url), "utf8")) as {
-      operations: SessionOperation[];
-    };
-    operationsById = new Map(inventory.operations.map(row => [row.id, row]));
-  }
-  return operationsById.get(id);
-}
-
 export function resolveSessionOperation(version: string, method: string, route: string): SessionOperation {
   const id = `${version}:${method}:${route}`;
   const operation = findOperation(id);
   if (!operation) {
     throw new AxiError(`Unknown catalogued Graph operation ${id}`, "VALIDATION_ERROR", [
-      "Use a route from inventory/operations.json; the session never builds uncatalogued URLs",
+      "Use a shipped named command or reviewed api get route; discovery alone never grants access",
     ]);
   }
   return { ...operation };
@@ -319,7 +305,7 @@ function checkOperation(operation: SessionOperation): void {
     !(typeof operation.owningSlice === "string" || operation.owningSlice === null)
   ) {
     throw new AxiError("Graph operations must be catalogued inventory rows", "VALIDATION_ERROR", [
-      "Resolve the operation from inventory/operations.json before executing it",
+      "Resolve a shipped operation from the runtime index before executing it",
     ]);
   }
   const unsupported: Record<string, string[]> = {
@@ -784,7 +770,7 @@ export class GraphSession {
     const operation = findOperation(args.operation.id);
     if (!operation) {
       throw new AxiError(`Unknown catalogued Graph operation ${args.operation.id}`, "VALIDATION_ERROR", [
-        "Use a route from inventory/operations.json; the session never builds uncatalogued URLs",
+        "Use a shipped named command or reviewed api get route; discovery alone never grants access",
       ]);
     }
     const profile = validateProfile(args.profile, this.files);
@@ -821,7 +807,7 @@ export class GraphSession {
     const operation = findOperation(args.operation.id);
     if (!operation) {
       throw new AxiError(`Unknown catalogued Graph operation ${args.operation.id}`, "VALIDATION_ERROR", [
-        "Use a route from inventory/operations.json; the session never builds uncatalogued URLs",
+        "Use a shipped named command or reviewed api get route; discovery alone never grants access",
       ]);
     }
     const profile = validateProfile(args.profile, this.files);

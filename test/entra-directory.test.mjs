@@ -555,21 +555,21 @@ test("directory read flags validate before profiles or HTTP", async () => {
     "--administrative-unit", au1.id, "--id", au1.id]), { code: "VALIDATION_ERROR" });
 });
 
-test("directory reads stay preview-gated on beta", async () => {
+test("directory reads refuse unshipped beta operations", async () => {
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
     await assert.rejects(
       executeArgv(["entra", "device", "list", "--profile", "soc", "--api-version", "beta", "--limit", "1"], overrides),
       error => {
-        assert.equal(error.code, "POLICY_DENIED");
-        return /preview-enabled/.test(error.message);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        return /Unknown catalogued/.test(error.message);
       },
     );
     await assert.rejects(
       executeArgv(["entra", "administrative-unit", "member", "list",
         "--administrative-unit", au1.id, "--profile", "soc", "--api-version", "beta"], overrides),
-      { code: "POLICY_DENIED" },
+      { code: "VALIDATION_ERROR" },
     );
   } finally {
     teardownProfiles(state);

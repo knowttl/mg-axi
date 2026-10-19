@@ -174,109 +174,47 @@ test("home still shows the hint in a worktree that has its own .claude/skills fo
   assert.equal(help.at(-1), SKILL_HINT);
 });
 
-test("top help lists only the shell catalogue", () => {
+test("top help lists immediate commands within a small output budget", () => {
   const result = run(["--help"]);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /entra user list/);
-  assert.match(result.stdout, /entra group list/);
-  assert.match(result.stdout, /entra application list/);
-  assert.match(result.stdout, /entra service-principal list/);
-  assert.match(result.stdout, /entra directory-role list/);
-  assert.match(result.stdout, /entra user authentication-method list/);
-  assert.match(result.stdout, /entra registration list/);
-  assert.match(result.stdout, /entra service-principal oauth2-grant list/);
-  assert.match(result.stdout, /entra service-principal app-role-assignment list/);
-  assert.match(result.stdout, /entra pim active list/);
-  assert.match(result.stdout, /entra device list/);
-  assert.match(result.stdout, /entra administrative-unit list/);
-  assert.match(result.stdout, /entra organization list/);
-  assert.match(result.stdout, /entra organization branding show/);
-  assert.match(result.stdout, /entra organization branding-localization list/);
-  assert.match(result.stdout, /entra domain list/);
-  assert.match(result.stdout, /entra domain verification-dns-record list/);
-  assert.match(result.stdout, /entra domain service-configuration-record list/);
-  assert.match(result.stdout, /entra domain-dns-record list/);
-  assert.match(result.stdout, /entra certificate-auth-pki list/);
-  assert.match(result.stdout, /entra certificate-authority list/);
-  assert.match(result.stdout, /entra subscription list/);
-  assert.match(result.stdout, /entra subscription show/);
-  assert.match(result.stdout, /entra subscription count/);
-  assert.match(result.stdout, /entra on-premises-synchronization list/);
-  assert.match(result.stdout, /entra on-premises-synchronization show/);
-  assert.match(result.stdout, /entra agreement list/);
-  assert.match(result.stdout, /entra agreement show/);
-  assert.match(result.stdout, /entra agreement acceptance list/);
-  assert.match(result.stdout, /entra agreement acceptance show/);
-  assert.match(result.stdout, /entra agreement-acceptance list/);
-  assert.match(result.stdout, /entra agreement-acceptance show/);
-  assert.match(result.stdout, /entra directory-object list/);
-  assert.match(result.stdout, /entra directory-object show/);
-  assert.match(result.stdout, /entra directory-object count/);
-  assert.match(result.stdout, /entra deleted-user list/);
-  assert.match(result.stdout, /entra deleted-user count/);
-  assert.match(result.stdout, /entra deleted-group list/);
-  assert.match(result.stdout, /entra deleted-group count/);
-  assert.match(result.stdout, /entra deleted-application list/);
-  assert.match(result.stdout, /entra deleted-application count/);
-  assert.match(result.stdout, /entra deleted-service-principal list/);
-  assert.match(result.stdout, /entra deleted-service-principal count/);
-  assert.match(result.stdout, /entra deleted-administrative-unit list/);
-  assert.match(result.stdout, /entra deleted-administrative-unit count/);
-  assert.match(result.stdout, /entra deleted-item show/);
-  assert.match(result.stdout, /entra contact list/);
-  assert.match(result.stdout, /entra contact show/);
-  assert.match(result.stdout, /entra contact count/);
-  assert.match(result.stdout, /entra contact show-manager/);
-  assert.match(result.stdout, /entra contact list-direct-reports/);
-  assert.match(result.stdout, /entra contact show-direct-report/);
-  assert.match(result.stdout, /entra contact count-direct-reports/);
-  assert.match(result.stdout, /entra group-lifecycle-policy list/);
-  assert.match(result.stdout, /entra group-lifecycle-policy show/);
-  assert.match(result.stdout, /entra group-lifecycle-policy count/);
-  assert.match(result.stdout, /entra group-setting-template list/);
-  assert.match(result.stdout, /entra group-setting-template show/);
-  assert.match(result.stdout, /entra group-setting-template count/);
-  assert.match(result.stdout, /entra attribute-set list/);
-  assert.match(result.stdout, /entra attribute-set show/);
-  assert.match(result.stdout, /entra attribute-set count/);
-  assert.match(result.stdout, /entra custom-security-attribute-definition list/);
-  assert.match(result.stdout, /entra custom-security-attribute-definition show/);
-  assert.match(result.stdout, /entra custom-security-attribute-definition count/);
-  assert.match(result.stdout, /entra allowed-value list/);
-  assert.match(result.stdout, /entra allowed-value show/);
-  assert.match(result.stdout, /entra allowed-value count/);
-  assert.match(result.stdout, /entra contract list/);
-  assert.match(result.stdout, /entra contract show/);
-  assert.match(result.stdout, /entra contract count/);
-  assert.match(result.stdout, /entra delegated-admin-customer list/);
-  assert.match(result.stdout, /entra delegated-admin-customer show/);
-  assert.match(result.stdout, /entra delegated-admin-relationship list/);
-  assert.match(result.stdout, /entra delegated-admin-relationship show/);
-  assert.match(result.stdout, /entra delegated-admin-relationship list-access-assignments/);
-  assert.match(result.stdout, /entra delegated-admin-relationship show-access-assignment/);
-  assert.match(result.stdout, /entra delegated-admin-relationship list-operations/);
-  assert.match(result.stdout, /entra delegated-admin-relationship show-operation/);
-  assert.match(result.stdout, /entra delegated-admin-relationship list-requests/);
-  assert.match(result.stdout, /entra delegated-admin-relationship show-request/);
-  assert.match(result.stdout, /entra delegated-admin-customer list-service-management-details/);
-  assert.match(result.stdout, /entra delegated-admin-customer show-service-management-detail/);
-  assert.match(result.stdout, /entra delegated-admin-customer count/);
-  assert.match(result.stdout, /entra delegated-admin-customer count-service-management-details/);
-  assert.match(result.stdout, /entra delegated-admin-relationship count/);
-  assert.match(result.stdout, /entra delegated-admin-relationship count-access-assignments/);
-  assert.match(result.stdout, /entra delegated-admin-relationship count-operations/);
-  assert.match(result.stdout, /entra delegated-admin-relationship count-requests/);
-  assert.match(result.stdout, /entra multi-tenant-organization show/);
-  assert.match(result.stdout, /entra multi-tenant-organization join-request show/);
-  assert.match(result.stdout, /entra multi-tenant-organization tenant list/);
-  assert.match(result.stdout, /entra multi-tenant-organization tenant count/);
-  assert.match(result.stdout, /entra tenant-information show/);
-  assert.match(result.stdout, /entra conditional-access policy list/);
-  assert.match(result.stdout, /entra conditional-access named-location list/);
-  assert.match(result.stdout, /entra group member add/);
-  assert.match(result.stdout, /entra user revoke-sessions/);
-  assert.match(result.stdout, /login/);
-  assert.doesNotMatch(result.stdout, /Upgrade/);
+  assert.equal(result.stderr, "");
+  assert.ok(Buffer.byteLength(result.stdout) < 2048);
+  for (const command of ["entra", "profile", "auth", "api", "setup", "doctor"]) {
+    assert.ok(result.stdout.includes(`mg-axi ${command} --help`));
+  }
+  assert.doesNotMatch(result.stdout, /entra user list|--scopes/);
+});
+
+for (const path of ["entra", "entra user", "entra group member", "entra lifecycle run", "profile", "auth", "api"]) {
+  test(`group help for ${path} is bounded and local`, () => {
+    const result = run([...path.split(" "), "--help"]);
+    assert.equal(result.status, 0, result.stdout);
+    assert.equal(result.stderr, "");
+    assert.ok(Buffer.byteLength(result.stdout) < 8192);
+    assert.ok(result.stdout.includes(`mg-axi ${path} `));
+    assert.doesNotMatch(result.stdout, /--scopes|--api-version/);
+  });
+}
+
+for (const [args, expected, excluded] of [
+  [["typo"], "mg-axi entra --help", "entra user list"],
+  [["entra"], "mg-axi entra user --help", "entra user list"],
+  [["entra", "typo", "--help"], "mg-axi entra user --help", "entra user list"],
+  [["entra", "user"], "mg-axi entra user list --help", "entra group"],
+  [["entra", "user", "typo"], "mg-axi entra user list --help", "entra group"],
+  [["entra", "group", "member", "typo"], "mg-axi entra group member list --help", "entra user"],
+  [["api"], "mg-axi api get --help", "entra user"],
+  [["entra", "--help", "--typo"], "mg-axi entra user --help", "entra user list"],
+  [["entra", "--help=false"], "mg-axi entra user --help", "entra user list"],
+]) test(`unknown or incomplete command ${args.join(" ")} gives nearest-group guidance`, () => {
+  const result = run(args);
+  assert.equal(result.status, 2);
+  assert.equal(result.stderr, "");
+  assert.ok(Buffer.byteLength(result.stdout) < 8192);
+  const output = decode(result.stdout);
+  assert.equal(output.code, "VALIDATION_ERROR");
+  assert.ok(output.help.join("\n").includes(expected));
+  assert.ok(!output.help.join("\n").includes(excluded));
 });
 
 test("leaf help includes flags, defaults and examples without requiring an ID", () => {

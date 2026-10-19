@@ -3,7 +3,7 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, isAbsolute, sep } from "node:path";
 import { AxiError, installSessionStartHooks, runAxiCli } from "axi-sdk-js";
-import { LEAVES, home, leafHelp, operationFor, resolveCommand, DESCRIPTION, TOP_LEVEL_HELP } from "./catalogue.js";
+import { LEAVES, home, groupHelp, leafHelp, operationFor, resolveCommand, DESCRIPTION, TOP_LEVEL_HELP } from "./catalogue.js";
 import { VERSION } from "./version.js";
 import { Profiles } from "./profiles.js";
 import { skillHint } from "./skill-hint.js";
@@ -145,8 +145,21 @@ async function readCursor(cursor: string | undefined): Promise<string | undefine
 }
 
 export async function executeArgv(argv: string[], overrides: DispatchOverrides = {}): Promise<string | Record<string, unknown>> {
+  if (argv.at(-1) === "--help" && argv.slice(0, -1).every(word => !word.startsWith("-"))) {
+    const path = argv.slice(0, -1).join(" ");
+    const help = groupHelp(path);
+    if (help) {
+      const found = LEAVES.find(item => item.path === path);
+      if (!found) return help;
+      return `${leafHelp(found)}\n${help.split("\n").slice(1).join("\n")}`;
+    }
+  }
   const { leaf, flags, positional } = resolveCommand(argv);
-  if (flags.help) return leafHelp(leaf);
+  if (flags.help) {
+    const group = groupHelp(leaf.path);
+    if (!group) return leafHelp(leaf);
+    return `${leafHelp(leaf)}\n${group.split("\n").slice(1).join("\n")}`;
+  }
   if (leaf.path === "home") return localHome(flags.profile as string | undefined, flags.config as string | undefined);
   const profiles = new Profiles(flags.config as string | undefined);
   if (leaf.path === "config path") return { config: profiles.path };

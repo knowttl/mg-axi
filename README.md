@@ -110,6 +110,9 @@ Login does not modify app registration or automatically request blanket write co
 
 The [capability report](docs/coverage.md) distinguishes implemented operations from deferred or excluded ones.
 The [command table](skills/mg-axi/SKILL.md#orientation) lists every executable leaf; use its leaf-level help for exact flags and permission defaults.
+Top-level `--help` lists immediate commands; `entra --help`, `entra user --help` and deeper group help list only their immediate children.
+Unknown or incomplete commands return usage exit code 2 with guidance for the nearest valid group.
+Group and leaf `--help` return exit code 0 without signing in.
 
 | Area | Shipped surface |
 | --- | --- |

@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { decode } from "@toon-format/toon";
 import { executeArgv } from "../dist/cli.js";
+import { LEAVES } from "../dist/catalogue.js";
 import { doctorTargets, runDoctor } from "../dist/doctor.js";
 import { capabilityDocument, skillCommandTable, skillDescription, skillDocument, skillHomeHints } from "../dist/docs.js";
 import { GraphSession, systemClock } from "../dist/graph-session.js";
@@ -17,6 +18,22 @@ const client = "22222222-2222-4222-8222-222222222222";
 const bin = resolve("dist/bin/mg-axi.js");
 const userId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const groupId = "gggggggg-gggg-4ggg-8ggg-gggggggggggg";
+
+const entraLeaves = LEAVES.filter(leaf => leaf.path.startsWith("entra "));
+const entraGroups = [...new Set(entraLeaves.flatMap(leaf => {
+  const words = leaf.path.split(" ");
+  return words.slice(1).map((_, index) => words.slice(0, index + 1).join(" "));
+}))];
+
+for (const path of entraGroups) test(`group help discovers every immediate child of ${path}`, async () => {
+  const help = await executeArgv([...path.split(" "), "--help"]);
+  assert.equal(typeof help, "string");
+  assert.ok(Buffer.byteLength(help) < 8192);
+  const children = [...new Set(entraLeaves.filter(leaf => leaf.path.startsWith(`${path} `))
+    .map(leaf => leaf.path.slice(path.length + 1).split(" ")[0]))];
+  assert.deepEqual(help.split("\n").filter(line => line.endsWith(" --help")),
+    children.map(child => `mg-axi ${path} ${child} --help`));
+});
 
 function dir() {
   return mkdtempSync(join(tmpdir(), "mg-axi-pack-"));

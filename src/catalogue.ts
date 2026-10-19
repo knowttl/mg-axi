@@ -2812,7 +2812,28 @@ export function leafHelp(leaf: Leaf): string {
   ].join("\n");
 }
 
-export const TOP_LEVEL_HELP = [DESCRIPTION, ...LEAVES.map(leaf => leafHelp(leaf)), "-v, -V, --version: Print the bare version"].join("\n\n");
+export function groupHelp(path: string): string | undefined {
+  const prefix = path ? `${path} ` : "";
+  const children = [...new Set(LEAVES.filter(leaf => leaf.path.startsWith(prefix) && leaf.path !== path)
+    .map(leaf => leaf.path.slice(prefix.length).split(" ")[0]!))];
+  if (!children.length) return undefined;
+  return [
+    path ? `mg-axi ${path}` : DESCRIPTION,
+    "Commands (run with --help for subcommands, flags and examples):",
+    ...children.map(child => `mg-axi ${prefix}${child} --help`),
+    ...(path ? [] : ["-v, -V, --version: Print the bare version"]),
+  ].join("\n");
+}
+
+export const TOP_LEVEL_HELP = groupHelp("")!;
+
+function nearestGroupHelp(words: string[]): string {
+  for (let length = words.length; length > 0; length--) {
+    const help = groupHelp(words.slice(0, length).join(" "));
+    if (help) return help;
+  }
+  return TOP_LEVEL_HELP;
+}
 
 export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<string, string | boolean>; positional?: string } {
   const words = argv.slice(0, argv.findIndex(arg => arg.startsWith("-")) < 0 ? argv.length : argv.findIndex(arg => arg.startsWith("-")));
@@ -2821,11 +2842,11 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
   let positional: string | undefined;
   let flagStart = words.length;
   if (!leaf) {
-    if (words[0] !== "api") throw new AxiError("unknown or incomplete command", "VALIDATION_ERROR", [TOP_LEVEL_HELP]);
+    if (words[0] !== "api") throw new AxiError("unknown or incomplete command", "VALIDATION_ERROR", [nearestGroupHelp(words)]);
     leaf = LEAVES.find(item => item.path === "api get")!;
     const help = leafHelp(leaf);
     const verb = words[1];
-    if (verb === undefined) throw new AxiError("unknown or incomplete command", "VALIDATION_ERROR", [TOP_LEVEL_HELP]);
+    if (verb === undefined) throw new AxiError("unknown or incomplete command", "VALIDATION_ERROR", [nearestGroupHelp(words)]);
     if (verb.toLowerCase() !== "get") throw new AxiError(`mg-axi api serves reviewed GET reads only; got api ${verb}`, "VALIDATION_ERROR", [help]);
     if (words.length < 3 || words[2]!.startsWith("-")) throw new AxiError("missing path for `mg-axi api get`", "VALIDATION_ERROR", ["Example: mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All", help]);
     if (words.length > 3) throw new AxiError(`unexpected argument \`${words[3]}\` for \`mg-axi api get\``, "VALIDATION_ERROR", ["Pass one path before flags: mg-axi api get <path> [--odata 'k=v']", help]);

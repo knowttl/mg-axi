@@ -42,7 +42,7 @@ import type { AnyProfile } from "./profiles.js";
 // six $count scalars ship in this module; the tenantRelationship container
 // root stays scheduled for a later EXT-04 subfamily, as do the multi-tenant-organization reads
 // (shipped separately) and the tenant-lookup functions (shipped as
-// tenant-information show under mg-ext-04e). Beta stays out. No delegated-admin mutation exists in this slice:
+// tenant-information show with allowlisted function arguments). Beta stays out. No delegated-admin mutation exists in this slice:
 // relationship creation, approval and termination are writes.
 
 // Every customer property this slice may request or display, matching the

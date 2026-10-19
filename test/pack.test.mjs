@@ -549,6 +549,12 @@ test("keeps the committed coverage record generated from the inventory", () => {
   assert.equal(coverage, capabilityDocument());
 });
 
+test("generated public documents describe capabilities without delivery instructions", () => {
+  for (const document of [capabilityDocument(), skillDocument()]) {
+    assert.doesNotMatch(document, /firstmate|captain|inbox|PR body|origin\/main|mg-ext-\d|docs\/build-plan\.md/i);
+  }
+});
+
 test("write status follows the catalogue, not hard-coded prose", () => {
   const coverage = capabilityDocument();
   const shipped = coverage.split("Shipped initial writes: ")[1]?.split(".\n")[0] ?? "";

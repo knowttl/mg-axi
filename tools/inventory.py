@@ -11,11 +11,11 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
 REVISION = "7b2914c8ad1340129f52aa785f13c074cb46fd7c"
-# Deferred out of v1 by the approved read-family cutoff (mg-coverage-close):
+# Deferred out of v1 by the documented read-family cutoff:
 # the cutoff ships the agreed named reads and stops this long-tail operation.
 CUTOFF_REASON = "Deferred out of v1 by the approved read-family cutoff: no named command ships this operation and no later v1 slice claims it."
-# Reasons that already name the firstmate deferral decision survive the flip.
-DEFERRING_REASONS = ("Deferred by firstmate", "Deferred to a later")
+# Preserve operation-specific deferral rationale instead of the generic cutoff.
+DEFERRING_REASONS = ("Deferred",)
 METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
 MAP_SOURCE = "https://learn.microsoft.com/en-us/graph/api/resources/identity-network-access-overview?view=graph-rest-1.0"
 LICENCE_SOURCE = "https://learn.microsoft.com/en-us/entra/fundamentals/licensing"
@@ -130,7 +130,7 @@ APPROVED_MTO_READS = {
     "/tenantRelationships/multiTenantOrganization/tenants",
     "/tenantRelationships/multiTenantOrganization/tenants/$count",
 }
-# The two approved mg-ext-04e v1.0 tenant-lookup function reads: tenant
+# The two supported v1.0 tenant-lookup function reads: tenant
 # information by domain name and by tenant ID. Both bind only through the
 # allowlisted session function-argument contract.
 APPROVED_TENANT_LOOKUP_READS = {
@@ -397,52 +397,52 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
         disposition, reason = "intentionally-blocked", "External-customer launch support requires separate authorization."
     if owner == "EXT-01" and not mutates and disposition == "scheduled" and path.split("/")[1] == "organization" and path not in APPROVED_ORGANIZATION_READS:
         if "/certificateBasedAuthConfiguration" in path:
-            reason = "Deferred by firstmate organization scope to a later EXT-01 organization certificate-auth subfamily: trusted-CA certificate material needs a separate redaction and output review."
+            reason = "Deferred organization scope to a later EXT-01 organization certificate-auth subfamily: trusted-CA certificate material needs a separate redaction and output review."
         elif "/extensions" in path:
-            reason = "Deferred by firstmate organization scope to a later EXT-01 organization extensions subfamily: open-extension payloads need their own query and projection review."
+            reason = "Deferred organization scope to a later EXT-01 organization extensions subfamily: open-extension payloads need their own query and projection review."
         elif path.rsplit("/", 1)[-1] in {"backgroundImage", "bannerLogo", "customCSS", "favicon", "headerLogo", "squareLogo", "squareLogoDark"}:
-            reason = "Deferred by firstmate organization scope to a later EXT-01 organization branding-stream subfamily: binary image and CSS bytes need a separate output contract from the approved metadata reads."
+            reason = "Deferred organization scope to a later EXT-01 organization branding-stream subfamily: binary image and CSS bytes need a separate output contract from the approved metadata reads."
         elif path.endswith(("/$count", "/delta()")):
-            reason = "Deferred by firstmate organization scope to a later EXT-01 organization counts subfamily: scalar counts and deltas need a separate query and response contract from the approved list/show reads."
+            reason = "Deferred organization scope to a later EXT-01 organization counts subfamily: scalar counts and deltas need a separate query and response contract from the approved list/show reads."
         elif method == "POST":
-            reason = "Deferred by firstmate organization scope to a later EXT-01 organization lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review."
+            reason = "Deferred organization scope to a later EXT-01 organization lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review."
         elif version == "beta":
-            reason = "Deferred by firstmate organization scope to a later EXT-01 beta organization subfamily: the approved reads cover the shared routes on both versions; beta-only settings, partner and theme contracts need separate review."
+            reason = "Deferred organization scope to a later EXT-01 beta organization subfamily: the approved reads cover the shared routes on both versions; beta-only settings, partner and theme contracts need separate review."
     if owner == "EXT-04" and not mutates and disposition == "scheduled" and path.split("/")[1] == "contracts" and (path not in APPROVED_CONTRACT_READS or version == "beta"):
         if path.endswith("/delta()"):
-            reason = "Deferred by firstmate contracts scope to a later EXT-04 contracts delta subfamily: delta-token sync needs its own paging and change-tracking contract beyond the approved list/show/count reads."
+            reason = "Deferred contracts scope to a later EXT-04 contracts delta subfamily: delta-token sync needs its own paging and change-tracking contract beyond the approved list/show/count reads."
         elif method == "POST":
-            reason = "Deferred by firstmate contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review."
+            reason = "Deferred contracts scope to a later EXT-04 contracts lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review."
         elif version == "beta":
-            reason = "Deferred by firstmate contracts scope to a later EXT-04 beta contracts subfamily: the three approved reads cover v1.0 only; beta contracts need separate review."
+            reason = "Deferred contracts scope to a later EXT-04 beta contracts subfamily: the three approved reads cover v1.0 only; beta contracts need separate review."
     if owner == "EXT-01" and not mutates and disposition == "scheduled" and path.split("/")[1] in {"groupLifecyclePolicies", "groupSettingTemplates"} and (path not in APPROVED_GROUP_LIFECYCLE_READS or version == "beta"):
         if path.endswith("/delta()"):
-            reason = "Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle delta subfamily: delta-token sync needs its own paging and change-tracking contract beyond the approved list/show/count reads."
+            reason = "Deferred group-lifecycle scope to a later EXT-01 group-lifecycle delta subfamily: delta-token sync needs its own paging and change-tracking contract beyond the approved list/show/count reads."
         elif method == "POST":
-            reason = "Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review."
+            reason = "Deferred group-lifecycle scope to a later EXT-01 group-lifecycle lookup-actions subfamily: membership-check and lookup POST actions need their own request and projection review."
         elif version == "beta":
-            reason = "Deferred by firstmate group-lifecycle scope to a later EXT-01 group-lifecycle beta subfamily: the six approved reads cover v1.0 only; beta policies and templates need separate review."
+            reason = "Deferred group-lifecycle scope to a later EXT-01 group-lifecycle beta subfamily: the six approved reads cover v1.0 only; beta policies and templates need separate review."
     if owner == "EXT-01" and not mutates and disposition == "scheduled" and path.split("/")[1] == "directory" and ("/attributeSets" in path or "/customSecurityAttributeDefinitions" in path) and version == "beta":
-        reason = "Deferred by firstmate custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review."
+        reason = "Deferred custom-security-attributes scope to a later EXT-01 custom-security-attributes beta subfamily: the nine approved reads cover v1.0 only; beta attribute sets, definitions and allowed values need separate review."
     if owner == "EXT-02" and method == "GET" and version == "beta" and disposition == "scheduled" and path in BETA_ENTITLEMENT_MIRROR_READS:
-        reason = "Deferred by firstmate entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the approved v1.0 reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review."
+        reason = "Deferred entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the approved v1.0 reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review."
     if owner == "EXT-04" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.split("/")[1] == "tenantRelationships" and path not in APPROVED_DELEGATED_ADMIN_READS and path not in APPROVED_MTO_READS and path not in APPROVED_TENANT_LOOKUP_READS:
         if path == "/tenantRelationships/multiTenantOrganization/tenants/{multiTenantOrganizationMember-id}":
-            reason = "Deferred by firstmate multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for the single-member read."
+            reason = "Deferred multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for the single-member read."
         elif path.startswith("/tenantRelationships/multiTenantOrganization"):
-            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 multi-tenant-organization subfamily: multi-tenant-organization reads need their own MultiTenantOrganization access, Entra P1 licensing and projection review beyond the approved delegated-admin list/show reads."
+            reason = "Deferred delegated-admin scope to a later EXT-04 multi-tenant-organization subfamily: multi-tenant-organization reads need their own MultiTenantOrganization access, Entra P1 licensing and projection review beyond the approved delegated-admin list/show reads."
         elif "findTenantInformation" in path:
-            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 tenant-lookup subfamily: tenant-information lookup functions need their own CrossTenantInformation access and explicit domain/tenant-argument review beyond the approved delegated-admin list/show reads."
+            reason = "Deferred delegated-admin scope to a later EXT-04 tenant-lookup subfamily: tenant-information lookup functions need their own CrossTenantInformation access and explicit domain/tenant-argument review beyond the approved delegated-admin list/show reads."
         elif path.endswith("/$count"):
-            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
+            reason = "Deferred delegated-admin scope to a later EXT-04 delegated-admin counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
         elif path == "/tenantRelationships":
-            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin root subfamily: the tenantRelationship container singleton needs its own projection review beyond the approved customer and relationship list/show reads."
+            reason = "Deferred delegated-admin scope to a later EXT-04 delegated-admin root subfamily: the tenantRelationship container singleton needs its own projection review beyond the approved customer and relationship list/show reads."
         elif "/serviceManagementDetails" in path:
-            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin customer-details subfamily: service-management detail reads need their own query, access and projection review beyond the approved customer list/show reads."
+            reason = "Deferred delegated-admin scope to a later EXT-04 delegated-admin customer-details subfamily: service-management detail reads need their own query, access and projection review beyond the approved customer list/show reads."
         elif "/accessAssignments" in path or "/operations" in path or "/requests" in path:
-            reason = "Deferred by firstmate delegated-admin scope to a later EXT-04 delegated-admin relationship-details subfamily: access-assignment, operation and request navigation reads need their own query, access and projection review beyond the approved relationship list/show reads."
+            reason = "Deferred delegated-admin scope to a later EXT-04 delegated-admin relationship-details subfamily: access-assignment, operation and request navigation reads need their own query, access and projection review beyond the approved relationship list/show reads."
     if owner == "EXT-04" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/reports/getRelyingPartyDetailedSummary(period='{period}')":
-        reason = "Deferred by firstmate reports scope to a later EXT-04 reports subfamily: the period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for the relying-party summary read."
+        reason = "Deferred reports scope to a later EXT-04 reports subfamily: the period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard does not support that binding, so no named command or raw access is approved for the relying-party summary read."
     if owner == "EXT-02" and method == "GET" and disposition == "scheduled" and "/accessReviews/historyDefinitions" in path:
         disposition, reason = "intentionally-blocked", "Blocked: documented least privilege is the write scope AccessReview.ReadWrite.All (no read scope), and history instances return SAS download URLs in downloadUri; recording or emitting that URL needs its own redaction and output review."
         owner = "EXT-02c"
@@ -451,69 +451,69 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
         reason = "Split into EXT-02c to limit this piece's size: legacy accessReviews and unified alias reads need their own query, access and projection review; beta contracts need separate review."
     if owner == "EXT-01" and method == "GET" and disposition == "scheduled" and path.split("/")[1] in {"domains", "domainDnsRecords"}:
         if "/federationConfiguration" in path:
-            reason = "Deferred by firstmate R1 to a later EXT-01 domain federation subfamily: federation configuration can carry signing-certificate material and needs a separate output review."
+            reason = "Deferred domain scope to a later EXT-01 domain federation subfamily: federation configuration can carry signing-certificate material and needs a separate output review."
         elif "/domainNameReferences" in path or path.endswith("/rootDomain"):
-            reason = "Deferred by firstmate R1 to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review."
+            reason = "Deferred domain scope to a later EXT-01 domain relationships subfamily: directory-object references and root-domain navigation need their own query and projection review."
         elif "/sharedEmailDomainInvitations" in path:
-            reason = "Deferred by firstmate R1 to a later EXT-01 shared-email domains subfamily: beta invitation relationships need a separate access and output review."
+            reason = "Deferred domain scope to a later EXT-01 shared-email domains subfamily: beta invitation relationships need a separate access and output review."
         elif path.endswith("/$count"):
-            reason = "Deferred by firstmate R1 to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads."
+            reason = "Deferred domain scope to a later EXT-01 domain counts subfamily: scalar counts need a separate query and response contract from the eight approved list/show reads."
         elif version == "beta":
-            reason = "Deferred by firstmate R1 to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review."
+            reason = "Deferred domain scope to a later EXT-01 beta domains subfamily: the eight approved reads cover v1.0 only; beta contracts need separate review."
     if owner == "EXT-03" and method == "GET" and disposition == "scheduled" and (path == "/identity/identityProviders" or path.startswith("/identity/identityProviders/")):
         if version == "beta":
             reason = "Deferred to a later EXT-03 beta identity-providers subfamily: Identity-provider reads support v1.0 only; beta needs its own review."
     if owner == "EXT-01" and method == "GET" and version == "beta" and disposition == "scheduled" and (path == "/directory/federationConfigurations" or path.startswith("/directory/federationConfigurations")):
-        reason = "Deferred by firstmate federation-configuration scope to a later EXT-01 federation-configuration beta subfamily: the four approved reads cover v1.0 only; beta federation configurations need separate review."
+        reason = "Deferred federation-configuration scope to a later EXT-01 federation-configuration beta subfamily: the four approved reads cover v1.0 only; beta federation configurations need separate review."
     if owner == "EXT-03" and method == "GET" and version == "beta" and disposition == "scheduled" and (path == "/dataPolicyOperations" or path.startswith("/dataPolicyOperations")):
-        reason = "Deferred by firstmate data-policy-operations scope to a later EXT-03 data-policy-operations beta subfamily: the three approved reads cover v1.0 only; beta data-policy operations need separate review."
+        reason = "Deferred data-policy-operations scope to a later EXT-03 data-policy-operations beta subfamily: the three approved reads cover v1.0 only; beta data-policy operations need separate review."
     if owner == "EXT-03" and method == "GET" and version == "beta" and disposition == "scheduled" and (path == "/identity/riskPrevention" or path.startswith("/identity/riskPrevention/")):
-        reason = "Deferred by firstmate risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review."
+        reason = "Deferred risk-prevention scope to a later EXT-03 risk-prevention beta subfamily: the ten approved reads cover v1.0 only; beta risk prevention needs separate review."
     if owner == "EXT-03" and method == "GET" and version == "v1.0" and disposition == "scheduled" and (path == "/invitations" or path.startswith("/invitations/")):
-        disposition, reason = "unavailable", "Marked unavailable by firstmate EXT-03b decision: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md)."
+        disposition, reason = "unavailable", "Unavailable invitation reads: The v1.0 invitation resource Methods table documents Create only, with no documented GET contract for these invitation reads (https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md)."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and (path == "/certificateBasedAuthConfiguration" or path.startswith("/certificateBasedAuthConfiguration/")):
-        disposition, reason = "unavailable", "Marked unavailable by firstmate mg-ext-01d decision: the v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped /organization/{organization-id}/certificateBasedAuthConfiguration routes, with no documented GET contract for these root reads (https://learn.microsoft.com/en-us/graph/api/resources/certificatebasedauthconfiguration?view=graph-rest-1.0)."
+        disposition, reason = "unavailable", "Unavailable root certificate-authentication reads: the v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped /organization/{organization-id}/certificateBasedAuthConfiguration routes, with no documented GET contract for these root reads (https://learn.microsoft.com/en-us/graph/api/resources/certificatebasedauthconfiguration?view=graph-rest-1.0)."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/directory/onPremisesSynchronization/$count":
-        reason = "Deferred by firstmate on-premises-synchronization scope to a later EXT-01 on-premises-synchronization counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
+        reason = "Deferred on-premises-synchronization scope to a later EXT-01 on-premises-synchronization counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
     if owner == "EXT-01" and method == "GET" and version == "beta" and disposition == "scheduled" and path.split("/")[1] == "directory" and "/onPremisesSynchronization" in path:
-        reason = "Deferred by firstmate on-premises-synchronization scope to a later EXT-01 on-premises-synchronization beta subfamily: the two approved reads cover v1.0 only; beta on-premises synchronization needs separate review."
+        reason = "Deferred on-premises-synchronization scope to a later EXT-01 on-premises-synchronization beta subfamily: the two approved reads cover v1.0 only; beta on-premises synchronization needs separate review."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/directoryObjects/delta()":
-        reason = "Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects delta subfamily: delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads."
+        reason = "Deferred directory-objects scope to a later EXT-01 directory-objects delta subfamily: delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads."
     if owner == "EXT-01" and method == "GET" and version == "beta" and disposition == "scheduled" and path.split("/")[1] == "directoryObjects":
-        reason = "Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects beta subfamily: the three approved reads cover v1.0 only; beta directory objects need separate review."
+        reason = "Deferred directory-objects scope to a later EXT-01 directory-objects beta subfamily: the three approved reads cover v1.0 only; beta directory objects need separate review."
     if owner == "EXT-01" and method == "POST" and disposition == "scheduled" and "/directoryObjects" in path and path != "/directoryObjects" and not path.endswith("/restore"):
-        reason = "Deferred by firstmate directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review."
+        reason = "Deferred directory-objects scope to a later EXT-01 directory-objects lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.split("/")[1] == "directory" and "/deletedItems" in path:
         if path in ("/directory/deletedItems", "/directory/deletedItems/$count"):
-            reason = "Deferred by firstmate deleted-items scope: upstream requires the OData cast as part of the list URI and states calling GET /directory/deletedItems without a type is not supported, so no untyped list or count command is approved (https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0)."
+            reason = "Deferred deleted-items scope: upstream requires the OData cast as part of the list URI and states calling GET /directory/deletedItems without a type is not supported, so no untyped list or count command is approved (https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0)."
         elif "/graph.device" in path:
-            reason = "Deferred by firstmate deleted-items scope: the v1.0 deletedItems list/get pages name the supported types and document per-type least-privilege permissions, and device is not among them, so no device cast command is approved (https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0)."
+            reason = "Deferred deleted-items scope: the v1.0 deletedItems list/get pages name the supported types and document per-type least-privilege permissions, and device is not among them, so no device cast command is approved (https://learn.microsoft.com/en-us/graph/api/directory-deleteditems-list?view=graph-rest-1.0)."
         elif path.startswith("/directory/deletedItems/{directoryObject-id}/graph."):
-            reason = "Deferred by firstmate deleted-items scope: covered by the approved deleted-item show, which reads the untyped get returning the same object for every type; the cast suffix only asserts the expected type and no separate reviewed route is approved."
+            reason = "Deferred deleted-items scope: covered by the approved deleted-item show, which reads the untyped get returning the same object for every type; the cast suffix only asserts the expected type and no separate reviewed route is approved."
     if owner == "EXT-01" and method == "GET" and version == "beta" and disposition == "scheduled" and path.split("/")[1] == "directory" and "/deletedItems" in path:
-        reason = "Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review."
+        reason = "Deferred deleted-items scope to a later EXT-01 deleted-items beta subfamily: the eleven approved reads cover v1.0 only; beta deleted items need separate review."
     if owner == "EXT-01" and method == "POST" and not mutates and disposition == "scheduled" and path.split("/")[1] == "directory" and "/deletedItems" in path and not path.endswith("/restore"):
-        reason = "Deferred by firstmate deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review."
+        reason = "Deferred deleted-items scope to a later EXT-01 deleted-items lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/contacts/delta()":
-        reason = "Deferred by firstmate contacts scope to a later EXT-01 contacts delta subfamily: delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads."
+        reason = "Deferred contacts scope to a later EXT-01 contacts delta subfamily: delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path in {
             "/contacts/{orgContact-id}/serviceProvisioningErrors",
             "/contacts/{orgContact-id}/serviceProvisioningErrors/$count",
             "/contacts/{orgContact-id}/onPremisesSyncBehavior"}:
-        disposition, reason = "unavailable", "Marked unavailable by firstmate mg-ext-01m decision: no operation-level permission documentation exists for these reads (the guessed operation pages return 404 and onPremisesSyncBehavior is absent from the orgContact resource page), so no read-scope contract can be established (https://learn.microsoft.com/en-us/graph/api/resources/orgcontact?view=graph-rest-1.0)."
+        disposition, reason = "unavailable", "Unavailable contact synchronization reads: no operation-level permission documentation exists for these reads (the guessed operation pages return 404 and onPremisesSyncBehavior is absent from the orgContact resource page), so no read-scope contract can be established (https://learn.microsoft.com/en-us/graph/api/resources/orgcontact?view=graph-rest-1.0)."
     if owner == "EXT-01" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.startswith("/contacts/{orgContact-id}/") and path not in APPROVED_CONTACT_NAV_READS:
-        reason = "Split into EXT-01n (mg-ext-01n) to limit this piece's size: memberOf and transitiveMemberOf reads need their own multi-scope and advanced-query review; the ten approved manager/directReports navigation reads ship in mg-ext-01m."
+        reason = "Contact membership navigation requires multi-scope and advanced-query review separately from manager/directReports navigation."
     if owner == "EXT-01" and method == "GET" and version == "beta" and disposition == "scheduled" and path.split("/")[1] == "contacts":
-        reason = "Deferred by firstmate contacts scope to a later EXT-01 contacts beta subfamily: the three approved reads cover v1.0 only; beta contacts need separate review."
+        reason = "Deferred contacts scope to a later EXT-01 contacts beta subfamily: the three approved reads cover v1.0 only; beta contacts need separate review."
     if owner == "EXT-01" and method == "POST" and not mutates and disposition == "scheduled" and "/contacts" in path and path != "/contacts" and not path.endswith("/restore"):
-        reason = "Deferred by firstmate contacts scope to a later EXT-01 contacts lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review."
+        reason = "Deferred contacts scope to a later EXT-01 contacts lookup-actions subfamily: the POST lookup and validation actions need their own request and projection review."
     if owner == "EXT-01" and method == "GET" and disposition == "scheduled" and path.split("/")[1] in {"agreements", "agreementAcceptances"}:
         if path.endswith("/$count"):
-            reason = "Deferred by firstmate terms-of-use scope to a later EXT-01 terms-of-use counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
+            reason = "Deferred terms-of-use scope to a later EXT-01 terms-of-use counts subfamily: scalar counts need a separate query and response contract from the approved list/show reads."
         elif "/file" in path or "/files" in path or "/localizations" in path or "/versions" in path:
-            reason = "Deferred by firstmate terms-of-use scope to a later EXT-01 terms-of-use file-content subfamily: agreement file contents and localizations need a separate binary-output and projection contract, and file bytes are never downloaded or printed."
+            reason = "Deferred terms-of-use scope to a later EXT-01 terms-of-use file-content subfamily: agreement file contents and localizations need a separate binary-output and projection contract, and file bytes are never downloaded or printed."
         elif version == "beta":
-            reason = "Deferred by firstmate terms-of-use scope to a later EXT-01 terms-of-use beta subfamily: the six approved reads cover v1.0 only; beta agreements and acceptances need separate review."
+            reason = "Deferred terms-of-use scope to a later EXT-01 terms-of-use beta subfamily: the six approved reads cover v1.0 only; beta agreements and acceptances need separate review."
     if mutates and owner is not None:
         owner = "WRITE-N"
         if disposition == "scheduled":

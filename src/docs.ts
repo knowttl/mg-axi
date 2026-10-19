@@ -132,7 +132,7 @@ function skillWriteLabels(): string[] {
 
 // Terse, outcome-focused trigger description: current read coverage plus
 // the shipped gated writes. Generated so EXT reads and new writes land in
-// the frontmatter with the slice that ships them.
+// the frontmatter alongside their catalogue entries.
 export function skillDescription(): string {
   const areas = skillReadAreas();
   const writes = skillWriteLabels();
@@ -285,7 +285,7 @@ function initialWriteStatus(rows: InventoryRow[]): { shipped: string[]; pending:
 
 const DISPOSITIONS = ["named-command", "reviewed-raw-read", "scheduled", "deferred", "intentionally-blocked", "deprecated", "unavailable", "excluded"] as const;
 
-// FULL-01 audit record (2026-10-07, latest origin/main at PR #78): the cutoff
+// FULL-01 audit record (2026-10-07): the cutoff
 // is met when no v1.0 row is left scheduled, so the counts below are read
 // from the same generated inventory the Counts section reports. Beta stays
 // scheduled by definition and was never agreed for v1.
@@ -311,7 +311,7 @@ function auditRecord(rows: InventoryRow[]): string[] {
   ];
 }
 
-// COMPLETE-01 audit record (2026-10-07, latest origin/main at this change):
+// COMPLETE-01 audit record (2026-10-07):
 // the full agreed Entra capability audit including later writes. Five writes
 // ship as named, gated commands through the WRITE-00 mutation coordinator,
 // WRITE-N carries explicit reviewed deferred/blocked/deprecated dispositions
@@ -382,29 +382,29 @@ export function capabilityDocument(): string {
     const row = rows.find(candidate => candidate.id === `v1.0:${leaf.operation}`);
     return `| \`mg-axi ${leaf.path}\` | \`${leaf.operation}\` | ${row?.owningSlice ?? "-"} |`;
   });
-  const deferredDomainRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate R1 "));
+  const deferredDomainRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred domain scope "));
   const deferredProviderRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred to a later EXT-03 "));
-  const deferredFederationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate federation-configuration scope "));
-  const deferredDataPolicyRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred by firstmate data-policy-operations scope "));
-  const deferredRiskPreventionRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred by firstmate risk-prevention scope "));
-  const unavailableInvitationRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Marked unavailable by firstmate EXT-03b decision: "));
-  const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate organization scope "));
-  const unavailableCertAuthRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01d decision: "));
-  const deferredOnPremSyncRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate on-premises-synchronization scope "));
-  const deferredTermsOfUseRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate terms-of-use scope "));
-  const deferredDirectoryObjectRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate directory-objects scope "));
-  const deferredDeletedItemsRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate deleted-items scope"));
-  const deferredContactRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate contacts scope "));
-  const unavailableContactRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Marked unavailable by firstmate mg-ext-01m decision: "));
-  const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate contracts scope "));
-  const deferredDelegatedAdminRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate delegated-admin scope "));
-  const deferredMtoRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate multi-tenant-organization scope "));
-  const deferredReportsRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred by firstmate reports scope "));
-  const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate group-lifecycle scope "));
-  const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred by firstmate custom-security-attributes scope "));
+  const deferredFederationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred federation-configuration scope "));
+  const deferredDataPolicyRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred data-policy-operations scope "));
+  const deferredRiskPreventionRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Deferred risk-prevention scope "));
+  const unavailableInvitationRows = rows.filter(row => row.owningSlice === "EXT-03" && row.reason.startsWith("Unavailable invitation reads: "));
+  const deferredOrganizationRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred organization scope "));
+  const unavailableCertAuthRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Unavailable root certificate-authentication reads: "));
+  const deferredOnPremSyncRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred on-premises-synchronization scope "));
+  const deferredTermsOfUseRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred terms-of-use scope "));
+  const deferredDirectoryObjectRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred directory-objects scope "));
+  const deferredDeletedItemsRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred deleted-items scope"));
+  const deferredContactRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred contacts scope "));
+  const unavailableContactRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Unavailable contact synchronization reads: "));
+  const deferredContractRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred contracts scope "));
+  const deferredDelegatedAdminRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred delegated-admin scope "));
+  const deferredMtoRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred multi-tenant-organization scope "));
+  const deferredReportsRows = rows.filter(row => row.owningSlice === "EXT-04" && row.reason.startsWith("Deferred reports scope "));
+  const deferredGroupLifecycleRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred group-lifecycle scope "));
+  const deferredCustomSecurityRows = rows.filter(row => row.owningSlice === "EXT-01" && row.reason.startsWith("Deferred custom-security-attributes scope "));
   const deferredAccessReviewRows = rows.filter(row => row.owningSlice === "EXT-02c");
-  const deferredEntitlementRows = rows.filter(row => row.owningSlice === "EXT-02" && row.reason.startsWith("Deferred by firstmate entitlement-management scope "));
-  const deferredAppLookupRows = rows.filter(row => row.owningSlice === "READ-07" && row.reason.startsWith("Deferred by firstmate application-lookups scope "));
+  const deferredEntitlementRows = rows.filter(row => row.owningSlice === "EXT-02" && row.reason.startsWith("Deferred entitlement-management scope "));
+  const deferredAppLookupRows = rows.filter(row => row.owningSlice === "READ-07" && row.reason.startsWith("Deferred application-lookups scope "));
   const readCount = readLeaves.length + 2;
   const localCount = LEAVES.length - readCount - writeLeaves.length;
   return [
@@ -441,12 +441,10 @@ export function capabilityDocument(): string {
     "",
     "## EXT-01 domain scope decisions",
     "",
-    "Firstmate decision R1: approve narrowing this change to the eight v1.0 domain reads above.",
+    "Domain coverage includes the eight v1.0 reads above.",
     "The root domain-dns-record list is now explicitly unsupported; use verification-dns-record or service-configuration-record list with a parent domain.",
     "The v1.0 operations below carry the deferred disposition (out of v1) and the beta operations remain scheduled (never agreed for v1); no new commands or raw access are approved.",
     "Federation stays out because it can carry signing-certificate material.",
-    "Firstmate decision R2: keep the write-family status section as the coverage fix added to scope (resolved-kept).",
-    "Both firstmate decisions must also be stated in the PR body by the delivery phase.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
@@ -454,7 +452,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-03 identity-provider scope decisions",
     "",
-    "This change covers the four v1.0 workforce identity-provider reads above (list, show, count, available-types).",
+    "Supported coverage includes the four v1.0 workforce identity-provider reads above (list, show, count, available-types).",
     "The four beta operations below remain scheduled (never agreed for v1) for a later EXT-03 subfamily.",
     "Identity-provider reads support v1.0 only; beta needs its own review.",
     "Workforce context only; no external-customer (B2C/External ID tenant) support is claimed.",
@@ -465,7 +463,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-01 federation-configuration scope decisions",
     "",
-    "This change covers the four v1.0 workforce directory federation-configuration reads above (federation-configuration list, show, count and available-types).",
+    "Supported coverage includes the four v1.0 workforce directory federation-configuration reads above (federation-configuration list, show, count and available-types).",
     "The four beta operations below remain scheduled (never agreed for v1) for a later EXT-01 subfamily; no new commands or raw access are approved.",
     "Federation-configuration reads support v1.0 only; beta needs its own review.",
     "signingCertificate carries the public token-signing key only and is omitted from default selects; no private key material exists on these resources and the domains navigation property needs its own review.",
@@ -477,7 +475,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-03 data-policy-operations scope decisions",
     "",
-    "This change covers the three v1.0 workforce data-policy-operation reads above (data-policy-operation list, show and count).",
+    "Supported coverage includes the three v1.0 workforce data-policy-operation reads above (data-policy-operation list, show and count).",
     "The three beta operations below remain scheduled (never agreed for v1) for a later EXT-03 subfamily; no new commands or raw access are approved.",
     "Data-policy-operation reads support v1.0 only; beta needs its own review.",
     "storageLocation always renders as the redaction marker; export submission (POST /users/{id}/exportPersonalData) belongs to no read slice.",
@@ -489,7 +487,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-03 risk-prevention scope decisions",
     "",
-    "This change covers the ten v1.0 workforce risk-prevention reads above (fraud-protection-provider list, show and count; web-application-firewall-provider list, show and count; web-application-firewall-verification list, show, count and provider show).",
+    "Supported coverage includes the ten v1.0 workforce risk-prevention reads above (fraud-protection-provider list, show and count; web-application-firewall-provider list, show and count; web-application-firewall-verification list, show, count and provider show).",
     "The eleven beta operations below remain scheduled (never agreed for v1) for a later EXT-03 subfamily; no new commands or raw access are approved.",
     "Risk-prevention reads support v1.0 only; beta needs its own review.",
     "API keys, client secrets and other key material (Arkose privateKey/publicKey, HUMAN serverToken, Akamai clientSecret/clientToken/accessToken, Cloudflare apiToken) are never selectable and never projected; application profiles are refused before credentials because Graph documents no supported application permission.",
@@ -501,7 +499,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-03 invitations scope decisions",
     "",
-    "Firstmate decision (mg-ext-03b inbox 001): do not implement these reads and add no scope.",
+    "Invitation reads have no supported command or reviewed raw route.",
     "The eight v1.0 invitation reads below carry an explicit reviewed unavailable disposition; no new commands or raw access are approved.",
     "The [v1.0 invitation resource documentation](https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md) lists Create only in its Methods table and provides no documented GET contract for these invitation reads.",
     "Workforce B2B context only; no invitation creation or any mutation is claimed here.",
@@ -522,7 +520,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-01 certificate-auth scope decisions",
     "",
-    "This change covers the six v1.0 PKI and certificate-authority reads above (certificate-auth-pki and certificate-authority list, show and count).",
+    "Supported coverage includes the six v1.0 PKI and certificate-authority reads above (certificate-auth-pki and certificate-authority list, show and count).",
     "The three root /certificateBasedAuthConfiguration reads below carry an explicit reviewed unavailable disposition; no new commands or raw access are approved for them.",
     "The v1.0 certificateBasedAuthConfiguration resource Methods table documents List/Create/Get/Delete only on the org-scoped routes, which belong to the deferred organization certificate-auth subfamily.",
     "Certificate-authority entries carry public certificates only; the base64 certificate blob is omitted from default selects and needs an explicit --select naming it.",
@@ -533,13 +531,13 @@ export function capabilityDocument(): string {
     ...unavailableCertAuthRows.map(row => `| \`${row.id}\` | ${row.disposition} | ${row.owningSlice} | ${row.reason} |`),
     "## EXT-01 directory-subscriptions scope decisions",
     "",
-    "This change covers the three v1.0 commercial-subscription reads above (subscription list, show and count).",
+    "Supported coverage includes the three v1.0 commercial-subscription reads above (subscription list, show and count).",
     "The show leaf additionally serves the commerceSubscriptionId alternate-key lookup via --commerce-subscription-id, and the reviewed raw surface carries the matching function route; both bind the key only through the allowlisted session function-argument contract (validated, OData-quoted and encoded).",
     "Subscription reads support v1.0 only; beta needs its own review.",
     "",
     "## EXT-01 group lifecycle scope decisions",
     "",
-    "This change covers the six v1.0 group lifecycle policy and group setting template reads above (list, show, count per family).",
+    "Supported coverage includes the six v1.0 group lifecycle policy and group setting template reads above (list, show, count per family).",
     "The v1.0 operations below carry the deferred disposition (out of v1) and the beta operations remain scheduled (never agreed for v1); no new commands or raw access are approved.",
     "Beta policies and templates need their own review; delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads; the POST lookup actions need their own request and projection review.",
     "",
@@ -549,7 +547,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-01 custom-security-attributes scope decisions",
     "",
-    "This change covers the nine v1.0 attribute-set, custom-security-attribute-definition and allowed-value reads above (list, show, count per family).",
+    "Supported coverage includes the nine v1.0 attribute-set, custom-security-attribute-definition and allowed-value reads above (list, show, count per family).",
     "The nine beta operations below remain scheduled (never agreed for v1) for a later EXT-01 subfamily; no new commands or raw access are approved.",
     "Beta attribute sets, definitions and allowed values need their own review; definition $expand (inline allowedValues) is not reviewed here and stays on the dedicated allowed-value list/show reads.",
     "",
@@ -559,7 +557,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-01 on-premises-synchronization scope decisions",
     "",
-    "This change covers the two v1.0 on-premises-synchronization reads above (on-premises-synchronization list and show).",
+    "Supported coverage includes the two v1.0 on-premises-synchronization reads above (on-premises-synchronization list and show).",
     "The $count scalar below carries the deferred disposition (out of v1) and the three beta operations remain scheduled (never agreed for v1); no new commands or raw access are approved.",
     "On-premises-synchronization reads support v1.0 only; beta needs its own review.",
     "Scalar counts need a separate query and response contract from the approved list/show reads.",
@@ -570,7 +568,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-01 terms-of-use scope decisions",
     "",
-    "This change covers the six v1.0 agreement and agreement-acceptance reads above (agreement list/show, one agreement's acceptance list/show, and tenant-wide acceptance list/show).",
+    "Supported coverage includes the six v1.0 agreement and agreement-acceptance reads above (agreement list/show, one agreement's acceptance list/show, and tenant-wide acceptance list/show).",
     "The v1.0 operations below carry the deferred disposition (out of v1) and the beta operations remain scheduled (never agreed for v1); no new commands or raw access are approved.",
     "Terms-of-use reads support v1.0 only; beta needs its own review.",
     "Scalar counts need a separate query and response contract from the approved list/show reads; agreement file contents and localizations need a separate binary-output and projection contract, and file bytes are never downloaded or printed.",
@@ -593,7 +591,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-01 deleted-items scope decisions",
     "",
-    "This change covers the eleven v1.0 deleted directory-item reads above (deleted-user, deleted-group, deleted-application, deleted-service-principal and deleted-administrative-unit list and count, plus deleted-item show).",
+    "Supported coverage includes the eleven v1.0 deleted directory-item reads above (deleted-user, deleted-group, deleted-application, deleted-service-principal and deleted-administrative-unit list and count, plus deleted-item show).",
     "The rows below carry the deferred (v1.0, out of v1) or scheduled (beta, never agreed for v1) disposition shown; no new commands or raw access are approved for them.",
     "Deleted-item reads support v1.0 only; beta needs its own review.",
     "Untyped list/count commands do not exist because upstream requires the OData cast as part of the list URI.",
@@ -607,12 +605,12 @@ export function capabilityDocument(): string {
     "",
     "## EXT-01 contacts scope decisions",
     "",
-    "This change covers the three v1.0 top-level contact reads above (contact list, show and count), the ten v1.0 manager/directReports navigation reads above (show-manager, list/show/count-direct-reports with user/contact casts), and the eighteen v1.0 memberOf/transitiveMemberOf navigation reads above (list/show/count-member-of with transitive and group/administrativeUnit casts).",
+    "Supported coverage includes the three v1.0 top-level contact reads above (contact list, show and count), the ten v1.0 manager/directReports navigation reads above (show-manager, list/show/count-direct-reports with user/contact casts), and the eighteen v1.0 memberOf/transitiveMemberOf navigation reads above (list/show/count-member-of with transitive and group/administrativeUnit casts).",
     "The v1.0 operations below carry the deferred disposition (out of v1) and the beta operations remain scheduled (never agreed for v1); no new commands or raw access are approved.",
     "Contact reads support v1.0 only; beta needs its own review.",
     "Delta-token sync needs its own change-tracking contract beyond the approved reads; the POST lookup actions need their own request and projection review.",
     "Contacts are personal data: top-level default rows carry id, displayName, mail and companyName only; navigation rows carry the @odata.type discriminator plus id and displayName only, and identifying fields need an explicit --select.",
-    "The three error/sync navigation reads below are unavailable by firstmate mg-ext-01m decision: no operation-level permission documentation exists for them, so no read-scope contract can be established.",
+    "The three error/sync navigation reads below are unavailable: no operation-level permission documentation exists for them, so no read-scope contract can be established.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
@@ -621,7 +619,7 @@ export function capabilityDocument(): string {
     "",
     "## EXT-04 partner contracts scope decisions",
     "",
-    "Firstmate scope: approve narrowing this change to the three v1.0 partner-contract reads above (list, show, count).",
+    "Supported coverage includes the three v1.0 partner-contract reads above (list, show, count).",
     "The v1.0 operations below carry the deferred disposition (out of v1) and the beta operations remain scheduled (never agreed for v1); no new commands or raw access are approved.",
     "Beta contracts need their own review; delta-token sync needs its own change-tracking contract beyond the approved list/show/count reads.",
     "",
@@ -630,16 +628,16 @@ export function capabilityDocument(): string {
     ...deferredContractRows.map(row => `| \`${row.id}\` | ${row.disposition} | ${row.owningSlice} | ${row.reason} |`),    "",
     "## EXT-04 delegated-admin scope decisions",
     "",
-    "Firstmate scope: approve narrowing this change to the eighteen v1.0 delegated-admin reads above (customer list/show/count, relationship list/show/count, access-assignment list/show/count, operation list/show/count, request list/show/count and service-management-detail list/show/count).",
+    "Supported coverage includes the eighteen v1.0 delegated-admin reads above (customer list/show/count, relationship list/show/count, access-assignment list/show/count, operation list/show/count, request list/show/count and service-management-detail list/show/count).",
     "The operation below carries the deferred disposition (out of v1); no new commands or raw access are approved.",
-    "The tenantRelationship container root needs its own projection review; multi-tenant-organization reads shipped in the section below, and tenant-lookup functions ship as tenant-information show under the mg-ext-04e function-argument contract.",
+    "The tenantRelationship container root needs its own projection review; multi-tenant-organization reads shipped in the section below, and tenant-lookup functions ship as tenant-information show under the allowlisted function-argument contract.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredDelegatedAdminRows.map(row => `| \`${row.id}\` | ${row.disposition} | ${row.owningSlice} | ${row.reason} |`),    "",
     "## EXT-04 multi-tenant-organization scope decisions",
     "",
-    "Firstmate scope: approve narrowing this change to the four v1.0 multi-tenant-organization reads above (organization show, join-request show, tenant list/count).",
+    "Supported coverage includes the four v1.0 multi-tenant-organization reads above (organization show, join-request show, tenant list/count).",
     "The single-member read below carries the deferred disposition (out of v1): its documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for it until its own least-privilege review lands.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
@@ -647,22 +645,22 @@ export function capabilityDocument(): string {
     ...deferredMtoRows.map(row => `| \`${row.id}\` | ${row.disposition} | ${row.owningSlice} | ${row.reason} |`),    "",
     "## EXT-04 reports scope decisions",
     "",
-    "Firstmate scope: approve deferring the v1.0 relying-party summary read below; no named command or raw access is approved for it.",
-    "The relying-party summary read below carries the deferred disposition (out of v1): its period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for it until its own guard review lands.",
+    "The v1.0 relying-party summary read below is deferred; no named command or raw access is supported for it.",
+    "The relying-party summary read below carries the deferred disposition (out of v1): its period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard does not support that binding, so no named command or raw access is approved for it until its own guard review lands.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
     ...deferredReportsRows.map(row => `| \`${row.id}\` | ${row.disposition} | ${row.owningSlice} | ${row.reason} |`),    "",
     "## EXT-04 tenant-lookup scope decisions",
     "",
-    "Firstmate scope: approve the mg-ext-04e function-argument contract with the three v1.0 reads it unblocks (tenant-information show by domain name or tenant ID, subscription show by commerce subscription ID).",
+    "The function-argument contract supports three v1.0 reads (tenant-information show by domain name or tenant ID, subscription show by commerce subscription ID).",
     "The shared session binds parenthesised function arguments only for these three allowlisted catalogue operations, each with its exact function/key name and parameter name; every other path keeps the refusal. Values arrive only as explicit CLI flags, are validated per type (DNS name, tenant GUID, commerce identifier), OData-quoted with single quotes doubled, then percent-encoded past the RFC3986 unreserved set; control characters, separators, reserved characters and overlong values fail before credentials. The reviewed raw surface carries the same three routes with the same binding.",
     "Tenant-information lookups need CrossTenantInformation.ReadBasic.All with no Entra role; the commerce lookup needs Organization.Read.All plus a supported subscription role. Personal Microsoft accounts are not supported for any of the three. Tenant-information reads support v1.0 only; beta needs its own review.",
     "",
     "## EXT-02 access-review scope decisions",
     "",
     "The access-review scope covers the ten reads above (definition, instance, decision, contacted-reviewer and stage list/show reads).",
-    "The legacy accessReviews and unified alias reads below carry the deferred disposition (out of v1) under the captain-declined EXT-02c follow-up (see docs/build-plan.md); beta-only operations remain scheduled (\"beta needs its own review\").",,
+    "The legacy accessReviews and unified alias reads below carry the deferred disposition (out of v1) because they require a separate access and projection review; beta-only operations remain scheduled (\"beta needs its own review\").",,
     "The history reads below are blocked: their documented least privilege is the write scope AccessReview.ReadWrite.All (no read scope), and history instances return SAS download URLs in downloadUri.",
     "No new commands or raw access are approved for any row below.",
     "",
@@ -673,7 +671,7 @@ export function capabilityDocument(): string {
     "## EXT-02 entitlement-management scope decisions",
     "",
     "The entitlement-management scope covers the eighteen reads above (catalog, access-package, assignment-policy and resource-role-scope list/show/count reads plus assignment and assignment-request list/show/count reads).",
-    "Approval and subject reads carry personal data and stay deferred (out of v1) for later parts with no new commands or raw access approved; so do assignment and request navigation sub-reads (assignment target/accessPackage/assignmentPolicy, request accessPackage/assignment/requestor), the top-level assignment-policy and resource-role-scope lists, catalog navigation reads (accessPackages, resources, resourceScopes, resourceRoles, customWorkflowExtensions), package navigation reads (catalog, incompatible sets), policy navigation reads (questions, custom-extension stages), role/scope link expansion, filterByCurrentUser and additionalAccess functions (parenthesised function segments need their own session-guard binding review), while every beta operation below remains scheduled (never agreed for v1). Raw $expand review is a separate change: the named assignment and request reads flatten one fixed documented expansion in code, and no user-supplied $expand exists on any route.",
+    "Approval and subject reads carry personal data and stay deferred (out of v1) with no new commands or raw access approved; so do assignment and request navigation sub-reads (assignment target/accessPackage/assignmentPolicy, request accessPackage/assignment/requestor), the top-level assignment-policy and resource-role-scope lists, catalog navigation reads (accessPackages, resources, resourceScopes, resourceRoles, customWorkflowExtensions), package navigation reads (catalog, incompatible sets), policy navigation reads (questions, custom-extension stages), role/scope link expansion, filterByCurrentUser and additionalAccess functions (parenthesised function segments need their own session-guard binding review), while every beta operation below remains scheduled (never agreed for v1). Raw $expand review is a separate change: the named assignment and request reads flatten one fixed documented expansion in code, and no user-supplied $expand exists on any route.",
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
@@ -681,14 +679,14 @@ export function capabilityDocument(): string {
     "",
     "## EXT-02 lifecycle-workflows scope decisions",
     "",
-    "This change covers the thirty-three v1.0 lifecycle-workflows first-, second-, third- and fourth-part reads above (workflow, workflow-template and task-definition list/show/count reads, the tenant settings show, top-level run and user/subject processing-result list/show/count reads, task-report list/show/count reads with the task and taskDefinition singles, plus run-nested user/subject/task processing-result list/show/count reads).",
-    "Third-level processing results, taskProcessingResults sub-reads under a user or subject result, reprocessed runs, subject sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay deferred (out of v1) for follow-up parts with no new commands or raw access approved; so do the six summary functions (the run user/subject summaries plus the four top-level ones), which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard cannot change beyond READ_SCOPES additions. Every beta operation below remains scheduled (never agreed for v1) and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.",
+    "Supported coverage includes the thirty-three v1.0 lifecycle-workflows first-, second-, third- and fourth-part reads above (workflow, workflow-template and task-definition list/show/count reads, the tenant settings show, top-level run and user/subject processing-result list/show/count reads, task-report list/show/count reads with the task and taskDefinition singles, plus run-nested user/subject/task processing-result list/show/count reads).",
+    "Third-level processing results, taskProcessingResults sub-reads under a user or subject result, reprocessed runs, subject sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay deferred (out of v1) with no new commands or raw access approved; so do the six summary functions (the run user/subject summaries plus the four top-level ones), which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard does not support those bindings. Every beta operation below remains scheduled (never agreed for v1) and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.",
     "No new commands or raw access are approved for any lifecycle-workflows row outside the thirty-three above.",
     "",
     "## READ-07 application lookups scope decisions",
     "",
-    "This change covers seven v1.0 application and service-principal reads above (application and service-principal federated-credential list/show reads with credential metadata only, service-principal app-role-assigned-to list/show reads, and the service-principal app-role-assignment show companion).",
-    "The four parenthesised lookups below carry the deferred disposition (out of v1): the (appId='...') alternate-key forms and the federated-credential (name='...') function forms each need a new session-guard binding, and the request-path guard must stay byte-identical to origin/main apart from READ_SCOPES additions, so no named command or raw access is approved for them until their own guard review lands.",,
+    "Supported coverage includes seven v1.0 application and service-principal reads above (application and service-principal federated-credential list/show reads with credential metadata only, service-principal app-role-assigned-to list/show reads, and the service-principal app-role-assignment show companion).",
+    "The four parenthesised lookups below carry the deferred disposition (out of v1): the (appId='...') alternate-key forms and the federated-credential (name='...') function forms each need a new session-guard binding, and the request-path guard does not support that binding, so no named command or raw access is approved for them until their own guard review lands.",,
     "",
     "| Inventory operation | Disposition | Owning slice | Deferral reason |",
     "|---|---|---|---|",
@@ -705,7 +703,7 @@ export function capabilityDocument(): string {
     `Shipped initial writes: ${writeStatus.shipped.length ? writeStatus.shipped.join(", ") : "none"}.`,
     `Pending initial writes: ${writeStatus.pending.length ? writeStatus.pending.join(", ") : "none"}.`,
     "Extended families (EXT-01 through EXT-04) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining",
-    "deferred rows out of v1; see docs/build-plan.md for their dispatch.",
+    "deferred rows out of v1; see the operation dispositions and reasons above.",
     "",
   ].join("\n");
 }

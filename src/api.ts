@@ -24,7 +24,7 @@ import { KNOWN_DELETED_ADMINISTRATIVE_UNIT_FIELDS, KNOWN_DELETED_APPLICATION_FIE
 import { KNOWN_CONTACT_FIELDS, KNOWN_NAV_FIELDS } from "./entra-contacts.js";
 import { KNOWN_LIFECYCLE_FIELDS, KNOWN_TEMPLATE_FIELDS } from "./entra-group-lifecycle.js";
 import { KNOWN_ALLOWED_VALUE_FIELDS, KNOWN_ATTRIBUTE_SET_FIELDS, KNOWN_CUSTOM_SECURITY_DEFINITION_FIELDS } from "./entra-custom-security-attributes.js";
-import { encodeGraphPathSegment, functionBindingFor, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
+import { DEFAULT_MAX_BYTES, encodeGraphPathSegment, functionBindingFor, GraphSession, resolveSessionOperation, type GraphTransport } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
 // API-01: the reviewed read-only raw Graph surface.
@@ -1202,10 +1202,30 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
 // headers and text. Timeouts and cancellation arrive through the session's
 // AbortSignal; credential attachment happened before this call.
 export const fetchTransport: GraphTransport = async request => {
-  const response = await fetch(request.url, { method: "GET", headers: request.headers, signal: request.signal, redirect: "manual" });
+  const response = await fetch(request.url, { method: request.method, body: request.body, headers: request.headers, signal: request.signal, redirect: "manual" });
   const headers: Record<string, string> = {};
   response.headers.forEach((value, key) => {
     headers[key] = value;
   });
+  if (request.method === "POST" && response.body) {
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytes += value.length;
+        if (bytes > DEFAULT_MAX_BYTES) {
+          await reader.cancel();
+          throw new AxiError("Hunting response exceeds the 5 MB client budget", "GRAPH_ERROR", ["Reduce --limit or project fewer columns"]);
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    return { status: response.status, headers, body: Buffer.concat(chunks).toString("utf8") };
+  }
   return { status: response.status, headers, body: await response.text() };
 };

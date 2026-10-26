@@ -7,6 +7,7 @@ import { DelegatedAuth } from "./auth.js";
 import { PrivateFiles } from "./private-file.js";
 import { validateProfile, profileName, type AnyProfile } from "./profiles.js";
 import { findOperation } from "./runtime-index.js";
+import { HUNTING_OPERATION, HUNTING_SCOPE, huntingRequest } from "./security-hunting.js";
 
 // CORE-01: the single path that owns Graph URL construction, operation
 // authorization, credential attachment and response validation. Command
@@ -24,6 +25,7 @@ export const SAFE_CREDENTIAL_FIELDS: readonly string[] = ["keyId", "displayName"
 // buffering, execute output and cursor decode.
 export const GRAPH_HOST = "graph.microsoft.com";
 const READ_SCOPES = new Set([
+  "ThreatHunting.Read.All",
   "Agreement.Read.All",
   "AgreementAcceptance.Read",
   "AgreementAcceptance.Read.All",
@@ -107,7 +109,8 @@ export interface SessionOperation {
 }
 
 export interface TransportRequest {
-  method: "GET";
+  method: "GET" | "POST";
+  body?: string;
   url: string;
   headers: Record<string, string>;
   signal?: AbortSignal;
@@ -142,6 +145,7 @@ export interface ExecuteArgs {
   operation: SessionOperation;
   params?: Record<string, string>;
   query?: Record<string, string>;
+  hunting?: { query: string; timespan: string; limit: number };
   // Delegated callers declare explicit Graph scopes; application profiles use
   // the configured .default audience and reject caller scopes.
   scopes?: string[];
@@ -775,6 +779,37 @@ export class GraphSession {
     }
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
+    if (operation.id === HUNTING_OPERATION) {
+      if (!args.hunting || args.query || args.params || args.scalar || args.consistencyLevel) {
+        throw new AxiError("Hunting requires a validated bounded KQL request", "VALIDATION_ERROR", ["mg-axi security hunting query --help"]);
+      }
+      const body = JSON.stringify(huntingRequest(args.hunting.query, args.hunting.timespan, args.hunting.limit));
+      const scopes = profile.mode === "delegated" ? this.readScopes(args.scopes) : this.applicationScopes(args.scopes);
+      if (profile.mode === "delegated" && (scopes?.length !== 1 || scopes[0] !== HUNTING_SCOPE)) {
+        throw new AxiError("Hunting requires ThreatHunting.Read.All", "VALIDATION_ERROR", ["Grant admin consent for ThreatHunting.Read.All"]);
+      }
+      const clock = args.clock ?? systemClock;
+      const deadline = clock.now() + DEFAULT_DEADLINE_MS;
+      let response: TransportResponse;
+      try {
+        response = await beforeDeadline(async signal => {
+          const credential = profile.mode === "delegated"
+            ? await this.deps.delegated.credential(profile, scopes!)
+            : await this.deps.application.credential(profile, scopes);
+          return this.deps.transport({ method: "POST", url: `https://${GRAPH_HOST}/v1.0/security/runHuntingQuery`,
+            headers: { Authorization: `Bearer ${credential.token}`, Accept: "application/json", "Content-Type": "application/json; charset=utf-8", "client-request-id": randomUUID() },
+            body, signal });
+        }, clock, deadline, args.signal);
+      } catch (error) {
+        args.signal?.throwIfAborted();
+        if (error instanceof AxiError) throw error;
+        throw new AxiError("Hunting request failed or exceeded the 30-second deadline", "GRAPH_ERROR", ["Narrow the query and time window before retrying"]);
+      }
+      if (bodyBytes(response.body) > DEFAULT_MAX_BYTES) throw new AxiError("Hunting response exceeds the 5 MB client budget", "GRAPH_ERROR", ["Reduce --limit or project fewer columns"]);
+      // No redirect or retry can replay a query body to another destination.
+      return this.translate(operation, response);
+    }
+    if (args.hunting) throw new AxiError("Hunting input is only allowed for the reviewed hunting action", "VALIDATION_ERROR");
     const query = args.query ?? {};
     checkQueryContext(query, args.consistencyLevel);
     const params = args.params ?? {};
@@ -804,6 +839,9 @@ export class GraphSession {
   // requests and while waiting.
   async collect(args: CollectArgs): Promise<CollectionResult> {
     checkOperation(args.operation);
+    if (args.operation.method !== "GET" || args.operation.id === HUNTING_OPERATION) {
+      throw new AxiError("Graph collections require GET; hunting uses a bounded single response without a cursor", "VALIDATION_ERROR", ["mg-axi security hunting query --help"]);
+    }
     const operation = findOperation(args.operation.id);
     if (!operation) {
       throw new AxiError(`Unknown catalogued Graph operation ${args.operation.id}`, "VALIDATION_ERROR", [
@@ -983,17 +1021,18 @@ export class GraphSession {
   }
 
   private authorizePolicy(profile: AnyProfile, operation: SessionOperation): void {
-    if (operation.method !== "GET") {
+    if (operation.method !== "GET" && operation.id !== HUNTING_OPERATION) {
       throw new AxiError(`Graph session executes reads; ${operation.id} is not a read`, "VALIDATION_ERROR", [
         "Named mutations ship with their own coordinator slice; the session never sends them",
       ]);
     }
     // Profile-scoped gates run before the catalogued verdict, so a route that
     // is both sensitive and excluded reports the sensitive denial.
-    // Every current owning slice belongs to the entra pack; a profile without
-    // it cannot execute. New packs extend this gate with their own review.
-    if (!profile.enabledPacks.includes("entra")) {
-      throw new AxiError("Pack entra is not enabled for this profile", "POLICY_DENIED", ["mg-axi profile show --profile <name>"]);
+    // Security is a separate explicit opt-in; existing Entra profiles do not
+    // acquire Defender access merely by installing this command.
+    const pack = operation.id === HUNTING_OPERATION ? "security" : "entra";
+    if (!profile.enabledPacks.includes(pack)) {
+      throw new AxiError(`Pack ${pack} is not enabled for this profile`, "POLICY_DENIED", ["mg-axi profile show --profile <name>"]);
     }
     if (operation.version === "beta" && !profile.preview) {
       throw new AxiError(`Beta Graph reads require a preview-enabled profile (${operation.id})`, "POLICY_DENIED", [
@@ -1129,7 +1168,8 @@ export class GraphSession {
 
   private translateError(operation: SessionOperation, response: TransportResponse): AxiError {
     const status = response.status;
-    const fault = faultBody(response.body);
+    // Hunting errors can echo arbitrary query literals, including secrets.
+    const fault = operation.id === HUNTING_OPERATION ? "" : faultBody(response.body);
     if (status === 401) {
       return new AxiError(`Graph rejected the credential for ${operation.id} (401)${fault}`, "AUTH_REQUIRED", [
         "mg-axi login --profile <name> --scopes <comma-separated-Graph-scopes>",
@@ -1141,6 +1181,7 @@ export class GraphSession {
         `Graph denied ${operation.id} (403)${fault}: the grant, role, licence or policy prerequisite is missing and Graph does not say which`,
         "GRAPH_ERROR",
         [
+          ...(operation.id === HUNTING_OPERATION ? ["Hunting requires admin-consented ThreatHunting.Read.All in the profile's authentication mode; existing Entra grants do not supply it"] : []),
           "Check the catalogue permission and role guidance for this operation",
           "Confirm tenant licensing for the generating feature",
           "A 403 never proves which prerequisite is missing; do not retry blindly",

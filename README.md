@@ -1,6 +1,6 @@
 # mg-axi
 
-Microsoft Graph CLI for agents and the humans running them, with reviewed Entra reads, compact output and five explicitly gated writes.
+Microsoft Graph CLI for agents and the humans running them, with reviewed Entra and Defender XDR hunting reads, compact output and five explicitly gated writes.
 
 [![npm](https://img.shields.io/npm/v/@knowttl/mg-axi)](https://www.npmjs.com/package/@knowttl/mg-axi)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -29,6 +29,43 @@ It targets workforce Entra tenants in the commercial cloud; sovereign clouds, pe
 - **Write gates** require manual profile enablement, an operation allowlist and exact target confirmation.
 - **Offline discovery** provides local status, group help and leaf references without sign-in.
 - **Redaction** protects sensitive fields in output, previews, errors and audit metadata, including with `--full`.
+
+## Defender XDR advanced hunting
+
+`mg-axi security hunting query --file hunt.kql --profile soc --timespan P7D --limit 1000` runs a reviewed read-only Graph POST to `/security/runHuntingQuery`.
+Save this example as `hunt.kql`:
+
+```kql
+UrlClickEvents
+| where ActionType == "ClickAllowed"
+| project Timestamp, AccountUpn, Url, ActionType
+| order by Timestamp desc
+```
+
+Before use, an administrator must grant Microsoft Graph **ThreatHunting.Read.All**, with admin consent, for the profile's delegated or application authentication mode.
+Existing Entra permissions do not grant hunting access.
+Add `"security"` to that profile's `enabledPacks` array in the configuration file (for example `["entra", "security"]`); existing profiles default to Entra only.
+For delegated authentication, sign in explicitly with `mg-axi auth login --profile soc --scopes https://graph.microsoft.com/ThreatHunting.Read.All` after consent.
+Application profiles use their configured Graph `.default` audience.
+Defender data availability, licensing and the signed-in user's data access still apply; HTTP 403 alone does not identify the missing prerequisite.
+
+The default `--timespan P1D` looks back from now; use whole-day durations such as `P7D`, or time durations such as `PT6H` or `PT30M`, from one second to 30 days.
+Graph also applies any narrower time filter in KQL.
+The default `--limit 100` accepts 1-10000 rows and appends a server-side `take` for one extra row to detect overflow.
+Overflow returns `complete: false` and `reason: row-limit`; it never invents a total or cursor.
+Microsoft documents no paging or cursor for this action; narrow the time window or query filters to retrieve more results.
+Results use TOON and existing secret redaction, with recursive 500-character string previews; `--full` removes text truncation while retaining redaction and query bounds.
+The client uses a 30-second deadline and a 5 MB response budget, refuses redirects and does not automatically replay hunting requests.
+Microsoft's service limits are 100000 rows, 50 MB and three minutes per request, with tenant CPU and call quotas.
+See [runHuntingQuery](https://learn.microsoft.com/en-us/graph/api/security-security-runhuntingquery?view=graph-rest-1.0), [security quotas](https://learn.microsoft.com/en-us/graph/api/resources/security-api-overview?view=graph-rest-1.0#quotas-and-resource-allocation), and [permission consent](https://learn.microsoft.com/en-us/graph/permissions-reference#threathuntingreadall).
+
+KQL input is file-only and is never echoed in results or server errors.
+The local validator accepts one table pipeline, ordinary quoted strings, `//` comments, balanced parentheses/brackets, and the following operators: `where`, `project`, `project-away`, `project-rename`, `project-reorder`, `extend`, `summarize`, `distinct`, `count`, `take`, `limit`, `top`, `sort`, `order`.
+Only reviewed scalar and aggregate function calls are accepted, including `ago`, `datetime`, `bin`, `count`, `dcount`, `sum`, `arg_max`, `tostring`, `parse_json` and `parse_url`; the exact allowlist lives in [security-hunting.ts](src/security-hunting.ts).
+The table allowlist covers `DeviceEvents`, `DeviceProcessEvents`, `DeviceNetworkEvents`, `DeviceFileEvents`, `DeviceFileCertificateInfo`, `DeviceRegistryEvents`, `DeviceLogonEvents`, `DeviceImageLoadEvents`, `DeviceInfo`, `DeviceNetworkInfo`, `DeviceTvmSoftwareInventory`, `DeviceTvmSoftwareVulnerabilities`, `DeviceTvmSoftwareVulnerabilitiesKB`, `EmailEvents`, `EmailPostDeliveryEvents`, `EmailUrlInfo`, `EmailAttachmentInfo`, `UrlClickEvents`, `IdentityLogonEvents`, `IdentityQueryEvents`, `IdentityDirectoryEvents`, `CloudAppEvents`, `AlertInfo`, `AlertEvidence`, `BehaviorInfo`, `BehaviorEntities`, `ExposureGraphNodes` and `ExposureGraphEdges`.
+Everything outside this restricted grammar is refused before credentials: semicolon statements (including trailing semicolons), `let`/`set`, dot-prefixed control commands, stored/source functions, qualified functions, external data, plugins (`evaluate`/`invoke`), joins/unions, nested query pipelines and block comments.
+Graph validates the remaining KQL expression syntax and table availability.
+Raw `api get` keeps its reviewed GET-only route list and does not expose `/security`.
 
 ## Quickstart
 
@@ -119,7 +156,7 @@ Group and leaf `--help` return exit code 0 without signing in.
 | Directory | Users, groups and memberships, devices, administrative units, directory objects, deleted items, contacts, organizations and branding |
 | Applications and consent | Applications, service principals, owners, federated credentials, delegated grants and app-role assignments |
 | Roles and governance | Directory roles and assignments, PIM reads, access reviews, entitlement management and lifecycle workflows |
-| Security | Conditional Access, authentication methods and registration reports, audit/sign-in/provisioning logs, user and workload risk |
+| Security | Conditional Access, authentication methods and registration reports, audit/sign-in/provisioning logs, user and workload risk, Defender XDR advanced hunting (`security hunting query`) |
 | Tenant configuration | Domains and DNS records, subscriptions, certificate authentication, synchronization, terms of use, custom security attributes and group lifecycle policies |
 | Identity and partner configuration | Identity providers, federation configurations, risk-prevention providers, data policy operations, contracts, delegated administration, multitenant organization and tenant information |
 | Reviewed raw reads | `api get <path>` for allowlisted v1.0 routes |
@@ -254,6 +291,7 @@ The [execution contract](docs/execution.md#named-writes) describes the shared gu
 | Users and `doctor` | `User.Read.All` |
 | Group membership | `GroupMember.Read.All` |
 | Conditional Access policies | `Policy.Read.All` |
+| Defender XDR hunting | `ThreatHunting.Read.All` (admin-consented; requires the `security` pack) |
 | Reviewed raw reads | Explicit approved `--scopes` for the requested route |
 
 Use full `https://graph.microsoft.com/` scope names with `auth login`.

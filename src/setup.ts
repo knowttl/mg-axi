@@ -1,7 +1,7 @@
 import { LEAVES } from "./catalogue.js";
 import { Profiles } from "./profiles.js";
 import { invocation } from "./invocation.js";
-import { skillWriteLabels } from "./docs.js";
+import { leafEffect, skillWriteLabels } from "./docs.js";
 
 // PACK-01: explicit release setup guidance. The setup view is offline: it
 // reads the selected configuration file, describes installation and the
@@ -96,8 +96,8 @@ export function setupView(store: Profiles): Record<string, unknown> {
   const families = shippedReadFamilies();
   const items = store.list();
   const implemented = LEAVES.map(leaf => leaf.path);
-  const reads = LEAVES.filter(leaf => (leaf.operation !== undefined && leaf.operation.startsWith("GET:")) || leaf.path === "api get" || leaf.path === "doctor").length;
-  const writes = LEAVES.filter(leaf => leaf.operation !== undefined && !leaf.operation.startsWith("GET:")).length;
+  const reads = LEAVES.filter(leaf => leafEffect(leaf) === "read").length;
+  const writes = LEAVES.filter(leaf => leafEffect(leaf) === "write").length;
   return {
     command: "mg-axi setup",
     config: store.path,
@@ -123,6 +123,7 @@ export function setupView(store: Profiles): Record<string, unknown> {
       local: implemented.length - reads - writes,
       api: `Entra ${families.slice(0, -1).join(", ")} and ${families.at(-1)} reads plus reviewed raw api get and ${writeLabels.length} gated writes (${writeLabels.join(", ")}); every other v1.0 operation is deferred out of v1, and every other beta operation remains scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded`,
       report: "docs/coverage.md",
+      hunting: "security hunting query --file <kql> --timespan P1D --limit 100; explicit security pack and admin-consented ThreatHunting.Read.All; no cursor",
     },
     integration: "Install skills/mg-axi/SKILL.md explicitly through your agent's skill installation mechanism; setup only shows guidance and installs no skills or hooks",
     help: [`${command} doctor`, `${command} entra user list --help`, `${command} api get --help`],

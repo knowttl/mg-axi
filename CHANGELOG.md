@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.12](https://github.com/knowttl/mg-axi/compare/v0.1.11...v0.1.12) (2026-10-26)
+
+
+### Features
+
+* add bounded read-only Defender XDR hunting queries ([#105](https://github.com/knowttl/mg-axi/issues/105)) ([e8e122a](https://github.com/knowttl/mg-axi/commit/e8e122a9fdb5c558af38bbf79f489e5d1905f14b))
+
 ## [0.1.11](https://github.com/knowttl/mg-axi/compare/v0.1.10...v0.1.11) (2026-10-19)
 
 

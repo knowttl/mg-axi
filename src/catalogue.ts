@@ -2796,6 +2796,14 @@ export const LEAVES: Leaf[] = [
   }, examples: ["mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All", "mg-axi api get /groups --odata '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All", "mg-axi api get /users --cursor - --all --scopes https://graph.microsoft.com/User.Read.All < cursor.txt"] },
 ];
 
+LEAVES.push({ path: "security hunting query", description: "Run one read-only Defender XDR KQL table pipeline from a file; requires the security pack and ThreatHunting.Read.All; no paging API exists", operation: "POST:/security/microsoft.graph.security.runHuntingQuery", flags: {
+  ...common,
+  file: { value: "path", required: true, description: "UTF-8 KQL file; one table pipeline only, no statements, control commands, subqueries or plugins; query text is never echoed" },
+  timespan: { value: "ISO-8601-duration", default: "P1D", description: "Server time window looking backwards from now; whole days or hours/minutes/seconds, at most 30 days" },
+  limit: { value: "positive-integer", default: "100", description: "Cap result rows at 1-10000; overflow is reported, with no cursor; narrow the time window or query to retrieve more" },
+  full: { description: "Disable recursive 500-character string truncation; redaction, time window and row cap still apply" },
+}, examples: ["mg-axi security hunting query --file hunt.kql --profile soc", "mg-axi security hunting query --file hunt.kql --timespan P7D --limit 1000 --full --profile soc"] });
+
 LEAVES.push({ ...LEAVES.find(leaf => leaf.path === "auth login")!, path: "login", description: "Deprecated alias for auth login (one minor release)" });
 LEAVES.push({ path: "config path", description: "Show the selected configuration path without reading credentials", flags: {}, examples: ["mg-axi config path", "mg-axi config path --config /absolute/path/config.json"] });
 LEAVES.push({ path: "auth status", description: "Show credential sources and verify local file permissions without a live request", flags: { profile: common.profile }, examples: ["mg-axi auth status", "mg-axi auth status --profile soc"] });

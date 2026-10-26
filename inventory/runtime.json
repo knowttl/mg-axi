@@ -2345,6 +2345,14 @@
       "owningSlice": "WRITE-05"
     },
     {
+      "id": "v1.0:POST:/security/microsoft.graph.security.runHuntingQuery",
+      "method": "POST",
+      "path": "/security/microsoft.graph.security.runHuntingQuery",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "SECURITY-01"
+    },
+    {
       "id": "v1.0:POST:/users/{user-id}/revokeSignInSessions",
       "method": "POST",
       "path": "/users/{user-id}/revokeSignInSessions",

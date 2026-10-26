@@ -9,6 +9,7 @@ import { Profiles } from "./profiles.js";
 import { skillHint } from "./skill-hint.js";
 import { authStatus } from "./auth-status.js";
 import { redactSecrets } from "./redact.js";
+import { queryHunting } from "./security-hunting.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
 import { updateUserAccount } from "./entra-user-update.js";
@@ -65,6 +66,7 @@ function localHome(name?: string, config?: string) {
     output.tenant = selected.profile.tenantId;
     output.domains = [{ name: "entra", status: selected.profile.enabledPacks.includes("entra") ? "enabled" : "disabled",
       summary: "Local profile configuration only; no Graph request made" }];
+    if (selected.profile.enabledPacks.includes("security")) output.domains.push({ name: "security", status: "enabled", summary: "Defender XDR hunting; local configuration only, no Graph request made" });
   } catch (error) {
     if ((name?.trim() ? name : undefined) || !(error instanceof AxiError) || !["PROFILE_REQUIRED", "PROFILE_AMBIGUOUS"].includes(error.code)) throw error;
     if (error.code === "PROFILE_AMBIGUOUS") {
@@ -167,6 +169,23 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     return `${leafHelp(leaf)}\n${group.split("\n").slice(1).join("\n")}`;
   }
   if (leaf.path === "home") return localHome(flags.profile as string | undefined, flags.config as string | undefined);
+  if (leaf.path === "security hunting query") {
+    if (flags["api-version"] !== undefined && flags["api-version"] !== "v1.0") throw new AxiError("Hunting supports Graph v1.0 only", "VALIDATION_ERROR", [leafHelp(leaf)]);
+    const selected = new Profiles(flags.config as string | undefined).resolve(flags.profile as string | undefined);
+    let delegated = overrides.delegated;
+    let application = overrides.application;
+    if (!delegated) {
+      const { DelegatedAuth: Service } = await import("./auth.js");
+      const { MsalProvider } = await import("./msal-provider.js");
+      delegated = new Service(new MsalProvider());
+    }
+    if (!application) {
+      const { ApplicationAuth: Service } = await import("./app-auth.js");
+      const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+      application = new Service(new MsalApplicationProvider());
+    }
+    return queryHunting(new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport }), flags, selected.profile);
+  }
   const profiles = new Profiles(flags.config as string | undefined);
   if (leaf.path === "config path") return { config: profiles.path };
   if (leaf.path === "profile create") {

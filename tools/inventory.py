@@ -67,6 +67,7 @@ DIRECTORY_READ_ACTIONS = set("checkMemberGroups checkMemberObjects getMemberGrou
 USER_ACTIONS |= DIRECTORY_READ_ACTIONS
 GROUP_ACTIONS |= DIRECTORY_READ_ACTIONS
 READ_ACTION_SOURCES = {
+    "runHuntingQuery": "security-security-runhuntingquery",
     **{action: f"directoryobject-{action.lower()}" for action in DIRECTORY_READ_ACTIONS},
     "getUserOwnedObjects": "directory-deleteditems-getuserownedobjects",
     "evaluateDynamicMembership": "group-evaluatedynamicmembership",
@@ -195,6 +196,8 @@ EXCLUDED_NAV = {
 
 
 def exclusion_reason(path):
+    if path == "/security/microsoft.graph.security.runHuntingQuery":
+        return None
     segments = {part.removeprefix("microsoft.graph.").split("(")[0] for part in path.strip("/").split("/")}
     for domain, navigations in EXCLUDED_NAV.items():
         if segments & navigations:
@@ -204,6 +207,8 @@ def exclusion_reason(path):
 
 def scoped_slice(path):
     """Return the owning family, or None for a separately authorized domain."""
+    if path == "/security/microsoft.graph.security.runHuntingQuery":
+        return "SECURITY-01"
     parts = path.strip("/").split("/")
     if exclusion_reason(path):
         return None

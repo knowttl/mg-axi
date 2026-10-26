@@ -18,7 +18,8 @@ const UNSUPPORTED_READ_NOTE = "Graph v1.0 does not support the legacy `entra sco
 // One row per executable leaf in catalogue order.
 // Every leaf is implemented by an mg-axi handler (native). Graph
 // leaves carry the read effect, except reviewed named writes.
-function leafEffect(leaf: { path: string; operation?: string }): string {
+export function leafEffect(leaf: { path: string; operation?: string }): string {
+  if (leaf.path === "security hunting query") return "read";
   if (leaf.operation !== undefined) return leaf.operation.startsWith("GET:") ? "read" : "write";
   return leaf.path === "api get" || leaf.path === "doctor" ? "read" : "local";
 }
@@ -36,6 +37,7 @@ export function skillCommandTable(): string {
 // read leaf: a new read leaf without coverage here throws, so the
 // committed description can never silently omit shipped coverage.
 const READ_AREA_LABELS: Array<[string, string]> = [
+  ["security hunting ", "Defender XDR advanced hunting"],
   ["entra user authentication-method ", "authentication methods"],
   ["entra registration ", "authentication methods"],
   ["entra user ", "users"],
@@ -166,7 +168,9 @@ export function skillDocument(): string {
     "# mg-axi",
     "",
     `Agent-ergonomic CLI for Microsoft Graph. ${DESCRIPTION}.`,
-    "Entra SOC reads through token-efficient TOON output.",
+    "Entra SOC and Defender XDR hunting reads through token-efficient TOON output.",
+    "`security hunting query --file <kql>` requires an explicit security pack in enabledPacks and admin-consented ThreatHunting.Read.All (delegated or application); existing Entra grants do not supply it.",
+    "Hunting accepts one restricted table pipeline, never inline KQL, statements, control commands, subqueries or plugins. Default --timespan P1D (maximum 30 days), --limit 100 (maximum 10000); no server cursor exists. --full only removes 500-character text truncation, never redaction or bounds. See README for the accepted operators and functions.",
     "The generated [command table](#orientation) lists supported named writes through the gated mutation coordinator; raw API remains read-only and every other mutation is refused.",
     "See [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.",
     "",
@@ -325,7 +329,7 @@ function completeAuditRecord(rows: InventoryRow[]): string[] {
   const named = v1("named-command");
   const raw = v1("reviewed-raw-read");
   const scheduled = v1("scheduled");
-  const writeRows = rows.filter(row => row.id.startsWith("v1.0:") && row.disposition === "named-command" && !row.id.includes(":GET:"));
+  const writeRows = rows.filter(row => row.id.startsWith("v1.0:") && row.disposition === "named-command" && row.owningSlice?.startsWith("WRITE-"));
   const writeN = (version: string, disposition: string): number =>
     rows.filter(row => row.owningSlice === "WRITE-N" && row.id.startsWith(`${version}:`) && row.disposition === disposition).length;
   const writeNScheduled = rows.filter(row => row.owningSlice === "WRITE-N" && row.disposition === "scheduled").length;
@@ -372,8 +376,8 @@ export function capabilityDocument(): string {
   const rows = inventory.operations;
   const count = (disposition: string): number => rows.filter(row => row.disposition === disposition).length;
   const writeStatus = initialWriteStatus(rows);
-  const readLeaves = LEAVES.filter(leaf => leaf.operation !== undefined && leaf.operation.startsWith("GET:"));
-  const writeLeaves = LEAVES.filter(leaf => leaf.operation !== undefined && !leaf.operation.startsWith("GET:"));
+  const readLeaves = LEAVES.filter(leaf => leaf.operation !== undefined && leafEffect(leaf) === "read");
+  const writeLeaves = LEAVES.filter(leaf => leaf.operation !== undefined && leafEffect(leaf) === "write");
   const commandRows = readLeaves.map(leaf => {
     const row = rows.find(candidate => candidate.id === `v1.0:${leaf.operation}`);
     return `| \`mg-axi ${leaf.path}\` | \`${leaf.operation}\` | ${row ? row.disposition : "no v1.0 inventory row"} | ${row?.owningSlice ?? "-"} |`;

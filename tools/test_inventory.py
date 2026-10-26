@@ -10,6 +10,15 @@ from inventory import CUTOFF_REASON, ROOT, build, make_row, scoped_slice, valida
 
 
 class InventoryTests(unittest.TestCase):
+    def test_hunting_is_a_separately_reviewed_read_only_security_action(self):
+        path = "/security/microsoft.graph.security.runHuntingQuery"
+        row = make_row("v1.0", path, "POST", {"operationId": "security.runHuntingQuery"}, {f"POST:{path}": "security hunting query"})
+        self.assertEqual((row["disposition"], row["owningSlice"]), ("named-command", "SECURITY-01"))
+        self.assertEqual(row["permissions"]["sources"], ["https://learn.microsoft.com/en-us/graph/api/security-security-runhuntingquery?view=graph-rest-1.0"])
+        for other in ("/security", "/security/alerts_v2", "/security/incidents", "/security/microsoft.graph.security.runHuntingQuery/other"):
+            with self.subTest(path=other):
+                self.assertIsNone(scoped_slice(other))
+
     def test_identity_provider_reads_defer_only_beta(self):
         for suffix in ("", "/{identityProviderBase-id}", "/$count", "/availableProviderTypes()"):
             for version, reason in [

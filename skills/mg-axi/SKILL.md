@@ -1,7 +1,7 @@
 ---
 name: mg-axi
 description: >
-  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, federation configurations, deleted directory items, data policy operations, risk prevention, access reviews, entitlement catalogs and access packages, entitlement assignments and requests, lifecycle workflows, templates, task definitions, settings, runs, processing results and task reports, reviewed raw reads and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
+  Inspect Microsoft Entra users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, federation configurations, deleted directory items, data policy operations, risk prevention, access reviews, entitlement catalogs and access packages, entitlement assignments and requests, lifecycle workflows, templates, task definitions, settings, runs, processing results and task reports, reviewed raw reads, Defender XDR advanced hunting and run 5 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update) through token-efficient TOON output.
 user-invocable: false
 ---
 
@@ -10,7 +10,9 @@ user-invocable: false
 # mg-axi
 
 Agent-ergonomic CLI for Microsoft Graph. Inspect Microsoft Graph capabilities, read-only by default.
-Entra SOC reads through token-efficient TOON output.
+Entra SOC and Defender XDR hunting reads through token-efficient TOON output.
+`security hunting query --file <kql>` requires an explicit security pack in enabledPacks and admin-consented ThreatHunting.Read.All (delegated or application); existing Entra grants do not supply it.
+Hunting accepts one restricted table pipeline, never inline KQL, statements, control commands, subqueries or plugins. Default --timespan P1D (maximum 30 days), --limit 100 (maximum 10000); no server cursor exists. --full only removes 500-character text truncation, never redaction or bounds. See README for the accepted operators and functions.
 The generated [command table](#orientation) lists supported named writes through the gated mutation coordinator; raw API remains read-only and every other mutation is refused.
 See [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.
 
@@ -308,6 +310,7 @@ See [coverage](https://github.com/knowttl/mg-axi/blob/main/docs/coverage.md) for
 | `mg-axi entra lifecycle run task-processing-result show` | native | read |
 | `mg-axi entra lifecycle run task-processing-result count` | native | read |
 | `mg-axi api get` | native | read |
+| `mg-axi security hunting query` | native | read |
 | `mg-axi login` | native | local |
 | `mg-axi config path` | native | local |
 | `mg-axi auth status` | native | local |

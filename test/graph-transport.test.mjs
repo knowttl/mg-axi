@@ -4,6 +4,28 @@ import { createServer } from "node:http";
 import { test } from "node:test";
 import { fetchTransport } from "../dist/api.js";
 
+test("fetch transport sends hunting JSON and refuses oversized response streams", async () => {
+  const requests = [];
+  const server = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    requests.push({ method: request.method, body: Buffer.concat(chunks).toString("utf8") });
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end("x".repeat(5_000_001));
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const body = JSON.stringify({ Query: "EmailEvents | take 2", Timespan: "P1D" });
+    await assert.rejects(fetchTransport({ method: "POST", url: `http://127.0.0.1:${server.address().port}/hunting`,
+      headers: { Authorization: "Bearer offline-fixture", "Content-Type": "application/json; charset=utf-8" }, body }),
+    error => error.code === "GRAPH_ERROR" && /5 MB/.test(error.message));
+    assert.deepEqual(requests, [{ method: "POST", body }]);
+  } finally {
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
 test("fetch transport returns redirects for session authorization without following them", async () => {
   const requests = [];
   const server = createServer((request, response) => {

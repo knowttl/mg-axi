@@ -156,7 +156,7 @@ Group and leaf `--help` return exit code 0 without signing in.
 | Directory | Users, groups and memberships, devices, administrative units, directory objects, deleted items, contacts, organizations and branding |
 | Applications and consent | Applications, service principals, owners, federated credentials, delegated grants and app-role assignments |
 | Roles and governance | Directory roles and assignments, PIM reads, access reviews, entitlement management and lifecycle workflows |
-| Security | Conditional Access, authentication methods and registration reports, audit/sign-in/provisioning logs, user and workload risk |
+| Security | Conditional Access, authentication methods and registration reports, audit/sign-in/provisioning logs, user and workload risk, Defender XDR advanced hunting (`security hunting query`) |
 | Tenant configuration | Domains and DNS records, subscriptions, certificate authentication, synchronization, terms of use, custom security attributes and group lifecycle policies |
 | Identity and partner configuration | Identity providers, federation configurations, risk-prevention providers, data policy operations, contracts, delegated administration, multitenant organization and tenant information |
 | Reviewed raw reads | `api get <path>` for allowlisted v1.0 routes |
@@ -291,6 +291,7 @@ The [execution contract](docs/execution.md#named-writes) describes the shared gu
 | Users and `doctor` | `User.Read.All` |
 | Group membership | `GroupMember.Read.All` |
 | Conditional Access policies | `Policy.Read.All` |
+| Defender XDR hunting | `ThreatHunting.Read.All` (admin-consented; requires the `security` pack) |
 | Reviewed raw reads | Explicit approved `--scopes` for the requested route |
 
 Use full `https://graph.microsoft.com/` scope names with `auth login`.

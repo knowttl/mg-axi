@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.15](https://github.com/knowttl/mg-axi/compare/v0.1.14...v0.1.15) (2026-10-27)
+
+
+### Features
+
+* **mail:** add gated folder and master-category writes ([#117](https://github.com/knowttl/mg-axi/issues/117)) ([7f9c187](https://github.com/knowttl/mg-axi/commit/7f9c187136c029a160d16838fe18d538471656ea))
+* **mail:** add gated inbox rule create, update, and delete ([#118](https://github.com/knowttl/mg-axi/issues/118)) ([9687fe1](https://github.com/knowttl/mg-axi/commit/9687fe1cf38c8b10a674028a8c4e6a152506c727))
+* **mail:** add gated message move, copy, and trash ([#116](https://github.com/knowttl/mg-axi/issues/116)) ([d60d424](https://github.com/knowttl/mg-axi/commit/d60d4243c55a4b16e7123c71288b77018f7d6925))
+* **mail:** add gated message tag, flag, and mark writes ([#114](https://github.com/knowttl/mg-axi/issues/114)) ([7e08f87](https://github.com/knowttl/mg-axi/commit/7e08f87d22c6c1759c9641b25572ae3d471b94d6))
+
 ## [0.1.14](https://github.com/knowttl/mg-axi/compare/v0.1.13...v0.1.14) (2026-10-27)
 
 

@@ -8,6 +8,8 @@ import type { AnyProfile } from "./profiles.js";
 
 export const MAIL_WRITE_ALTERNATES: Readonly<Record<string, string>> = {
   "PATCH:/users/{user-id}/messages/{message-id}": "PATCH:/me/messages/{message-id}",
+  "POST:/users/{user-id}/messages/{message-id}/move": "POST:/me/messages/{message-id}/move",
+  "POST:/users/{user-id}/messages/{message-id}/copy": "POST:/me/messages/{message-id}/copy",
 };
 export const MAIL_MESSAGE_WRITE_SCOPE = "https://graph.microsoft.com/Mail.ReadWrite";
 
@@ -21,8 +23,13 @@ export async function writeMailMessages(args: {
   if (!profile.enabledPacks.includes("mail")) throw new AxiError("Mail pack is not enabled", "POLICY_DENIED", [help]);
   if (mailbox === "me" && profile.mode === "application") throw new AxiError("me requires delegated authentication", "POLICY_DENIED", [help]);
   const ids = mailWriteTargets(flags, help);
+  const transfer = ["move", "copy", "trash"].includes(action);
+  const destination = action === "trash" ? "deleteditems" : String(flags.destination ?? "");
+  if (transfer && (!destination || /[\x00-\x20\x7f/\\?#%$,]/.test(destination) || destination === "." || destination === "..")) {
+    throw new AxiError("--destination must be a folder ID or well-known folder name without whitespace or path syntax", "VALIDATION_ERROR", [help]);
+  }
   let add: string[] = [], remove: string[] = [];
-  const field = action === "tag" ? "categories" : action === "flag" ? "flag" : "isRead";
+  const field = transfer ? "id" : action === "tag" ? "categories" : action === "flag" ? "flag" : "isRead";
   if (action === "tag") {
     const categories = (value: string | boolean | undefined) => value === undefined ? [] : String(value).split(",");
     add = categories(flags.add);
@@ -32,25 +39,25 @@ export async function writeMailMessages(args: {
     }
   } else if (action === "flag") {
     if (!["notFlagged", "flagged", "complete"].includes(String(flags.status))) throw new AxiError("--status must be notFlagged, flagged or complete", "VALIDATION_ERROR", [help]);
-  } else if (action !== "mark" || !["read", "unread"].includes(String(flags.state))) {
+  } else if (!transfer && (action !== "mark" || !["read", "unread"].includes(String(flags.state)))) {
     throw new AxiError("--state must be read or unread", "VALIDATION_ERROR", [help]);
   }
   const root = mailbox === "me" ? "/me" : "/users/{user-id}";
   const readOperation = resolveSessionOperation("v1.0", "GET", `${root}/messages/{message-id}`);
   const definition = (id: string): MutationDefinition => ({
-    operation: `mail.message.${action}`, method: "PATCH", version: "v1.0", effect: "disruptive", target: id,
-    path: `/v1.0${mailbox === "me" ? "/me" : `/users/${encodeGraphPathSegment(mailbox)}`}/messages/${encodeGraphPathSegment(id)}`,
+    operation: `mail.message.${action}`, method: transfer ? "POST" : "PATCH", version: "v1.0", effect: "disruptive", target: id,
+    path: `/v1.0${mailbox === "me" ? "/me" : `/users/${encodeGraphPathSegment(mailbox)}`}/messages/${encodeGraphPathSegment(id)}${transfer ? `/${action === "copy" ? "copy" : "move"}` : ""}`,
   });
   const text = mailText(flags.full === true);
-  const result = await runMailWrites({ ids, coordinator, definition, prepare: async id => {
+  const result = await runMailWrites({ ids, coordinator, definition, includeNewId: transfer, prepare: async id => {
     const read = async () => {
       const raw = await session.execute({ profile, operation: readOperation,
         params: { "message-id": id, ...(mailbox === "me" ? {} : { "user-id": mailbox }) },
-        query: { $select: `id,${field}` }, ...(profile.mode === "delegated" ? { scopes: [MAIL_MESSAGE_SCOPE] } : {}) });
+        query: { $select: transfer ? "id" : `id,${field}` }, ...(profile.mode === "delegated" ? { scopes: [MAIL_MESSAGE_SCOPE] } : {}) });
       const row = raw as Record<string, unknown> | null;
-      if (!row || row.id !== id || (field === "categories" ? !Array.isArray(row.categories) || row.categories.some(value => typeof value !== "string")
+      if (!row || row.id !== id || (!transfer && (field === "categories" ? !Array.isArray(row.categories) || row.categories.some(value => typeof value !== "string")
         : field === "isRead" ? typeof row.isRead !== "boolean"
-          : !row.flag || typeof row.flag !== "object" || !["notFlagged", "flagged", "complete"].includes(String((row.flag as Record<string, unknown>).flagStatus)))) {
+          : !row.flag || typeof row.flag !== "object" || !["notFlagged", "flagged", "complete"].includes(String((row.flag as Record<string, unknown>).flagStatus))))) {
         throw new AxiError("Graph did not return the requested message state", "GRAPH_ERROR");
       }
       return { [field]: field === "flag" ? { flagStatus: (row.flag as Record<string, unknown>).flagStatus } : row[field] };
@@ -59,9 +66,10 @@ export async function writeMailMessages(args: {
     if (field === "categories" && flags.execute === true && (current.categories as string[]).includes(REDACTED)) {
       throw new AxiError("Cannot safely preserve redacted category names", "POLICY_DENIED");
     }
-    const payload = field === "categories" ? { categories: [...new Set([...(current.categories as string[]).filter(value => !remove.includes(value)), ...add])] }
+    const payload = transfer ? { destinationId: destination } : field === "categories" ? { categories: [...new Set([...(current.categories as string[]).filter(value => !remove.includes(value)), ...add])] }
       : field === "flag" ? { flag: { flagStatus: String(flags.status) } } : { isRead: flags.state === "read" };
     const same = (state: unknown) => {
+      if (transfer) return false;
       if (field !== "categories") return JSON.stringify(state) === JSON.stringify(payload);
       const values = (state as { categories: string[] }).categories;
       const desired = (payload as { categories: string[] }).categories;
@@ -80,6 +88,7 @@ export async function writeMailMessages(args: {
       } } };
   } });
   for (const row of result.results) {
+    if (typeof row.newId === "string") row.newId = text.text(row.newId);
     if (row.preview && typeof row.preview === "object") {
       const preview = row.preview as Record<string, unknown>;
       for (const key of ["currentState", "proposedChange"]) if (typeof preview[key] === "string") preview[key] = text.text(preview[key]);

@@ -46,6 +46,19 @@ class InventoryTests(unittest.TestCase):
                 self.assertIsNone(scoped_slice(path, method))
             self.assertIsNone(scoped_slice(path + "/$value"))
 
+    def test_message_transfers_admit_only_reviewed_posts(self):
+        for root in ("/me", "/users/{user-id}"):
+            for action in ("move", "copy"):
+                path = f"{root}/messages/{{message-id}}/{action}"
+                row = make_row("v1.0", path, "POST", {"operationId": "fixture"}, {f"POST:{path}": f"mail message {action}"})
+                self.assertEqual((row["disposition"], row["owningSlice"]), ("named-command", "MAIL-06"))
+                self.assertEqual(row["permissions"]["sources"], [f"https://learn.microsoft.com/en-us/graph/api/message-{action}?view=graph-rest-1.0"])
+                self.assertEqual(make_row("beta", path, "POST", {"operationId": "fixture"})["disposition"], "intentionally-blocked")
+                for method in ("GET", "PATCH", "DELETE"):
+                    self.assertIsNone(scoped_slice(path, method))
+            for action in ("send", "reply", "forward", "permanentDelete"):
+                self.assertIsNone(scoped_slice(f"{root}/messages/{{message-id}}/{action}", "POST"))
+
     def test_hunting_is_a_separately_reviewed_read_only_security_action(self):
         path = "/security/microsoft.graph.security.runHuntingQuery"
         row = make_row("v1.0", path, "POST", {"operationId": "security.runHuntingQuery"}, {f"POST:{path}": "security hunting query"})
@@ -429,7 +442,7 @@ components:
             from inventory import shipped_operations
             first = alternate_operations(shipped_operations())
             self.assertEqual(first, alternate_operations(shipped_operations()))
-            self.assertEqual(len(first), 35)
+            self.assertEqual(len(first), 37)
 
     def test_discovery_cannot_claim_raw_coverage(self):
         inventory = json.loads((ROOT / "inventory/operations.json").read_text())

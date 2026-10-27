@@ -228,6 +228,9 @@ MAIL_METADATA_READS = {
 }
 
 
+MAIL_MESSAGE_TRANSFERS = {f"{path}/{action}" for path in MAIL_MESSAGE_SHOW_READS for action in ("move", "copy")}
+
+
 def exclusion_reason(path, method="GET"):
     if (method == "GET" and path in MAIL_FOLDER_READS | MAIL_MESSAGE_READS | MAIL_MESSAGE_SHOW_READS | MAIL_METADATA_READS) or path == "/security/microsoft.graph.security.runHuntingQuery":
         return None
@@ -240,6 +243,8 @@ def exclusion_reason(path, method="GET"):
 
 def scoped_slice(path, method="GET"):
     """Return the owning family, or None for a separately authorized domain."""
+    if method == "POST" and path in MAIL_MESSAGE_TRANSFERS:
+        return "MAIL-06"
     if method == "PATCH" and path in MAIL_MESSAGE_SHOW_READS:
         return "MAIL-05"
     if method == "GET" and path in MAIL_FOLDER_READS:
@@ -350,7 +355,11 @@ def shipped_operations():
         if found:
             parsed += 1
             if found[0] in shipped:
-                if found[0] != "PATCH:/users/{user-id}/messages/{message-id}" or leaf not in {"mail message tag", "mail message flag", "mail message mark"}:
+                shared = {
+                    "PATCH:/users/{user-id}/messages/{message-id}": {"mail message tag", "mail message flag", "mail message mark"},
+                    "POST:/users/{user-id}/messages/{message-id}/move": {"mail message move", "mail message trash"},
+                }
+                if leaf not in shared.get(found[0], set()):
                     raise ValueError(f"Catalogue operation {found[0]} is claimed by more than one leaf")
                 shipped[found[0]] += f" | {leaf}"
             else:
@@ -448,6 +457,8 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
     if method == "PATCH" and path in MAIL_MESSAGE_SHOW_READS:
         # Documentation provenance only; this remains a mutation.
         operation = {**operation, "externalDocs": {"url": "https://learn.microsoft.com/en-us/graph/api/message-update?view=graph-rest-1.0"}}
+    if method == "POST" and path in MAIL_MESSAGE_TRANSFERS:
+        operation = {**operation, "externalDocs": {"url": f"https://learn.microsoft.com/en-us/graph/api/message-{action}?view=graph-rest-1.0"}}
     if method == "GET" and path in MAIL_METADATA_READS:
         if path.endswith("/attachments"):
             read_source = "message-list-attachments"

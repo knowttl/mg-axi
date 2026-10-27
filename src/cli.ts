@@ -193,7 +193,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     }
     if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
     const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
-    if (["mail message tag", "mail message flag", "mail message mark"].includes(leaf.path)) {
+    if (["mail message tag", "mail message flag", "mail message mark", "mail message move", "mail message copy", "mail message trash"].includes(leaf.path)) {
       const coordinator = createMutationCoordinator({ profile: selected.profile, delegated, application,
         transport: overrides.mutationTransport ?? mutationFetchTransport, journalPath: overrides.journalPath });
       const result = await writeMailMessages({ session, coordinator, profile: selected.profile, flags, action: leaf.path.split(" ")[2]!, help: leafHelp(leaf) });

@@ -2829,6 +2829,14 @@ LEAVES.push({ path: "mail message flag", description: "Set message follow-up sta
 LEAVES.push({ path: "mail message mark", description: "Mark messages read or unread through gated writes; opt-in mail pack; delegated Mail.Read plus Mail.ReadWrite or scoped Exchange Application Mail.ReadWrite", operation: "PATCH:/users/{user-id}/messages/{message-id}", flags: {
   ...mailMessageWrite, state: { value: "read|unread", required: true, description: "Desired read state" },
 }, examples: ["mg-axi mail message mark --mailbox me --ids <id> --state unread --profile soc", "mg-axi mail message mark --mailbox mailbox@contoso.example --ids <id> --state read --execute --confirm <id> --profile batch"] });
+LEAVES.push({ path: "mail message move", description: "Move messages within the mailbox through gated writes; returns original id and newId; delegated Mail.Read plus Mail.ReadWrite or scoped Exchange Application Mail.ReadWrite", operation: "POST:/users/{user-id}/messages/{message-id}/move", flags: {
+  ...mailMessageWrite, destination: { value: "folder-id|well-known-name", required: true, description: "Destination folder in the same mailbox" },
+}, examples: ["mg-axi mail message move --mailbox me --ids <id> --destination archive --profile soc", "mg-axi mail message move --mailbox me --ids <id1>,<id2> --destination <folder-id> --execute --confirm <id1>,<id2> --profile soc"] });
+LEAVES.push({ path: "mail message copy", description: "Copy messages within the mailbox through gated writes; returns original id and newId; delegated Mail.Read plus Mail.ReadWrite or scoped Exchange Application Mail.ReadWrite", operation: "POST:/users/{user-id}/messages/{message-id}/copy", flags: {
+  ...mailMessageWrite, destination: { value: "folder-id|well-known-name", required: true, description: "Destination folder in the same mailbox; retains the original message" },
+}, examples: ["mg-axi mail message copy --mailbox me --ids <id> --destination archive --profile soc", "mg-axi mail message copy --mailbox mailbox@contoso.example --ids <id> --destination <folder-id> --execute --confirm <id> --profile batch"] });
+LEAVES.push({ path: "mail message trash", description: "Soft delete by moving messages to Deleted Items only; returns original id and newId; delegated Mail.Read plus Mail.ReadWrite or scoped Exchange Application Mail.ReadWrite; never DELETE or permanentDelete", operation: "POST:/users/{user-id}/messages/{message-id}/move", flags: mailMessageWrite,
+  examples: ["mg-axi mail message trash --mailbox me --ids <id> --profile soc", "mg-axi mail message trash --mailbox me --ids <id1>,<id2> --execute --confirm <id1>,<id2> --profile soc"] });
 const mailMetadataRead: Record<string, Flag> = {
   ...common, mailbox: mailFolderRead.mailbox!, full: mailFolderRead.full!,
   fields: { value: "comma-separated-properties", description: "Select reviewed properties only; nested objects are projected and attachment bytes are never returned" },

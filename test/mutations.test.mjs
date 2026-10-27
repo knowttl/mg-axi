@@ -513,6 +513,8 @@ test("every catalogue leaf stays a read except the reviewed named writes", () =>
   assert.ok(operations.includes("PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}"), "WRITE-04 leaf is catalogued");
   const reviewed = new Set(["POST:/groups/{group-id}/members/$ref", "PATCH:/users/{user-id}", "POST:/users/{user-id}/revokeSignInSessions", "POST:/identityProtection/riskyUsers/dismiss", "PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}"]);
   reviewed.add("PATCH:/users/{user-id}/messages/{message-id}");
+  reviewed.add("POST:/users/{user-id}/messages/{message-id}/move");
+  reviewed.add("POST:/users/{user-id}/messages/{message-id}/copy");
   for (const operation of operations) {
     if (reviewed.has(operation)) continue;
     if (operation === "POST:/security/microsoft.graph.security.runHuntingQuery") {

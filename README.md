@@ -1,6 +1,6 @@
 # mg-axi
 
-Microsoft Graph CLI for agents and the humans running them, with reviewed Entra and Defender XDR hunting reads, compact output and five explicitly gated writes.
+Microsoft Graph CLI for agents and the humans running them, with reviewed Entra and Defender XDR hunting reads, compact output and eight explicitly gated writes.
 
 [![npm](https://img.shields.io/npm/v/@knowttl/mg-axi)](https://www.npmjs.com/package/@knowttl/mg-axi)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -20,7 +20,7 @@ $ npx -y @knowttl/mg-axi@0.1.10 --version
 Working directly with Graph REST requires agents to manage route selection, permissions, paging and response size.
 mg-axi exposes reviewed commands with bounded lists, TOON output and contextual next steps, without requiring an MCP server.
 It targets workforce Entra tenants in the commercial cloud; sovereign clouds, personal accounts and general Microsoft 365 file access are outside its supported surface.
-The opt-in mail pack supports folder list/show, metadata-only message list, search, filter and conversation reads, message show with bodies and internet headers, and attachment metadata list, mailbox settings show, inbox rule list/show and master category list; see [the generated skill](skills/mg-axi/SKILL.md) for mailbox authorization and bounds.
+The opt-in mail pack supports folder list/show, metadata-only message list, search, filter and conversation reads, message show with bodies and internet headers, and attachment metadata list, mailbox settings show, inbox rule list/show and master category list, plus gated message tag, flag and mark writes; see [the generated skill](skills/mg-axi/SKILL.md) for mailbox authorization and bounds.
 
 ## Features
 
@@ -166,7 +166,7 @@ Group and leaf `--help` return exit code 0 without signing in.
 | Tenant configuration | Domains and DNS records, subscriptions, certificate authentication, synchronization, terms of use, custom security attributes and group lifecycle policies |
 | Identity and partner configuration | Identity providers, federation configurations, risk-prevention providers, data policy operations, contracts, delegated administration, multitenant organization and tenant information |
 | Reviewed raw reads | `api get <path>` for allowlisted v1.0 routes |
-| Named writes | Group member add, account enable/disable, session revocation, Conditional Access policy update and risky-user dismissal |
+| Named writes | Group member add, account enable/disable, session revocation, Conditional Access policy update, risky-user dismissal, and mail message tag, flag and mark |
 
 Delegated read commands default to the scope for their operation, which may differ from the user-read scope in the quick start.
 Sign in explicitly with the appropriate scopes before switching areas.
@@ -228,7 +228,7 @@ Denied reads return structured errors, not empty success results.
 
 ## Safety and permissions
 
-Read-only by default: only the five named writes below can be enabled.
+Read-only by default: only the eight named writes below can be enabled.
 **Writes require manual profile opt-in, an operation allowlist, `--execute` and exact target confirmation.**
 Without `--execute`, a named write previews the change and journals nothing, but preview still requires the write-enabled profile and prerequisite read access.
 `MG_AXI_READ_ONLY=1` overrides profile opt-in.
@@ -253,6 +253,9 @@ The operation names are exact and scoped to the configured tenant:
 | `entra user revoke-sessions` | `entra.user.revokeSessions` | `--user` |
 | `entra conditional-access policy update` | `entra.conditional-access.policy.update` | `--id` |
 | `entra risky-user dismiss` | `entra.risky-user.dismiss` | `--user` |
+| `mail message tag` | `mail.message.tag` | `--ids` in identical order |
+| `mail message flag` | `mail.message.flag` | `--ids` in identical order |
+| `mail message mark` | `mail.message.mark` | `--ids` in identical order |
 
 These examples preview only after the corresponding policy and permissions are configured:
 
@@ -274,6 +277,7 @@ Review the preview and operation-specific permissions first:
 | Session revocation | `User.RevokeSessions.All` plus prerequisite user-read access. Only user object IDs are accepted. The action cannot be undone, may take minutes to affect sessions and does not revoke external users' home-tenant sessions. Accepted 2xx means the action was accepted, without verification readback. |
 | Conditional Access update | `Policy.Read.All` plus `Policy.ReadWrite.ConditionalAccess`; delegated callers need Conditional Access Administrator or Security Administrator. P1 is required, with P2 for risk-based features. Reviewed fields only; JSON flags replace their entire corresponding block. |
 | Risk dismissal | `IdentityRiskyUser.ReadWrite.All` plus `IdentityRiskyUser.Read.All`; delegated callers need Security Administrator, and risky-user access requires P2. Dismissal is not remediation: it resets no credential and revokes no session. |
+| Message tag, flag and mark | Delegated preview and fresh reads request `Mail.Read`; execution requests `Mail.ReadWrite`. Application mode uses Exchange Application `Mail.ReadWrite` scoped through the owner-chosen mail-enabled group, with no `Mail.*` application grant in Entra. `--ids` takes 1 to 20 distinct IDs and `--confirm` repeats every ID in identical order. See [the generated skill](skills/mg-axi/SKILL.md) for tag, flag and mark flags and multi-target stop semantics. |
 
 Conditional Access enforcement changes require a readable lockout analysis.
 Enabled policies require `--acknowledge-lockout-risk` after verifying emergency-access coverage.

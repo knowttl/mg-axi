@@ -13,38 +13,38 @@ scheduled work as complete.
 ## Counts
 
 - implemented read leaves: 273 (271 named Graph reads plus reviewed raw api get and doctor health check)
-- implemented write leaves: 5 (named gated mutations below)
+- implemented write leaves: 8 (named gated mutations below)
 - local leaves: 11 (home, profile, config, auth, login alias and setup views)
-- inventory named-command: 310
+- inventory named-command: 312
 - inventory reviewed-raw-read: 5
 - inventory scheduled: 3738
 - inventory deferred: 4429
-- inventory intentionally-blocked: 3071
+- inventory intentionally-blocked: 3073
 - inventory deprecated: 870
 - inventory unavailable: 14
-- inventory excluded: 35014
+- inventory excluded: 35010
 
 ## FULL-01 audit record
 
 FULL-01 audit (2026-10-07): every agreed v1.0 read has a named command or an
 explicit reviewed blocked/unavailable/deprecated/deferred disposition, and no
 v1.0 row is left scheduled. The deferred tail is declared out of v1.
-- v1.0 named-command: 310, reviewed-raw-read: 5, scheduled: 0
+- v1.0 named-command: 312, reviewed-raw-read: 5, scheduled: 0
 - v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
 - beta scheduled (never agreed for v1): 3738
-PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 310 named / 5 raw (315 backed).
+PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 312 named / 5 raw (317 backed).
 
 ## COMPLETE-01 audit record
 
 COMPLETE-01 audit (2026-10-07): the full agreed Entra capability audit including later writes.
-Five writes ship as named, gated commands through the WRITE-00 mutation coordinator; WRITE-N carries explicit
+8 writes ship as named, gated commands through the WRITE-00 mutation coordinator; WRITE-N carries explicit
 reviewed deferred/blocked/deprecated dispositions rather than scheduled; no agreed v1.0 operation, read or
 write, is left merely scheduled. Beta stays scheduled by definition and was never agreed for v1.
 The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS URLs) stay out.
-- v1.0 named-command: 310 (305 reads plus 5 writes below), reviewed-raw-read: 5, scheduled: 0
+- v1.0 named-command: 312 (305 read rows plus 7 write rows; 8 gated write leaves in Named writes below), reviewed-raw-read: 5, scheduled: 0
 - v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
 - beta scheduled (never agreed for v1): 3738
-- shipped writes: WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
+- shipped writes: MAIL-05 (`mg-axi mail message tag`, `mg-axi mail message flag`, `mg-axi mail message mark`), WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
 - WRITE-N (remaining agreed mutations): deferred 1878, intentionally-blocked 25 v1.0 plus 2937 beta, deprecated 6 v1.0 plus 398 beta, scheduled 0.
 - outstanding upstream limitations (already documented in the repo): P1 for Conditional Access and P2 for risk-based CA, PIM P2 or ID Governance, riskyUsers P2 and Workload Identities Premium for workload risk with hidden riskDetail/riskLevel without it (docs/graph-coverage.md); conservative P1/P2 Graph prerequisite for sign-in/audit logs, registration report excludes disabled users, no tenant-wide method enumeration (docs/graph-coverage.md); v1.0 group-members route omits service principals (README.md member-read warning); 14 unavailable rows with no documented v1.0 GET contract, invitation Create-only Methods table, org-scoped certificateBasedAuthConfiguration routes only, contacts sync-behavior reads without operation permission docs (inventory reasons); EXT-02c history reads need AccessReview.ReadWrite.All with no read scope and return SAS download URLs (docs/coverage.md); write-side limits beside each command, revoke lag/external-user scope/unknown outcome, CA update lockout gates with no concurrency promise, dismissal is not remediation (README.md, docs/execution.md).
 
@@ -1165,8 +1165,11 @@ Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, i
 | `mg-axi entra group member add` | `POST:/groups/{group-id}/members/$ref` | WRITE-01 |
 | `mg-axi entra risky-user dismiss` | `POST:/identityProtection/riskyUsers/dismiss` | WRITE-05 |
 | `mg-axi entra conditional-access policy update` | `PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}` | WRITE-04 |
+| `mg-axi mail message tag` | `PATCH:/users/{user-id}/messages/{message-id}` | MAIL-05 |
+| `mg-axi mail message flag` | `PATCH:/users/{user-id}/messages/{message-id}` | MAIL-05 |
+| `mg-axi mail message mark` | `PATCH:/users/{user-id}/messages/{message-id}` | MAIL-05 |
 
-Shipped initial writes: WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
+Shipped initial writes: MAIL-05 (`mg-axi mail message tag`, `mg-axi mail message flag`, `mg-axi mail message mark`), WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
 Pending initial writes: none.
 Extended families (EXT-01 through EXT-04) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining
 deferred rows out of v1; see the operation dispositions and reasons above.

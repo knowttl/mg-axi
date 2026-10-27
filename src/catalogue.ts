@@ -2810,6 +2810,25 @@ const mailFolderRead: Record<string, Flag> = {
   fields: { value: "comma-separated-properties", description: "Reviewed folder properties: id, displayName, totalItemCount, unreadItemCount, parentFolderId, childFolderCount, isHidden" },
   full: { description: "Disable 500-character string truncation; redaction and bounds remain" },
 };
+const mailMessageWrite: Record<string, Flag> = {
+  ...common,
+  mailbox: { value: "user-id|upn|me", required: true, description: "Mailbox to change; delegated own mailbox only; me is delegated only" },
+  ids: { value: "comma-separated-message-ids", required: true, description: "1 to 20 distinct IDs, processed sequentially; stops at the first failed or unknown outcome" },
+  execute: { description: "Apply the change; default is a preview. Requires allowWrites and the exact mail.message operation in writes.operations" },
+  confirm: { value: "identical-id-list", description: "Required with --execute: every --ids target in exactly the same order" },
+  full: { description: "Show complete preview text instead of 500-character truncation; redaction remains" },
+};
+LEAVES.push({ path: "mail message tag", description: "Add/remove message categories through gated read-modify-write; opt-in mail pack; delegated Mail.Read plus Mail.ReadWrite or scoped Exchange Application Mail.ReadWrite", operation: "PATCH:/users/{user-id}/messages/{message-id}", flags: {
+  ...mailMessageWrite,
+  add: { value: "comma-separated-category-names", description: "Add categories while retaining existing categories; combine with --remove" },
+  remove: { value: "comma-separated-category-names", description: "Remove categories by exact name; unchanged results are no-ops" },
+}, examples: ["mg-axi mail message tag --mailbox me --ids <id> --add Reviewed --profile soc", "mg-axi mail message tag --mailbox mailbox@contoso.example --ids <id1>,<id2> --remove Pending --execute --confirm <id1>,<id2> --profile batch"] });
+LEAVES.push({ path: "mail message flag", description: "Set message follow-up status through gated writes; opt-in mail pack; delegated Mail.Read plus Mail.ReadWrite or scoped Exchange Application Mail.ReadWrite", operation: "PATCH:/users/{user-id}/messages/{message-id}", flags: {
+  ...mailMessageWrite, status: { value: "notFlagged|flagged|complete", required: true, description: "Desired follow-up flag status" },
+}, examples: ["mg-axi mail message flag --mailbox me --ids <id> --status flagged --profile soc", "mg-axi mail message flag --mailbox me --ids <id> --status complete --execute --confirm <id> --profile soc"] });
+LEAVES.push({ path: "mail message mark", description: "Mark messages read or unread through gated writes; opt-in mail pack; delegated Mail.Read plus Mail.ReadWrite or scoped Exchange Application Mail.ReadWrite", operation: "PATCH:/users/{user-id}/messages/{message-id}", flags: {
+  ...mailMessageWrite, state: { value: "read|unread", required: true, description: "Desired read state" },
+}, examples: ["mg-axi mail message mark --mailbox me --ids <id> --state unread --profile soc", "mg-axi mail message mark --mailbox mailbox@contoso.example --ids <id> --state read --execute --confirm <id> --profile batch"] });
 const mailMetadataRead: Record<string, Flag> = {
   ...common, mailbox: mailFolderRead.mailbox!, full: mailFolderRead.full!,
   fields: { value: "comma-separated-properties", description: "Select reviewed properties only; nested objects are projected and attachment bytes are never returned" },

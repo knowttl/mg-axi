@@ -5,6 +5,15 @@ import type { AnyProfile, AppCredential } from "./profiles.js";
 export const MAIL_FOLDER_SCOPE = "https://graph.microsoft.com/Mail.ReadBasic";
 export const MAIL_MESSAGE_SCOPE = "https://graph.microsoft.com/Mail.Read";
 export const MAIL_SETTINGS_SCOPE = "https://graph.microsoft.com/MailboxSettings.Read";
+export function validateMailbox(mailbox: string, help: string): void {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const upn = /^[A-Za-z0-9.!_+#^~'-]{1,64}@[A-Za-z0-9.-]{1,48}$/;
+  const domain = mailbox.split("@")[1];
+  if (mailbox !== "me" && !uuid.test(mailbox) && (!upn.test(mailbox) || mailbox.includes(".@")
+    || domain!.split(".").some(label => !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)))) {
+    throw new AxiError("--mailbox must be a user UUID, UPN or me", "VALIDATION_ERROR", [help]);
+  }
+}
 export function isMailOperation(operation: { owningSlice: string | null }) {
   return operation.owningSlice?.startsWith("MAIL-") === true;
 }

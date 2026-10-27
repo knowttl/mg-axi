@@ -9,6 +9,7 @@ import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-se
 import { booleanEnv, movedError, validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
 import { statePath } from "./paths.js";
 import { PrivateFiles } from "./private-file.js";
+import { checkMailCredential } from "./mail-authorization.js";
 
 // Shared mutation coordinator for reviewed named mutation families.
 // The gate order follows az-axi's write gates as the reference: read-only default,
@@ -286,7 +287,7 @@ export function createMutationSender(args: {
   const { delegated, application, transport, files = new PrivateFiles() } = args;
   const bound = args.profile.mode === "application" ? validateApplicationProfile(args.profile, files) : validateDelegatedProfile(args.profile, files);
 
-  async function credential(scopes: string[] | undefined, signal?: AbortSignal): Promise<string> {
+  async function credential(scopes: string[] | undefined, signal?: AbortSignal, mailbox?: string): Promise<string> {
     signal?.throwIfAborted();
     if (bound.mode === "delegated") {
       if (scopes === undefined) {
@@ -294,7 +295,9 @@ export function createMutationSender(args: {
           "Pass the operation's documented delegated permission using full https://graph.microsoft.com/ scope names",
         ]);
       }
-      return (await delegated.credential(bound, scopes)).token;
+      const acquired = await delegated.credential(bound, scopes);
+      if (mailbox !== undefined) checkMailCredential(bound, acquired, mailbox === "me" ? undefined : mailbox);
+      return acquired.token;
     }
     if (scopes !== undefined) {
       throw new AxiError("Application profiles use the configured Graph .default audience; delegated scopes are unavailable", "VALIDATION_ERROR", [
@@ -336,7 +339,8 @@ export function createMutationSender(args: {
       // Provider checks bind the acquired credential to the snapshotted
       // tenant and client; a credential for another identity fails here and
       // nothing is sent.
-      const token = await credential(options?.scopes, options?.signal);
+      const mailTarget = new URL(authorization.url).pathname.match(/^\/v1\.0\/(?:users\/([^/]+)|(me))\/messages\//);
+      const token = await credential(options?.scopes, options?.signal, mailTarget ? decodeURIComponent(mailTarget[1] ?? "me") : undefined);
       options?.signal?.throwIfAborted();
       assertMutationDestination(authorization.url);
       if (readOnlyForced()) {

@@ -14,6 +14,7 @@ import { readMailFolders } from "./mail-folders.js";
 import { readMailMessages } from "./mail-messages.js";
 import { showMailMessage } from "./mail-message-show.js";
 import { readMailMetadata } from "./mail-metadata.js";
+import { writeMailMessages } from "./mail-message-writes.js";
 import { KqlValidationError } from "./kql.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
@@ -72,7 +73,7 @@ function localHome(name?: string, config?: string) {
     output.domains = [{ name: "entra", status: selected.profile.enabledPacks.includes("entra") ? "enabled" : "disabled",
       summary: "Local profile configuration only; no Graph request made" }];
     if (selected.profile.enabledPacks.includes("security")) output.domains.push({ name: "security", status: "enabled", summary: "Defender XDR hunting; local configuration only, no Graph request made" });
-    if (selected.profile.enabledPacks.includes("mail")) output.domains.push({ name: "mail", status: "enabled", summary: "Mailbox reads: folders, messages, attachment metadata, settings, inbox rules and categories; local configuration only, no Graph request made" });
+    if (selected.profile.enabledPacks.includes("mail")) output.domains.push({ name: "mail", status: "enabled", summary: "Mailbox reads and gated message tag, flag and mark; local configuration only, no Graph request made" });
   } catch (error) {
     if ((name?.trim() ? name : undefined) || !(error instanceof AxiError) || !["PROFILE_REQUIRED", "PROFILE_AMBIGUOUS"].includes(error.code)) throw error;
     if (error.code === "PROFILE_AMBIGUOUS") {
@@ -192,6 +193,13 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     }
     if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
     const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    if (["mail message tag", "mail message flag", "mail message mark"].includes(leaf.path)) {
+      const coordinator = createMutationCoordinator({ profile: selected.profile, delegated, application,
+        transport: overrides.mutationTransport ?? mutationFetchTransport, journalPath: overrides.journalPath });
+      const result = await writeMailMessages({ session, coordinator, profile: selected.profile, flags, action: leaf.path.split(" ")[2]!, help: leafHelp(leaf) });
+      if (result.complete === false) process.exitCode = 1;
+      return result;
+    }
     if (leaf.path === "mail message list") return readMailMessages(session, flags, selected.profile, leafHelp(leaf));
     if (leaf.path === "mail message show") return showMailMessage(session, flags, selected.profile, leafHelp(leaf));
     if (!["mail folder list", "mail folder show"].includes(leaf.path)) return readMailMetadata(session, flags, selected.profile, leaf.path, leafHelp(leaf));

@@ -1,5 +1,5 @@
 import { AxiError } from "axi-sdk-js";
-import { MAIL_MESSAGE_SCOPE } from "./mail-authorization.js";
+import { MAIL_MESSAGE_SCOPE, validateMailbox } from "./mail-authorization.js";
 import { mailText } from "./mail-output.js";
 import { resolveSessionOperation, type GraphSession } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
@@ -13,7 +13,7 @@ const RECIPIENT_FIELDS = ["toRecipients", "ccRecipients", "bccRecipients", "repl
 
 export async function showMailMessage(session: GraphSession, flags: Record<string, string | boolean>, profile: AnyProfile, help: string): Promise<Record<string, unknown>> {
   const mailbox = String(flags.mailbox);
-  if (mailbox !== "me" && !/^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Za-z0-9.!_+%-]+@[A-Za-z0-9.-]+)$/i.test(mailbox)) throw new AxiError("--mailbox must be a user UUID, UPN or me", "VALIDATION_ERROR", [help]);
+  validateMailbox(mailbox, help);
   const body = flags.body ?? "text";
   if (!["text", "html", "none"].includes(String(body))) throw new AxiError("--body must be text, html or none", "VALIDATION_ERROR", [help]);
   if (!String(flags.id).trim()) throw new AxiError("--id cannot be empty", "VALIDATION_ERROR", [help]);

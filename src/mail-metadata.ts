@@ -1,5 +1,5 @@
 import { AxiError } from "axi-sdk-js";
-import { MAIL_MESSAGE_SCOPE, MAIL_SETTINGS_SCOPE } from "./mail-authorization.js";
+import { MAIL_MESSAGE_SCOPE, MAIL_SETTINGS_SCOPE, validateMailbox } from "./mail-authorization.js";
 import { mailText } from "./mail-output.js";
 import { resolveSessionOperation, type GraphSession } from "./graph-session.js";
 import { listTotals } from "./list-totals.js";
@@ -50,7 +50,7 @@ const category = { id: "string", displayName: "string", color: "string" } satisf
 
 export async function readMailMetadata(session: GraphSession, flags: Record<string, string | boolean>, profile: AnyProfile, command: string, help: string): Promise<Record<string, unknown>> {
   const mailbox = String(flags.mailbox);
-  if (mailbox !== "me" && !/^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Za-z0-9.!_+%-]+@[A-Za-z0-9.-]+)$/i.test(mailbox)) throw new AxiError("--mailbox must be a user UUID, UPN or me", "VALIDATION_ERROR", [help]);
+  validateMailbox(mailbox, help);
   const attachments = command === "mail attachment list";
   const rules = command.startsWith("mail rule ");
   const show = command.endsWith(" show");

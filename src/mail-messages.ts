@@ -1,5 +1,5 @@
 import { AxiError } from "axi-sdk-js";
-import { MAIL_FOLDER_SCOPE } from "./mail-authorization.js";
+import { MAIL_FOLDER_SCOPE, validateMailbox } from "./mail-authorization.js";
 import { mailText } from "./mail-output.js";
 import { resolveSessionOperation, type GraphSession } from "./graph-session.js";
 import { listTotals } from "./list-totals.js";
@@ -17,7 +17,7 @@ const FIELDS = [...STRING_FIELDS, ...BOOLEAN_FIELDS, "categories"];
 
 export async function readMailMessages(session: GraphSession, flags: Record<string, string | boolean>, profile: AnyProfile, help: string): Promise<Record<string, unknown>> {
   const mailbox = String(flags.mailbox);
-  if (mailbox !== "me" && !/^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Za-z0-9.!_+%-]+@[A-Za-z0-9.-]+)$/i.test(mailbox)) throw new AxiError("--mailbox must be a user UUID, UPN or me", "VALIDATION_ERROR", [help]);
+  validateMailbox(mailbox, help);
   if (["search", "filter", "conversation"].filter(key => flags[key] !== undefined).length > 1) throw new AxiError("--search, --filter and --conversation are mutually exclusive", "VALIDATION_ERROR", [help]);
   for (const key of ["search", "filter", "conversation", "folder"]) {
     if (flags[key] !== undefined && !String(flags[key]).trim()) throw new AxiError(`--${key} cannot be empty`, "VALIDATION_ERROR", [help]);

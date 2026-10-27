@@ -10,6 +10,20 @@ from inventory import CUTOFF_REASON, ROOT, build, make_row, scoped_slice, valida
 
 
 class InventoryTests(unittest.TestCase):
+    def test_mail_rule_writes_own_only_m8_routes(self):
+        for root in ("/me", "/users/{user-id}"):
+            for method, suffix, command, source in (
+                ("POST", "", "create", "mailfolder-post-messagerules"),
+                ("PATCH", "/{messageRule-id}", "update", "messagerule-update"),
+                ("DELETE", "/{messageRule-id}", "delete", "messagerule-delete"),
+            ):
+                path = root + "/mailFolders/{mailFolder-id}/messageRules" + suffix
+                row = make_row("v1.0", path, method, {"operationId": "fixture"}, {f"{method}:{path}": f"mail rule {command}"})
+                self.assertEqual((row["disposition"], row["owningSlice"]), ("named-command", "MAIL-08"))
+                self.assertEqual(row["permissions"]["sources"], [f"https://learn.microsoft.com/en-us/graph/api/{source}?view=graph-rest-1.0"])
+                self.assertEqual(make_row("beta", path, method, {"operationId": "fixture"})["disposition"], "intentionally-blocked")
+            self.assertIsNone(scoped_slice(root + "/mailFolders/{mailFolder-id}/childFolders/{mailFolder-id1}/messageRules", "POST"))
+
     def test_mail_folder_routes_admit_reviewed_reads_and_gated_writes(self):
         for root in ("/me", "/users/{user-id}"):
             for suffix in ("", "/{mailFolder-id}"):
@@ -458,7 +472,7 @@ components:
             from inventory import shipped_operations
             first = alternate_operations(shipped_operations())
             self.assertEqual(first, alternate_operations(shipped_operations()))
-            self.assertEqual(len(first), 40)
+            self.assertEqual(len(first), 43)
 
     def test_discovery_cannot_claim_raw_coverage(self):
         inventory = json.loads((ROOT / "inventory/operations.json").read_text())

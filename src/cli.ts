@@ -16,6 +16,7 @@ import { showMailMessage } from "./mail-message-show.js";
 import { readMailMetadata } from "./mail-metadata.js";
 import { writeMailMessages } from "./mail-message-writes.js";
 import { writeMailFolders } from "./mail-folder-writes.js";
+import { writeMailRules } from "./mail-rule-writes.js";
 import { KqlValidationError } from "./kql.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
@@ -194,12 +195,14 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     }
     if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
     const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
-    if (["mail folder create", "mail folder delete", "mail category create", "mail message tag", "mail message flag", "mail message mark", "mail message move", "mail message copy", "mail message trash"].includes(leaf.path)) {
+    if (["mail rule create", "mail rule update", "mail rule delete", "mail folder create", "mail folder delete", "mail category create", "mail message tag", "mail message flag", "mail message mark", "mail message move", "mail message copy", "mail message trash"].includes(leaf.path)) {
       const coordinator = createMutationCoordinator({ profile: selected.profile, delegated, application,
         transport: overrides.mutationTransport ?? mutationFetchTransport, journalPath: overrides.journalPath });
       const result = leaf.path.startsWith("mail message ")
         ? await writeMailMessages({ session, coordinator, profile: selected.profile, flags, action: leaf.path.split(" ")[2]!, help: leafHelp(leaf) })
-        : await writeMailFolders({ session, coordinator, profile: selected.profile, flags, command: leaf.path, help: leafHelp(leaf) });
+        : leaf.path.startsWith("mail rule ")
+          ? await writeMailRules({ session, coordinator, profile: selected.profile, flags, command: leaf.path, help: leafHelp(leaf) })
+          : await writeMailFolders({ session, coordinator, profile: selected.profile, flags, command: leaf.path, help: leafHelp(leaf) });
       if (result.complete === false) process.exitCode = 1;
       return result;
     }

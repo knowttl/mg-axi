@@ -2827,6 +2827,21 @@ LEAVES.push({ path: "mail category create", description: "Create a master catego
   ...mailFolderWrite, name: { value: "display-name", required: true, description: "Unique category name; nonempty trimmed text without controls or commas; confirm repeats this name" },
   color: { value: "none|preset0..preset24", required: true, description: "Outlook category color; an existing name with the same color is a no-op" },
 }, examples: ["mg-axi mail category create --mailbox me --name Reviewed --color preset4 --profile soc", "mg-axi mail category create --mailbox me --name Reviewed --color preset4 --execute --confirm Reviewed --profile soc"] });
+const mailRuleWrite: Record<string, Flag> = {
+  ...mailFolderWrite,
+  confirm: { value: "display-name|identical-id-list", description: "Required with --execute: repeat the file displayName for create, or every --ids target in identical order" },
+};
+const ruleFile: Flag = { value: "path", required: true, description: "UTF-8 JSON rule file, at most 64 KiB; reviewed fields only; forwarding, redirect and permanentDelete forbidden. Create requires displayName, sequence, isEnabled, conditions and actions; update accepts partial fields and refuses existing prohibited actions" };
+const ruleIds: Flag = { value: "comma-separated-rule-ids", required: true, description: "1 to 20 distinct inbox rule IDs; sequential execution stops on failure or uncertainty; read-only rules refused" };
+LEAVES.push({ path: "mail rule create", description: "Create an inbox rule through gated writes; delegated MailboxSettings.Read plus MailboxSettings.ReadWrite or scoped Exchange Application MailboxSettings.ReadWrite", operation: "POST:/users/{user-id}/mailFolders/{mailFolder-id}/messageRules", flags: {
+  ...mailRuleWrite, file: ruleFile,
+}, examples: ["mg-axi mail rule create --mailbox me --file rule.json --profile soc", "mg-axi mail rule create --mailbox me --file rule.json --execute --confirm Reviewed --profile soc"] });
+LEAVES.push({ path: "mail rule update", description: "Update inbox rules through gated writes; delegated MailboxSettings.Read plus MailboxSettings.ReadWrite or scoped Exchange Application MailboxSettings.ReadWrite", operation: "PATCH:/users/{user-id}/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}", flags: {
+  ...mailRuleWrite, file: ruleFile, ids: ruleIds,
+}, examples: ["mg-axi mail rule update --mailbox me --ids <rule-id> --file rule.json --profile soc", "mg-axi mail rule update --mailbox me --ids <id1>,<id2> --file rule.json --execute --confirm <id1>,<id2> --profile soc"] });
+LEAVES.push({ path: "mail rule delete", description: "Delete inbox rules through gated writes; delegated MailboxSettings.Read plus MailboxSettings.ReadWrite or scoped Exchange Application MailboxSettings.ReadWrite", operation: "DELETE:/users/{user-id}/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}", flags: {
+  ...mailRuleWrite, ids: ruleIds,
+}, examples: ["mg-axi mail rule delete --mailbox me --ids <rule-id> --profile soc", "mg-axi mail rule delete --mailbox me --ids <id1>,<id2> --execute --confirm <id1>,<id2> --profile soc"] });
 const mailMessageWrite: Record<string, Flag> = {
   ...common,
   mailbox: { value: "user-id|upn|me", required: true, description: "Mailbox to change; delegated own mailbox only; me is delegated only" },

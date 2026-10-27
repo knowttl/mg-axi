@@ -126,6 +126,9 @@ const WRITE_LABELS: Record<string, string> = {
   "mail folder create": "mail folder creation",
   "mail folder delete": "empty custom mail folder deletion",
   "mail category create": "mail master category creation",
+  "mail rule create": "inbox rule creation",
+  "mail rule update": "inbox rule update",
+  "mail rule delete": "inbox rule deletion",
 };
 
 function skillReadAreas(): string[] {
@@ -186,6 +189,7 @@ export function skillDocument(): string {
     "Entra SOC and Defender XDR hunting reads through token-efficient TOON output.",
     "Mail reads require explicit mail in enabledPacks; Entra stays the default. Every mail command requires --mailbox <user-id|upn|me>; me is delegated only and delegated access covers the signed-in user's own mailbox only.",
     "Mail folder create, folder delete and category create require the mail pack, allowWrites and the exact mail.folder.create, mail.folder.delete or mail.category.create operation in writes.operations.",
+    "Mail rule create, update and delete require the mail pack, allowWrites and the exact mail.rule.create, mail.rule.update or mail.rule.delete operation in writes.operations. All operate on inbox only, preview by default, journal intent before a fresh safety read and send once without retries. Delegated safety reads use MailboxSettings.Read and writes use MailboxSettings.ReadWrite; application access uses scoped Exchange Application MailboxSettings.ReadWrite with no MailboxSettings.* application grant in Entra. Create and update take --file rule.json (UTF-8 JSON, regular file, at most 64 KiB). Reviewed writable fields are displayName, sequence, isEnabled, conditions, exceptions and actions; create requires all except exceptions, while update accepts partial fields. Unknown fields, forwarding, redirect and permanentDelete actions are refused. Updates refuse existing active prohibited actions; read-only rules cannot be updated or deleted. Safe actions include assignCategories, copyToFolder, moveToFolder, delete (moves messages to Deleted Items), markAsRead, markImportance and stopProcessingRules. Confirm create with the file displayName; confirm update/delete with every --ids target in identical order (maximum 20 distinct IDs). Batches stop at the first failed or unknown outcome. Previews truncate at 500 characters unless --full; error bodies and unreviewed response fields are suppressed. A fresh read does not make rule changes atomic with other mailbox clients.",
     "Folder writes need delegated Mail.ReadBasic for preview/fresh reads and Mail.ReadWrite for execution; category creation needs MailboxSettings.Read and MailboxSettings.ReadWrite respectively.",
     "Application mode uses the corresponding scoped Exchange Application Mail.ReadWrite or Application MailboxSettings.ReadWrite role, with no Mail.* or MailboxSettings.* application grants in Entra.",
     "Creation takes --name and --confirm repeating that exact name with --execute; folder creation makes a visible folder at the mailbox root.",

@@ -1,6 +1,6 @@
 # mg-axi
 
-Microsoft Graph CLI for agents and the humans running them, with reviewed Entra and Defender XDR hunting reads, compact output and fourteen explicitly gated writes.
+Microsoft Graph CLI for agents and the humans running them, with reviewed Entra and Defender XDR hunting reads, compact output and seventeen explicitly gated writes.
 
 [![npm](https://img.shields.io/npm/v/@knowttl/mg-axi)](https://www.npmjs.com/package/@knowttl/mg-axi)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -20,7 +20,7 @@ $ npx -y @knowttl/mg-axi@0.1.10 --version
 Working directly with Graph REST requires agents to manage route selection, permissions, paging and response size.
 mg-axi exposes reviewed commands with bounded lists, TOON output and contextual next steps, without requiring an MCP server.
 It targets workforce Entra tenants in the commercial cloud; sovereign clouds, personal accounts and general Microsoft 365 file access are outside its supported surface.
-The opt-in mail pack supports folder list/show, metadata-only message list, search, filter and conversation reads, message show with bodies and internet headers, and attachment metadata list, mailbox settings show, inbox rule list/show and master category list, plus gated folder create, folder delete, category create and message tag, flag, mark, move, copy and trash writes; see [the generated skill](skills/mg-axi/SKILL.md) for mailbox authorization and bounds.
+The opt-in mail pack supports folder list/show, metadata-only message list, search, filter and conversation reads, message show with bodies and internet headers, and attachment metadata list, mailbox settings show, inbox rule list/show and master category list, plus gated folder create, folder delete, category create, rule create, rule update, rule delete and message tag, flag, mark, move, copy and trash writes; see [the generated skill](skills/mg-axi/SKILL.md) for mailbox authorization and bounds.
 
 ## Features
 
@@ -166,7 +166,7 @@ Group and leaf `--help` return exit code 0 without signing in.
 | Tenant configuration | Domains and DNS records, subscriptions, certificate authentication, synchronization, terms of use, custom security attributes and group lifecycle policies |
 | Identity and partner configuration | Identity providers, federation configurations, risk-prevention providers, data policy operations, contracts, delegated administration, multitenant organization and tenant information |
 | Reviewed raw reads | `api get <path>` for allowlisted v1.0 routes |
-| Named writes | Group member add, account enable/disable, session revocation, Conditional Access policy update, risky-user dismissal, mail folder create, folder delete, category create, and mail message tag, flag, mark, move, copy and trash |
+| Named writes | Group member add, account enable/disable, session revocation, Conditional Access policy update, risky-user dismissal, mail folder create, folder delete, category create, rule create, rule update, rule delete, and mail message tag, flag, mark, move, copy and trash |
 
 Delegated read commands default to the scope for their operation, which may differ from the user-read scope in the quick start.
 Sign in explicitly with the appropriate scopes before switching areas.
@@ -228,7 +228,7 @@ Denied reads return structured errors, not empty success results.
 
 ## Safety and permissions
 
-Read-only by default: only the fourteen named writes below can be enabled.
+Read-only by default: only the seventeen named writes below can be enabled.
 **Writes require manual profile opt-in, an operation allowlist, `--execute` and exact target confirmation.**
 Without `--execute`, a named write previews the change and journals nothing, but preview still requires the write-enabled profile and prerequisite read access.
 `MG_AXI_READ_ONLY=1` overrides profile opt-in.
@@ -256,6 +256,9 @@ The operation names are exact and scoped to the configured tenant:
 | `mail folder create` | `mail.folder.create` | `--name` |
 | `mail folder delete` | `mail.folder.delete` | `--ids` in identical order |
 | `mail category create` | `mail.category.create` | `--name` |
+| `mail rule create` | `mail.rule.create` | file `displayName` |
+| `mail rule update` | `mail.rule.update` | `--ids` in identical order |
+| `mail rule delete` | `mail.rule.delete` | `--ids` in identical order |
 | `mail message tag` | `mail.message.tag` | `--ids` in identical order |
 | `mail message flag` | `mail.message.flag` | `--ids` in identical order |
 | `mail message mark` | `mail.message.mark` | `--ids` in identical order |
@@ -285,6 +288,7 @@ Review the preview and operation-specific permissions first:
 | Risk dismissal | `IdentityRiskyUser.ReadWrite.All` plus `IdentityRiskyUser.Read.All`; delegated callers need Security Administrator, and risky-user access requires P2. Dismissal is not remediation: it resets no credential and revokes no session. |
 | Folder create and delete | Delegated preview and fresh reads request `Mail.ReadBasic`; execution requests `Mail.ReadWrite`. Application mode uses scoped Exchange Application `Mail.ReadWrite` with no `Mail.*` application grant in Entra. Creation makes a visible folder at the mailbox root from `--name`; deletion takes 1 to 20 distinct `--ids` for empty custom folders only and refuses well-known folders. See [the generated skill](skills/mg-axi/SKILL.md) for confirm, empty-folder checks and stop semantics. |
 | Category create | Delegated preview and fresh reads request `MailboxSettings.Read`; creation requests `MailboxSettings.ReadWrite`. Application mode uses scoped Exchange Application `MailboxSettings.ReadWrite` with no `MailboxSettings.*` application grant in Entra. Creation takes `--name` and `--color`; an existing name with the same color is a no-op and a conflicting color is refused. See [the generated skill](skills/mg-axi/SKILL.md) for bounds and stop semantics. |
+| Rule create, update and delete | Delegated preview and fresh reads request `MailboxSettings.Read`; execution requests `MailboxSettings.ReadWrite`. Application mode uses scoped Exchange Application `MailboxSettings.ReadWrite` with no `MailboxSettings.*` application grant in Entra. Create and update take `--file` rule JSON (UTF-8 regular file, at most 64 KiB); forwarding, redirect and permanentDelete actions are refused and read-only rules cannot be changed. `--ids` takes 1 to 20 distinct IDs and `--confirm` repeats the file `displayName` for create or every ID in identical order for update and delete. Inbox only. See [the generated skill](skills/mg-axi/SKILL.md) for reviewed fields and stop semantics. |
 | Message tag, flag, mark, move, copy and trash | Delegated preview and fresh reads request `Mail.Read`; execution requests `Mail.ReadWrite`. Application mode uses Exchange Application `Mail.ReadWrite` scoped through the owner-chosen mail-enabled group, with no `Mail.*` application grant in Entra. `--ids` takes 1 to 20 distinct IDs and `--confirm` repeats every ID in identical order. Move and copy take `--destination` in the same mailbox; trash always moves to Deleted Items and never uses DELETE or permanentDelete. Results carry only the original id and the returned newId; a missing newId stops the batch as unknown. See [the generated skill](skills/mg-axi/SKILL.md) for per-command flags and multi-target stop semantics. |
 
 Conditional Access enforcement changes require a readable lockout analysis.

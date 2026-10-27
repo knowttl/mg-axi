@@ -1,5 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 import { MAIL_FOLDER_SCOPE } from "./mail-authorization.js";
+import { mailText } from "./mail-output.js";
 import { resolveSessionOperation, type GraphSession } from "./graph-session.js";
 import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
@@ -38,12 +39,8 @@ export async function readMailMessages(session: GraphSession, flags: Record<stri
   else query.$orderby = "receivedDateTime desc";
   const result = await session.collect({ profile, operation, params, query, scopes: profile.mode === "delegated" ? [MAIL_FOLDER_SCOPE] : undefined,
     limit, budget: { maxRequests: 1 }, cursor: flags.cursor === undefined ? undefined : String(flags.cursor) });
-  let truncated = false;
-  const text = (value: string) => {
-    if (flags.full === true || value.length <= 500) return value;
-    truncated = true;
-    return `${value.slice(0, 500)}... (truncated, ${value.length} chars total)`;
-  };
+  const output = mailText(flags.full === true);
+  const text = output.text;
   const messages = result.value.map(raw => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new AxiError("Graph returned a malformed message", "GRAPH_ERROR");
     const source = raw as Record<string, unknown>;
@@ -59,7 +56,7 @@ export async function readMailMessages(session: GraphSession, flags: Record<stri
   return { messages, ...listTotals(messages.length, result.total, "messages", result.complete), complete: result.complete,
     ...(!result.complete ? { reason: result.reason, ...(result.cursor ? { cursor: result.cursor } : {}) } : {}),
     help: [
-      ...(truncated ? ["Repeat the same command with --full for complete text; redaction remains"] : []),
+      ...output.help(),
       ...(!messages.length && result.complete ? ["0 messages matched in the selected mailbox or folder"] : []),
       ...(result.cursor ? ["Resume with the same flags plus --cursor <cursor-from-output>; cursors contain query text and must be treated as sensitive"] : []),
     ] };

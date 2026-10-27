@@ -27,6 +27,7 @@ export const SAFE_CREDENTIAL_FIELDS: readonly string[] = ["keyId", "displayName"
 export const GRAPH_HOST = "graph.microsoft.com";
 const READ_SCOPES = new Set([
   "Mail.ReadBasic",
+  "Mail.Read",
   "ThreatHunting.Read.All",
   "Agreement.Read.All",
   "AgreementAcceptance.Read",
@@ -157,6 +158,7 @@ export interface ExecuteArgs {
   // Scalar reads ($count-style text/plain numeric bodies) declare it
   // explicitly; JSON stays the default and anything else is malformed.
   scalar?: boolean;
+  mailBodyType?: "text" | "html";
   signal?: AbortSignal;
   clock?: Clock;
 }
@@ -784,7 +786,8 @@ export class GraphSession {
     }
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
-    if (isMailOperation(operation)) checkMailScopes(profile, args.scopes);
+    if (isMailOperation(operation)) checkMailScopes(profile, args.scopes, operation);
+    if (args.mailBodyType !== undefined && (operation.owningSlice !== "MAIL-03" || !["text", "html"].includes(args.mailBodyType))) throw new AxiError("Body format is only supported for message show", "VALIDATION_ERROR");
     if (operation.id === HUNTING_OPERATION) {
       if (!args.hunting || args.query || args.params || args.scalar || args.consistencyLevel) {
         throw new AxiError("Hunting requires a validated bounded KQL request", "VALIDATION_ERROR", ["mg-axi security hunting query --help"]);
@@ -837,7 +840,7 @@ export class GraphSession {
       if (error instanceof DeadlineExceeded) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
       throw error;
     }
-    return this.send(operation, params, url, token, { signal, clock, deadline, consistencyLevel: args.consistencyLevel, scalar: args.scalar });
+    return this.send(operation, params, url, token, { signal, clock, deadline, consistencyLevel: args.consistencyLevel, scalar: args.scalar, mailBodyType: args.mailBodyType });
   }
 
   // CORE-02: follow @odata.nextLink continuations through the same
@@ -860,7 +863,7 @@ export class GraphSession {
     }
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
-    if (isMailOperation(operation)) checkMailScopes(profile, args.scopes);
+    if (isMailOperation(operation)) checkMailScopes(profile, args.scopes, operation);
     checkLimit(args.limit);
     const budget = checkBudget(args.budget);
     if (args.cursor !== undefined && (typeof args.cursor !== "string" || !args.cursor)) {
@@ -1096,7 +1099,7 @@ export class GraphSession {
     return undefined;
   }
 
-  private async send(operation: SessionOperation, params: Record<string, string>, url: string, token: string, opts: { signal?: AbortSignal; clock: Clock; deadline: number; consistencyLevel?: "eventual"; scalar?: boolean }): Promise<unknown> {
+  private async send(operation: SessionOperation, params: Record<string, string>, url: string, token: string, opts: { signal?: AbortSignal; clock: Clock; deadline: number; consistencyLevel?: "eventual"; scalar?: boolean; mailBodyType?: "text" | "html" }): Promise<unknown> {
     const clock = opts.clock;
     const signal = opts.signal;
     const deadline = opts.deadline;
@@ -1110,6 +1113,7 @@ export class GraphSession {
       Accept: "application/json",
       "Accept-Language": "en-US",
       "client-request-id": randomUUID(),
+      ...(opts.mailBodyType ? { Prefer: `outlook.body-content-type="${opts.mailBodyType}"` } : {}),
       ...(opts.consistencyLevel === "eventual" ? { ConsistencyLevel: "eventual" } : {}),
       // The branding GET documents Accept-Language as required; 0 selects
       // the default branding object. Locale variants come from the

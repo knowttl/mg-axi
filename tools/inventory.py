@@ -210,9 +210,14 @@ MAIL_MESSAGE_READS = {
     "/me/mailFolders/{mailFolder-id}/messages",
 }
 
+MAIL_MESSAGE_SHOW_READS = {
+    "/users/{user-id}/messages/{message-id}",
+    "/me/messages/{message-id}",
+}
+
 
 def exclusion_reason(path, method="GET"):
-    if (method == "GET" and path in MAIL_FOLDER_READS | MAIL_MESSAGE_READS) or path == "/security/microsoft.graph.security.runHuntingQuery":
+    if (method == "GET" and path in MAIL_FOLDER_READS | MAIL_MESSAGE_READS | MAIL_MESSAGE_SHOW_READS) or path == "/security/microsoft.graph.security.runHuntingQuery":
         return None
     segments = {part.removeprefix("microsoft.graph.").split("(")[0] for part in path.strip("/").split("/")}
     for domain, navigations in EXCLUDED_NAV.items():
@@ -227,6 +232,8 @@ def scoped_slice(path, method="GET"):
         return "MAIL-01"
     if method == "GET" and path in MAIL_MESSAGE_READS:
         return "MAIL-02"
+    if method == "GET" and path in MAIL_MESSAGE_SHOW_READS:
+        return "MAIL-03"
     if path == "/security/microsoft.graph.security.runHuntingQuery":
         return "SECURITY-01"
     parts = path.strip("/").split("/")
@@ -349,6 +356,7 @@ def reviewed_raw_routes():
 ALTERNATE_TABLES = (
     ("MAIL_FOLDER_ALTERNATES", "src/mail-folders.ts"),
     ("MAIL_MESSAGE_ALTERNATES", "src/mail-messages.ts"),
+    ("MAIL_MESSAGE_SHOW_ALTERNATES", "src/mail-message-show.ts"),
     ("TRANSITIVE_OPERATION", "src/entra-groups.ts"),
     ("NAV_CASTS", "src/entra-contacts.ts"),
     ("MEMBERSHIP_TRANSITIVE", "src/entra-contacts.ts"),
@@ -412,6 +420,8 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
         read_source = "mailfolder-get" if path.endswith("/{mailFolder-id}") else "user-list-mailfolders"
     if method == "GET" and path in MAIL_MESSAGE_READS:
         read_source = "user-list-messages"
+    if method == "GET" and path in MAIL_MESSAGE_SHOW_READS:
+        read_source = "message-get"
     mutates = method not in {"GET", "HEAD", "OPTIONS"} and read_source is None
     lower = path.lower()
     secret = any(word in lower for word in ("addpassword", "passwordprofile", "getpassword", "resetpassword", "generatepassword", "uploadsecret", "getsecret", "/secrets", "devicelocalcredentials/", "bitlocker/recoverykeys/")) and not lower.endswith("/$count")

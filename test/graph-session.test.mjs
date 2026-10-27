@@ -303,7 +303,7 @@ test("mutating a resolved operation cannot change the authoritative inventory", 
 
 for (const [name, operation, params] of [
   ["intentionally-blocked route", blockedDeviceCredentials, { "deviceLocalCredentialInfo-id": "fixture-id" }],
-  ["excluded route", discoveryOperation("v1.0", "GET", "/me/messages/{message-id}"), { "message-id": "fixture-message" }],
+  ["excluded route", discoveryOperation("v1.0", "GET", "/me/messages/{message-id}/$value"), { "message-id": "fixture-message" }],
 ]) test(`${name} is denied with no credential and no HTTP call`, async () => {
   const f = fixture(json(200, {}));
   await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, params, scopes }), { code: "VALIDATION_ERROR" });
@@ -422,7 +422,7 @@ for (const method of ["execute", "collect"]) {
     "https://graph.microsoft.com/Policy.ReadWrite.ConditionalAccess",
     "https://graph.microsoft.com/Mail.Write.All",
     "https://graph.microsoft.com/User.EnableDisableAccount.All",
-    "https://graph.microsoft.com/Mail.Read",
+    "https://graph.microsoft.com/Mail.Read.Shared",
     "https://example.invalid/User.Read.All",
     "User.Read.All",
   ]) test(`${method} rejects unsupported read scope ${scope} before credentials`, async () => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.16](https://github.com/knowttl/mg-axi/compare/v0.1.15...v0.1.16) (2026-10-27)
+
+
+### Features
+
+* **mail:** add guarded attachment save and message export downloads ([#119](https://github.com/knowttl/mg-axi/issues/119)) ([df17597](https://github.com/knowttl/mg-axi/commit/df17597917a39b3eb8b04f4cc38381e693516ea2))
+
 ## [0.1.15](https://github.com/knowttl/mg-axi/compare/v0.1.14...v0.1.15) (2026-10-27)
 
 

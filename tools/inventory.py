@@ -215,9 +215,21 @@ MAIL_MESSAGE_SHOW_READS = {
     "/me/messages/{message-id}",
 }
 
+MAIL_METADATA_READS = {
+    f"{root}{suffix}"
+    for root in ("/users/{user-id}", "/me")
+    for suffix in (
+        "/messages/{message-id}/attachments",
+        "/mailboxSettings",
+        "/mailFolders/{mailFolder-id}/messageRules",
+        "/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+        "/outlook/masterCategories",
+    )
+}
+
 
 def exclusion_reason(path, method="GET"):
-    if (method == "GET" and path in MAIL_FOLDER_READS | MAIL_MESSAGE_READS | MAIL_MESSAGE_SHOW_READS) or path == "/security/microsoft.graph.security.runHuntingQuery":
+    if (method == "GET" and path in MAIL_FOLDER_READS | MAIL_MESSAGE_READS | MAIL_MESSAGE_SHOW_READS | MAIL_METADATA_READS) or path == "/security/microsoft.graph.security.runHuntingQuery":
         return None
     segments = {part.removeprefix("microsoft.graph.").split("(")[0] for part in path.strip("/").split("/")}
     for domain, navigations in EXCLUDED_NAV.items():
@@ -234,6 +246,8 @@ def scoped_slice(path, method="GET"):
         return "MAIL-02"
     if method == "GET" and path in MAIL_MESSAGE_SHOW_READS:
         return "MAIL-03"
+    if method == "GET" and path in MAIL_METADATA_READS:
+        return "MAIL-04"
     if path == "/security/microsoft.graph.security.runHuntingQuery":
         return "SECURITY-01"
     parts = path.strip("/").split("/")
@@ -357,6 +371,7 @@ ALTERNATE_TABLES = (
     ("MAIL_FOLDER_ALTERNATES", "src/mail-folders.ts"),
     ("MAIL_MESSAGE_ALTERNATES", "src/mail-messages.ts"),
     ("MAIL_MESSAGE_SHOW_ALTERNATES", "src/mail-message-show.ts"),
+    ("MAIL_METADATA_ALTERNATES", "src/mail-metadata.ts"),
     ("TRANSITIVE_OPERATION", "src/entra-groups.ts"),
     ("NAV_CASTS", "src/entra-contacts.ts"),
     ("MEMBERSHIP_TRANSITIVE", "src/entra-contacts.ts"),
@@ -422,6 +437,15 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
         read_source = "user-list-messages"
     if method == "GET" and path in MAIL_MESSAGE_SHOW_READS:
         read_source = "message-get"
+    if method == "GET" and path in MAIL_METADATA_READS:
+        if path.endswith("/attachments"):
+            read_source = "message-list-attachments"
+        elif path.endswith("/mailboxSettings"):
+            read_source = "user-get-mailboxsettings"
+        elif path.endswith("/masterCategories"):
+            read_source = "outlookuser-list-mastercategories"
+        else:
+            read_source = "messagerule-get" if path.endswith("/{messageRule-id}") else "mailfolder-list-messagerules"
     mutates = method not in {"GET", "HEAD", "OPTIONS"} and read_source is None
     lower = path.lower()
     secret = any(word in lower for word in ("addpassword", "passwordprofile", "getpassword", "resetpassword", "generatepassword", "uploadsecret", "getsecret", "/secrets", "devicelocalcredentials/", "bitlocker/recoverykeys/")) and not lower.endswith("/$count")

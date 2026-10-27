@@ -28,6 +28,7 @@ export const GRAPH_HOST = "graph.microsoft.com";
 const READ_SCOPES = new Set([
   "Mail.ReadBasic",
   "Mail.Read",
+  "MailboxSettings.Read",
   "ThreatHunting.Read.All",
   "Agreement.Read.All",
   "AgreementAcceptance.Read",

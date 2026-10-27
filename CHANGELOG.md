@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.13](https://github.com/knowttl/mg-axi/compare/v0.1.12...v0.1.13) (2026-10-27)
+
+
+### Features
+
+* validate hunting KQL syntax before read-only policy checks ([#107](https://github.com/knowttl/mg-axi/issues/107)) ([820e70a](https://github.com/knowttl/mg-axi/commit/820e70ab1c87883556c16ff31eb7d05b94761947))
+
 ## [0.1.12](https://github.com/knowttl/mg-axi/compare/v0.1.11...v0.1.12) (2026-10-26)
 
 

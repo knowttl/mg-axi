@@ -10,7 +10,7 @@ from inventory import CUTOFF_REASON, ROOT, build, make_row, scoped_slice, valida
 
 
 class InventoryTests(unittest.TestCase):
-    def test_mail_folder_routes_admit_only_reviewed_reads(self):
+    def test_mail_folder_routes_admit_reviewed_reads_and_gated_writes(self):
         for root in ("/me", "/users/{user-id}"):
             for suffix in ("", "/{mailFolder-id}"):
                 path = f"{root}/mailFolders{suffix}"
@@ -19,9 +19,25 @@ class InventoryTests(unittest.TestCase):
                     self.assertEqual((row["disposition"], row["owningSlice"]), ("named-command", "MAIL-01"))
                     for method in ("POST", "PATCH", "DELETE"):
                         write = make_row("v1.0", path, method, {"operationId": "fixture"})
-                        self.assertEqual((write["disposition"], write["owningSlice"]), ("excluded", None))
+                        expected = ("scheduled", "MAIL-07") if (method == "POST" and suffix == "") or (method == "DELETE" and suffix != "") else ("excluded", None)
+                        self.assertEqual((write["disposition"], write["owningSlice"]), expected)
         for path in ("/me/messages/{message-id}/$value", "/me/mailFolders/{mailFolder-id}/childFolders"):
             self.assertIsNone(scoped_slice(path))
+
+    def test_mail_folder_and_category_writes_own_only_m7_routes(self):
+        for root in ("/me", "/users/{user-id}"):
+            for method, suffix, command, source in (
+                ("POST", "/mailFolders", "mail folder create", "user-post-mailfolders"),
+                ("DELETE", "/mailFolders/{mailFolder-id}", "mail folder delete", "mailfolder-delete"),
+                ("POST", "/outlook/masterCategories", "mail category create", "outlookuser-post-mastercategories"),
+            ):
+                path = root + suffix
+                row = make_row("v1.0", path, method, {"operationId": "fixture"}, {f"{method}:{path}": command})
+                self.assertEqual((row["disposition"], row["owningSlice"]), ("named-command", "MAIL-07"))
+                self.assertEqual(row["permissions"]["sources"], [f"https://learn.microsoft.com/en-us/graph/api/{source}?view=graph-rest-1.0"])
+                self.assertEqual(make_row("beta", path, method, {"operationId": "fixture"})["disposition"], "intentionally-blocked")
+            for suffix in ("/mailFolders/{mailFolder-id}/permanentDelete", "/mailFolders/{mailFolder-id}/childFolders", "/outlook/masterCategories/{outlookCategory-id}"):
+                self.assertIsNone(scoped_slice(root + suffix, "POST"))
 
     def test_message_collections_admit_only_reviewed_reads(self):
         for root in ("/me", "/users/{user-id}"):
@@ -442,7 +458,7 @@ components:
             from inventory import shipped_operations
             first = alternate_operations(shipped_operations())
             self.assertEqual(first, alternate_operations(shipped_operations()))
-            self.assertEqual(len(first), 37)
+            self.assertEqual(len(first), 40)
 
     def test_discovery_cannot_claim_raw_coverage(self):
         inventory = json.loads((ROOT / "inventory/operations.json").read_text())

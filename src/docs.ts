@@ -282,25 +282,30 @@ type InventoryRow = {
   method: string;
 };
 
-// Initial write families resolve to shipped when the catalogue carries a
+// Implemented write families resolve to shipped when the catalogue carries a
 // leaf for one of their v1.0 operations, and stay pending while every row
 // remains unimplemented. Family membership comes from the inventory
 // owningSlice and shipped status comes from the catalogue, so a merged
-// write slice flips its own row without touching this template. Blocked,
+// write slice flips its own row without touching this template. WRITE-01
+// through WRITE-05 cover the initial Entra writes; MAIL write slices cover
+// non-GET mail operations. Blocked,
 // deprecated, unavailable and deferred-out-of-v1 variants never count as pending.
 function initialWriteStatus(rows: InventoryRow[]): { shipped: string[]; pending: string[] } {
   const families = new Map<string, string[]>();
   for (const row of rows) {
     const operation = /^v1\.0:(.+)$/.exec(row.id)?.[1];
-    if (operation === undefined || row.owningSlice === null || !/^WRITE-0[1-9]$/.test(row.owningSlice)) continue;
+    if (operation === undefined || row.owningSlice === null) continue;
+    const isWriteFamily = /^WRITE-0[1-9]$/.test(row.owningSlice)
+      || (row.owningSlice.startsWith("MAIL-") && row.method !== "GET");
+    if (!isWriteFamily) continue;
     if (row.disposition === "intentionally-blocked" || row.disposition === "deprecated" || row.disposition === "unavailable" || row.disposition === "deferred") continue;
     families.set(row.owningSlice, [...(families.get(row.owningSlice) ?? []), operation]);
   }
   const shipped: string[] = [];
   const pending: string[] = [];
   for (const [slice, operations] of [...families.entries()].sort()) {
-    const leaf = LEAVES.find(candidate => candidate.operation !== undefined && operations.includes(candidate.operation));
-    if (leaf) shipped.push(`${slice} (\`mg-axi ${leaf.path}\`)`);
+    const leaves = LEAVES.filter(candidate => candidate.operation !== undefined && operations.includes(candidate.operation));
+    if (leaves.length > 0) shipped.push(`${slice} (${leaves.map(leaf => `\`mg-axi ${leaf.path}\``).join(", ")})`);
     else pending.push(`${slice} (${operations.map(operation => `\`${operation}\``).join(", ")})`);
   }
   return { shipped, pending };
@@ -335,8 +340,8 @@ function auditRecord(rows: InventoryRow[]): string[] {
 }
 
 // COMPLETE-01 audit record (2026-10-07):
-// the full agreed Entra capability audit including later writes. Five writes
-// ship as named, gated commands through the WRITE-00 mutation coordinator,
+// the full agreed Entra capability audit including later writes. Shipped writes
+// are named, gated commands through the WRITE-00 mutation coordinator,
 // WRITE-N carries explicit reviewed deferred/blocked/deprecated dispositions
 // rather than scheduled, and no agreed v1.0 operation, read or write, is
 // left merely scheduled. Beta stays scheduled by definition and was never
@@ -358,17 +363,18 @@ function completeAuditRecord(rows: InventoryRow[]): string[] {
   if (scheduled !== 0) throw new Error(`COMPLETE-01 audit blocked: ${scheduled} v1.0 rows remain scheduled`);
   if (writeNScheduled !== 0) throw new Error(`COMPLETE-01 audit blocked: ${writeNScheduled} WRITE-N rows remain scheduled`);
   const writeStatus = initialWriteStatus(rows);
-  const expectedWrites = ["WRITE-01", "WRITE-02", "WRITE-03", "WRITE-04", "WRITE-05"];
+  const expectedWrites = ["WRITE-01", "WRITE-02", "WRITE-03", "WRITE-04", "WRITE-05", "MAIL-05"];
   const missing = expectedWrites.filter(slice => !writeStatus.shipped.some(entry => entry.startsWith(`${slice} `)));
   if (writeStatus.pending.length > 0 || missing.length > 0) {
     throw new Error(`COMPLETE-01 audit blocked: pending writes: ${[...missing, ...writeStatus.pending].join(", ")}`);
   }
   if (declinedOut.length > 0) throw new Error(`COMPLETE-01 audit blocked: declined EXT-02c rows ship: ${declinedOut.map(row => row.id).join(", ")}`);
+  const shippedLeafCount = LEAVES.filter(leaf => leaf.operation !== undefined && leafEffect(leaf) === "write").length;
   return [
     "## COMPLETE-01 audit record",
     "",
     "COMPLETE-01 audit (2026-10-07): the full agreed Entra capability audit including later writes.",
-    "Five writes ship as named, gated commands through the WRITE-00 mutation coordinator; WRITE-N carries explicit",
+    `${shippedLeafCount} writes ship as named, gated commands through the WRITE-00 mutation coordinator; WRITE-N carries explicit`,
     "reviewed deferred/blocked/deprecated dispositions rather than scheduled; no agreed v1.0 operation, read or",
     "write, is left merely scheduled. Beta stays scheduled by definition and was never agreed for v1.",
     "The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS URLs) stay out.",

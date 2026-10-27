@@ -8,6 +8,9 @@ The [JSON Schema](../inventory/schema.json) defines the public discovery format.
 The discovery schema records every discovered operation, including explicit excluded rows.
 The [offline discovery tool](../tools/inventory.py) owns boundary classification and deterministic generation.
 Generated operation rows must be regenerated rather than edited manually.
+The SECURITY-01 hunting command parses KQL locally before its existing read-only allowlist and credential acquisition.
+This adds positioned validation diagnostics, with no change to operation dispositions or the accepted security policy.
+Graph remains responsible for semantic and permission checks; recognized hunting 400 errors expose only error class and line/column, tested with synthetic fixtures and unverified live.
 
 ## Boundary
 

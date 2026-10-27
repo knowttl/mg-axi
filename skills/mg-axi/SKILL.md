@@ -12,6 +12,7 @@ user-invocable: false
 Agent-ergonomic CLI for Microsoft Graph. Inspect Microsoft Graph capabilities, read-only by default.
 Entra SOC and Defender XDR hunting reads through token-efficient TOON output.
 `security hunting query --file <kql>` requires an explicit security pack in enabledPacks and admin-consented ThreatHunting.Read.All (delegated or application); existing Entra grants do not supply it.
+Hunting parses KQL locally before the read-only allowlist and credentials. VALIDATION_ERROR (exit 2) includes up to five positioned diagnostics without query excerpts or quoted literals. Parsing does not check table/column availability, types or permissions. Recognized Graph 400 errors expose only the error class and line/column; unknown shapes remain opaque. Server error fixtures are synthetic, unverified live.
 Hunting accepts one restricted table pipeline, never inline KQL, statements, control commands, subqueries or plugins. Default --timespan P1D (maximum 30 days), --limit 100 (maximum 10000); no server cursor exists. --full only removes 500-character text truncation, never redaction or bounds. See README for the accepted operators and functions.
 The generated [command table](#orientation) lists supported named writes through the gated mutation coordinator; raw API remains read-only and every other mutation is refused.
 See [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.

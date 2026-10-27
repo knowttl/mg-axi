@@ -2810,6 +2810,23 @@ const mailFolderRead: Record<string, Flag> = {
   fields: { value: "comma-separated-properties", description: "Reviewed folder properties: id, displayName, totalItemCount, unreadItemCount, parentFolderId, childFolderCount, isHidden" },
   full: { description: "Disable 500-character string truncation; redaction and bounds remain" },
 };
+const mailFolderWrite: Record<string, Flag> = {
+  ...common,
+  mailbox: { value: "user-id|upn|me", required: true, description: "Mailbox to change; delegated own mailbox only; me is delegated only; opt-in mail pack required" },
+  execute: { description: "Apply the change; default is a preview; requires allowWrites and the exact operation in writes.operations" },
+  confirm: { value: "exact-name|identical-id-list", description: "Required with --execute: repeat --name exactly, or every --ids target in identical order" },
+  full: { description: "Disable 500-character preview and returned-ID truncation; redaction remains" },
+};
+LEAVES.push({ path: "mail folder create", description: "Create a visible folder at the mailbox root through gated writes; delegated Mail.ReadBasic plus Mail.ReadWrite or scoped Exchange Application Mail.ReadWrite", operation: "POST:/users/{user-id}/mailFolders", flags: {
+  ...mailFolderWrite, name: { value: "display-name", required: true, description: "New root folder name; nonempty trimmed text without controls or commas; confirm repeats this name" },
+}, examples: ["mg-axi mail folder create --mailbox me --name Reviewed --profile soc", "mg-axi mail folder create --mailbox me --name Reviewed --execute --confirm Reviewed --profile soc"] });
+LEAVES.push({ path: "mail folder delete", description: "Delete empty custom folders only; protected well-known IDs must be readable; delegated Mail.ReadBasic plus Mail.ReadWrite or scoped Exchange Application Mail.ReadWrite", operation: "DELETE:/users/{user-id}/mailFolders/{mailFolder-id}", flags: {
+  ...mailFolderWrite, ids: { value: "comma-separated-folder-ids", required: true, description: "1 to 20 distinct folder IDs; refuses well-known folders, contained items and child folders; sequential execution stops on failure or unknown outcome" },
+}, examples: ["mg-axi mail folder delete --mailbox me --ids <folder-id> --profile soc", "mg-axi mail folder delete --mailbox me --ids <id1>,<id2> --execute --confirm <id1>,<id2> --profile soc"] });
+LEAVES.push({ path: "mail category create", description: "Create a master category through gated writes; delegated MailboxSettings.Read plus MailboxSettings.ReadWrite or scoped Exchange Application MailboxSettings.ReadWrite", operation: "POST:/users/{user-id}/outlook/masterCategories", flags: {
+  ...mailFolderWrite, name: { value: "display-name", required: true, description: "Unique category name; nonempty trimmed text without controls or commas; confirm repeats this name" },
+  color: { value: "none|preset0..preset24", required: true, description: "Outlook category color; an existing name with the same color is a no-op" },
+}, examples: ["mg-axi mail category create --mailbox me --name Reviewed --color preset4 --profile soc", "mg-axi mail category create --mailbox me --name Reviewed --color preset4 --execute --confirm Reviewed --profile soc"] });
 const mailMessageWrite: Record<string, Flag> = {
   ...common,
   mailbox: { value: "user-id|upn|me", required: true, description: "Mailbox to change; delegated own mailbox only; me is delegated only" },

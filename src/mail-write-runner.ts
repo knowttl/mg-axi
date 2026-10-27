@@ -6,7 +6,7 @@ import type { MutationCoordinator, MutationDefinition, MutationExecuteOptions, M
 export function mailWriteTargets(flags: Record<string, string | boolean>, help: string): string[] {
   const ids = String(flags.ids ?? "").split(",");
   if (ids.length > 20 || ids.some(id => !id || id.trim() !== id || /[\x00-\x20\x7f/\\?#%$]/.test(id) || id === "." || id === "..") || new Set(ids).size !== ids.length) {
-    throw new AxiError("--ids requires 1 to 20 distinct message IDs, comma-separated without whitespace or path syntax", "VALIDATION_ERROR", [help]);
+    throw new AxiError("--ids requires 1 to 20 distinct IDs, comma-separated without whitespace or path syntax", "VALIDATION_ERROR", [help]);
   }
   if (flags.execute === true && flags.confirm !== ids.join(",")) {
     throw new AxiError("--execute requires --confirm listing every ID in exactly the same order as --ids", flags.confirm === undefined ? "CONFIRM_REQUIRED" : "CONFIRM_MISMATCH", [help]);
@@ -38,7 +38,7 @@ export async function runMailWrites(args: {
       const missingId = args.includeNewId && result.kind === "success" && (typeof newId !== "string" || !newId.trim());
       results.push({ id, status: result.kind, ...("auditId" in result && result.auditId ? { auditId: result.auditId } : {}),
         ...(args.includeNewId && result.kind === "success" ? missingId
-          ? { status: "unknown", guidance: "Graph accepted the change but did not return a message ID; read back the destination before continuing and never replay this intent" }
+          ? { status: "unknown", guidance: "Graph accepted the change but did not return a resource ID; read back the destination before continuing and never replay this intent" }
           : { newId: redactGraphValue(newId) } : {}),
         ...(result.kind === "dry-run" ? { preview: { ...result.preview } } : {}),
         ...(result.kind === "unknown" ? { guidance: result.guidance } : {}),

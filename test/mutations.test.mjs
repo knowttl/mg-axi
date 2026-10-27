@@ -515,6 +515,9 @@ test("every catalogue leaf stays a read except the reviewed named writes", () =>
   reviewed.add("PATCH:/users/{user-id}/messages/{message-id}");
   reviewed.add("POST:/users/{user-id}/messages/{message-id}/move");
   reviewed.add("POST:/users/{user-id}/messages/{message-id}/copy");
+  reviewed.add("POST:/users/{user-id}/mailFolders");
+  reviewed.add("DELETE:/users/{user-id}/mailFolders/{mailFolder-id}");
+  reviewed.add("POST:/users/{user-id}/outlook/masterCategories");
   for (const operation of operations) {
     if (reviewed.has(operation)) continue;
     if (operation === "POST:/security/microsoft.graph.security.runHuntingQuery") {

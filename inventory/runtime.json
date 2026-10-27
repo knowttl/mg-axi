@@ -1,6 +1,22 @@
 {
   "operations": [
     {
+      "id": "v1.0:DELETE:/me/mailFolders/{mailFolder-id}",
+      "method": "DELETE",
+      "path": "/me/mailFolders/{mailFolder-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-07"
+    },
+    {
+      "id": "v1.0:DELETE:/users/{user-id}/mailFolders/{mailFolder-id}",
+      "method": "DELETE",
+      "path": "/users/{user-id}/mailFolders/{mailFolder-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-07"
+    },
+    {
       "id": "v1.0:GET:/agreementAcceptances",
       "method": "GET",
       "path": "/agreementAcceptances",
@@ -2521,6 +2537,14 @@
       "owningSlice": "WRITE-05"
     },
     {
+      "id": "v1.0:POST:/me/mailFolders",
+      "method": "POST",
+      "path": "/me/mailFolders",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-07"
+    },
+    {
       "id": "v1.0:POST:/me/messages/{message-id}/copy",
       "method": "POST",
       "path": "/me/messages/{message-id}/copy",
@@ -2537,12 +2561,28 @@
       "owningSlice": "MAIL-06"
     },
     {
+      "id": "v1.0:POST:/me/outlook/masterCategories",
+      "method": "POST",
+      "path": "/me/outlook/masterCategories",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-07"
+    },
+    {
       "id": "v1.0:POST:/security/microsoft.graph.security.runHuntingQuery",
       "method": "POST",
       "path": "/security/microsoft.graph.security.runHuntingQuery",
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "SECURITY-01"
+    },
+    {
+      "id": "v1.0:POST:/users/{user-id}/mailFolders",
+      "method": "POST",
+      "path": "/users/{user-id}/mailFolders",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-07"
     },
     {
       "id": "v1.0:POST:/users/{user-id}/messages/{message-id}/copy",
@@ -2559,6 +2599,14 @@
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-06"
+    },
+    {
+      "id": "v1.0:POST:/users/{user-id}/outlook/masterCategories",
+      "method": "POST",
+      "path": "/users/{user-id}/outlook/masterCategories",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-07"
     },
     {
       "id": "v1.0:POST:/users/{user-id}/revokeSignInSessions",

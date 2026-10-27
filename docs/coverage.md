@@ -13,38 +13,38 @@ scheduled work as complete.
 ## Counts
 
 - implemented read leaves: 273 (271 named Graph reads plus reviewed raw api get and doctor health check)
-- implemented write leaves: 11 (named gated mutations below)
+- implemented write leaves: 14 (named gated mutations below)
 - local leaves: 11 (home, profile, config, auth, login alias and setup views)
-- inventory named-command: 316
+- inventory named-command: 322
 - inventory reviewed-raw-read: 5
 - inventory scheduled: 3738
 - inventory deferred: 4429
-- inventory intentionally-blocked: 3077
+- inventory intentionally-blocked: 3083
 - inventory deprecated: 870
 - inventory unavailable: 14
-- inventory excluded: 35002
+- inventory excluded: 34990
 
 ## FULL-01 audit record
 
 FULL-01 audit (2026-10-07): every agreed v1.0 read has a named command or an
 explicit reviewed blocked/unavailable/deprecated/deferred disposition, and no
 v1.0 row is left scheduled. The deferred tail is declared out of v1.
-- v1.0 named-command: 316, reviewed-raw-read: 5, scheduled: 0
+- v1.0 named-command: 322, reviewed-raw-read: 5, scheduled: 0
 - v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
 - beta scheduled (never agreed for v1): 3738
-PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 316 named / 5 raw (321 backed).
+PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 322 named / 5 raw (327 backed).
 
 ## COMPLETE-01 audit record
 
 COMPLETE-01 audit (2026-10-07): the full agreed Entra capability audit including later writes.
-11 writes ship as named, gated commands through the WRITE-00 mutation coordinator; WRITE-N carries explicit
+14 writes ship as named, gated commands through the WRITE-00 mutation coordinator; WRITE-N carries explicit
 reviewed deferred/blocked/deprecated dispositions rather than scheduled; no agreed v1.0 operation, read or
 write, is left merely scheduled. Beta stays scheduled by definition and was never agreed for v1.
 The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS URLs) stay out.
-- v1.0 named-command: 316 (305 read rows plus 11 write rows; 11 gated write leaves in Named writes below), reviewed-raw-read: 5, scheduled: 0
+- v1.0 named-command: 322 (305 read rows plus 17 write rows; 14 gated write leaves in Named writes below), reviewed-raw-read: 5, scheduled: 0
 - v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
 - beta scheduled (never agreed for v1): 3738
-- shipped writes: MAIL-05 (`mg-axi mail message tag`, `mg-axi mail message flag`, `mg-axi mail message mark`), MAIL-06 (`mg-axi mail message move`, `mg-axi mail message copy`, `mg-axi mail message trash`), WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
+- shipped writes: MAIL-05 (`mg-axi mail message tag`, `mg-axi mail message flag`, `mg-axi mail message mark`), MAIL-06 (`mg-axi mail message move`, `mg-axi mail message copy`, `mg-axi mail message trash`), MAIL-07 (`mg-axi mail folder create`, `mg-axi mail folder delete`, `mg-axi mail category create`), WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
 - WRITE-N (remaining agreed mutations): deferred 1878, intentionally-blocked 25 v1.0 plus 2937 beta, deprecated 6 v1.0 plus 398 beta, scheduled 0.
 - outstanding upstream limitations (already documented in the repo): P1 for Conditional Access and P2 for risk-based CA, PIM P2 or ID Governance, riskyUsers P2 and Workload Identities Premium for workload risk with hidden riskDetail/riskLevel without it (docs/graph-coverage.md); conservative P1/P2 Graph prerequisite for sign-in/audit logs, registration report excludes disabled users, no tenant-wide method enumeration (docs/graph-coverage.md); v1.0 group-members route omits service principals (README.md member-read warning); 14 unavailable rows with no documented v1.0 GET contract, invitation Create-only Methods table, org-scoped certificateBasedAuthConfiguration routes only, contacts sync-behavior reads without operation permission docs (inventory reasons); EXT-02c history reads need AccessReview.ReadWrite.All with no read scope and return SAS download URLs (docs/coverage.md); write-side limits beside each command, revoke lag/external-user scope/unknown outcome, CA update lockout gates with no concurrency promise, dismissal is not remediation (README.md, docs/execution.md).
 
@@ -1165,6 +1165,9 @@ Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, i
 | `mg-axi entra group member add` | `POST:/groups/{group-id}/members/$ref` | WRITE-01 |
 | `mg-axi entra risky-user dismiss` | `POST:/identityProtection/riskyUsers/dismiss` | WRITE-05 |
 | `mg-axi entra conditional-access policy update` | `PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}` | WRITE-04 |
+| `mg-axi mail folder create` | `POST:/users/{user-id}/mailFolders` | MAIL-07 |
+| `mg-axi mail folder delete` | `DELETE:/users/{user-id}/mailFolders/{mailFolder-id}` | MAIL-07 |
+| `mg-axi mail category create` | `POST:/users/{user-id}/outlook/masterCategories` | MAIL-07 |
 | `mg-axi mail message tag` | `PATCH:/users/{user-id}/messages/{message-id}` | MAIL-05 |
 | `mg-axi mail message flag` | `PATCH:/users/{user-id}/messages/{message-id}` | MAIL-05 |
 | `mg-axi mail message mark` | `PATCH:/users/{user-id}/messages/{message-id}` | MAIL-05 |
@@ -1172,7 +1175,7 @@ Each write below runs the WRITE-00 mutation coordinator: hand-enabled profile, i
 | `mg-axi mail message copy` | `POST:/users/{user-id}/messages/{message-id}/copy` | MAIL-06 |
 | `mg-axi mail message trash` | `POST:/users/{user-id}/messages/{message-id}/move` | MAIL-06 |
 
-Shipped initial writes: MAIL-05 (`mg-axi mail message tag`, `mg-axi mail message flag`, `mg-axi mail message mark`), MAIL-06 (`mg-axi mail message move`, `mg-axi mail message copy`, `mg-axi mail message trash`), WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
+Shipped initial writes: MAIL-05 (`mg-axi mail message tag`, `mg-axi mail message flag`, `mg-axi mail message mark`), MAIL-06 (`mg-axi mail message move`, `mg-axi mail message copy`, `mg-axi mail message trash`), MAIL-07 (`mg-axi mail folder create`, `mg-axi mail folder delete`, `mg-axi mail category create`), WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
 Pending initial writes: none.
 Extended families (EXT-01 through EXT-04) and the full-Entra audit (FULL-01, COMPLETE-01) own the remaining
 deferred rows out of v1; see the operation dispositions and reasons above.

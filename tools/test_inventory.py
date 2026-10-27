@@ -35,8 +35,18 @@ class InventoryTests(unittest.TestCase):
                         write = make_row("v1.0", path, method, {"operationId": "fixture"})
                         expected = ("scheduled", "MAIL-07") if (method == "POST" and suffix == "") or (method == "DELETE" and suffix != "") else ("excluded", None)
                         self.assertEqual((write["disposition"], write["owningSlice"]), expected)
-        for path in ("/me/messages/{message-id}/$value", "/me/mailFolders/{mailFolder-id}/childFolders"):
+        for path in ("/me/mailFolders/{mailFolder-id}/childFolders",):
             self.assertIsNone(scoped_slice(path))
+
+    def test_guarded_download_routes_have_documented_mail_ownership(self):
+        for root in ("/me", "/users/{user-id}"):
+            for suffix in ("/$value", "/attachments/{attachment-id}", "/attachments/{attachment-id}/$value"):
+                path = root + "/messages/{message-id}" + suffix
+                row = make_row("v1.0", path, "GET", {"operationId": "fixture"}, {f"GET:{path}": "mail download"})
+                self.assertEqual((row["disposition"], row["owningSlice"]), ("named-command", "MAIL-09"))
+                source = "attachment-get" if "/attachments/" in path else "message-get"
+                self.assertEqual(row["permissions"]["sources"], [f"https://learn.microsoft.com/en-us/graph/api/{source}?view=graph-rest-1.0"])
+                self.assertIsNone(scoped_slice(path, "POST"))
 
     def test_mail_folder_and_category_writes_own_only_m7_routes(self):
         for root in ("/me", "/users/{user-id}"):
@@ -74,7 +84,7 @@ class InventoryTests(unittest.TestCase):
             self.assertEqual(make_row("beta", path, "PATCH", {"operationId": "fixture"})["disposition"], "intentionally-blocked")
             for method in ("POST", "DELETE"):
                 self.assertIsNone(scoped_slice(path, method))
-            self.assertIsNone(scoped_slice(path + "/$value"))
+            self.assertEqual(scoped_slice(path + "/$value"), "MAIL-09")
 
     def test_message_transfers_admit_only_reviewed_posts(self):
         for root in ("/me", "/users/{user-id}"):
@@ -472,7 +482,7 @@ components:
             from inventory import shipped_operations
             first = alternate_operations(shipped_operations())
             self.assertEqual(first, alternate_operations(shipped_operations()))
-            self.assertEqual(len(first), 43)
+            self.assertEqual(len(first), 47)
 
     def test_discovery_cannot_claim_raw_coverage(self):
         inventory = json.loads((ROOT / "inventory/operations.json").read_text())

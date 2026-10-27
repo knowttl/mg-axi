@@ -303,12 +303,20 @@ test("mutating a resolved operation cannot change the authoritative inventory", 
 
 for (const [name, operation, params] of [
   ["intentionally-blocked route", blockedDeviceCredentials, { "deviceLocalCredentialInfo-id": "fixture-id" }],
-  ["excluded route", discoveryOperation("v1.0", "GET", "/me/messages/{message-id}/$value"), { "message-id": "fixture-message" }],
+  ["excluded route", discoveryOperation("v1.0", "GET", "/me/messages/{message-id}/extensions"), { "message-id": "fixture-message" }],
 ]) test(`${name} is denied with no credential and no HTTP call`, async () => {
   const f = fixture(json(200, {}));
   await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, params, scopes }), { code: "VALIDATION_ERROR" });
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
+});
+
+test("download routes cannot bypass the guarded coordinator through a read session", async () => {
+  const f = fixture(json(200, {}));
+  await assert.rejects(f.session.execute({ profile: { ...delegatedProfile, enabledPacks: ["mail"] },
+    operation: resolveSessionOperation("v1.0", "GET", "/me/messages/{message-id}/$value"), params: { "message-id": "fixture-message" },
+    scopes: ["https://graph.microsoft.com/Mail.Read"] }), { code: "POLICY_DENIED" });
+  assert.equal(f.credentialCalls.length, 0); assert.equal(f.requests.length, 0);
 });
 
 test("disabled pack is denied before credential or HTTP", async () => {

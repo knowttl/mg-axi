@@ -20,7 +20,7 @@ $ npx -y @knowttl/mg-axi@0.1.10 --version
 Working directly with Graph REST requires agents to manage route selection, permissions, paging and response size.
 mg-axi exposes reviewed commands with bounded lists, TOON output and contextual next steps, without requiring an MCP server.
 It targets workforce Entra tenants in the commercial cloud; sovereign clouds, personal accounts and general Microsoft 365 file access are outside its supported surface.
-The opt-in mail pack supports folder list/show, metadata-only message list, search, filter and conversation reads, message show with bodies and internet headers, and attachment metadata list, mailbox settings show, inbox rule list/show and master category list, plus gated folder create, folder delete, category create, rule create, rule update, rule delete and message tag, flag, mark, move, copy and trash writes; see [the generated skill](skills/mg-axi/SKILL.md) for mailbox authorization and bounds.
+The opt-in mail pack supports folder list/show, metadata-only message list, search, filter and conversation reads, message show with bodies and internet headers, attachment metadata list, mailbox settings show, inbox rule list/show and master category list, and guarded attachment save and message export downloads, plus gated folder create, folder delete, category create, rule create, rule update, rule delete and message tag, flag, mark, move, copy and trash writes; see [the generated skill](skills/mg-axi/SKILL.md) for mailbox authorization and bounds.
 
 ## Features
 

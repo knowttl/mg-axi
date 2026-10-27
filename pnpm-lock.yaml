@@ -11,6 +11,9 @@ importers:
       '@azure/msal-node':
         specifier: ^7.0.1
         version: 7.0.1
+      '@kusto/language-service-next':
+        specifier: ^12.4.1
+        version: 12.4.1
       '@toon-format/toon':
         specifier: ^2.3.0
         version: 2.3.1
@@ -37,6 +40,9 @@ packages:
   '@azure/msal-node@7.0.1':
     resolution: {integrity: sha512-mrHLCwXird58rdk7LjvlUn5YybvVb3qXwlw3tvSWqHllmatFeQYuFhX/cJ7CoGgpdAOmNzm6Un4KDu+v/O3Tcw==}
     engines: {node: '>=20'}
+
+  '@kusto/language-service-next@12.4.1':
+    resolution: {integrity: sha512-8Ybwi1DVxnFZ8+mnw38ruXjSGIxA2jwx1HeqjStvMa5kSHzHPtEYm5n7et1fwgn5KDUZJzsSNjuRroiI+j8brA==}
 
   '@toon-format/toon@2.3.1':
     resolution: {integrity: sha512-sWqEMeAJGMda9qRrfPKrX3C4c33CO9SJuvJzzrcBEn5sbDB+k6pSLkDsfN0rVnLQwR97MV3sDgVbcxQNsq8xVw==}
@@ -282,6 +288,8 @@ snapshots:
     dependencies:
       '@azure/msal-common': 16.14.2
       jsonwebtoken: 9.0.3
+
+  '@kusto/language-service-next@12.4.1': {}
 
   '@toon-format/toon@2.3.1': {}
 

@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { spawnSync } from "node:child_process";
 import { encode, decode } from "@toon-format/toon";
 import { executeArgv } from "../dist/cli.js";
 import { Profiles } from "../dist/profiles.js";
@@ -92,6 +93,72 @@ test("hunting gives a definitive empty result", async t => {
   assert.equal(result.complete, true);
   assert.equal(result.returned, 0);
   assert.match(result.help.join(" "), /0 hunting rows matched/);
+});
+
+test("hunting returns all syntax diagnostics before credentials", async t => {
+  const f = fixture(t, { kql: "EmailEvents\n| wher Subject != 0 | take 5" });
+  await assert.rejects(f.run(), error => {
+    assert.equal(error.code, "VALIDATION_ERROR");
+    assert.match(error.message, /KQL syntax error at line 2, column 3/);
+    assert.deepEqual(error.diagnostics, [
+      { line: 2, column: 3, code: "KS176", token: "wher", message: "Query operator expected." },
+      { line: 2, column: 8, code: "KS005", token: "Subject", message: "Expected: ;" },
+    ]);
+    return true;
+  });
+  assert.equal(f.credentials.length, 0);
+  assert.equal(f.requests.length, 0);
+});
+
+test("malformed parentheses report syntax rather than an unsupported stage", async t => {
+  const f = fixture(t, { kql: "EmailEvents | where Timestamp > ago(1d" });
+  await assert.rejects(f.run(), error => /KQL syntax error/.test(error.message) && error.diagnostics[0].code === "KS005");
+  assert.equal(f.credentials.length, 0);
+  assert.equal(f.requests.length, 0);
+});
+
+test("hunting policy errors locate the operator and list allowed operators", async t => {
+  const f = fixture(t, { kql: "EmailEvents\n// comment\n| join (DeviceEvents) on DeviceId" });
+  await assert.rejects(f.run(), error => {
+    assert.match(error.message, /read-only allowlist: where, project/);
+    assert.deepEqual(error.diagnostics[0], {
+      line: 3, column: 3, code: "READ_ONLY_ALLOWLIST", token: "join",
+      message: "Operator is not in the read-only allowlist: where, project, project-away, project-rename, project-reorder, extend, summarize, distinct, count, take, limit, top, sort, order",
+    });
+    return true;
+  });
+  assert.equal(f.credentials.length, 0);
+  assert.equal(f.requests.length, 0);
+});
+
+test("hunting CLI emits capped TOON diagnostics with usage exit and no query literals", t => {
+  const f = fixture(t, { kql: 'EmailEvents | wher Subject == "private-literal" | wher x | wher y | wher z' });
+  const result = spawnSync(process.execPath, ["dist/bin/mg-axi.js", "security", "hunting", "query", "--config", f.config, "--profile", "soc", "--file", f.file], { encoding: "utf8" });
+  assert.equal(result.status, 2);
+  assert.equal(result.stderr, "");
+  const output = decode(result.stdout);
+  assert.equal(output.code, "VALIDATION_ERROR");
+  assert.equal(output.diagnostics.length, 5);
+  assert.match(output.help.join(" "), /Showing 5 of/);
+  assert.ok(!result.stdout.includes("private-literal"));
+  assert.ok(!result.stdout.includes("EmailEvents |"));
+});
+
+for (const kind of ["Semantic", "Syntax"]) test(`hunting exposes only ${kind} class and position from a synthetic 400`, async t => {
+  const f = fixture(t, { status: 400, body: { error: { message: `${kind} error: 'private-literal' at line 2, column 17: secret-unquoted-tail` } } });
+  await assert.rejects(f.run(), error => {
+    assert.equal(error.code, "GRAPH_ERROR");
+    assert.equal(error.message, `The server rejected the query (${kind.toLowerCase()} error): line 2, column 17`);
+    assert.ok(!JSON.stringify(error).includes("private-literal"));
+    assert.ok(!JSON.stringify(error).includes("secret-unquoted-tail"));
+    return true;
+  });
+  assert.equal(f.requests.length, 1);
+});
+
+for (const message of ["unrecognized body", "Semantic error: 'line 2, column 17'", "Semantic error at line 0, column 1", "Semantic error at line 1, column 0"]) test(`hunting keeps unknown server shapes opaque: ${message}`, async t => {
+  const f = fixture(t, { status: 400, body: { error: { message } } });
+  await assert.rejects(f.run(), error => /^Graph failed .*\(400\)$/.test(error.message));
 });
 
 for (const kql of [

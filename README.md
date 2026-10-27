@@ -64,7 +64,12 @@ The local validator accepts one table pipeline, ordinary quoted strings, `//` co
 Only reviewed scalar and aggregate function calls are accepted, including `ago`, `datetime`, `bin`, `count`, `dcount`, `sum`, `arg_max`, `tostring`, `parse_json` and `parse_url`; the exact allowlist lives in [security-hunting.ts](src/security-hunting.ts).
 The table allowlist covers `DeviceEvents`, `DeviceProcessEvents`, `DeviceNetworkEvents`, `DeviceFileEvents`, `DeviceFileCertificateInfo`, `DeviceRegistryEvents`, `DeviceLogonEvents`, `DeviceImageLoadEvents`, `DeviceInfo`, `DeviceNetworkInfo`, `DeviceTvmSoftwareInventory`, `DeviceTvmSoftwareVulnerabilities`, `DeviceTvmSoftwareVulnerabilitiesKB`, `EmailEvents`, `EmailPostDeliveryEvents`, `EmailUrlInfo`, `EmailAttachmentInfo`, `UrlClickEvents`, `IdentityLogonEvents`, `IdentityQueryEvents`, `IdentityDirectoryEvents`, `CloudAppEvents`, `AlertInfo`, `AlertEvidence`, `BehaviorInfo`, `BehaviorEntities`, `ExposureGraphNodes` and `ExposureGraphEdges`.
 Everything outside this restricted grammar is refused before credentials: semicolon statements (including trailing semicolons), `let`/`set`, dot-prefixed control commands, stored/source functions, qualified functions, external data, plugins (`evaluate`/`invoke`), joins/unions, nested query pipelines and block comments.
-Graph validates the remaining KQL expression syntax and table availability.
+Microsoft's reference Kusto parser checks syntax locally before the allowlist and before credentials or network access.
+Syntax failures keep `VALIDATION_ERROR` (exit 2) and include up to five diagnostics with line, column, code, token and message; allowlist failures also identify the offending token and position.
+Queries and quoted literals are never printed as error excerpts.
+Successful parsing prints no validation claim: table/column availability, types and permissions are still checked by Graph.
+Recognized hunting 400 errors expose only the semantic/syntax error class and line/column, with an opaque fallback for unknown shapes.
+The undocumented Graph error shape is covered by synthetic offline fixtures and has not been verified against a live tenant.
 Raw `api get` keeps its reviewed GET-only route list and does not expose `/security`.
 
 ## Quickstart

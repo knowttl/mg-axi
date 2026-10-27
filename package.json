@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@azure/msal-node": "^7.0.1",
+    "@kusto/language-service-next": "^12.4.1",
     "@toon-format/toon": "^2.3.0",
     "axi-sdk-js": "^0.1.13",
     "open": "^11.0.4"

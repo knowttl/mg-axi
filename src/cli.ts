@@ -10,6 +10,7 @@ import { skillHint } from "./skill-hint.js";
 import { authStatus } from "./auth-status.js";
 import { redactSecrets } from "./redact.js";
 import { queryHunting } from "./security-hunting.js";
+import { KqlValidationError } from "./kql.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
 import { updateUserAccount } from "./entra-user-update.js";
@@ -1522,7 +1523,7 @@ export async function main() {
       },
     },
     formatError: error => ({
-      output: `${redactSecrets(encode(error instanceof AxiError ? { error: error.message, code: error.code, help: hints(error.suggestions) } : { error: "Unable to run mg-axi", help: hints(["mg-axi --help"]) }))}\n`,
+      output: `${redactSecrets(encode(error instanceof AxiError ? { error: error.message, code: error.code, ...(error instanceof KqlValidationError ? { diagnostics: error.diagnostics } : {}), help: hints(error.suggestions) } : { error: "Unable to run mg-axi", help: hints(["mg-axi --help"]) }))}\n`,
       exitCode: error instanceof AxiError && error.code === "VALIDATION_ERROR" ? 2 : 1,
     }),
   });

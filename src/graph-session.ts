@@ -7,7 +7,7 @@ import { DelegatedAuth } from "./auth.js";
 import { PrivateFiles } from "./private-file.js";
 import { validateProfile, profileName, type AnyProfile } from "./profiles.js";
 import { findOperation } from "./runtime-index.js";
-import { HUNTING_OPERATION, HUNTING_SCOPE, huntingRequest } from "./security-hunting.js";
+import { HUNTING_OPERATION, HUNTING_SCOPE, huntingRequest, huntingServerError } from "./security-hunting.js";
 
 // CORE-01: the single path that owns Graph URL construction, operation
 // authorization, credential attachment and response validation. Command
@@ -783,7 +783,7 @@ export class GraphSession {
       if (!args.hunting || args.query || args.params || args.scalar || args.consistencyLevel) {
         throw new AxiError("Hunting requires a validated bounded KQL request", "VALIDATION_ERROR", ["mg-axi security hunting query --help"]);
       }
-      const body = JSON.stringify(huntingRequest(args.hunting.query, args.hunting.timespan, args.hunting.limit));
+      const body = JSON.stringify(await huntingRequest(args.hunting.query, args.hunting.timespan, args.hunting.limit));
       const scopes = profile.mode === "delegated" ? this.readScopes(args.scopes) : this.applicationScopes(args.scopes);
       if (profile.mode === "delegated" && (scopes?.length !== 1 || scopes[0] !== HUNTING_SCOPE)) {
         throw new AxiError("Hunting requires ThreatHunting.Read.All", "VALIDATION_ERROR", ["Grant admin consent for ThreatHunting.Read.All"]);
@@ -1168,6 +1168,10 @@ export class GraphSession {
 
   private translateError(operation: SessionOperation, response: TransportResponse): AxiError {
     const status = response.status;
+    if (operation.id === HUNTING_OPERATION && status === 400) {
+      const error = huntingServerError(response.body);
+      if (error) return error;
+    }
     // Hunting errors can echo arbitrary query literals, including secrets.
     const fault = operation.id === HUNTING_OPERATION ? "" : faultBody(response.body);
     if (status === 401) {

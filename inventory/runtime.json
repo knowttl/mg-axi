@@ -2481,12 +2481,28 @@
       "owningSlice": "WRITE-04"
     },
     {
+      "id": "v1.0:PATCH:/me/messages/{message-id}",
+      "method": "PATCH",
+      "path": "/me/messages/{message-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-05"
+    },
+    {
       "id": "v1.0:PATCH:/users/{user-id}",
       "method": "PATCH",
       "path": "/users/{user-id}",
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "WRITE-02"
+    },
+    {
+      "id": "v1.0:PATCH:/users/{user-id}/messages/{message-id}",
+      "method": "PATCH",
+      "path": "/users/{user-id}/messages/{message-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-05"
     },
     {
       "id": "v1.0:POST:/groups/{group-id}/members/$ref",

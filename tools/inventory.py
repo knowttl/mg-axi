@@ -240,6 +240,8 @@ def exclusion_reason(path, method="GET"):
 
 def scoped_slice(path, method="GET"):
     """Return the owning family, or None for a separately authorized domain."""
+    if method == "PATCH" and path in MAIL_MESSAGE_SHOW_READS:
+        return "MAIL-05"
     if method == "GET" and path in MAIL_FOLDER_READS:
         return "MAIL-01"
     if method == "GET" and path in MAIL_MESSAGE_READS:
@@ -339,17 +341,22 @@ def shipped_operations():
     text = (ROOT / "src/catalogue.ts").read_text()
     leaves = [(match.group(1), match.start()) for match in re.finditer(r"\{\s*path:\s*\"([^\"]+)\"", text)]
     shipped = {}
+    parsed = 0
     for index, (leaf, start) in enumerate(leaves):
         end = leaves[index + 1][1] if index + 1 < len(leaves) else len(text)
         found = re.findall(r"operation:\s*\"([A-Z]+:[^\"]+)\"", text[start:end])
         if len(found) > 1:
             raise ValueError(f"Catalogue leaf `{leaf}` carries more than one operation")
         if found:
+            parsed += 1
             if found[0] in shipped:
-                raise ValueError(f"Catalogue operation {found[0]} is claimed by more than one leaf")
-            shipped[found[0]] = leaf
+                if found[0] != "PATCH:/users/{user-id}/messages/{message-id}" or leaf not in {"mail message tag", "mail message flag", "mail message mark"}:
+                    raise ValueError(f"Catalogue operation {found[0]} is claimed by more than one leaf")
+                shipped[found[0]] += f" | {leaf}"
+            else:
+                shipped[found[0]] = leaf
     total = len(re.findall(r"operation:\s*\"[A-Z]+:[^\"]+\"", text))
-    if len(shipped) != total:
+    if parsed != total:
         raise ValueError("Catalogue parse mismatch: every operation must pair with its leaf path")
     return shipped
 
@@ -372,6 +379,7 @@ ALTERNATE_TABLES = (
     ("MAIL_MESSAGE_ALTERNATES", "src/mail-messages.ts"),
     ("MAIL_MESSAGE_SHOW_ALTERNATES", "src/mail-message-show.ts"),
     ("MAIL_METADATA_ALTERNATES", "src/mail-metadata.ts"),
+    ("MAIL_WRITE_ALTERNATES", "src/mail-message-writes.ts"),
     ("TRANSITIVE_OPERATION", "src/entra-groups.ts"),
     ("NAV_CASTS", "src/entra-contacts.ts"),
     ("MEMBERSHIP_TRANSITIVE", "src/entra-contacts.ts"),
@@ -437,6 +445,9 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
         read_source = "user-list-messages"
     if method == "GET" and path in MAIL_MESSAGE_SHOW_READS:
         read_source = "message-get"
+    if method == "PATCH" and path in MAIL_MESSAGE_SHOW_READS:
+        # Documentation provenance only; this remains a mutation.
+        operation = {**operation, "externalDocs": {"url": "https://learn.microsoft.com/en-us/graph/api/message-update?view=graph-rest-1.0"}}
     if method == "GET" and path in MAIL_METADATA_READS:
         if path.endswith("/attachments"):
             read_source = "message-list-attachments"
@@ -580,7 +591,7 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
         elif version == "beta":
             reason = "Deferred terms-of-use scope to a later EXT-01 terms-of-use beta subfamily: the six approved reads cover v1.0 only; beta agreements and acceptances need separate review."
     if mutates and owner is not None:
-        owner = "WRITE-N"
+        owner = owner if owner.startswith("MAIL-") else "WRITE-N"
         if disposition == "scheduled":
             reason = "No implemented command or reviewed raw contract yet."
         if method == "PATCH" and path == "/users/{user-id}":

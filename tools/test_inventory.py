@@ -32,13 +32,17 @@ class InventoryTests(unittest.TestCase):
                 for method in ("POST", "PATCH", "DELETE"):
                     self.assertIsNone(scoped_slice(path, method))
 
-    def test_message_show_admits_only_reviewed_reads(self):
+    def test_message_routes_admit_reviewed_reads_and_gated_patches(self):
         for root in ("/me", "/users/{user-id}"):
             path = root + "/messages/{message-id}"
             row = make_row("v1.0", path, "GET", {"operationId": "fixture"}, {f"GET:{path}": "mail message show"})
             self.assertEqual((row["disposition"], row["owningSlice"]), ("named-command", "MAIL-03"))
             self.assertEqual(row["permissions"]["sources"], ["https://learn.microsoft.com/en-us/graph/api/message-get?view=graph-rest-1.0"])
-            for method in ("POST", "PATCH", "DELETE"):
+            patch = make_row("v1.0", path, "PATCH", {"operationId": "fixture"}, {f"PATCH:{path}": "mail message mark"})
+            self.assertEqual((patch["disposition"], patch["owningSlice"]), ("named-command", "MAIL-05"))
+            self.assertEqual(patch["permissions"]["sources"], ["https://learn.microsoft.com/en-us/graph/api/message-update?view=graph-rest-1.0"])
+            self.assertEqual(make_row("beta", path, "PATCH", {"operationId": "fixture"})["disposition"], "intentionally-blocked")
+            for method in ("POST", "DELETE"):
                 self.assertIsNone(scoped_slice(path, method))
             self.assertIsNone(scoped_slice(path + "/$value"))
 
@@ -425,7 +429,7 @@ components:
             from inventory import shipped_operations
             first = alternate_operations(shipped_operations())
             self.assertEqual(first, alternate_operations(shipped_operations()))
-            self.assertEqual(len(first), 29)
+            self.assertEqual(len(first), 35)
 
     def test_discovery_cannot_claim_raw_coverage(self):
         inventory = json.loads((ROOT / "inventory/operations.json").read_text())

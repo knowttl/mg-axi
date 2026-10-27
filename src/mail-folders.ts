@@ -1,5 +1,5 @@
 import { AxiError } from "axi-sdk-js";
-import { MAIL_FOLDER_SCOPE } from "./mail-authorization.js";
+import { MAIL_FOLDER_SCOPE, validateMailbox } from "./mail-authorization.js";
 import { resolveSessionOperation, type GraphSession } from "./graph-session.js";
 import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
@@ -13,9 +13,7 @@ const SHOW_FIELDS = [...LIST_FIELDS, "parentFolderId", "childFolderCount", "isHi
 
 export async function readMailFolders(session: GraphSession, flags: Record<string, string | boolean>, profile: AnyProfile, show: boolean, help: string): Promise<Record<string, unknown>> {
   const mailbox = String(flags.mailbox);
-  if (mailbox !== "me" && !/^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Za-z0-9.!_+%-]+@[A-Za-z0-9.-]+)$/i.test(mailbox)) {
-    throw new AxiError("--mailbox must be a user UUID, UPN or me", "VALIDATION_ERROR", [help]);
-  }
+  validateMailbox(mailbox, help);
   const path = `${mailbox === "me" ? "/me" : "/users/{user-id}"}/mailFolders${show ? "/{mailFolder-id}" : ""}`;
   const operation = resolveSessionOperation("v1.0", "GET", path);
   const params: Record<string, string> = mailbox === "me" ? {} : { "user-id": mailbox };

@@ -1937,6 +1937,14 @@
       "owningSlice": "MAIL-02"
     },
     {
+      "id": "v1.0:GET:/me/messages/{message-id}",
+      "method": "GET",
+      "path": "/me/messages/{message-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-03"
+    },
+    {
       "id": "v1.0:GET:/oauth2PermissionGrants",
       "method": "GET",
       "path": "/oauth2PermissionGrants",
@@ -2375,6 +2383,14 @@
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-02"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}/messages/{message-id}",
+      "method": "GET",
+      "path": "/users/{user-id}/messages/{message-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-03"
     },
     {
       "id": "v1.0:PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}",

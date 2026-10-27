@@ -12,6 +12,7 @@ import { redactSecrets } from "./redact.js";
 import { queryHunting } from "./security-hunting.js";
 import { readMailFolders } from "./mail-folders.js";
 import { readMailMessages } from "./mail-messages.js";
+import { showMailMessage } from "./mail-message-show.js";
 import { KqlValidationError } from "./kql.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
@@ -70,7 +71,7 @@ function localHome(name?: string, config?: string) {
     output.domains = [{ name: "entra", status: selected.profile.enabledPacks.includes("entra") ? "enabled" : "disabled",
       summary: "Local profile configuration only; no Graph request made" }];
     if (selected.profile.enabledPacks.includes("security")) output.domains.push({ name: "security", status: "enabled", summary: "Defender XDR hunting; local configuration only, no Graph request made" });
-    if (selected.profile.enabledPacks.includes("mail")) output.domains.push({ name: "mail", status: "enabled", summary: "Mailbox folder and message metadata reads; local configuration only, no Graph request made" });
+    if (selected.profile.enabledPacks.includes("mail")) output.domains.push({ name: "mail", status: "enabled", summary: "Mailbox folder and message reads; local configuration only, no Graph request made" });
   } catch (error) {
     if ((name?.trim() ? name : undefined) || !(error instanceof AxiError) || !["PROFILE_REQUIRED", "PROFILE_AMBIGUOUS"].includes(error.code)) throw error;
     if (error.code === "PROFILE_AMBIGUOUS") {
@@ -173,7 +174,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     return `${leafHelp(leaf)}\n${group.split("\n").slice(1).join("\n")}`;
   }
   if (leaf.path === "home") return localHome(flags.profile as string | undefined, flags.config as string | undefined);
-  if (leaf.path === "mail folder list" || leaf.path === "mail folder show" || leaf.path === "mail message list") {
+  if (leaf.path === "mail folder list" || leaf.path === "mail folder show" || leaf.path === "mail message list" || leaf.path === "mail message show") {
     if (flags["api-version"] !== undefined && flags["api-version"] !== "v1.0") throw new AxiError("Mail supports Graph v1.0 only", "VALIDATION_ERROR", [leafHelp(leaf)]);
     const selected = new Profiles(flags.config as string | undefined).resolve(flags.profile as string | undefined);
     let delegated = overrides.delegated;
@@ -191,6 +192,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
     const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
     if (leaf.path === "mail message list") return readMailMessages(session, flags, selected.profile, leafHelp(leaf));
+    if (leaf.path === "mail message show") return showMailMessage(session, flags, selected.profile, leafHelp(leaf));
     return readMailFolders(session, flags, selected.profile, leaf.path === "mail folder show", leafHelp(leaf));
   }
   if (leaf.path === "security hunting query") {

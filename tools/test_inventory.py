@@ -20,7 +20,7 @@ class InventoryTests(unittest.TestCase):
                     for method in ("POST", "PATCH", "DELETE"):
                         write = make_row("v1.0", path, method, {"operationId": "fixture"})
                         self.assertEqual((write["disposition"], write["owningSlice"]), ("excluded", None))
-        for path in ("/me/messages/{message-id}", "/me/mailFolders/{mailFolder-id}/childFolders"):
+        for path in ("/me/messages/{message-id}/$value", "/me/mailFolders/{mailFolder-id}/childFolders"):
             self.assertIsNone(scoped_slice(path))
 
     def test_message_collections_admit_only_reviewed_reads(self):
@@ -31,6 +31,16 @@ class InventoryTests(unittest.TestCase):
                 self.assertEqual((row["disposition"], row["owningSlice"]), ("named-command", "MAIL-02"))
                 for method in ("POST", "PATCH", "DELETE"):
                     self.assertIsNone(scoped_slice(path, method))
+
+    def test_message_show_admits_only_reviewed_reads(self):
+        for root in ("/me", "/users/{user-id}"):
+            path = root + "/messages/{message-id}"
+            row = make_row("v1.0", path, "GET", {"operationId": "fixture"}, {f"GET:{path}": "mail message show"})
+            self.assertEqual((row["disposition"], row["owningSlice"]), ("named-command", "MAIL-03"))
+            self.assertEqual(row["permissions"]["sources"], ["https://learn.microsoft.com/en-us/graph/api/message-get?view=graph-rest-1.0"])
+            for method in ("POST", "PATCH", "DELETE"):
+                self.assertIsNone(scoped_slice(path, method))
+            self.assertIsNone(scoped_slice(path + "/$value"))
 
     def test_hunting_is_a_separately_reviewed_read_only_security_action(self):
         path = "/security/microsoft.graph.security.runHuntingQuery"
@@ -415,7 +425,7 @@ components:
             from inventory import shipped_operations
             first = alternate_operations(shipped_operations())
             self.assertEqual(first, alternate_operations(shipped_operations()))
-            self.assertEqual(len(first), 28)
+            self.assertEqual(len(first), 29)
 
     def test_discovery_cannot_claim_raw_coverage(self):
         inventory = json.loads((ROOT / "inventory/operations.json").read_text())

@@ -3,13 +3,15 @@ import type { Credential } from "./auth.js";
 import type { AnyProfile, AppCredential } from "./profiles.js";
 
 export const MAIL_FOLDER_SCOPE = "https://graph.microsoft.com/Mail.ReadBasic";
+export const MAIL_MESSAGE_SCOPE = "https://graph.microsoft.com/Mail.Read";
 export function isMailOperation(operation: { owningSlice: string | null }) {
   return operation.owningSlice?.startsWith("MAIL-") === true;
 }
 
-export function checkMailScopes(profile: AnyProfile, scopes: string[] | undefined) {
-  if (profile.mode === "delegated" && (scopes?.length !== 1 || scopes[0] !== MAIL_FOLDER_SCOPE)) {
-    throw new AxiError("Mail metadata reads require the delegated Mail.ReadBasic scope", "VALIDATION_ERROR", ["Use Mail.ReadBasic for folder and message metadata; shared mailbox scopes are unsupported"]);
+export function checkMailScopes(profile: AnyProfile, scopes: string[] | undefined, operation: { owningSlice: string | null }) {
+  const scope = operation.owningSlice === "MAIL-03" ? MAIL_MESSAGE_SCOPE : MAIL_FOLDER_SCOPE;
+  if (profile.mode === "delegated" && (scopes?.length !== 1 || scopes[0] !== scope)) {
+    throw new AxiError(`Mail reads require the delegated ${scope} scope`, "VALIDATION_ERROR", ["Use Mail.Read for message show and Mail.ReadBasic for lists and folders; shared mailbox scopes are unsupported"]);
   }
 }
 

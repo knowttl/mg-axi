@@ -10,6 +10,7 @@ import { resolveSessionOperation } from "../dist/graph-session.js";
 import { TRANSITIVE_OPERATION } from "../dist/entra-groups.js";
 import { MAIL_FOLDER_ALTERNATES } from "../dist/mail-folders.js";
 import { MAIL_MESSAGE_ALTERNATES } from "../dist/mail-messages.js";
+import { MAIL_MESSAGE_SHOW_ALTERNATES } from "../dist/mail-message-show.js";
 import { castDirectReports, castMembership, transitMembership, NAV_CAST_VALUES, MEMBERSHIP_CAST_VALUES } from "../dist/entra-contacts.js";
 
 const runtime = JSON.parse(readFileSync(new URL("../inventory/runtime.json", import.meta.url))).operations;
@@ -44,6 +45,8 @@ test("runtime rows exactly cover named and raw routes including flag-selected va
     if (alternate) reachable.add(`v1.0:${alternate}`);
     const mailAlternate = MAIL_FOLDER_ALTERNATES[leaf.operation];
     if (mailAlternate) reachable.add(`v1.0:${mailAlternate}`);
+    const showAlternate = MAIL_MESSAGE_SHOW_ALTERNATES[leaf.operation];
+    if (showAlternate) reachable.add(`v1.0:${showAlternate}`);
     if (leaf.path === "mail message list") {
       for (const alternate of Object.values(MAIL_MESSAGE_ALTERNATES)) reachable.add(`v1.0:${alternate}`);
     }

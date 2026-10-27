@@ -8,6 +8,7 @@ import { LEAVES, operationFor } from "../dist/catalogue.js";
 import { REVIEWED_ROUTES } from "../dist/api.js";
 import { resolveSessionOperation } from "../dist/graph-session.js";
 import { TRANSITIVE_OPERATION } from "../dist/entra-groups.js";
+import { MAIL_FOLDER_ALTERNATES } from "../dist/mail-folders.js";
 import { castDirectReports, castMembership, transitMembership, NAV_CAST_VALUES, MEMBERSHIP_CAST_VALUES } from "../dist/entra-contacts.js";
 
 const runtime = JSON.parse(readFileSync(new URL("../inventory/runtime.json", import.meta.url))).operations;
@@ -40,6 +41,8 @@ test("runtime rows exactly cover named and raw routes including flag-selected va
     reachable.add(`v1.0:${leaf.operation}`);
     const alternate = TRANSITIVE_OPERATION[leaf.operation];
     if (alternate) reachable.add(`v1.0:${alternate}`);
+    const mailAlternate = MAIL_FOLDER_ALTERNATES[leaf.operation];
+    if (mailAlternate) reachable.add(`v1.0:${mailAlternate}`);
     if (leaf.path.startsWith("entra contact ")) {
       const bases = [leaf.operation];
       if (leaf.flags.transitive) bases.push(transitMembership(leaf.operation, ""));

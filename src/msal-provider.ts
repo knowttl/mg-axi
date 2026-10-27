@@ -78,6 +78,7 @@ export class MsalProvider implements CredentialProvider {
   }
   private result(profile: DelegatedProfile, result: AuthenticationResult | null) {
     if (!result?.account || result.tenantId.toLowerCase() !== profile.tenantId.toLowerCase()) throw new Error("Configured tenant mismatch");
-    return { token: registerSecret(result.accessToken), expiresAt: result.expiresOn?.getTime() ?? NaN, tenantId: result.tenantId, clientId: profile.clientId, accountId: result.account.homeAccountId };
+    return { token: registerSecret(result.accessToken), expiresAt: result.expiresOn?.getTime() ?? NaN, tenantId: result.tenantId, clientId: profile.clientId,
+      accountId: result.account.homeAccountId, localAccountId: result.account.localAccountId, username: result.account.username };
   }
 }

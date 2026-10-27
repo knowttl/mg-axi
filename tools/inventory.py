@@ -195,8 +195,16 @@ EXCLUDED_NAV = {
 }
 
 
-def exclusion_reason(path):
-    if path == "/security/microsoft.graph.security.runHuntingQuery":
+MAIL_FOLDER_READS = {
+    "/users/{user-id}/mailFolders",
+    "/users/{user-id}/mailFolders/{mailFolder-id}",
+    "/me/mailFolders",
+    "/me/mailFolders/{mailFolder-id}",
+}
+
+
+def exclusion_reason(path, method="GET"):
+    if (method == "GET" and path in MAIL_FOLDER_READS) or path == "/security/microsoft.graph.security.runHuntingQuery":
         return None
     segments = {part.removeprefix("microsoft.graph.").split("(")[0] for part in path.strip("/").split("/")}
     for domain, navigations in EXCLUDED_NAV.items():
@@ -205,12 +213,14 @@ def exclusion_reason(path):
     return None
 
 
-def scoped_slice(path):
+def scoped_slice(path, method="GET"):
     """Return the owning family, or None for a separately authorized domain."""
+    if method == "GET" and path in MAIL_FOLDER_READS:
+        return "MAIL-01"
     if path == "/security/microsoft.graph.security.runHuntingQuery":
         return "SECURITY-01"
     parts = path.strip("/").split("/")
-    if exclusion_reason(path):
+    if exclusion_reason(path, method):
         return None
     root = parts[0].split("(")[0]
     if root == "tenantRelationships" and len(parts) > 1 and parts[1] == "managedTenants":
@@ -327,6 +337,7 @@ def reviewed_raw_routes():
 # Alternate-routing tables whose values a shipped leaf reaches through cli
 # flag routing (--transitive/--as): {table constant: module file}.
 ALTERNATE_TABLES = (
+    ("MAIL_FOLDER_ALTERNATES", "src/mail-folders.ts"),
     ("TRANSITIVE_OPERATION", "src/entra-groups.ts"),
     ("NAV_CASTS", "src/entra-contacts.ts"),
     ("MEMBERSHIP_TRANSITIVE", "src/entra-contacts.ts"),
@@ -382,16 +393,18 @@ def alternate_operations(shipped):
 
 
 def make_row(version, path, method, operation, shipped=None, reviewed=None, alternates=None):
-    owner = scoped_slice(path)
+    owner = scoped_slice(path, method)
     disposition, reason = "scheduled", "No implemented command or reviewed raw contract yet."
     action = path.rsplit("/", 1)[-1].rsplit(".", 1)[-1]
     read_source = READ_ACTION_SOURCES.get(action) if method == "POST" else None
+    if method == "GET" and path in MAIL_FOLDER_READS:
+        read_source = "mailfolder-get" if path.endswith("/{mailFolder-id}") else "user-list-mailfolders"
     mutates = method not in {"GET", "HEAD", "OPTIONS"} and read_source is None
     lower = path.lower()
     secret = any(word in lower for word in ("addpassword", "passwordprofile", "getpassword", "resetpassword", "generatepassword", "uploadsecret", "getsecret", "/secrets", "devicelocalcredentials/", "bitlocker/recoverykeys/")) and not lower.endswith("/$count")
     secret = secret or (method == "POST" and "temporaryaccesspassmethods" in lower)
     if owner is None:
-        disposition, reason = "excluded", exclusion_reason(path) or "Unscoped operation outside the accepted Entra boundary."
+        disposition, reason = "excluded", exclusion_reason(path, method) or "Unscoped operation outside the accepted Entra boundary."
     elif operation.get("deprecated") or "permissionsmanagement" in lower:
         disposition, reason = "deprecated", "Deprecated metadata or multicloud permissions management."
     elif secret or "trustframework/keysets" in lower:
@@ -605,7 +618,7 @@ def validate(inventory, shipped=None, reviewed=None, alternates=None):
             raise ValueError("Discovery alone cannot claim a named command")
         if row["disposition"] == "reviewed-raw-read" and row["id"] not in raw:
             raise ValueError("Discovery alone cannot claim reviewed raw access")
-        if (scoped_slice(row["path"]) is None) != (row["disposition"] == "excluded"):
+        if (scoped_slice(row["path"], row["method"]) is None) != (row["disposition"] == "excluded"):
             raise ValueError("Boundary mismatch: out-of-scope operations must be excluded")
     if {source["version"] for source in inventory["sources"]} != {"v1.0", "beta"}:
         raise ValueError("Both metadata versions must be pinned independently")

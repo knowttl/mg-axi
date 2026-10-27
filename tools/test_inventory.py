@@ -10,6 +10,19 @@ from inventory import CUTOFF_REASON, ROOT, build, make_row, scoped_slice, valida
 
 
 class InventoryTests(unittest.TestCase):
+    def test_mail_folder_routes_admit_only_reviewed_reads(self):
+        for root in ("/me", "/users/{user-id}"):
+            for suffix in ("", "/{mailFolder-id}"):
+                path = f"{root}/mailFolders{suffix}"
+                with self.subTest(path=path):
+                    row = make_row("v1.0", path, "GET", {"operationId": "fixture"}, {f"GET:{path}": "mail folder read"})
+                    self.assertEqual((row["disposition"], row["owningSlice"]), ("named-command", "MAIL-01"))
+                    for method in ("POST", "PATCH", "DELETE"):
+                        write = make_row("v1.0", path, method, {"operationId": "fixture"})
+                        self.assertEqual((write["disposition"], write["owningSlice"]), ("excluded", None))
+        for path in ("/me/messages", "/me/mailFolders/{mailFolder-id}/messages", "/me/mailFolders/{mailFolder-id}/childFolders"):
+            self.assertIsNone(scoped_slice(path))
+
     def test_hunting_is_a_separately_reviewed_read_only_security_action(self):
         path = "/security/microsoft.graph.security.runHuntingQuery"
         row = make_row("v1.0", path, "POST", {"operationId": "security.runHuntingQuery"}, {f"POST:{path}": "security hunting query"})
@@ -393,7 +406,7 @@ components:
             from inventory import shipped_operations
             first = alternate_operations(shipped_operations())
             self.assertEqual(first, alternate_operations(shipped_operations()))
-            self.assertEqual(len(first), 23)
+            self.assertEqual(len(first), 25)
 
     def test_discovery_cannot_claim_raw_coverage(self):
         inventory = json.loads((ROOT / "inventory/operations.json").read_text())

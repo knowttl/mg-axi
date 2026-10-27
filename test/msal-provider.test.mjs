@@ -44,7 +44,7 @@ class Application {
   }
   async acquire(id) {
     await this.plugin.beforeCacheAccess({ tokenCache: this.cache });
-    this.state = { Account: { [id]: { tenantId: tenant, homeAccountId: id } },
+    this.state = { Account: { [id]: { tenantId: tenant, homeAccountId: id, localAccountId: "33333333-3333-4333-8333-333333333333", username: "mailbox@contoso.example" } },
       AccessToken: { [id]: { secret: "fixture-access-" + id } },
       RefreshToken: { [id]: { secret: "fixture-refresh-" + id + "é".repeat(2000) } } };
     await this.plugin.afterCacheAccess({ tokenCache: this.cache, cacheHasChanged: true });
@@ -74,6 +74,18 @@ assert.ok(Buffer.byteLength(persisted) > 2560);
 assert.doesNotMatch(persisted, /fixture-access-/);
 assert.ok(aclEvents.some(entry => entry.action === "restrict" && !entry.directory));
 assert.deepEqual(prompts, [${JSON.stringify(method)}]);
+`);
+});
+
+test("delegated credentials retain authenticated MSAL mailbox metadata through silent acquisition", () => {
+  run(`
+const auth = new DelegatedAuth(new MsalProvider(store));
+const login = await auth.login(profile, "browser", scopes);
+assert.ok(!JSON.stringify(login).includes("mailbox@contoso.example"));
+const credential = await new DelegatedAuth(new MsalProvider(store)).credential(profile, scopes);
+assert.equal(credential.localAccountId, "33333333-3333-4333-8333-333333333333");
+assert.equal(credential.username, "mailbox@contoso.example");
+assert.equal(credential.token, "fixture-access-account-A");
 `);
 });
 

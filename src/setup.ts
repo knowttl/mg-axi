@@ -82,7 +82,7 @@ const READ_FAMILY_PREFIXES: ReadonlyArray<readonly [string, string]> = [
 function shippedReadFamilies(): string[] {
   const seen: string[] = [];
   for (const leaf of LEAVES) {
-    if (leaf.operation === undefined || !leaf.operation.startsWith("GET:")) continue;
+    if (!leaf.path.startsWith("entra ") || leaf.operation === undefined || !leaf.operation.startsWith("GET:")) continue;
     const match = READ_FAMILY_PREFIXES.find(([prefix]) => leaf.path === prefix || leaf.path.startsWith(`${prefix} `));
     const label = match ? match[1] : leaf.path.split(" ").slice(0, 2).join(" ");
     if (!seen.includes(label)) seen.push(label);
@@ -124,6 +124,7 @@ export function setupView(store: Profiles): Record<string, unknown> {
       api: `Entra ${families.slice(0, -1).join(", ")} and ${families.at(-1)} reads plus reviewed raw api get and ${writeLabels.length} gated writes (${writeLabels.join(", ")}); every other v1.0 operation is deferred out of v1, and every other beta operation remains scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded`,
       report: "docs/coverage.md",
       hunting: "security hunting query --file <kql> --timespan P1D --limit 100; explicit security pack and admin-consented ThreatHunting.Read.All; no cursor",
+      mail: "mail folder list/show --mailbox <user-id|upn|me>; explicit mail pack, delegated Mail.ReadBasic for own mailbox or scoped Exchange RBAC Application Mail.ReadBasic; no Entra mail application grants",
     },
     integration: "Install skills/mg-axi/SKILL.md explicitly through your agent's skill installation mechanism; setup only shows guidance and installs no skills or hooks",
     help: [`${command} doctor`, `${command} entra user list --help`, `${command} api get --help`],

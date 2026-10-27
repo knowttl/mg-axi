@@ -137,7 +137,7 @@ test("setup reports unconfigured state without writing configuration", () => {
     assert.equal(output.profiles, "0 profiles configured");
     assert.ok(output.capabilities.implemented.includes("mg-axi setup") || output.capabilities.implemented.includes("setup"));
     assert.ok(output.capabilities.implemented.includes("entra user list"));
-    assert.equal(output.capabilities.reads, 264);
+    assert.equal(output.capabilities.reads, 266);
     assert.equal(output.capabilities.writes, 5);    assert.equal(output.capabilities.local, 11);
     assert.ok(!existsSync(config), "setup writes nothing");
   } finally { rmSync(home, { recursive: true, force: true }); }
@@ -687,8 +687,8 @@ test("write status follows the catalogue, not hard-coded prose", () => {
   assert.doesNotMatch(coverage, /later writes \(WRITE-04 and beyond\)/);
 });
 
-test("calls the release the supported Entra read surface, not full coverage", () => {
+test("calls the release the supported Graph read surface, not full coverage", () => {
   const coverage = capabilityDocument();
-  assert.ok(coverage.includes("the supported Entra read surface, not full Entra coverage"));
+  assert.ok(coverage.includes("the supported Graph read surface, not full Graph coverage"));
   assert.doesNotMatch(coverage, /\d+\s*% (complete|coverage)/);
 });

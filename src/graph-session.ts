@@ -8,6 +8,7 @@ import { PrivateFiles } from "./private-file.js";
 import { validateProfile, profileName, type AnyProfile } from "./profiles.js";
 import { findOperation } from "./runtime-index.js";
 import { HUNTING_OPERATION, HUNTING_SCOPE, huntingRequest, huntingServerError } from "./security-hunting.js";
+import { checkMailCredential, checkMailScopes, isMailOperation } from "./mail-authorization.js";
 
 // CORE-01: the single path that owns Graph URL construction, operation
 // authorization, credential attachment and response validation. Command
@@ -25,6 +26,7 @@ export const SAFE_CREDENTIAL_FIELDS: readonly string[] = ["keyId", "displayName"
 // buffering, execute output and cursor decode.
 export const GRAPH_HOST = "graph.microsoft.com";
 const READ_SCOPES = new Set([
+  "Mail.ReadBasic",
   "ThreatHunting.Read.All",
   "Agreement.Read.All",
   "AgreementAcceptance.Read",
@@ -779,6 +781,7 @@ export class GraphSession {
     }
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
+    if (isMailOperation(operation)) checkMailScopes(profile, args.scopes);
     if (operation.id === HUNTING_OPERATION) {
       if (!args.hunting || args.query || args.params || args.scalar || args.consistencyLevel) {
         throw new AxiError("Hunting requires a validated bounded KQL request", "VALIDATION_ERROR", ["mg-axi security hunting query --help"]);
@@ -819,9 +822,13 @@ export class GraphSession {
     const deadline = clock.now() + DEFAULT_DEADLINE_MS;
     let token: string;
     try {
-      token = await beforeDeadline(async () => profile.mode === "delegated"
-        ? (await this.deps.delegated.credential(profile, this.readScopes(args.scopes))).token
-        : (await this.deps.application.credential(profile, this.applicationScopes(args.scopes))).token, clock, deadline, signal);
+      token = await beforeDeadline(async () => {
+        const credential = profile.mode === "delegated"
+          ? await this.deps.delegated.credential(profile, this.readScopes(args.scopes))
+          : await this.deps.application.credential(profile, this.applicationScopes(args.scopes));
+        if (isMailOperation(operation)) checkMailCredential(profile, credential, params["user-id"]);
+        return credential.token;
+      }, clock, deadline, signal);
     } catch (error) {
       signal?.throwIfAborted();
       if (error instanceof DeadlineExceeded) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
@@ -850,12 +857,14 @@ export class GraphSession {
     }
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
+    if (isMailOperation(operation)) checkMailScopes(profile, args.scopes);
     checkLimit(args.limit);
     const budget = checkBudget(args.budget);
     if (args.cursor !== undefined && (typeof args.cursor !== "string" || !args.cursor)) {
       throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
     }
     const resumed = args.cursor === undefined ? undefined : decodeCursor(operation, args.cursor);
+    if (isMailOperation(operation) && resumed?.buffered.length) throw new AxiError("Mail cursors cannot contain buffered rows", "VALIDATION_ERROR");
     const query = { ...resumed?.query, ...args.query };
     const consistencyLevel = args.consistencyLevel ?? resumed?.consistencyLevel;
     checkQueryContext(query, consistencyLevel);
@@ -909,6 +918,7 @@ export class GraphSession {
       const credential = await beforeDeadline(async () => profile.mode === "delegated"
         ? this.deps.delegated.credential(profile, this.readScopes(args.scopes))
         : this.deps.application.credential(profile, this.applicationScopes(args.scopes)), clock, deadline, signal);
+      if (isMailOperation(operation)) checkMailCredential(profile, credential, params["user-id"]);
       const acquiredIdentity = createHash("sha256").update(JSON.stringify([
         profile.mode, credential.tenantId.toLowerCase(), credential.clientId.toLowerCase(),
         profile.mode === "delegated" && "accountId" in credential ? credential.accountId : null,
@@ -935,7 +945,7 @@ export class GraphSession {
       if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
       if (args.limit !== undefined && results.length >= args.limit) {
         if (pending.length === 0 && !current) return { value: results, query, complete: true, requests, bytes, total };
-        return partial("row limit reached; buffered remainder is preserved in the cursor", current, pending);
+        return partial(isMailOperation(operation) ? "row limit reached" : "row limit reached; buffered remainder is preserved in the cursor", current, pending);
       }
       if (!current) return { value: results, query, complete: true, requests, bytes, total };
       if (requests >= budget.maxRequests) return partial(`request budget exhausted after ${requests} requests`, current, pending);
@@ -1006,6 +1016,9 @@ export class GraphSession {
           throw new AxiError(`Graph returned a non-JSON success body for ${operation.id}`, "GRAPH_ERROR", ["Successful reads are JSON; anything else is malformed"]);
         }
         const rows = valuesOf(operation, parsed);
+        if (isMailOperation(operation) && (rows.length > Number(query.$top) || bytes > budget.maxBytes)) {
+          throw new AxiError("Mail page exceeds the requested row or byte budget", "GRAPH_ERROR", ["Reduce --limit; oversized mail pages are never buffered into cursors"]);
+        }
         const pageTotal = countOf(parsed);
         if (total === null && pageTotal !== null) total = pageTotal;
         const rawNext = nextLinkOf(parsed);
@@ -1030,7 +1043,7 @@ export class GraphSession {
     // is both sensitive and excluded reports the sensitive denial.
     // Security is a separate explicit opt-in; existing Entra profiles do not
     // acquire Defender access merely by installing this command.
-    const pack = operation.id === HUNTING_OPERATION ? "security" : "entra";
+    const pack = isMailOperation(operation) ? "mail" : operation.id === HUNTING_OPERATION ? "security" : "entra";
     if (!profile.enabledPacks.includes(pack)) {
       throw new AxiError(`Pack ${pack} is not enabled for this profile`, "POLICY_DENIED", ["mg-axi profile show --profile <name>"]);
     }
@@ -1046,7 +1059,7 @@ export class GraphSession {
       ]);
     }
     const area = sensitiveArea(operation.path);
-    if (area && !profile.sensitiveAreas.includes(area)) {
+    if (area && !(area === "mail" && profile.enabledPacks.includes("mail")) && !profile.sensitiveAreas.includes(area)) {
       throw new AxiError(`Sensitive area ${area} is not enabled for this profile (${operation.id})`, "POLICY_DENIED", [
         "Mail and file content stay disabled unless explicitly enabled for the profile",
       ]);

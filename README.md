@@ -19,7 +19,8 @@ $ npx -y @knowttl/mg-axi@0.1.10 --version
 
 Working directly with Graph REST requires agents to manage route selection, permissions, paging and response size.
 mg-axi exposes reviewed commands with bounded lists, TOON output and contextual next steps, without requiring an MCP server.
-It targets workforce Entra tenants in the commercial cloud; sovereign clouds, personal accounts and general Microsoft 365 mail/file access are outside its supported surface.
+It targets workforce Entra tenants in the commercial cloud; sovereign clouds, personal accounts and general Microsoft 365 file access are outside its supported surface.
+The opt-in mail pack currently supports folder list/show only; see [the generated skill](skills/mg-axi/SKILL.md) for mailbox authorization and bounds.
 
 ## Features
 

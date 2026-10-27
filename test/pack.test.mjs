@@ -137,7 +137,7 @@ test("setup reports unconfigured state without writing configuration", () => {
     assert.equal(output.profiles, "0 profiles configured");
     assert.ok(output.capabilities.implemented.includes("mg-axi setup") || output.capabilities.implemented.includes("setup"));
     assert.ok(output.capabilities.implemented.includes("entra user list"));
-    assert.equal(output.capabilities.reads, 268);
+    assert.equal(output.capabilities.reads, 273);
     assert.equal(output.capabilities.writes, 5);    assert.equal(output.capabilities.local, 11);
     assert.ok(!existsSync(config), "setup writes nothing");
   } finally { rmSync(home, { recursive: true, force: true }); }
@@ -674,7 +674,7 @@ test("keeps the committed coverage record generated from the inventory", () => {
 
 test("generated public documents describe capabilities without delivery instructions", () => {
   for (const document of [capabilityDocument(), skillDocument()]) {
-    assert.doesNotMatch(document, /firstmate|captain|inbox|PR body|origin\/main|mg-ext-\d|docs\/build-plan\.md/i);
+    assert.doesNotMatch(document, /firstmate|captain|steering inbox|task inbox|PR body|origin\/main|mg-ext-\d|docs\/build-plan\.md/i);
   }
 });
 

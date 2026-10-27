@@ -1921,12 +1921,36 @@
       "owningSlice": "MAIL-01"
     },
     {
+      "id": "v1.0:GET:/me/mailFolders/{mailFolder-id}/messageRules",
+      "method": "GET",
+      "path": "/me/mailFolders/{mailFolder-id}/messageRules",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-04"
+    },
+    {
+      "id": "v1.0:GET:/me/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "method": "GET",
+      "path": "/me/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-04"
+    },
+    {
       "id": "v1.0:GET:/me/mailFolders/{mailFolder-id}/messages",
       "method": "GET",
       "path": "/me/mailFolders/{mailFolder-id}/messages",
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-02"
+    },
+    {
+      "id": "v1.0:GET:/me/mailboxSettings",
+      "method": "GET",
+      "path": "/me/mailboxSettings",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-04"
     },
     {
       "id": "v1.0:GET:/me/messages",
@@ -1943,6 +1967,22 @@
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-03"
+    },
+    {
+      "id": "v1.0:GET:/me/messages/{message-id}/attachments",
+      "method": "GET",
+      "path": "/me/messages/{message-id}/attachments",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-04"
+    },
+    {
+      "id": "v1.0:GET:/me/outlook/masterCategories",
+      "method": "GET",
+      "path": "/me/outlook/masterCategories",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-04"
     },
     {
       "id": "v1.0:GET:/oauth2PermissionGrants",
@@ -2369,12 +2409,36 @@
       "owningSlice": "MAIL-01"
     },
     {
+      "id": "v1.0:GET:/users/{user-id}/mailFolders/{mailFolder-id}/messageRules",
+      "method": "GET",
+      "path": "/users/{user-id}/mailFolders/{mailFolder-id}/messageRules",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-04"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "method": "GET",
+      "path": "/users/{user-id}/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-04"
+    },
+    {
       "id": "v1.0:GET:/users/{user-id}/mailFolders/{mailFolder-id}/messages",
       "method": "GET",
       "path": "/users/{user-id}/mailFolders/{mailFolder-id}/messages",
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-02"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}/mailboxSettings",
+      "method": "GET",
+      "path": "/users/{user-id}/mailboxSettings",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-04"
     },
     {
       "id": "v1.0:GET:/users/{user-id}/messages",
@@ -2391,6 +2455,22 @@
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-03"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}/messages/{message-id}/attachments",
+      "method": "GET",
+      "path": "/users/{user-id}/messages/{message-id}/attachments",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-04"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}/outlook/masterCategories",
+      "method": "GET",
+      "path": "/users/{user-id}/outlook/masterCategories",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-04"
     },
     {
       "id": "v1.0:PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}",

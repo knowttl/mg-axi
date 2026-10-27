@@ -112,7 +112,7 @@ The inventory must cover directory/tenant administration; users/groups/relations
 The map identifies beta-only areas including network access and selected backup, user-flow, policy and tenant-setting surfaces.
 Deprecated multicloud permissions management is recorded as deprecated rather than implemented.
 Credential values, device recovery keys, LAPS passwords and secret minting are explicit blocked dispositions for the initial supported surface, separate from useful metadata.
-Mail/file content stays refused for raw read access; the opt-in MAIL-01 mail-folder, MAIL-02 mail-message, MAIL-03 message-show and MAIL-04 mail-metadata reads ship as named commands and remaining mail/file named work remains separately authorized work.
+Mail/file content stays refused for raw read access; the opt-in MAIL-01 mail-folder, MAIL-02 mail-message, MAIL-03 message-show and MAIL-04 mail-metadata reads and MAIL-05 mail message tag, flag and mark writes ship as named commands and remaining mail/file named work remains separately authorized work.
 
 The metadata inventory is not a substitute for permissions/licensing documentation.
 Report named coverage and raw reachability separately.

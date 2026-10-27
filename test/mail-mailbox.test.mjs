@@ -29,7 +29,7 @@ function fixture(t) {
 }
 
 for (const command of commands) {
-  for (const mailbox of ["o'brien@contoso.example", "name#^~!_-@contoso.example"]) test(`${command.join(" ")} accepts and encodes permitted UPN ${mailbox}`, async t => {
+  for (const mailbox of ["o'brien@contoso.example", "name#^~!_-@contoso.example", "user+tag@contoso.example"]) test(`${command.join(" ")} accepts and encodes permitted UPN ${mailbox}`, async t => {
     const f = fixture(t);
     await f.run(command, mailbox);
     assert.equal(f.requests.length, 1);

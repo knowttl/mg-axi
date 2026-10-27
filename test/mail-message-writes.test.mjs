@@ -13,6 +13,11 @@ const actions = [
   { action: "flag", flags: ["--status", "flagged"], field: "flag", current: { flagStatus: "notFlagged" }, desired: { flagStatus: "flagged" } },
   { action: "mark", flags: ["--state", "read"], field: "isRead", current: false, desired: true },
 ];
+const transfers = [
+  { action: "move", flags: ["--destination", "Folder+ID="], destination: "Folder+ID=" },
+  { action: "copy", flags: ["--destination", "archive"], destination: "archive" },
+  { action: "trash", flags: [], destination: "deleteditems" },
+];
 function fixture(t, spec, options = {}) {
   const directory = mkdtempSync(join(tmpdir(), "mg-axi-mail-writes-"));
   const previousExitCode = process.exitCode;
@@ -25,7 +30,7 @@ function fixture(t, spec, options = {}) {
   const configuration = JSON.parse(readFileSync(config, "utf8"));
   for (const profile of Object.values(configuration.profiles)) {
     profile.enabledPacks = ["mail"];
-    profile.writes = { allowWrites: true, operations: actions.map(item => `mail.message.${item.action}`) };
+    profile.writes = { allowWrites: true, operations: [...actions, ...transfers].map(item => `mail.message.${item.action}`) };
   }
   writeFileSync(config, JSON.stringify(configuration));
   const reads = [], writes = [], credentials = [], events = [];
@@ -49,6 +54,93 @@ function fixture(t, spec, options = {}) {
   const journal = () => existsSync(journalPath) ? readFileSync(journalPath, "utf8").trim().split("\n").map(line => JSON.parse(line)) : [];
   return { run, reads, writes, credentials, events, journal, config, configuration, journalPath };
 }
+
+for (const spec of transfers) {
+  test(`${spec.action} previews only the target and destination`, async t => {
+    const f = fixture(t, spec);
+    const result = decode(encode(await f.run()));
+    assert.deepEqual(result.results.map(row => row.status), ["dry-run", "dry-run"]);
+    assert.deepEqual(JSON.parse(result.results[0].preview.currentState), { id: "A+ID=" });
+    assert.deepEqual(JSON.parse(result.results[0].preview.proposedChange), { destinationId: spec.destination });
+    assert.equal(f.writes.length, 0); assert.equal(f.journal().length, 0);
+    assert.ok(!JSON.stringify(result).includes("unreviewed-"));
+    assert.equal(new URL(f.reads[0].url).searchParams.get("$select"), "id");
+  });
+  for (const [profile, target] of [["soc", "me"], ["soc", mailbox], ["batch", mailbox]]) test(`${spec.action} posts once per ID and returns the new ID in ${profile}/${target}`, async t => {
+    const f = fixture(t, spec, { write: (_request, count) => ({ status: 201, headers: {}, body: JSON.stringify({ id: `new-${count}`, body: { content: "unreviewed-response" }, subject: "private-subject" }) }) });
+    const result = await f.run(["--execute", "--confirm", "A+ID=,B+ID="], profile, target);
+    assert.deepEqual(result.results.map(row => [row.id, row.newId, row.status]), [["A+ID=", "new-1", "success"], ["B+ID=", "new-2", "success"]]);
+    assert.deepEqual(f.events, ["read", "read", "write", "read", "read", "write"]);
+    assert.deepEqual(f.journal().map(row => row.kind), ["intent", "outcome", "intent", "outcome"]);
+    assert.deepEqual(f.journal().filter(row => row.kind === "outcome").map(row => row.outcome), ["SUCCESS", "SUCCESS"]);
+    for (const request of f.writes) {
+      assert.equal(request.method, "POST");
+      assert.deepEqual(JSON.parse(request.body), { destinationId: spec.destination });
+      assert.match(request.url, target === "me" ? /\/me\/messages\/[AB]%2BID%3D\/(move|copy)$/ : /\/users\/mailbox%40contoso.example\/messages\/[AB]%2BID%3D\/(move|copy)$/);
+      assert.equal(new URL(request.url).pathname.split("/").at(-1), spec.action === "copy" ? "copy" : "move");
+    }
+    assert.equal(f.credentials.filter(item => item.scopes?.includes("https://graph.microsoft.com/Mail.ReadWrite")).length, profile === "soc" ? 2 : 0);
+    assert.ok(!JSON.stringify(result).includes("unreviewed-")); assert.ok(!JSON.stringify(result).includes("private-subject"));
+  });
+  for (const status of [403, 429, 503]) test(`${spec.action} stops on ${status} without retry`, async t => {
+    const f = fixture(t, spec, { write: () => ({ status, headers: { "retry-after": "0" }, body: '{"error":{"message":"private-echo"}}' }) });
+    const result = await f.run(["--execute", "--confirm", "A+ID=,B+ID="]);
+    assert.deepEqual(result.results.map(row => row.status), [status === 503 ? "unknown" : "failed", "not-attempted"]);
+    assert.equal(f.writes.length, 1); assert.equal(result.complete, false); assert.equal(process.exitCode, 1);
+    assert.ok(!JSON.stringify(result).includes("private-echo"));
+  });
+  test(`${spec.action} refuses confirmation and operation mismatches before calls`, async t => {
+    const f = fixture(t, spec);
+    await assert.rejects(f.run(["--execute", "--confirm", "B+ID=,A+ID="]), { code: "CONFIRM_MISMATCH" });
+    f.configuration.profiles.soc.writes.operations = ["mail.message.mark"];
+    writeFileSync(f.config, JSON.stringify(f.configuration));
+    await assert.rejects(f.run(), { code: "OPERATION_NOT_WRITABLE" });
+    assert.equal(f.credentials.length, 0); assert.equal(f.reads.length, 0); assert.equal(f.writes.length, 0);
+  });
+  test(`${spec.action} timeout stops the batch with an unknown audited outcome`, async t => {
+    const f = fixture(t, spec, { write: () => { throw new Error("fixture timeout"); } });
+    const result = await f.run(["--execute", "--confirm", "A+ID=,B+ID="]);
+    assert.deepEqual(result.results.map(row => row.status), ["unknown", "not-attempted"]);
+    assert.equal(f.writes.length, 1); assert.equal(f.journal().at(-1).outcome, "OUTCOME_UNKNOWN");
+  });
+}
+
+for (const spec of transfers.slice(0, 2)) {
+  for (const destination of ["", "../folder", "folder/child", "a,b", " folder", "folder?x=y"]) test(`${spec.action} refuses unsafe destination ${destination} before calls`, async t => {
+    const f = fixture(t, { ...spec, flags: ["--destination", destination] });
+    await assert.rejects(f.run(), { code: "VALIDATION_ERROR" });
+    assert.equal(f.credentials.length, 0); assert.equal(f.reads.length, 0); assert.equal(f.writes.length, 0);
+  });
+}
+
+test("trash refuses destination overrides before calls", async t => {
+  const f = fixture(t, transfers[2]);
+  await assert.rejects(f.run(["--destination", "archive"]));
+  assert.equal(f.credentials.length, 0); assert.equal(f.writes.length, 0);
+});
+
+for (const body of ["{}", "[]", "null", '{"id":42}', '{"id":""}', "invalid json"]) test(`move missing response ID stops after accepted mutation (${body})`, async t => {
+  const f = fixture(t, transfers[0], { write: () => ({ status: 201, headers: {}, body }) });
+  const result = await f.run(["--execute", "--confirm", "A+ID=,B+ID="]);
+  assert.deepEqual(result.results.map(row => row.status), ["unknown", "not-attempted"]);
+  assert.equal(f.writes.length, 1); assert.equal(result.complete, false); assert.equal(process.exitCode, 1);
+  assert.ok(result.results[0].auditId);
+});
+
+test("copy new ID truncates with full escape hatch", async t => {
+  const f = fixture(t, transfers[1], { write: () => ({ status: 201, headers: {}, body: JSON.stringify({ id: "x".repeat(501) }) }) });
+  const preview = await f.run(["--execute", "--confirm", "a"], "soc", "me", "a");
+  assert.match(preview.results[0].newId, /truncated/);
+  const full = await f.run(["--execute", "--confirm", "a", "--full"], "soc", "me", "a");
+  assert.equal(full.results[0].newId, "x".repeat(501));
+});
+
+test("move returned ID retains redaction even with full", async t => {
+  const f = fixture(t, transfers[0], { write: () => ({ status: 201, headers: {}, body: JSON.stringify({ id: "-----BEGIN PRIVATE KEY-----fixture-----END PRIVATE KEY-----" }) }) });
+  const result = await f.run(["--execute", "--confirm", "a", "--full"], "soc", "me", "a");
+  assert.ok(!JSON.stringify(result).includes("PRIVATE KEY"));
+  assert.equal(result.results[0].status, "success");
+});
 
 for (const spec of actions) {
   test(`${spec.action} previews only reviewed state without writes or audit`, async t => {

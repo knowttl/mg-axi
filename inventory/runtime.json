@@ -2521,12 +2521,44 @@
       "owningSlice": "WRITE-05"
     },
     {
+      "id": "v1.0:POST:/me/messages/{message-id}/copy",
+      "method": "POST",
+      "path": "/me/messages/{message-id}/copy",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-06"
+    },
+    {
+      "id": "v1.0:POST:/me/messages/{message-id}/move",
+      "method": "POST",
+      "path": "/me/messages/{message-id}/move",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-06"
+    },
+    {
       "id": "v1.0:POST:/security/microsoft.graph.security.runHuntingQuery",
       "method": "POST",
       "path": "/security/microsoft.graph.security.runHuntingQuery",
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "SECURITY-01"
+    },
+    {
+      "id": "v1.0:POST:/users/{user-id}/messages/{message-id}/copy",
+      "method": "POST",
+      "path": "/users/{user-id}/messages/{message-id}/copy",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-06"
+    },
+    {
+      "id": "v1.0:POST:/users/{user-id}/messages/{message-id}/move",
+      "method": "POST",
+      "path": "/users/{user-id}/messages/{message-id}/move",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-06"
     },
     {
       "id": "v1.0:POST:/users/{user-id}/revokeSignInSessions",

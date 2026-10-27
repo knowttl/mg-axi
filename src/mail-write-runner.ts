@@ -1,4 +1,5 @@
 import { AxiError } from "axi-sdk-js";
+import { redactGraphValue } from "./graph-session.js";
 import type { MutationCoordinator, MutationDefinition, MutationExecuteOptions, MutationResult } from "./mutations.js";
 
 // Validate the entire selection before the first credential or request.
@@ -17,6 +18,7 @@ export async function runMailWrites(args: {
   ids: string[];
   coordinator: MutationCoordinator;
   definition: (id: string) => MutationDefinition;
+  includeNewId?: boolean;
   prepare: (id: string) => Promise<{ payload: unknown; options: MutationExecuteOptions }>;
 }): Promise<{ results: Record<string, unknown>[]; complete: boolean }> {
   const { ids, coordinator, definition, prepare } = args;
@@ -31,11 +33,17 @@ export async function runMailWrites(args: {
     try {
       const prepared = await prepare(id);
       const result: MutationResult = await coordinator.execute({ ...definition(id), payload: prepared.payload }, prepared.options);
+      const newId = args.includeNewId && result.kind === "success" && result.response && typeof result.response === "object" && !Array.isArray(result.response)
+        ? (result.response as Record<string, unknown>).id : undefined;
+      const missingId = args.includeNewId && result.kind === "success" && (typeof newId !== "string" || !newId.trim());
       results.push({ id, status: result.kind, ...("auditId" in result && result.auditId ? { auditId: result.auditId } : {}),
+        ...(args.includeNewId && result.kind === "success" ? missingId
+          ? { status: "unknown", guidance: "Graph accepted the change but did not return a message ID; read back the destination before continuing and never replay this intent" }
+          : { newId: redactGraphValue(newId) } : {}),
         ...(result.kind === "dry-run" ? { preview: { ...result.preview } } : {}),
         ...(result.kind === "unknown" ? { guidance: result.guidance } : {}),
         ...(result.kind === "failed" ? { httpStatus: result.status } : {}) });
-      stopped = result.kind === "failed" || result.kind === "unknown";
+      stopped = result.kind === "failed" || result.kind === "unknown" || missingId === true;
     } catch (error) {
       // Preserve earlier outcomes even if a read or journal failed. In
       // particular, an outcome-journal failure can follow a successful send.

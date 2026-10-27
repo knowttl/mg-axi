@@ -1921,6 +1921,22 @@
       "owningSlice": "MAIL-01"
     },
     {
+      "id": "v1.0:GET:/me/mailFolders/{mailFolder-id}/messages",
+      "method": "GET",
+      "path": "/me/mailFolders/{mailFolder-id}/messages",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-02"
+    },
+    {
+      "id": "v1.0:GET:/me/messages",
+      "method": "GET",
+      "path": "/me/messages",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-02"
+    },
+    {
       "id": "v1.0:GET:/oauth2PermissionGrants",
       "method": "GET",
       "path": "/oauth2PermissionGrants",
@@ -2343,6 +2359,22 @@
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-01"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}/mailFolders/{mailFolder-id}/messages",
+      "method": "GET",
+      "path": "/users/{user-id}/mailFolders/{mailFolder-id}/messages",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-02"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}/messages",
+      "method": "GET",
+      "path": "/users/{user-id}/messages",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-02"
     },
     {
       "id": "v1.0:PATCH:/identity/conditionalAccess/policies/{conditionalAccessPolicy-id}",

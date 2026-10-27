@@ -20,8 +20,17 @@ class InventoryTests(unittest.TestCase):
                     for method in ("POST", "PATCH", "DELETE"):
                         write = make_row("v1.0", path, method, {"operationId": "fixture"})
                         self.assertEqual((write["disposition"], write["owningSlice"]), ("excluded", None))
-        for path in ("/me/messages", "/me/mailFolders/{mailFolder-id}/messages", "/me/mailFolders/{mailFolder-id}/childFolders"):
+        for path in ("/me/messages/{message-id}", "/me/mailFolders/{mailFolder-id}/childFolders"):
             self.assertIsNone(scoped_slice(path))
+
+    def test_message_collections_admit_only_reviewed_reads(self):
+        for root in ("/me", "/users/{user-id}"):
+            for suffix in ("/messages", "/mailFolders/{mailFolder-id}/messages"):
+                path = root + suffix
+                row = make_row("v1.0", path, "GET", {"operationId": "fixture"}, {f"GET:{path}": "mail message list"})
+                self.assertEqual((row["disposition"], row["owningSlice"]), ("named-command", "MAIL-02"))
+                for method in ("POST", "PATCH", "DELETE"):
+                    self.assertIsNone(scoped_slice(path, method))
 
     def test_hunting_is_a_separately_reviewed_read_only_security_action(self):
         path = "/security/microsoft.graph.security.runHuntingQuery"
@@ -199,7 +208,7 @@ class InventoryTests(unittest.TestCase):
             ("/users(userPrincipalName='{userPrincipalName}')", "READ-01"),
             ("/groups/{group-id}/members", "READ-02"),
             ("/me/memberOf", "READ-01"),
-            ("/users/{user-id}/messages", None),
+            ("/users/{user-id}/messages", "MAIL-02"),
             ("/users/{user-id}/managedDevices", None),
             ("/groups/{group-id}/drive", None),
             ("/roleManagement/deviceManagement", None),
@@ -255,15 +264,15 @@ components:
             "v1.0:GET:/unscoped", "v1.0:GET:/users", "v1.0:GET:/users/{user-id}/messages",
             "v1.0:PATCH:/invitations/invitedUser/mailboxSettings", "v1.0:PATCH:/users/{user-id}",
         ])
-        self.assertEqual(inventory["sources"][0]["excludedByRoot"], {"invitations": 1, "unscoped": 1, "users": 1})
-        self.assertEqual([(row["disposition"], row["owningSlice"]) for row in inventory["operations"] if row["path"] in {"/unscoped", "/users/{user-id}/messages", "/invitations/invitedUser/mailboxSettings"}], [("excluded", None)] * 6)
+        self.assertEqual(inventory["sources"][0]["excludedByRoot"], {"invitations": 1, "unscoped": 1})
+        self.assertEqual([(row["disposition"], row["owningSlice"]) for row in inventory["operations"] if row["path"] in {"/unscoped", "/invitations/invitedUser/mailboxSettings"}], [("excluded", None)] * 4)
         for path in ("/unscoped", "/users"):
             incomplete = copy.deepcopy(inventory)
             incomplete["operations"] = [row for row in incomplete["operations"] if row["path"] != path]
             with self.subTest(path=path), self.assertRaisesRegex(ValueError, "Missing operation"):
                 validate(incomplete)
         cross_pack = copy.deepcopy(inventory)
-        cross_pack["operations"][2].update(disposition="scheduled", owningSlice="READ-01")
+        cross_pack["operations"][0].update(disposition="scheduled", owningSlice="READ-01")
         with self.assertRaisesRegex(ValueError, "Boundary mismatch"):
             validate(cross_pack)
 
@@ -406,7 +415,7 @@ components:
             from inventory import shipped_operations
             first = alternate_operations(shipped_operations())
             self.assertEqual(first, alternate_operations(shipped_operations()))
-            self.assertEqual(len(first), 25)
+            self.assertEqual(len(first), 28)
 
     def test_discovery_cannot_claim_raw_coverage(self):
         inventory = json.loads((ROOT / "inventory/operations.json").read_text())

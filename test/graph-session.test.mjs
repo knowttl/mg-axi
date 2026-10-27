@@ -303,7 +303,7 @@ test("mutating a resolved operation cannot change the authoritative inventory", 
 
 for (const [name, operation, params] of [
   ["intentionally-blocked route", blockedDeviceCredentials, { "deviceLocalCredentialInfo-id": "fixture-id" }],
-  ["excluded route", discoveryOperation("v1.0", "GET", "/me/messages"), {}],
+  ["excluded route", discoveryOperation("v1.0", "GET", "/me/messages/{message-id}"), { "message-id": "fixture-message" }],
 ]) test(`${name} is denied with no credential and no HTTP call`, async () => {
   const f = fixture(json(200, {}));
   await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, params, scopes }), { code: "VALIDATION_ERROR" });
@@ -328,7 +328,7 @@ for (const [area, id] of [
   const [version, method, ...route] = id.split(":");
   const operation = discoveryOperation(version, method, route.join(":"));
   const f = fixture(json(200, {}));
-  await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, scopes }), { code: "VALIDATION_ERROR" });
+  await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, scopes }), { code: area === "mail" ? "POLICY_DENIED" : "VALIDATION_ERROR" });
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
 });

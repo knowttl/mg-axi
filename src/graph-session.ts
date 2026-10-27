@@ -550,13 +550,14 @@ export function authorizeUrl(operation: SessionOperation, params: Record<string,
   for (const [key, value] of url.searchParams) {
     if (queryKeys.has(key)) throw denied(operation, `the target repeats query ${key}`);
     queryKeys.add(key);
+    if (isMailOperation(operation) && key === "$skip" && /^\d+$/.test(value)) continue;
     try {
       checkQueryEntry(key, value);
     } catch {
       throw denied(operation, `the target carries unsupported query ${key}`);
     }
   }
-  checkQueryContext(Object.fromEntries(url.searchParams), consistencyLevel);
+  checkQueryContext(Object.fromEntries(url.searchParams), consistencyLevel, isMailOperation(operation));
   url.hash = "";
   return url.toString();
 }
@@ -579,13 +580,13 @@ function faultBody(body: string): string {
   }
 }
 
-function checkQueryContext(query: Record<string, string>, consistencyLevel: "eventual" | undefined): void {
+function checkQueryContext(query: Record<string, string>, consistencyLevel: "eventual" | undefined, mail = false): void {
   if (consistencyLevel !== undefined && consistencyLevel !== "eventual") {
     throw new AxiError(`Unsupported consistency ${consistencyLevel}`, "VALIDATION_ERROR", [
       "Advanced queries use ConsistencyLevel eventual or no header",
     ]);
   }
-  const needsEventual = Object.hasOwn(query, "$search") || String(query["$count"] ?? "").toLowerCase() === "true";
+  const needsEventual = (!mail && Object.hasOwn(query, "$search")) || String(query["$count"] ?? "").toLowerCase() === "true";
   if (Object.hasOwn(query, "$expand")) {
     if (needsEventual) {
       throw new AxiError("Advanced queries cannot use $expand", "VALIDATION_ERROR", ["Use $expand separately from $search and $count=true"]);
@@ -681,6 +682,7 @@ function bodyBytes(body: string): number {
 }
 
 interface CursorState {
+  searchRows?: number;
   next?: string;
   buffered: unknown[];
   seen: string[];
@@ -695,7 +697,7 @@ interface CursorState {
 }
 
 function encodeCursor(operation: SessionOperation, state: CursorState): string {
-  const payload = { v: 3, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN), query: state.query, consistencyLevel: state.consistencyLevel ?? null, context: state.context, identity: state.identity, total: state.total };
+  const payload = { v: 3, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN), query: state.query, consistencyLevel: state.consistencyLevel ?? null, context: state.context, identity: state.identity, total: state.total, searchRows: state.searchRows };
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
@@ -709,7 +711,7 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   } catch {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
-  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown; query?: unknown; consistencyLevel?: unknown; context?: unknown; identity?: unknown; total?: unknown };
+  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown; query?: unknown; consistencyLevel?: unknown; context?: unknown; identity?: unknown; total?: unknown; searchRows?: unknown };
   if (!record || typeof record !== "object" || record.v !== 3 || record.op !== operation.id || !(record.next === null || typeof record.next === "string") || !Array.isArray(record.buffered) || !Array.isArray(record.seen) || !record.query || typeof record.query !== "object" || Array.isArray(record.query) || !(record.consistencyLevel === null || record.consistencyLevel === "eventual") || typeof record.context !== "string" || !/^[0-9a-f]{64}$/.test(record.context) || !(record.identity === null || (typeof record.identity === "string" && /^[0-9a-f]{64}$/.test(record.identity)))) {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
@@ -725,8 +727,9 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   const query = record.query as Record<string, string>;
   const consistencyLevel = record.consistencyLevel ?? undefined;
   buildQuery(query);
-  checkQueryContext(query, consistencyLevel);
-  return { next: record.next ?? undefined, buffered: record.buffered.map(redact), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity, total };
+  checkQueryContext(query, consistencyLevel, isMailOperation(operation));
+  if (record.searchRows !== undefined && (typeof record.searchRows !== "number" || !Number.isSafeInteger(record.searchRows) || record.searchRows < 0 || record.searchRows >= 1000)) throw new AxiError("Invalid search cursor count", "VALIDATION_ERROR");
+  return { next: record.next ?? undefined, buffered: record.buffered.map(redact), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity, total, searchRows: record.searchRows as number | undefined };
 }
 
 function nextLinkOf(body: unknown): string | undefined {
@@ -814,7 +817,7 @@ export class GraphSession {
     }
     if (args.hunting) throw new AxiError("Hunting input is only allowed for the reviewed hunting action", "VALIDATION_ERROR");
     const query = args.query ?? {};
-    checkQueryContext(query, args.consistencyLevel);
+    checkQueryContext(query, args.consistencyLevel, isMailOperation(operation));
     const params = args.params ?? {};
     const url = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params)}${buildQuery(query)}`;
     const clock = args.clock ?? systemClock;
@@ -867,7 +870,7 @@ export class GraphSession {
     if (isMailOperation(operation) && resumed?.buffered.length) throw new AxiError("Mail cursors cannot contain buffered rows", "VALIDATION_ERROR");
     const query = { ...resumed?.query, ...args.query };
     const consistencyLevel = args.consistencyLevel ?? resumed?.consistencyLevel;
-    checkQueryContext(query, consistencyLevel);
+    checkQueryContext(query, consistencyLevel, isMailOperation(operation));
     if (resumed && ((args.query !== undefined && buildQuery(query) !== buildQuery(resumed.query)) || (args.consistencyLevel !== undefined && args.consistencyLevel !== resumed.consistencyLevel))) {
       throw new AxiError("Resume arguments conflict with collection cursor context", "VALIDATION_ERROR", ["Resume with the cursor's original query and consistency level, or omit those arguments"]);
     }
@@ -897,6 +900,8 @@ export class GraphSession {
       }
     };
     const results: unknown[] = [];
+    const mailSearch = isMailOperation(operation) && query.$search !== undefined;
+    const searchRows = resumed?.searchRows ?? 0;
     let requests = 0;
     let bytes = 0;
     let identity = resumed?.identity ?? null;
@@ -908,7 +913,7 @@ export class GraphSession {
       query,
       complete: false,
       reason,
-      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel, context, identity, total }),
+      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel, context, identity, total, ...(mailSearch ? { searchRows: searchRows + results.length } : {}) }),
       requests,
       bytes,
       total,
@@ -942,6 +947,7 @@ export class GraphSession {
       signal?.throwIfAborted();
       if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
       while (pending.length > 0 && (args.limit === undefined || results.length < args.limit)) results.push(pending.shift()!);
+      if (mailSearch && searchRows + results.length >= 1000) return { value: results, query, complete: false, reason: "search-cap", requests, bytes, total };
       if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
       if (args.limit !== undefined && results.length >= args.limit) {
         if (pending.length === 0 && !current) return { value: results, query, complete: true, requests, bytes, total };
@@ -963,6 +969,7 @@ export class GraphSession {
         try {
           requests += 1;
           const requestUrl = new URL(fetchUrl);
+          if (mailSearch) requestUrl.searchParams.set("$top", String(Math.min(Number(query.$top), 1000 - searchRows - results.length)));
           if (operation.path === "/users/{user-id}/authentication/methods") requestUrl.searchParams.delete("$select");
           response = await beforeDeadline(signal => this.deps.transport({ method: "GET", url: requestUrl.toString(), headers: headersFor(), signal }), clock, deadline, signal);
         } catch (error) {
@@ -1016,7 +1023,7 @@ export class GraphSession {
           throw new AxiError(`Graph returned a non-JSON success body for ${operation.id}`, "GRAPH_ERROR", ["Successful reads are JSON; anything else is malformed"]);
         }
         const rows = valuesOf(operation, parsed);
-        if (isMailOperation(operation) && (rows.length > Number(query.$top) || bytes > budget.maxBytes)) {
+        if (isMailOperation(operation) && (rows.length > Math.min(Number(query.$top), mailSearch ? 1000 - searchRows - results.length : Infinity) || bytes > budget.maxBytes)) {
           throw new AxiError("Mail page exceeds the requested row or byte budget", "GRAPH_ERROR", ["Reduce --limit; oversized mail pages are never buffered into cursors"]);
         }
         const pageTotal = countOf(parsed);
@@ -1186,7 +1193,7 @@ export class GraphSession {
       if (error) return error;
     }
     // Hunting errors can echo arbitrary query literals, including secrets.
-    const fault = operation.id === HUNTING_OPERATION ? "" : faultBody(response.body);
+    const fault = operation.id === HUNTING_OPERATION || isMailOperation(operation) ? "" : faultBody(response.body);
     if (status === 401) {
       return new AxiError(`Graph rejected the credential for ${operation.id} (401)${fault}`, "AUTH_REQUIRED", [
         "mg-axi login --profile <name> --scopes <comma-separated-Graph-scopes>",

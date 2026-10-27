@@ -41,7 +41,7 @@ Five writes ship as named, gated commands through the WRITE-00 mutation coordina
 reviewed deferred/blocked/deprecated dispositions rather than scheduled; no agreed v1.0 operation, read or
 write, is left merely scheduled. Beta stays scheduled by definition and was never agreed for v1.
 The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS URLs) stay out.
-- v1.0 named-command: 312 (307 reads plus 5 writes below), reviewed-raw-read: 5, scheduled: 0
+- v1.0 named-command: 312 (305 read rows plus 7 write rows; 8 gated write leaves in Named writes below), reviewed-raw-read: 5, scheduled: 0
 - v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
 - beta scheduled (never agreed for v1): 3738
 - shipped writes: WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).

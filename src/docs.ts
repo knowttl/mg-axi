@@ -279,6 +279,7 @@ type InventoryRow = {
   disposition: string;
   owningSlice: string | null;
   reason: string;
+  method: string;
 };
 
 // Initial write families resolve to shipped when the catalogue carries a
@@ -347,7 +348,8 @@ function completeAuditRecord(rows: InventoryRow[]): string[] {
   const named = v1("named-command");
   const raw = v1("reviewed-raw-read");
   const scheduled = v1("scheduled");
-  const writeRows = rows.filter(row => row.id.startsWith("v1.0:") && row.disposition === "named-command" && row.owningSlice?.startsWith("WRITE-"));
+  const writeRows = rows.filter(row => row.id.startsWith("v1.0:") && row.disposition === "named-command"
+    && (row.owningSlice?.startsWith("WRITE-") || (row.owningSlice?.startsWith("MAIL-") && row.method !== "GET")));
   const writeN = (version: string, disposition: string): number =>
     rows.filter(row => row.owningSlice === "WRITE-N" && row.id.startsWith(`${version}:`) && row.disposition === disposition).length;
   const writeNScheduled = rows.filter(row => row.owningSlice === "WRITE-N" && row.disposition === "scheduled").length;
@@ -370,7 +372,7 @@ function completeAuditRecord(rows: InventoryRow[]): string[] {
     "reviewed deferred/blocked/deprecated dispositions rather than scheduled; no agreed v1.0 operation, read or",
     "write, is left merely scheduled. Beta stays scheduled by definition and was never agreed for v1.",
     "The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS URLs) stay out.",
-    `- v1.0 named-command: ${named} (${named - writeRows.length} reads plus ${writeRows.length} writes below), reviewed-raw-read: ${raw}, scheduled: ${scheduled}`,
+    `- v1.0 named-command: ${named} (${named - writeRows.length} read rows plus ${writeRows.length} write rows; ${LEAVES.filter(leaf => leaf.operation !== undefined && leafEffect(leaf) === "write").length} gated write leaves in Named writes below), reviewed-raw-read: ${raw}, scheduled: ${scheduled}`,
     `- v1.0 deferred (out of v1): ${v1("deferred")}, intentionally-blocked: ${v1("intentionally-blocked")}, deprecated: ${v1("deprecated")}, unavailable: ${v1("unavailable")}`,
     `- beta scheduled (never agreed for v1): ${betaScheduled}`,
     `- shipped writes: ${writeStatus.shipped.join(", ")}.`,

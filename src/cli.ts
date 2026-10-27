@@ -17,6 +17,7 @@ import { readMailMetadata } from "./mail-metadata.js";
 import { writeMailMessages } from "./mail-message-writes.js";
 import { writeMailFolders } from "./mail-folder-writes.js";
 import { writeMailRules } from "./mail-rule-writes.js";
+import { downloadMail, type BinaryTransport } from "./mail-download.js";
 import { KqlValidationError } from "./kql.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
@@ -143,6 +144,7 @@ function runSetupHooks(): Record<string, unknown> {
 export interface DispatchOverrides {
   transport?: GraphTransport;
   mutationTransport?: MutationTransport;
+  binaryTransport?: BinaryTransport;
   delegated?: DelegatedAuth;
   application?: ApplicationAuth;
   journalPath?: string;
@@ -195,6 +197,11 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     }
     if (flags.cursor !== undefined) flags.cursor = (await readCursor(String(flags.cursor)))!;
     const session = new GraphSession({ delegated, application, transport: overrides.transport ?? fetchTransport });
+    if (["mail attachment save", "mail message export"].includes(leaf.path)) {
+      const coordinator = createMutationCoordinator({ profile: selected.profile, delegated, application,
+        transport: overrides.mutationTransport ?? mutationFetchTransport, binaryTransport: overrides.binaryTransport, journalPath: overrides.journalPath });
+      return downloadMail(coordinator, flags, leaf.path === "mail attachment save", leafHelp(leaf));
+    }
     if (["mail rule create", "mail rule update", "mail rule delete", "mail folder create", "mail folder delete", "mail category create", "mail message tag", "mail message flag", "mail message mark", "mail message move", "mail message copy", "mail message trash"].includes(leaf.path)) {
       const coordinator = createMutationCoordinator({ profile: selected.profile, delegated, application,
         transport: overrides.mutationTransport ?? mutationFetchTransport, journalPath: overrides.journalPath });

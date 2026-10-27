@@ -251,8 +251,15 @@ MAIL_RULE_WRITES = {
 }
 
 
+MAIL_DOWNLOAD_READS = {
+    f"{root}/messages/{{message-id}}{suffix}"
+    for root in ("/users/{user-id}", "/me")
+    for suffix in ("/$value", "/attachments/{attachment-id}", "/attachments/{attachment-id}/$value")
+}
+
+
 def exclusion_reason(path, method="GET"):
-    if (method == "GET" and path in MAIL_FOLDER_READS | MAIL_MESSAGE_READS | MAIL_MESSAGE_SHOW_READS | MAIL_METADATA_READS) or path == "/security/microsoft.graph.security.runHuntingQuery":
+    if (method == "GET" and path in MAIL_FOLDER_READS | MAIL_MESSAGE_READS | MAIL_MESSAGE_SHOW_READS | MAIL_METADATA_READS | MAIL_DOWNLOAD_READS) or path == "/security/microsoft.graph.security.runHuntingQuery":
         return None
     segments = {part.removeprefix("microsoft.graph.").split("(")[0] for part in path.strip("/").split("/")}
     for domain, navigations in EXCLUDED_NAV.items():
@@ -263,6 +270,8 @@ def exclusion_reason(path, method="GET"):
 
 def scoped_slice(path, method="GET"):
     """Return the owning family, or None for a separately authorized domain."""
+    if method == "GET" and path in MAIL_DOWNLOAD_READS:
+        return "MAIL-09"
     if (method, path) in MAIL_RULE_WRITES:
         return "MAIL-08"
     if (method, path) in MAIL_FOLDER_WRITES:
@@ -408,6 +417,7 @@ def reviewed_raw_routes():
 # Alternate-routing tables whose values a shipped leaf reaches through cli
 # flag routing (--transitive/--as): {table constant: module file}.
 ALTERNATE_TABLES = (
+    ("MAIL_DOWNLOAD_ALTERNATES", "src/mail-download.ts"),
     ("MAIL_FOLDER_ALTERNATES", "src/mail-folders.ts"),
     ("MAIL_MESSAGE_ALTERNATES", "src/mail-messages.ts"),
     ("MAIL_MESSAGE_SHOW_ALTERNATES", "src/mail-message-show.ts"),
@@ -480,6 +490,9 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
         read_source = "user-list-messages"
     if method == "GET" and path in MAIL_MESSAGE_SHOW_READS:
         read_source = "message-get"
+    if method == "GET" and path in MAIL_DOWNLOAD_READS:
+        read_source = "attachment-get" if "/attachments/" in path else "message-get"
+        operation = {**operation, "externalDocs": {"url": f"https://learn.microsoft.com/en-us/graph/api/{read_source}?view=graph-rest-1.0"}}
     if method == "PATCH" and path in MAIL_MESSAGE_SHOW_READS:
         # Documentation provenance only; this remains a mutation.
         operation = {**operation, "externalDocs": {"url": "https://learn.microsoft.com/en-us/graph/api/message-update?view=graph-rest-1.0"}}
@@ -696,6 +709,23 @@ def build(sources, shipped=None, reviewed=None, alternates=None):
                 excluded[root] = excluded.get(root, 0) + 1
         pins[-1]["discoveredOperations"] = discovered
         pins[-1]["excludedByRoot"] = dict(sorted(excluded.items()))
+        # Graph's attachment-get documentation specifies /$value, but the
+        # pinned OpenAPI omits these two base-attachment stream routes.
+        if version == "v1.0":
+            supplemental = 0
+            for root in ("/me", "/users/{user-id}"):
+                path = f"{root}/messages/{{message-id}}/attachments/{{attachment-id}}/$value"
+                if f"GET:{path}" not in shipped and f"GET:{path}" not in alternates:
+                    continue
+                if any(row["version"] == version and row["method"] == "GET" and row["path"] == path for row in rows):
+                    continue
+                rows.append(make_row(version, path, "GET", {
+                    "operationId": f"documented.{root.split('/')[1]}.message.attachment.value",
+                    "externalDocs": {"url": "https://learn.microsoft.com/en-us/graph/api/attachment-get?view=graph-rest-1.0"},
+                }, shipped, reviewed, alternates))
+                supplemental += 1
+            if supplemental:
+                pins[-1]["documentedOperations"] = supplemental
     rows.sort(key=lambda row: row["id"])
     return {"schemaVersion": 2, "repository": "microsoftgraph/msgraph-metadata", "revision": REVISION, "checkedOn": "2026-10-03", "sources": pins, "operations": rows}
 
@@ -725,7 +755,7 @@ def validate(inventory, shipped=None, reviewed=None, alternates=None):
         raise ValueError("Both metadata versions must be pinned independently")
     for source in inventory["sources"]:
         rows = [row for row in inventory["operations"] if row["version"] == source["version"]]
-        if len(rows) != source["discoveredOperations"]:
+        if len(rows) != source["discoveredOperations"] + source.get("documentedOperations", 0):
             raise ValueError("Missing operation: every discovered operation must have a row")
         excluded = {}
         for row in rows:

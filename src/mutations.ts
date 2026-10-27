@@ -9,7 +9,8 @@ import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-se
 import { booleanEnv, movedError, validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
 import { statePath } from "./paths.js";
 import { PrivateFiles } from "./private-file.js";
-import { checkMailCredential } from "./mail-authorization.js";
+import { checkMailCredential, MAIL_MESSAGE_SCOPE } from "./mail-authorization.js";
+import { saveMailBytes, binaryFetchTransport, type BinaryTransport } from "./mail-download.js";
 
 // Shared mutation coordinator for reviewed named mutation families.
 // The gate order follows az-axi's write gates as the reference: read-only default,
@@ -54,9 +55,11 @@ export type MutationDefinition = {
   payload?: unknown;
 };
 
+export type DownloadDefinition = Omit<MutationDefinition, "method"> & { method: "GET" };
+
 export type MutationPreview = {
   operation: string;
-  method: MutationMethod;
+  method: MutationMethod | "GET";
   url: string;
   effect: MutationEffect;
   target: string;
@@ -100,6 +103,7 @@ export type WriteScope = Readonly<{
 }>;
 
 export type MutationCoordinator = {
+  download(definition: DownloadDefinition, options: { execute: boolean; confirm?: string; out: string }): Promise<Record<string, unknown>>;
   readonly scope: WriteScope;
   preview(definition: MutationDefinition, current?: unknown, isNoop?: (current: unknown) => boolean): MutationPreview;
   execute(definition: MutationDefinition, options: MutationExecuteOptions): Promise<MutationResult>;
@@ -383,7 +387,7 @@ type AuditRecord = {
   time: string;
   profile: string;
   operation: string;
-  method: MutationMethod;
+  method: MutationMethod | "GET";
   url: string;
   target: string;
   effect: MutationEffect;
@@ -413,6 +417,7 @@ function serialize(value: unknown): string | undefined {
 }
 
 export function createMutationCoordinator(args: {
+  binaryTransport?: BinaryTransport;
   profile: AnyProfile;
   delegated: DelegatedAuth;
   application: ApplicationAuth;
@@ -432,7 +437,7 @@ export function createMutationCoordinator(args: {
   });
   const sender = createMutationSender({ profile: validated, delegated, application, transport, files });
 
-  function enforceWriteGates(definition: MutationDefinition): void {
+  function enforceWriteGates(definition: MutationDefinition | DownloadDefinition): void {
     // Gate 1: forced read-only overrides every profile.
     // Gate 2: the profile must opt in through hand-edited configuration.
     if (readOnlyForced() || !scope.allowWrites) {
@@ -475,7 +480,7 @@ export function createMutationCoordinator(args: {
     }
   }
 
-  function boundMutationUrl(definition: MutationDefinition): string {
+  function boundMutationUrl(definition: MutationDefinition | DownloadDefinition): string {
     const prefix = "/v1.0/";
     const segments = definition.path.split("/");
     if (!definition.path.startsWith(prefix) || segments[0] !== ""
@@ -486,6 +491,9 @@ export function createMutationCoordinator(args: {
       ]);
     }
     for (const segment of segments.slice(1)) {
+      if (segment === "$value" && definition.method === "GET"
+        && ((definition.operation === "mail.message.export" && /^\/v1\.0\/(?:me|users\/[^/]+)\/messages\/[^/]+\/\$value$/.test(definition.path))
+          || (definition.operation === "mail.attachment.save" && /^\/v1\.0\/(?:me|users\/[^/]+)\/messages\/[^/]+\/attachments\/[^/]+\/\$value$/.test(definition.path)))) continue;
       if (segment === "$ref" && definition.operation === "mg.entra.group.member.add" && definition.method === "POST"
         && /^\/v1\.0\/groups\/[^/]+\/members\/\$ref$/.test(definition.path)) continue;
       let decoded: string;
@@ -501,7 +509,7 @@ export function createMutationCoordinator(args: {
     return `https://${GRAPH_HOST}${definition.path}`;
   }
 
-  function preview(definition: MutationDefinition, current?: unknown, isNoop?: (current: unknown) => boolean): MutationPreview {
+  function preview(definition: MutationDefinition | DownloadDefinition, current?: unknown, isNoop?: (current: unknown) => boolean): MutationPreview {
     enforceWriteGates(definition);
     const url = boundMutationUrl(definition);
     return Object.freeze({
@@ -575,7 +583,7 @@ export function createMutationCoordinator(args: {
     }
   }
 
-  function metadata(definition: MutationDefinition, seen: MutationPreview, id: string, ifMatch: string | undefined): Omit<AuditRecord, "kind" | "time"> {
+  function metadata(definition: MutationDefinition | DownloadDefinition, seen: MutationPreview, id: string, ifMatch: string | undefined): Omit<AuditRecord, "kind" | "time"> {
     return {
       id,
       intentKey: createHash("sha256").update(id).digest("hex"),
@@ -676,5 +684,37 @@ export function createMutationCoordinator(args: {
     return { kind: "success", preview: seen, auditId: id, status: sent.status, response: sent.body };
   }
 
-  return { scope, preview, execute };
+  async function download(definition: DownloadDefinition, options: { execute: boolean; confirm?: string; out: string }): Promise<Record<string, unknown>> {
+    enforceWriteGates(definition);
+    const attachment = definition.operation === "mail.attachment.save";
+    if (definition.method !== "GET" || (!attachment && definition.operation !== "mail.message.export")
+      || !(attachment ? /^\/v1\.0\/(?:me|users\/[^/]+)\/messages\/[^/]+\/attachments\/[^/]+\/\$value$/ : /^\/v1\.0\/(?:me|users\/[^/]+)\/messages\/[^/]+\/\$value$/).test(definition.path)) throw new AxiError("Unreviewed download operation", "OPERATION_BLOCKED");
+    if (!validated.enabledPacks.includes("mail")) throw new AxiError("Pack mail is not enabled for this profile", "POLICY_DENIED");
+    const url = boundMutationUrl(definition);
+    const mailbox = decodeURIComponent(definition.path.split("/")[2] === "me" ? "me" : definition.path.split("/")[3]!);
+    if (validated.mode === "application" && mailbox === "me") throw new AxiError("Application profiles cannot use me", "POLICY_DENIED");
+    if (!options.execute) return { status: "dry-run" };
+    if (options.confirm !== definition.target) throw new AxiError("Download requires exact resource confirmation", "CONFIRM_MISMATCH");
+    const id = randomUUID();
+    // Mailbox and resource IDs are sensitive even when they resemble no secret.
+    const safe = { ...definition, target: "[mail resource]" };
+    const meta = metadata(safe, { ...preview(definition), url: `https://${GRAPH_HOST}/v1.0/[mail resource]/$value` }, id, undefined);
+    recordAudit({ ...meta, kind: "intent" });
+    let result: Record<string, unknown>;
+    try {
+      const credential = validated.mode === "delegated"
+        ? await delegated.credential(validated, [MAIL_MESSAGE_SCOPE])
+        : await application.credential(validated);
+      checkMailCredential(validated, credential, mailbox === "me" ? undefined : mailbox);
+      enforceWriteGates(definition);
+      result = await saveMailBytes({ path: options.out, url, token: credential.token, attachment, transport: args.binaryTransport ?? binaryFetchTransport });
+    } catch (error) {
+      recordAudit({ ...meta, kind: "outcome", outcome: "FAILED" });
+      throw error;
+    }
+    recordAudit({ ...meta, kind: "outcome", outcome: "SUCCESS" });
+    return result;
+  }
+
+  return { scope, preview, execute, download };
 }

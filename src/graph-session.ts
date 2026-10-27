@@ -1045,6 +1045,7 @@ export class GraphSession {
   }
 
   private authorizePolicy(profile: AnyProfile, operation: SessionOperation): void {
+    if (operation.owningSlice === "MAIL-09") throw new AxiError("Mail downloads require the guarded download coordinator", "POLICY_DENIED");
     if (operation.method !== "GET" && operation.id !== HUNTING_OPERATION) {
       throw new AxiError(`Graph session executes reads; ${operation.id} is not a read`, "VALIDATION_ERROR", [
         "Named mutations ship with their own coordinator slice; the session never sends them",

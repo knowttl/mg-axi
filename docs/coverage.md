@@ -9,30 +9,31 @@ scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded.
 Inventory dispositions are generated records from INV-01 joined to the catalogue;
 the command list below is the implemented truth and never counts deferred or
 scheduled work as complete.
+The two documented attachment /$value routes omitted by the pinned OpenAPI are recorded separately in sources.documentedOperations; discoveredOperations retains the OpenAPI count.
 
 ## Counts
 
-- implemented read leaves: 273 (271 named Graph reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 275 (273 named Graph reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 17 (named gated mutations below)
 - local leaves: 11 (home, profile, config, auth, login alias and setup views)
-- inventory named-command: 328
+- inventory named-command: 334
 - inventory reviewed-raw-read: 5
-- inventory scheduled: 3738
+- inventory scheduled: 3742
 - inventory deferred: 4429
 - inventory intentionally-blocked: 3089
 - inventory deprecated: 870
 - inventory unavailable: 14
-- inventory excluded: 34978
+- inventory excluded: 34970
 
 ## FULL-01 audit record
 
 FULL-01 audit (2026-10-07): every agreed v1.0 read has a named command or an
 explicit reviewed blocked/unavailable/deprecated/deferred disposition, and no
 v1.0 row is left scheduled. The deferred tail is declared out of v1.
-- v1.0 named-command: 328, reviewed-raw-read: 5, scheduled: 0
+- v1.0 named-command: 334, reviewed-raw-read: 5, scheduled: 0
 - v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
-- beta scheduled (never agreed for v1): 3738
-PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 328 named / 5 raw (333 backed).
+- beta scheduled (never agreed for v1): 3742
+PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 334 named / 5 raw (339 backed).
 
 ## COMPLETE-01 audit record
 
@@ -41,9 +42,9 @@ COMPLETE-01 audit (2026-10-07): the full agreed Entra capability audit including
 reviewed deferred/blocked/deprecated dispositions rather than scheduled; no agreed v1.0 operation, read or
 write, is left merely scheduled. Beta stays scheduled by definition and was never agreed for v1.
 The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS URLs) stay out.
-- v1.0 named-command: 328 (305 read rows plus 23 write rows; 17 gated write leaves in Named writes below), reviewed-raw-read: 5, scheduled: 0
+- v1.0 named-command: 334 (311 read rows plus 23 write rows; 17 gated write leaves in Named writes below), reviewed-raw-read: 5, scheduled: 0
 - v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
-- beta scheduled (never agreed for v1): 3738
+- beta scheduled (never agreed for v1): 3742
 - shipped writes: MAIL-05 (`mg-axi mail message tag`, `mg-axi mail message flag`, `mg-axi mail message mark`), MAIL-06 (`mg-axi mail message move`, `mg-axi mail message copy`, `mg-axi mail message trash`), MAIL-07 (`mg-axi mail folder create`, `mg-axi mail folder delete`, `mg-axi mail category create`), MAIL-08 (`mg-axi mail rule create`, `mg-axi mail rule update`, `mg-axi mail rule delete`), WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
 - WRITE-N (remaining agreed mutations): deferred 1878, intentionally-blocked 25 v1.0 plus 2937 beta, deprecated 6 v1.0 plus 398 beta, scheduled 0.
 - outstanding upstream limitations (already documented in the repo): P1 for Conditional Access and P2 for risk-based CA, PIM P2 or ID Governance, riskyUsers P2 and Workload Identities Premium for workload risk with hidden riskDetail/riskLevel without it (docs/graph-coverage.md); conservative P1/P2 Graph prerequisite for sign-in/audit logs, registration report excludes disabled users, no tenant-wide method enumeration (docs/graph-coverage.md); v1.0 group-members route omits service principals (README.md member-read warning); 14 unavailable rows with no documented v1.0 GET contract, invitation Create-only Methods table, org-scoped certificateBasedAuthConfiguration routes only, contacts sync-behavior reads without operation permission docs (inventory reasons); EXT-02c history reads need AccessReview.ReadWrite.All with no read scope and return SAS download URLs (docs/coverage.md); write-side limits beside each command, revoke lag/external-user scope/unknown outcome, CA update lockout gates with no concurrency promise, dismissal is not remediation (README.md, docs/execution.md).
@@ -314,6 +315,8 @@ The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS
 | `mg-axi entra lifecycle run task-processing-result show` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults/{taskProcessingResult-id}` | named-command | EXT-02 |
 | `mg-axi entra lifecycle run task-processing-result count` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults/$count` | named-command | EXT-02 |
 | `mg-axi security hunting query` | `POST:/security/microsoft.graph.security.runHuntingQuery` | named-command | SECURITY-01 |
+| `mg-axi mail attachment save` | `GET:/users/{user-id}/messages/{message-id}/attachments/{attachment-id}/$value` | named-command | MAIL-09 |
+| `mg-axi mail message export` | `GET:/users/{user-id}/messages/{message-id}/$value` | named-command | MAIL-09 |
 | `mg-axi mail attachment list` | `GET:/users/{user-id}/messages/{message-id}/attachments` | named-command | MAIL-04 |
 | `mg-axi mail settings show` | `GET:/users/{user-id}/mailboxSettings` | named-command | MAIL-04 |
 | `mg-axi mail rule list` | `GET:/users/{user-id}/mailFolders/{mailFolder-id}/messageRules` | named-command | MAIL-04 |

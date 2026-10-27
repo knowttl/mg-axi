@@ -2001,12 +2001,36 @@
       "owningSlice": "MAIL-03"
     },
     {
+      "id": "v1.0:GET:/me/messages/{message-id}/$value",
+      "method": "GET",
+      "path": "/me/messages/{message-id}/$value",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-09"
+    },
+    {
       "id": "v1.0:GET:/me/messages/{message-id}/attachments",
       "method": "GET",
       "path": "/me/messages/{message-id}/attachments",
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-04"
+    },
+    {
+      "id": "v1.0:GET:/me/messages/{message-id}/attachments/{attachment-id}",
+      "method": "GET",
+      "path": "/me/messages/{message-id}/attachments/{attachment-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-09"
+    },
+    {
+      "id": "v1.0:GET:/me/messages/{message-id}/attachments/{attachment-id}/$value",
+      "method": "GET",
+      "path": "/me/messages/{message-id}/attachments/{attachment-id}/$value",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-09"
     },
     {
       "id": "v1.0:GET:/me/outlook/masterCategories",
@@ -2489,12 +2513,36 @@
       "owningSlice": "MAIL-03"
     },
     {
+      "id": "v1.0:GET:/users/{user-id}/messages/{message-id}/$value",
+      "method": "GET",
+      "path": "/users/{user-id}/messages/{message-id}/$value",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-09"
+    },
+    {
       "id": "v1.0:GET:/users/{user-id}/messages/{message-id}/attachments",
       "method": "GET",
       "path": "/users/{user-id}/messages/{message-id}/attachments",
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-04"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}/messages/{message-id}/attachments/{attachment-id}",
+      "method": "GET",
+      "path": "/users/{user-id}/messages/{message-id}/attachments/{attachment-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-09"
+    },
+    {
+      "id": "v1.0:GET:/users/{user-id}/messages/{message-id}/attachments/{attachment-id}/$value",
+      "method": "GET",
+      "path": "/users/{user-id}/messages/{message-id}/attachments/{attachment-id}/$value",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-09"
     },
     {
       "id": "v1.0:GET:/users/{user-id}/outlook/masterCategories",

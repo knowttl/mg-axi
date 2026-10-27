@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.14](https://github.com/knowttl/mg-axi/compare/v0.1.13...v0.1.14) (2026-10-27)
+
+
+### Features
+
+* add bounded mail message list, search and conversation reads ([#111](https://github.com/knowttl/mg-axi/issues/111)) ([278a0ba](https://github.com/knowttl/mg-axi/commit/278a0ba5bdee4a8f1044949814a14f648860d39e))
+* add mail attachment, settings, rule and category reads ([#113](https://github.com/knowttl/mg-axi/issues/113)) ([cc827f0](https://github.com/knowttl/mg-axi/commit/cc827f0293fc74941c1b1271b960a993d934637e))
+* add mail message show with safe body output ([#112](https://github.com/knowttl/mg-axi/issues/112)) ([6886c38](https://github.com/knowttl/mg-axi/commit/6886c38bf72ab00358e489b5bd6be99d206c66fa))
+* add opt-in mail pack and folder reads ([#109](https://github.com/knowttl/mg-axi/issues/109)) ([356dee1](https://github.com/knowttl/mg-axi/commit/356dee137a472a68c1628178d3e0839c34d17809))
+
 ## [0.1.13](https://github.com/knowttl/mg-axi/compare/v0.1.12...v0.1.13) (2026-10-27)
 
 

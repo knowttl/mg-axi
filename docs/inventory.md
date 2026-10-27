@@ -25,7 +25,7 @@ Legacy root aliases, alternate-key paths, casts, actions, count routes and `/me`
 `ROOT_SLICES`, `USER_NAV`, `GROUP_NAV`, `MANAGED_TENANT_NAV`, `EXCLUDED_NAV`, action sets and the small exceptional branches in `scoped_slice` are the exact executable boundary.
 New upstream roots or navigation properties require an explicit boundary review.
 
-Mail, calendar, files, Teams, contacts belonging to a user's mailbox, Intune, Security-pack endpoints (except the reviewed SECURITY-01 hunting action and the reviewed MAIL-01 mail-folder and MAIL-02 mail-message reads reported in [the capability report](coverage.md)) and other separately authorized domains are excluded from the scoped Entra surface.
+Mail, calendar, files, Teams, contacts belonging to a user's mailbox, Intune, Security-pack endpoints (except the reviewed SECURITY-01 hunting action and the reviewed MAIL-01 mail-folder, MAIL-02 mail-message and MAIL-03 message-show reads reported in [the capability report](coverage.md)) and other separately authorized domains are excluded from the scoped Entra surface.
 Organizational `/contacts` are directory contacts and remain included.
 Users and groups have explicit identity navigation/action allowlists because their nested routes also expose other products.
 Mailbox settings are excluded at every descendant depth, as are M365 insight settings and Intune authority changes.

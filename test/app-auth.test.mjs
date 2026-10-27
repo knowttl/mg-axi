@@ -145,7 +145,7 @@ test("flattened application configs normalize SHA-256 thumbprints and SecretRefs
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-for (const patch of [{ allowDeviceCode: true }, { mode: "delegated" }, { cloud: "government" }, { tenantId: "common" }, { enabledPacks: ["entra", "mail"] },
+for (const patch of [{ allowDeviceCode: true }, { mode: "delegated" }, { cloud: "government" }, { tenantId: "common" }, { enabledPacks: ["entra", "unknown"] },
   { credentialRef: { provider: "federated", key } }, { auth: "unknown" },
   { token: { env: "1BAD-NAME" } }, { token: { env: "TOKEN", extra: true } },
   { token: "opaque-fixture-secret" }, { token: { file: "relative" } },

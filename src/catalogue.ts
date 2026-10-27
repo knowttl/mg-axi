@@ -2804,6 +2804,22 @@ LEAVES.push({ path: "security hunting query", description: "Run one read-only De
   full: { description: "Disable recursive 500-character string truncation; redaction, time window and row cap still apply" },
 }, examples: ["mg-axi security hunting query --file hunt.kql --profile soc", "mg-axi security hunting query --file hunt.kql --timespan P7D --limit 1000 --full --profile soc"] });
 
+const mailFolderRead: Record<string, Flag> = {
+  ...common,
+  mailbox: { value: "user-id|upn|me", required: true, description: "Mailbox to read; delegated access is restricted to the signed-in user's own mailbox; me is delegated only" },
+  fields: { value: "comma-separated-properties", description: "Reviewed folder properties: id, displayName, totalItemCount, unreadItemCount, parentFolderId, childFolderCount, isHidden" },
+  full: { description: "Disable 500-character string truncation; redaction and bounds remain" },
+};
+LEAVES.push({ path: "mail folder list", description: "List visible folders directly under the mailbox root; requires the opt-in mail pack and Mail.ReadBasic (delegated) or scoped Exchange Application Mail.ReadBasic", operation: "GET:/users/{user-id}/mailFolders", flags: {
+  ...mailFolderRead,
+  limit: { value: "1-1000", default: "100", description: "Maximum returned folders and requested page size; bounded by the shared request, byte and time budgets" },
+  cursor: { value: "opaque-cursor|-", description: "Resume a partial list with the same mailbox and flags; - reads the cursor from stdin" },
+}, examples: ["mg-axi mail folder list --mailbox me --profile soc", "mg-axi mail folder list --mailbox mailbox@contoso.example --limit 20 --profile batch"] });
+LEAVES.push({ path: "mail folder show", description: "Read one folder's metadata; requires the opt-in mail pack and Mail.ReadBasic (delegated) or scoped Exchange Application Mail.ReadBasic", operation: "GET:/users/{user-id}/mailFolders/{mailFolder-id}", flags: {
+  ...mailFolderRead,
+  id: { value: "folder-id", required: true, description: "Folder ID or well-known folder name such as inbox" },
+}, examples: ["mg-axi mail folder show --mailbox me --id inbox --profile soc", "mg-axi mail folder show --mailbox mailbox@contoso.example --id inbox --profile batch"] });
+
 LEAVES.push({ ...LEAVES.find(leaf => leaf.path === "auth login")!, path: "login", description: "Deprecated alias for auth login (one minor release)" });
 LEAVES.push({ path: "config path", description: "Show the selected configuration path without reading credentials", flags: {}, examples: ["mg-axi config path", "mg-axi config path --config /absolute/path/config.json"] });
 LEAVES.push({ path: "auth status", description: "Show credential sources and verify local file permissions without a live request", flags: { profile: common.profile }, examples: ["mg-axi auth status", "mg-axi auth status --profile soc"] });

@@ -9,7 +9,7 @@ import { validateSecretRef, type SecretRef } from "./secrets.js";
 export type WritePolicy = Readonly<{ allowWrites: boolean; operations: readonly string[] }>;
 type SharedProfile = Readonly<{
   tenantId: string; clientId: string; cloud: "commercial";
-  enabledPacks: readonly ("entra" | "security")[]; preview: boolean; sensitiveAreas: readonly string[];
+  enabledPacks: readonly ("entra" | "security" | "mail")[]; preview: boolean; sensitiveAreas: readonly string[];
   writes?: WritePolicy;
 }>;
 export type DelegatedProfile = SharedProfile & Readonly<{ mode: "delegated"; token: SecretRef; allowDeviceCode: boolean }>;
@@ -51,7 +51,7 @@ function shared(value: Record<string, unknown>): SharedProfile {
   const packs = value.enabledPacks === undefined ? ["entra"] : value.enabledPacks;
   const sensitive = value.sensitiveAreas === undefined ? [] : value.sensitiveAreas;
   const preview = value.preview === undefined ? false : value.preview;
-  if (!Array.isArray(packs) || packs.some(pack => pack !== "entra" && pack !== "security") || new Set(packs).size !== packs.length ||
+  if (!Array.isArray(packs) || packs.some(pack => pack !== "entra" && pack !== "security" && pack !== "mail") || new Set(packs).size !== packs.length ||
     !Array.isArray(sensitive) || sensitive.length || typeof preview !== "boolean") invalid("Invalid profile policy");
   let writes: WritePolicy | undefined;
   if (value.writes !== undefined) {
@@ -61,7 +61,7 @@ function shared(value: Record<string, unknown>): SharedProfile {
       policy.operations.some(entry => typeof entry !== "string" || !entry.length || entry.length > 256)) invalid("Invalid write policy; use boolean allowWrites and a nonempty operations array");
     writes = Object.freeze({ allowWrites: policy.allowWrites, operations: Object.freeze([...policy.operations] as string[]) });
   }
-  return { tenantId: value.tenantId as string, clientId: value.clientId as string, cloud: "commercial", enabledPacks: Object.freeze([...packs] as ("entra" | "security")[]),
+  return { tenantId: value.tenantId as string, clientId: value.clientId as string, cloud: "commercial", enabledPacks: Object.freeze([...packs] as ("entra" | "security" | "mail")[]),
     preview: preview as boolean, sensitiveAreas: Object.freeze([]), ...(writes === undefined ? {} : { writes }) };
 }
 const sharedKeys = ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "allowDeviceCode", "writes"];

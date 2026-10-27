@@ -4,7 +4,7 @@ import { profileName, validateDelegatedProfile, type DelegatedProfile } from "./
 import { registerSecret } from "./redact.js";
 
 export type LoginMethod = "browser" | "device-code";
-export type Credential = { token: string; expiresAt: number; tenantId: string; clientId: string; accountId: string };
+export type Credential = { token: string; expiresAt: number; tenantId: string; clientId: string; accountId: string; localAccountId?: string; username?: string };
 export interface CredentialProvider {
   login(profile: DelegatedProfile, method: LoginMethod, scopes: string[]): Promise<Credential>;
   silent(profile: DelegatedProfile, scopes: string[]): Promise<Credential>;

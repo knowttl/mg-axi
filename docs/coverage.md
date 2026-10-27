@@ -12,27 +12,27 @@ scheduled work as complete.
 
 ## Counts
 
-- implemented read leaves: 266 (264 named Graph reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 267 (265 named Graph reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 5 (named gated mutations below)
 - local leaves: 11 (home, profile, config, auth, login alias and setup views)
-- inventory named-command: 294
+- inventory named-command: 298
 - inventory reviewed-raw-read: 5
-- inventory scheduled: 3722
+- inventory scheduled: 3726
 - inventory deferred: 4429
 - inventory intentionally-blocked: 3071
 - inventory deprecated: 870
 - inventory unavailable: 14
-- inventory excluded: 35046
+- inventory excluded: 35038
 
 ## FULL-01 audit record
 
 FULL-01 audit (2026-10-07): every agreed v1.0 read has a named command or an
 explicit reviewed blocked/unavailable/deprecated/deferred disposition, and no
 v1.0 row is left scheduled. The deferred tail is declared out of v1.
-- v1.0 named-command: 294, reviewed-raw-read: 5, scheduled: 0
+- v1.0 named-command: 298, reviewed-raw-read: 5, scheduled: 0
 - v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
-- beta scheduled (never agreed for v1): 3722
-PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 294 named / 5 raw (299 backed).
+- beta scheduled (never agreed for v1): 3726
+PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 298 named / 5 raw (303 backed).
 
 ## COMPLETE-01 audit record
 
@@ -41,9 +41,9 @@ Five writes ship as named, gated commands through the WRITE-00 mutation coordina
 reviewed deferred/blocked/deprecated dispositions rather than scheduled; no agreed v1.0 operation, read or
 write, is left merely scheduled. Beta stays scheduled by definition and was never agreed for v1.
 The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS URLs) stay out.
-- v1.0 named-command: 294 (289 reads plus 5 writes below), reviewed-raw-read: 5, scheduled: 0
+- v1.0 named-command: 298 (293 reads plus 5 writes below), reviewed-raw-read: 5, scheduled: 0
 - v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
-- beta scheduled (never agreed for v1): 3722
+- beta scheduled (never agreed for v1): 3726
 - shipped writes: WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
 - WRITE-N (remaining agreed mutations): deferred 1878, intentionally-blocked 25 v1.0 plus 2937 beta, deprecated 6 v1.0 plus 398 beta, scheduled 0.
 - outstanding upstream limitations (already documented in the repo): P1 for Conditional Access and P2 for risk-based CA, PIM P2 or ID Governance, riskyUsers P2 and Workload Identities Premium for workload risk with hidden riskDetail/riskLevel without it (docs/graph-coverage.md); conservative P1/P2 Graph prerequisite for sign-in/audit logs, registration report excludes disabled users, no tenant-wide method enumeration (docs/graph-coverage.md); v1.0 group-members route omits service principals (README.md member-read warning); 14 unavailable rows with no documented v1.0 GET contract, invitation Create-only Methods table, org-scoped certificateBasedAuthConfiguration routes only, contacts sync-behavior reads without operation permission docs (inventory reasons); EXT-02c history reads need AccessReview.ReadWrite.All with no read scope and return SAS download URLs (docs/coverage.md); write-side limits beside each command, revoke lag/external-user scope/unknown outcome, CA update lockout gates with no concurrency promise, dismissal is not remediation (README.md, docs/execution.md).
@@ -314,6 +314,7 @@ The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS
 | `mg-axi entra lifecycle run task-processing-result show` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults/{taskProcessingResult-id}` | named-command | EXT-02 |
 | `mg-axi entra lifecycle run task-processing-result count` | `GET:/identityGovernance/lifecycleWorkflows/workflows/{workflow-id}/runs/{run-id}/taskProcessingResults/$count` | named-command | EXT-02 |
 | `mg-axi security hunting query` | `POST:/security/microsoft.graph.security.runHuntingQuery` | named-command | SECURITY-01 |
+| `mg-axi mail message list` | `GET:/users/{user-id}/messages` | named-command | MAIL-02 |
 | `mg-axi mail folder list` | `GET:/users/{user-id}/mailFolders` | named-command | MAIL-01 |
 | `mg-axi mail folder show` | `GET:/users/{user-id}/mailFolders/{mailFolder-id}` | named-command | MAIL-01 |
 | `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |

@@ -2810,6 +2810,16 @@ const mailFolderRead: Record<string, Flag> = {
   fields: { value: "comma-separated-properties", description: "Reviewed folder properties: id, displayName, totalItemCount, unreadItemCount, parentFolderId, childFolderCount, isHidden" },
   full: { description: "Disable 500-character string truncation; redaction and bounds remain" },
 };
+LEAVES.push({ path: "mail message list", description: "List message metadata, search or read a conversation; opt-in mail pack, delegated Mail.ReadBasic or scoped Exchange Application Mail.ReadBasic", operation: "GET:/users/{user-id}/messages", flags: {
+  ...mailFolderRead,
+  fields: { value: "comma-separated-fields", description: "Reviewed metadata fields only; defaults: id,subject,receivedDateTime,isRead; bodies and previews are never returned" },
+  folder: { value: "folder-id", description: "Read messages in one folder, including well-known inbox" },
+  search: { value: "KQL", description: "Graph message $search expression (outer double quotes added if absent); searches from, subject and body by default; sent-time order; cap 1000 results; exclusive with filter and conversation" },
+  filter: { value: "OData-expression", description: "Graph $filter syntax, e.g. isRead eq false; no $orderby is added; exclusive with search and conversation" },
+  conversation: { value: "conversation-id", description: "Read messages matching conversationId; exclusive with search and filter" },
+  limit: { value: "1-1000", description: "Maximum rows per call (default 100); one bounded page" },
+  cursor: { value: "opaque-cursor|-", description: "Resume with identical flags; - reads stdin; cursor contains sensitive query text" },
+}, examples: ["mg-axi mail message list --mailbox me --search 'subject:invoice' --profile soc", "mg-axi mail message list --mailbox mailbox@contoso.example --folder inbox --filter 'isRead eq false' --profile batch"] });
 LEAVES.push({ path: "mail folder list", description: "List visible folders directly under the mailbox root; requires the opt-in mail pack and Mail.ReadBasic (delegated) or scoped Exchange Application Mail.ReadBasic", operation: "GET:/users/{user-id}/mailFolders", flags: {
   ...mailFolderRead,
   limit: { value: "1-1000", default: "100", description: "Maximum returned folders and requested page size; bounded by the shared request, byte and time budgets" },

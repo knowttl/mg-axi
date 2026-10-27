@@ -9,7 +9,7 @@ export function isMailOperation(operation: { owningSlice: string | null }) {
 
 export function checkMailScopes(profile: AnyProfile, scopes: string[] | undefined) {
   if (profile.mode === "delegated" && (scopes?.length !== 1 || scopes[0] !== MAIL_FOLDER_SCOPE)) {
-    throw new AxiError("Folder reads require the delegated Mail.ReadBasic scope", "VALIDATION_ERROR", ["Use Mail.ReadBasic for folder metadata; shared mailbox scopes are unsupported"]);
+    throw new AxiError("Mail metadata reads require the delegated Mail.ReadBasic scope", "VALIDATION_ERROR", ["Use Mail.ReadBasic for folder and message metadata; shared mailbox scopes are unsupported"]);
   }
 }
 

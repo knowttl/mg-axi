@@ -9,12 +9,28 @@
       "owningSlice": "MAIL-07"
     },
     {
+      "id": "v1.0:DELETE:/me/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "method": "DELETE",
+      "path": "/me/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-08"
+    },
+    {
       "id": "v1.0:DELETE:/users/{user-id}/mailFolders/{mailFolder-id}",
       "method": "DELETE",
       "path": "/users/{user-id}/mailFolders/{mailFolder-id}",
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-07"
+    },
+    {
+      "id": "v1.0:DELETE:/users/{user-id}/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "method": "DELETE",
+      "path": "/users/{user-id}/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-08"
     },
     {
       "id": "v1.0:GET:/agreementAcceptances",
@@ -2497,6 +2513,14 @@
       "owningSlice": "WRITE-04"
     },
     {
+      "id": "v1.0:PATCH:/me/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "method": "PATCH",
+      "path": "/me/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-08"
+    },
+    {
       "id": "v1.0:PATCH:/me/messages/{message-id}",
       "method": "PATCH",
       "path": "/me/messages/{message-id}",
@@ -2511,6 +2535,14 @@
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "WRITE-02"
+    },
+    {
+      "id": "v1.0:PATCH:/users/{user-id}/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "method": "PATCH",
+      "path": "/users/{user-id}/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-08"
     },
     {
       "id": "v1.0:PATCH:/users/{user-id}/messages/{message-id}",
@@ -2543,6 +2575,14 @@
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-07"
+    },
+    {
+      "id": "v1.0:POST:/me/mailFolders/{mailFolder-id}/messageRules",
+      "method": "POST",
+      "path": "/me/mailFolders/{mailFolder-id}/messageRules",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-08"
     },
     {
       "id": "v1.0:POST:/me/messages/{message-id}/copy",
@@ -2583,6 +2623,14 @@
       "version": "v1.0",
       "disposition": "named-command",
       "owningSlice": "MAIL-07"
+    },
+    {
+      "id": "v1.0:POST:/users/{user-id}/mailFolders/{mailFolder-id}/messageRules",
+      "method": "POST",
+      "path": "/users/{user-id}/mailFolders/{mailFolder-id}/messageRules",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "MAIL-08"
     },
     {
       "id": "v1.0:POST:/users/{user-id}/messages/{message-id}/copy",

@@ -240,6 +240,16 @@ MAIL_FOLDER_WRITES = {
     )
 }
 
+MAIL_RULE_WRITES = {
+    (method, root + "/mailFolders/{mailFolder-id}/messageRules" + suffix): source
+    for root in ("/me", "/users/{user-id}")
+    for method, suffix, source in (
+        ("POST", "", "mailfolder-post-messagerules"),
+        ("PATCH", "/{messageRule-id}", "messagerule-update"),
+        ("DELETE", "/{messageRule-id}", "messagerule-delete"),
+    )
+}
+
 
 def exclusion_reason(path, method="GET"):
     if (method == "GET" and path in MAIL_FOLDER_READS | MAIL_MESSAGE_READS | MAIL_MESSAGE_SHOW_READS | MAIL_METADATA_READS) or path == "/security/microsoft.graph.security.runHuntingQuery":
@@ -253,6 +263,8 @@ def exclusion_reason(path, method="GET"):
 
 def scoped_slice(path, method="GET"):
     """Return the owning family, or None for a separately authorized domain."""
+    if (method, path) in MAIL_RULE_WRITES:
+        return "MAIL-08"
     if (method, path) in MAIL_FOLDER_WRITES:
         return "MAIL-07"
     if method == "POST" and path in MAIL_MESSAGE_TRANSFERS:
@@ -402,6 +414,7 @@ ALTERNATE_TABLES = (
     ("MAIL_METADATA_ALTERNATES", "src/mail-metadata.ts"),
     ("MAIL_WRITE_ALTERNATES", "src/mail-message-writes.ts"),
     ("MAIL_FOLDER_WRITE_ALTERNATES", "src/mail-folder-writes.ts"),
+    ("MAIL_RULE_WRITE_ALTERNATES", "src/mail-rule-writes.ts"),
     ("TRANSITIVE_OPERATION", "src/entra-groups.ts"),
     ("NAV_CASTS", "src/entra-contacts.ts"),
     ("MEMBERSHIP_TRANSITIVE", "src/entra-contacts.ts"),
@@ -474,6 +487,9 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
         operation = {**operation, "externalDocs": {"url": f"https://learn.microsoft.com/en-us/graph/api/message-{action}?view=graph-rest-1.0"}}
     if (method, path) in MAIL_FOLDER_WRITES:
         source = MAIL_FOLDER_WRITES[(method, path)]
+        operation = {**operation, "externalDocs": {"url": f"https://learn.microsoft.com/en-us/graph/api/{source}?view=graph-rest-1.0"}}
+    if (method, path) in MAIL_RULE_WRITES:
+        source = MAIL_RULE_WRITES[(method, path)]
         operation = {**operation, "externalDocs": {"url": f"https://learn.microsoft.com/en-us/graph/api/{source}?view=graph-rest-1.0"}}
     if method == "GET" and path in MAIL_METADATA_READS:
         if path.endswith("/attachments"):

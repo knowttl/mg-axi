@@ -21,6 +21,7 @@
     "inventory/runtime.json",
     "skills/mg-axi",
     "docs/coverage.md",
+    "docs/agent-guide.md",
     "README.md",
     "axi-credential.schema.json"
   ],

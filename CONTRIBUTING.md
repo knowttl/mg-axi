@@ -20,15 +20,15 @@ Before opening a pull request, run all four checks above and describe the behavi
 Pull requests rely on local validation; there is no GitHub test CI.
 The release workflow is separate and does not replace these checks.
 
-The agent skill, command reference and capability report are generated.
-After changing the command catalogue, documentation template or discovery inventory, run `corepack pnpm run docs:generate`, then `corepack pnpm run docs:check`.
+The agent skill, command reference, capability report and investigation guide are generated.
+After changing the command catalogue, documentation template (including `src/docs.ts` for the investigation guide) or discovery inventory, run `corepack pnpm run docs:generate`, then `corepack pnpm run docs:check`.
 Do not edit generated files or `CHANGELOG.md` by hand.
 Keep changes focused and add regression tests for observable behavior.
 
 ## Documentation ownership
 
 README.md owns the overview, installation and first actions.
-The command catalogue generates skills/mg-axi/SKILL.md and docs/commands.md as the complete leaf references.
+The command catalogue generates skills/mg-axi/SKILL.md and docs/commands.md as the complete leaf references, and `src/docs.ts` generates docs/agent-guide.md as the compact investigation entry point.
 Detailed authorization, paging and pack behavior live in docs/.
 
 ## Versioning and releases

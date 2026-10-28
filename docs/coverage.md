@@ -16,6 +16,10 @@ The two documented attachment /$value routes omitted by the pinned OpenAPI are r
 - implemented read leaves: 275 (273 named Graph reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 17 (named gated mutations below)
 - local leaves: 11 (home, profile, config, auth, login alias and setup views)
+
+Mail ships 9 read commands, 2 guarded downloads and 12 gated mutations (23 mail leaves).
+Guarded downloads count as Graph read leaves in the registry, but require write-policy opt-in, execution and exact resource confirmation because they persist sensitive content locally.
+
 - inventory named-command: 334
 - inventory reviewed-raw-read: 5
 - inventory scheduled: 3742
@@ -617,7 +621,8 @@ Scalar counts need a separate query and response contract from the approved list
 Supported coverage includes the six v1.0 agreement and agreement-acceptance reads above (agreement list/show, one agreement's acceptance list/show, and tenant-wide acceptance list/show).
 The v1.0 operations below carry the deferred disposition (out of v1) and the beta operations remain scheduled (never agreed for v1); no new commands or raw access are approved.
 Terms-of-use reads support v1.0 only; beta needs its own review.
-Scalar counts need a separate query and response contract from the approved list/show reads; agreement file contents and localizations need a separate binary-output and projection contract, and file bytes are never downloaded or printed.
+Scalar counts need a separate query and response contract from the approved list/show reads; agreement file contents and localizations need a separate binary-output and projection contract, and agreement file bytes are never downloaded or printed.
+The opt-in mail pack separately supports guarded attachment and MIME downloads.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|

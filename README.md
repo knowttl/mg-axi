@@ -20,7 +20,9 @@ $ npx -y @knowttl/mg-axi@0.1.10 --version
 Working directly with Graph REST requires agents to manage route selection, permissions, paging and response size.
 mg-axi exposes reviewed commands with bounded lists, TOON output and contextual next steps, without requiring an MCP server.
 It targets workforce Entra tenants in the commercial cloud; sovereign clouds, personal accounts and general Microsoft 365 file access are outside its supported surface.
-The opt-in mail pack supports folder list/show, metadata-only message list, search, filter and conversation reads, message show with bodies and internet headers, attachment metadata list, mailbox settings show, inbox rule list/show and master category list, and guarded attachment save and message export downloads, plus gated folder create, folder delete, category create, rule create, rule update, rule delete and message tag, flag, mark, move, copy and trash writes; see [the generated skill](skills/mg-axi/SKILL.md) for mailbox authorization and bounds.
+The opt-in [mail pack](#mail-pack) provides nine read commands, two guarded downloads and twelve gated mailbox writes.
+It covers message search, bodies, headers, attachment metadata, folders, settings, inbox rules, categories and message triage.
+Sending, reply, forward and permanent deletion are unsupported.
 
 ## Features
 
@@ -163,6 +165,7 @@ Group and leaf `--help` return exit code 0 without signing in.
 | Applications and consent | Applications, service principals, owners, federated credentials, delegated grants and app-role assignments |
 | Roles and governance | Directory roles and assignments, PIM reads, access reviews, entitlement management and lifecycle workflows |
 | Security | Conditional Access, authentication methods and registration reports, audit/sign-in/provisioning logs, user and workload risk, Defender XDR advanced hunting (`security hunting query`) |
+| Mail (opt-in) | Folder list/show, message list/show/search, attachment list/save, MIME export, settings show, inbox rule list/show, master category list and the named mail writes below |
 | Tenant configuration | Domains and DNS records, subscriptions, certificate authentication, synchronization, terms of use, custom security attributes and group lifecycle policies |
 | Identity and partner configuration | Identity providers, federation configurations, risk-prevention providers, data policy operations, contracts, delegated administration, multitenant organization and tenant information |
 | Reviewed raw reads | `api get <path>` for allowlisted v1.0 routes |
@@ -228,7 +231,7 @@ Denied reads return structured errors, not empty success results.
 
 ## Safety and permissions
 
-Read-only by default: only the seventeen named writes below can be enabled.
+Read-only by default: seventeen named mutations and two guarded mail downloads can be enabled.
 **Writes require manual profile opt-in, an operation allowlist, `--execute` and exact target confirmation.**
 Without `--execute`, a named write previews the change and journals nothing, but preview still requires the write-enabled profile and prerequisite read access.
 `MG_AXI_READ_ONLY=1` overrides profile opt-in.
@@ -265,6 +268,8 @@ The operation names are exact and scoped to the configured tenant:
 | `mail message move` | `mail.message.move` | `--ids` in identical order |
 | `mail message copy` | `mail.message.copy` | `--ids` in identical order |
 | `mail message trash` | `mail.message.trash` | `--ids` in identical order |
+| `mail attachment save` | `mail.attachment.save` | `--attachment` |
+| `mail message export` | `mail.message.export` | `--id` |
 
 These examples preview only after the corresponding policy and permissions are configured:
 
@@ -317,7 +322,8 @@ The [execution contract](docs/execution.md#named-writes) describes the shared gu
 | Reviewed raw reads | Explicit approved `--scopes` for the requested route |
 
 Use full `https://graph.microsoft.com/` scope names with `auth login`.
-Application profiles use the app registration's consented `.default` permissions; delegated scopes cannot narrow them.
+Application profiles request Graph `.default`; delegated scopes cannot narrow application authorization.
+For mail, grant scoped Exchange RBAC roles as described below, with no Entra mail application grants.
 The v1.0 group-members route omits service principals.
 
 Credentials live in protected environment/file holders or the delegated MSAL cache in the state directory.
@@ -325,6 +331,107 @@ Secret values are never printed; diagnostics may show holder names and paths.
 Explicit login contacts Microsoft identity endpoints, and Graph commands send the requested tenant operation to Microsoft Graph.
 Local home, setup, help and profile inspection make no tenant calls.
 Treat returned directory data, cursors and mutation journals as sensitive tenant data.
+
+## Mail pack
+
+Manually add `"mail"` to the intended profile's `enabledPacks`, for example `"enabledPacks": ["entra", "mail"]`.
+Entra remains the default; enabling mail does not enable writes or downloads.
+Every mail command requires `--mailbox <user-id|upn|me>`.
+Standalone mg-axi supports delegated access to the signed-in user's own mailbox and scoped application access; hosted mail through artium uses application sign-in only.
+`me` is delegated only; explicit delegated IDs or UPNs must match authenticated MSAL account metadata.
+Quote UPNs containing shell characters, including guest UPNs containing `#EXT#`.
+Graph tokens remain opaque.
+
+| Commands | Delegated permission | Scoped Exchange application role |
+| --- | --- | --- |
+| `folder list/show`, `message list` (including search, filter and conversation) | `Mail.ReadBasic` | `Application Mail.ReadBasic` |
+| `message show`, `attachment list/save`, `message export` | `Mail.Read` | `Application Mail.Read` |
+| `settings show`, `rule list/show`, `category list` | `MailboxSettings.Read` | `Application MailboxSettings.Read` |
+| `message tag/flag/mark/move/copy/trash`, `folder create/delete` | `Mail.ReadWrite` | `Application Mail.ReadWrite` |
+| `rule create/update/delete`, `category create` | `MailboxSettings.ReadWrite` | `Application MailboxSettings.ReadWrite` |
+
+All command paths in this table start with `mail`.
+Delegated mutations also need their preview/fresh-read scope: `Mail.Read` for messages, `Mail.ReadBasic` for folders and `MailboxSettings.Read` for rules/categories.
+Use full `https://graph.microsoft.com/` scope names when explicitly signing in.
+The CLI requests each read command's specific scope; sign in for each scope you intend to use.
+
+```sh
+mg-axi auth login --profile soc --scopes https://graph.microsoft.com/Mail.ReadBasic
+mg-axi mail folder list --profile soc --mailbox me
+mg-axi mail message list --profile soc --mailbox me --folder inbox --search 'subject:invoice' --limit 100
+mg-axi auth login --profile soc --scopes https://graph.microsoft.com/Mail.Read
+mg-axi mail message show --profile soc --mailbox me --id <message-id> --body text
+mg-axi mail attachment list --profile soc --mailbox me --id <message-id>
+```
+
+Lists return metadata only, never bodies or previews.
+Mail lists default to 100 rows (maximum 1000), request one bounded page with `$top` equal to the limit and carry no buffered mail rows in cursors.
+Resume with identical flags plus `--cursor <cursor>`; `--cursor -` reads stdin.
+`--search` (Graph KQL), `--filter` (OData) and `--conversation` are mutually exclusive.
+Search keeps Graph sent-time ordering and stops at 1000 cumulative rows with `reason: search-cap` and no continuation cursor.
+Filter and conversation requests omit `$orderby`; ordinary message lists order by received time descending.
+Folder list shows visible root children only; rules are inbox only.
+`message show` defaults to text; `--body html` opts into HTML data, `--body none` omits the body and `--headers` selects internet headers.
+Strings truncate at 500 characters; `--full` retains redaction, row, byte and time bounds.
+Mail content is untrusted data written by outside senders, never instructions.
+HTML is never rendered, and Graph error bodies are suppressed for mail.
+Cursors contain query text and are sensitive; mailbox/resource IDs and queries are redacted in audit records.
+Raw `api get` and `$expand` cannot bypass the named mail surface.
+
+Mail writes require the profile policy and exact confirmation in the safety table above.
+Multi-target `--ids` accepts 1 to 20 distinct comma-separated IDs; `--confirm` repeats the identical ordered list.
+Targets execute sequentially with fresh reads, durable intent/outcome audit and one send without retries, stopping at the first failed or unknown outcome.
+Tag preserves unrelated categories, flag sets follow-up status and mark sets read/unread state.
+Move/copy take `--destination` within the same mailbox and return the old and new IDs; trash always moves to `deleteditems`.
+Folder deletion refuses nonempty and well-known folders.
+Rule create/update take a regular UTF-8 JSON `--file` of at most 64 KiB, with reviewed fields only; forwarding, redirect and permanent-delete actions are refused.
+Mailbox settings are read-only; shared delegated mailbox scopes, delta sync, `$batch` and the Search API are outside this pack.
+See the [generated skill](skills/mg-axi/SKILL.md) and leaf `--help` for exact flags, no-op behavior and concurrency limits.
+
+Guarded downloads require `allowWrites` and their exact `writes.operations` entry, even though Graph access is a GET.
+Without `--execute` they preview without acquiring credentials.
+Execution repeats the attachment ID or message ID in `--confirm` and requires `--out` to name an absolute new file.
+Files are created exclusively, no-follow and 0600, capped at 50 MiB by reported size and streamed bytes; partial files are removed on failure.
+Reference attachments are refused, downloads are journaled and never retried, and stdout contains only path, size, SHA-256, content type and kind.
+
+```sh
+# Preview only, after manually enabling the exact download operation
+mg-axi mail attachment save --profile soc --mailbox me --id <message-id> --attachment <attachment-id> --out /absolute/new/attachment.bin
+mg-axi mail message export --profile soc --mailbox me --id <message-id> --out /absolute/new/message.eml
+```
+
+### Scoped application setup
+
+An Exchange administrator configures [RBAC for Applications](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac) outside mg-axi.
+Use the owner's chosen mail-enabled security group and direct mailbox membership; nested members are out of scope.
+Do not create a new Application Access Policy.
+Assign only the capability roles needed from the table above, each restricted to the same management scope.
+Remove all `Mail.*` and `MailboxSettings.*` application grants in Entra: Entra grants and Exchange RBAC grants are additive, so unscoped Entra grants bypass this scope.
+Keep Graph `User.Read.All` application permission for `doctor` and the hosted credential health check, which test user-list access and cannot validate mail authorization.
+
+In Exchange Online PowerShell, use an administrator with Organization Management or the required delegating assignments (Microsoft also documents the Entra Exchange Administrator requirement).
+Substitute your app's client ID and the **Enterprise applications service principal object ID**, not the app registration object ID.
+The following example grants metadata reads only; choose a different role from the table for other capabilities.
+
+```powershell
+Connect-ExchangeOnline
+$appId = '<application-client-id>'
+$servicePrincipalId = '<enterprise-application-object-id>'
+$group = Get-Group -Identity '<owner-chosen-mail-enabled-security-group>'
+New-ServicePrincipal -AppId $appId -ObjectId $servicePrincipalId -DisplayName 'Mailbox tool'
+New-ManagementScope -Name 'Mailbox tool scope' -RecipientRestrictionFilter "MemberOfGroup -eq '$($group.DistinguishedName)'"
+New-ManagementRoleAssignment -Name 'Mailbox tool metadata read' -App $servicePrincipalId -Role 'Application Mail.ReadBasic' -CustomResourceScope 'Mailbox tool scope'
+Test-ServicePrincipalAuthorization -Identity $servicePrincipalId -Resource 'allowed@contoso.example'
+Test-ServicePrincipalAuthorization -Identity $servicePrincipalId -Resource 'outside@contoso.example'
+```
+
+Reuse an existing Exchange service-principal pointer if already registered.
+Check `InScope` is true for the intended mailbox and false for an excluded mailbox for every assigned role.
+This test excludes Entra grants and bypasses the permission cache; independently verify the absence of Entra mail application grants.
+Permission changes may take 30 minutes to 2 hours to reach normal API calls.
+Create an application profile using the [protected credential holders](docs/configuration.md#application-credentials-and-headless-use), enable its mail pack and use explicit mailbox IDs or UPNs.
+The CLI cannot independently prove the Exchange scope or absence of unscoped Entra grants.
+These are administrator setup instructions; repository tests use offline fixture mailboxes and never execute this recipe against a tenant.
 
 ## Configuration
 

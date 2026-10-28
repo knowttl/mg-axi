@@ -7,9 +7,9 @@ commands:
 
 document:
   instructions: |
-    README.md owns installation, current usage and observable CLI behavior.
-    The future skills/mg-axi/SKILL.md is the packaged agent skill surface; generate
-    it from the command catalogue in PACK-01 rather than maintaining parallel help.
+    README.md owns the overview, installation and first actions.
+    skills/mg-axi/SKILL.md and docs/commands.md are generated from the command
+    catalogue; docs/ owns detailed behavior, authorization and pack references.
     PLAN.md is the approved design authority; historical slice plans are preserved
     on archive/internal-docs.
     docs/inventory.md and inventory/schema.json own discovery semantics; scheduled

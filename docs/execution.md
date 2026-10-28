@@ -6,7 +6,7 @@ Only named, approved pack commands can mutate; raw API remains read-only.
 WRITE-00 provides the shared [mutation coordinator](../src/mutations.ts).
 WRITE-01 ships the first named command (`entra group member add`); WRITE-02 adds the named `entra user update` account-state command; WRITE-03 adds the named `entra user revoke-sessions` session-revocation action; WRITE-04 adds the named `entra conditional-access policy update` command; WRITE-05 adds the named `entra risky-user dismiss` single-user action; MAIL-05 adds the gated `mail message tag`, `mail message flag` and `mail message mark` writes; MAIL-06 adds the gated `mail message move`, `mail message copy` and `mail message trash` (soft delete to Deleted Items only) writes; MAIL-07 adds the gated `mail folder create`, `mail folder delete` (empty custom folders only) and `mail category create` writes; MAIL-08 adds the gated `mail rule create`, `mail rule update` and `mail rule delete` (inbox only) writes. Each mail ID runs as its own coordinator call with a fresh read, journal intent and single send, sequentially, stopping at the first failed or unknown outcome with later targets not attempted. MAIL-09 adds the guarded `mail attachment save` and `mail message export` downloads through the coordinator download path: exact resource confirmation, journaled intent and outcome with redacted mailbox and resource IDs, a single fetch with no retries, refused redirects, and exclusive no-follow 0600 output capped at 50 MiB with partial files removed on failure; reference attachments are refused.
 All seventeen mutation commands use the shared production [mutation transport](../src/mutations.ts); the two guarded downloads travel on the separate binary transport through the same coordinator journal. Later families still ship independently with their own contracts.
-Profile enablement, environment configuration and named-write usage, confirmation, identity pinning, permissions and limitations are documented in [README.md](../README.md).
+Profile enablement, environment configuration and named-write usage, confirmation, identity pinning, permissions and limitations are documented in [write and permission reference](writes.md).
 The coordinator snapshots the validated profile's tenant, identity and approved-operation scope at creation; later profile edits cannot widen that scope.
 It checks forced read-only and profile enablement before preview, and the sender checks forced read-only again before credential acquisition and immediately before transport handoff.
 Preview redacts current state and proposed payload using the shared Graph redaction boundary.
@@ -28,7 +28,7 @@ Unknown actions, raw writes, secret-returning endpoints, and unsupported beta wr
 
 ## Read mechanics and source contracts
 
-[Paging](https://learn.microsoft.com/en-us/graph/paging) follows exact `@odata.nextLink` values and preserves required headers, except for the authentication-method query handling documented in [README.md](../README.md).
+[Paging](https://learn.microsoft.com/en-us/graph/paging) follows exact `@odata.nextLink` values and preserves required headers, except for authentication-method queries, which omit unsupported OData options.
 Validate HTTPS origin and version on initial requests, redirects and every continuation before adding credentials.
 An output cap cannot discard the remainder of a fetched page; continuation state preserves query/context and buffered rows if necessary.
 CORE-02 exposes these mechanics through `GraphSession.collect`, with `limit`, `budget` and an opaque `cursor`.
@@ -58,22 +58,22 @@ Slice IDs and dependencies are defined in the [dispatch plan](https://github.com
 
 | Slice | Operation and permission | Material constraints |
 |---|---|---|
-| WRITE-01 Membership | [POST /groups/{id}/members/$ref](https://learn.microsoft.com/en-us/graph/api/group-post-members?view=graph-rest-1.0) | Shipped; supported targets and permission requirements are documented in [README.md](../README.md). |
-| WRITE-02 Account state | [PATCH /users/{id}](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0) | Shipped; account-state usage, permissions and sensitive-target role hierarchy are documented in [README.md](../README.md). |
-| WRITE-03 Revoke sessions | [POST /users/{id}/revokeSignInSessions](https://learn.microsoft.com/en-us/graph/api/user-revokesigninsessions?view=graph-rest-1.0) | Shipped; usage, permissions, limitations and unknown-outcome handling are documented in [README.md](../README.md); implementation: [entra-user-revoke-sessions](../src/entra-user-revoke-sessions.ts). |
-| WRITE-04 CA policy update | [PATCH /identity/conditionalAccess/policies/{id}](https://learn.microsoft.com/en-us/graph/api/conditionalaccesspolicy-update?view=graph-rest-1.0) | Shipped; usage, permissions, lockout gates and concurrency limitations are documented in [README.md](../README.md). |
-| WRITE-05 Risk dismissal | [POST /identityProtection/riskyUsers/dismiss](https://learn.microsoft.com/en-us/graph/api/riskyuser-dismiss?view=graph-rest-1.0) | Shipped; single-user dismissal usage, permissions and P2/role guidance are documented in [README.md](../README.md). |
+| WRITE-01 Membership | [POST /groups/{id}/members/$ref](https://learn.microsoft.com/en-us/graph/api/group-post-members?view=graph-rest-1.0) | Shipped; supported targets and permission requirements are documented in [write and permission reference](writes.md). |
+| WRITE-02 Account state | [PATCH /users/{id}](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0) | Shipped; account-state usage, permissions and sensitive-target role hierarchy are documented in [write and permission reference](writes.md). |
+| WRITE-03 Revoke sessions | [POST /users/{id}/revokeSignInSessions](https://learn.microsoft.com/en-us/graph/api/user-revokesigninsessions?view=graph-rest-1.0) | Shipped; usage, permissions, limitations and unknown-outcome handling are documented in [write and permission reference](writes.md); implementation: [entra-user-revoke-sessions](../src/entra-user-revoke-sessions.ts). |
+| WRITE-04 CA policy update | [PATCH /identity/conditionalAccess/policies/{id}](https://learn.microsoft.com/en-us/graph/api/conditionalaccesspolicy-update?view=graph-rest-1.0) | Shipped; usage, permissions, lockout gates and concurrency limitations are documented in [write and permission reference](writes.md). |
+| WRITE-05 Risk dismissal | [POST /identityProtection/riskyUsers/dismiss](https://learn.microsoft.com/en-us/graph/api/riskyuser-dismiss?view=graph-rest-1.0) | Shipped; single-user dismissal usage, permissions and P2/role guidance are documented in [write and permission reference](writes.md). |
 
 
 Each write ships independently after the shared coordinator and its own contract pass offline checks.
 The table describes permission choices, not automatic consent or authority.
 Raw writes remain denied even after named writes ship.
 
-The WRITE-01 implementation in [entra-group-member-add](../src/entra-group-member-add.ts) classifies membership adds as disruptive; command usage, enablement and permission requirements are owned by [README.md](../README.md).
+The WRITE-01 implementation in [entra-group-member-add](../src/entra-group-member-add.ts) classifies membership adds as disruptive; command usage, enablement and permission requirements are owned by [write and permission reference](writes.md).
 The $ref body carries exactly `{"@odata.id": "https://graph.microsoft.com/v1.0/directoryObjects/<user-id>"}`; both identifiers must be object IDs.
 The user is verified through `GET:/users/{user-id}` with `$select=id` before preview or no-op detection and again before sending; failed or malformed user reads block the operation.
 Group `isAssignableToRole` must be explicitly false or null; true, missing and malformed values are refused.
 Desired state is read through `GET:/groups/{group-id}/members` in the preview and rechecked before the single send; an incomplete member window proceeds to the POST where a duplicate 400 lands as a no-op.
 
 The WRITE-04 implementation in [entra-ca-policy-update](../src/entra-ca-policy-update.ts) supplies a READ-03 policy-show reread callback to the coordinator, reapplying lockout gates on each fresh effective policy before the single send.
-Its reviewed fields, diff and no-op behavior, confirmation, lockout requirements, permissions and concurrency limitations are owned by [README.md](../README.md).
+Its reviewed fields, diff and no-op behavior, confirmation, lockout requirements, permissions and concurrency limitations are owned by [write and permission reference](writes.md).

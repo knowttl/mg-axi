@@ -1,7 +1,7 @@
 # mg-axi implementation plan
 
 Approved planning baseline: 2026-10-03.
-See [README.md](README.md) for the current package, installation and CLI behavior.
+See [README.md](README.md) for installation and [docs/commands.md](docs/commands.md) for the current CLI surface.
 
 ## Outcome and scope
 
@@ -94,7 +94,7 @@ mg-axi entra application show --id <object-id>
 mg-axi api GET /users --profile soc
 ```
 
-These are target contracts; [README.md](README.md) describes the current CLI surface.
+These are target contracts; [docs/commands.md](docs/commands.md) describes the current CLI surface.
 The inventory and strict leaf schema define every supported command before publication.
 
 | AXI principle | Contract |
@@ -109,7 +109,7 @@ The inventory and strict leaf schema define every supported command before publi
 Use az-like group/subgroup/verb grammar, `list` for collections and `show` for one object.
 `--id` identifies a Graph object unless the command explicitly supports another identifier.
 Never silently conflate object ID with application/client ID.
-`--filter` is OData and `--fields` projects locally; [README.md](README.md) owns command-specific `--select` behavior.
+`--filter` is OData and `--fields` projects locally; [docs/output-and-paging.md](docs/output-and-paging.md) describes `--select` behavior, with exact availability in leaf help.
 Reserve `--query` for az-compatible output-query semantics rather than assigning it an unrelated meaning.
 `--limit` caps output and `--all` follows pages within an explicit budget.
 Unsupported advanced-query combinations fail early instead of forwarding a misleading request.

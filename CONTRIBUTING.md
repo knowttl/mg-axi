@@ -20,7 +20,21 @@ Before opening a pull request, run all four checks above and describe the behavi
 Pull requests rely on local validation; there is no GitHub test CI.
 The release workflow is separate and does not replace these checks.
 
-The agent skill and capability report are generated.
+The agent skill, command reference and capability report are generated.
 After changing the command catalogue, documentation template or discovery inventory, run `corepack pnpm run docs:generate`, then `corepack pnpm run docs:check`.
 Do not edit generated files or `CHANGELOG.md` by hand.
 Keep changes focused and add regression tests for observable behavior.
+
+## Documentation ownership
+
+README.md owns the overview, installation and first actions.
+The command catalogue generates skills/mg-axi/SKILL.md and docs/commands.md as the complete leaf references.
+Detailed authorization, paging and pack behavior live in docs/.
+
+## Versioning and releases
+
+During 0.x development, feature changes produce patch releases under the current [release configuration](release-please-config.json).
+Minor versions are cut intentionally.
+The deprecated top-level `login` and `AZURE_FEDERATED_TOKEN_FILE` aliases remain supported through the next intentionally cut minor release and become eligible for removal after that release.
+Patch releases do not expire either alias.
+The [release workflow](.github/workflows/release-please.yml) builds, lints, tests and checks generated docs before publishing with npm provenance.

@@ -1,5 +1,7 @@
 # INV-01 discovery contract
 
+Contents: [Boundary](#boundary) • [Row identity](#row-identity-and-evidence) • [Dispositions](#dispositions-and-ownership) • [Offline verification](#offline-verification-and-refresh)
+
 The machine-readable [inventory](../inventory/operations.json) records the pinned Microsoft Graph OpenAPI revision.
 Both `openapi/v1.0/openapi.yaml` and `openapi/beta/openapi.yaml` are inputs.
 The inventory records their exact byte sizes and SHA-256 hashes, along with the upstream repository, revision and check date.

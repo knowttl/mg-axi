@@ -59,6 +59,8 @@ mock.module(new URL("../../dist/api.js", import.meta.url), {
       body = url.searchParams.has("$skiptoken")
         ? { value: devices.slice(2) }
         : { value: devices.slice(0, 2), "@odata.nextLink": "https://graph.microsoft.com/v1.0/devices?%24skiptoken=page2" };
+    } else if (/^\/v1\.0\/devices\/[^/]+\/registered(Owners|Users)$/.test(url.pathname)) {
+      body = { value: members };
     } else if (url.pathname === "/v1.0/directory/administrativeUnits") {
       body = url.searchParams.has("$skiptoken")
         ? { value: units.slice(2) }

@@ -860,6 +860,30 @@ export const LEAVES: Leaf[] = [
     full: deviceRead.full,
     scopes: deviceRead.scopes,
   }, examples: ["mg-axi entra device show --id <device-id> --profile soc", "mg-axi entra device show --id <device-id> --profile soc --full"] },
+  { path: "entra device owners", description: "List registered device owners with id, displayName and userPrincipalName; limited-information rows are preserved", operation: "GET:/devices/{device-id}/registeredOwners",
+    positional: { name: "id", description: "Device object ID" },
+    flags: {
+      ...common,
+      limit: { value: "positive-integer", default: "100", description: "Cap returned rows; remaining rows are buffered in an opaque cursor; incompatible with --all" },
+      all: { description: "Follow pages within request, byte and deadline budgets" },
+      cursor: deviceRead.cursor,
+      scopes: deviceRead.scopes,
+      full: deviceRead.full,
+    },
+    examples: ["mg-axi entra device owners <id> --profile soc", "mg-axi entra device owners <id> --profile soc --all"],
+  },
+  { path: "entra device users", description: "List registered device users with id, displayName and userPrincipalName; limited-information rows are preserved", operation: "GET:/devices/{device-id}/registeredUsers",
+    positional: { name: "id", description: "Device object ID" },
+    flags: {
+      ...common,
+      limit: { value: "positive-integer", default: "100", description: "Cap returned rows; remaining rows are buffered in an opaque cursor; incompatible with --all" },
+      all: { description: "Follow pages within request, byte and deadline budgets" },
+      cursor: deviceRead.cursor,
+      scopes: deviceRead.scopes,
+      full: deviceRead.full,
+    },
+    examples: ["mg-axi entra device users <id> --profile soc", "mg-axi entra device users <id> --profile soc --all"],
+  },
   { path: "entra administrative-unit list", description: "List administrative units with compact properties (id, displayName, visibility, membershipType)", operation: "GET:/directory/administrativeUnits", flags: {
     ...common,
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; the remainder is buffered into an opaque cursor, never discarded; incompatible with --all" },
@@ -2975,6 +2999,13 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
   let leaf = LEAVES.find(item => item.path === path);
   let positional: string | undefined;
   let flagStart = words.length;
+  if (!leaf && words[0] !== "api") {
+    const candidate = LEAVES.find(item => item.positional && item.path === words.slice(0, -1).join(" "));
+    if (candidate) {
+      leaf = candidate;
+      positional = words.at(-1);
+    }
+  }
   if (!leaf) {
     if (words[0] !== "api") throw new AxiError("unknown or incomplete command", "VALIDATION_ERROR", [nearestGroupHelp(words)]);
     leaf = LEAVES.find(item => item.path === "api get")!;

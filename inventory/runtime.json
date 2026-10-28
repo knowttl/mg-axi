@@ -481,6 +481,22 @@
       "owningSlice": "READ-10"
     },
     {
+      "id": "v1.0:GET:/devices/{device-id}/registeredOwners",
+      "method": "GET",
+      "path": "/devices/{device-id}/registeredOwners",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-10"
+    },
+    {
+      "id": "v1.0:GET:/devices/{device-id}/registeredUsers",
+      "method": "GET",
+      "path": "/devices/{device-id}/registeredUsers",
+      "version": "v1.0",
+      "disposition": "named-command",
+      "owningSlice": "READ-10"
+    },
+    {
       "id": "v1.0:GET:/directory/administrativeUnits",
       "method": "GET",
       "path": "/directory/administrativeUnits",

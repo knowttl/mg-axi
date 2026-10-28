@@ -4,7 +4,7 @@ import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
 // READ-10: the directory-device and administrative-unit read mapping behind
-// `mg-axi entra device list/show`, `mg-axi entra administrative-unit
+// `mg-axi entra device list/show/owners/users`, `mg-axi entra administrative-unit
 // list/show` and `mg-axi entra administrative-unit member list`. Operation
 // construction stays beside its command; the shared session owns URLs,
 // credentials, paging, retries and error translation, and the SDK owns TOON
@@ -87,6 +87,7 @@ const DEFAULT_AU_MEMBER_SELECT = ["id", "displayName"];
 // explicit --scopes set including Member.Read.Hidden. Application profiles
 // use their configured .default audience and reject --scopes.
 export const DEFAULT_DEVICE_SCOPES = ["https://graph.microsoft.com/Device.Read.All"];
+export const DEVICE_PERSON_FIELDS = ["id", "displayName", "userPrincipalName"];
 export const DEFAULT_AU_SCOPES = ["https://graph.microsoft.com/AdministrativeUnit.Read.All"];
 const TRUNCATE_AT = 500;
 
@@ -350,6 +351,42 @@ export async function listDevices(
     };
   }
   return { devices, ...listTotals(devices.length, result.total, "devices", true), complete: true, help: [...truncationHints, showHint, scopeHint] };
+}
+
+// Reviewed 2026-10-27 against device-list-registeredowners and
+// device-list-registeredusers. Delegated callers need Directory Readers,
+// Global Reader, Intune Administrator or Windows 365 Administrator.
+// Query parameters on these relationships require advanced-query headers.
+export async function listDevicePeople(
+  session: GraphSession,
+  flags: DirectoryFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  id: string,
+  relationship: "owners" | "users",
+): Promise<Record<string, unknown>> {
+  const args: CollectArgs = {
+    profile, operation, params: { "device-id": id },
+    query: { $select: DEVICE_PERSON_FIELDS.join(","), $count: "true" },
+    consistencyLevel: "eventual", scopes: scopesFor(flags, DEFAULT_DEVICE_SCOPES, profile, help),
+    ...(flags.all === true ? {} : { limit: flags.limit === undefined ? 100 : Number(flags.limit) }),
+    ...(flags.cursor === undefined ? {} : { cursor: String(flags.cursor) }),
+  };
+  const result = await withGuidance([
+    "Device relationships need Device.Read.All; delegated callers also need Directory Readers, Global Reader, Intune Administrator or Windows 365 Administrator",
+  ], () => session.collect(args));
+  const projected = result.value.map(row => projectMember(row, DEVICE_PERSON_FIELDS, DEVICE_PERSON_FIELDS, flags.full === true));
+  const rows = projected.map(item => item.row);
+  const hints = ["Missing or null descriptive properties may reflect limited read consent or unset properties"];
+  if (projected.some(item => item.truncated)) hints.push(`Re-run mg-axi entra device ${relationship} ${shellValue(id)} with the same flags plus --full for untruncated strings`);
+  if (!result.complete) hints.push("Resume with the same command and flags plus --cursor <cursor-from-output>");
+  return {
+    [relationship]: rows, ...listTotals(rows.length, result.total, relationship, result.complete),
+    complete: result.complete,
+    ...(!result.complete ? { reason: result.reason, cursor: result.cursor } : {}),
+    help: hints,
+  };
 }
 
 export async function showDevice(

@@ -184,6 +184,8 @@ See [coverage](https://github.com/knowttl/mg-axi/blob/main/docs/coverage.md) for
 | `mg-axi entra pim group-eligibility-request show` | native | read |
 | `mg-axi entra device list` | native | read |
 | `mg-axi entra device show` | native | read |
+| `mg-axi entra device owners` | native | read |
+| `mg-axi entra device users` | native | read |
 | `mg-axi entra administrative-unit list` | native | read |
 | `mg-axi entra administrative-unit show` | native | read |
 | `mg-axi entra administrative-unit member list` | native | read |

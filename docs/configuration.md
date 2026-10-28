@@ -65,7 +65,9 @@ Credential acquisition is bound to the configured tenant/client and refreshes at
 <summary>Application providers, protected files and rotation</summary>
 
 Application profiles use client credentials without a signed-in user and request the configured Graph `.default` audience.
-An administrator must grant Graph application permissions on the app registration; delegated `--scopes` cannot narrow an application token.
+An administrator grants the required application authorization; delegated `--scopes` cannot narrow an application token.
+Entra operations use Graph application permissions on the app registration.
+Mail uses scoped Exchange RBAC for Applications with no `Mail.*` or `MailboxSettings.*` application grants in Entra; see the [mail setup recipe](../README.md#scoped-application-setup).
 Application profiles reject device-code opt-in and `login`, and acquisition failures never fall back to user authentication.
 
 Choose exactly one credential provider:

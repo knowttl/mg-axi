@@ -11,6 +11,7 @@ user-invocable: false
 
 Agent-ergonomic CLI for Microsoft Graph. Inspect Microsoft Graph capabilities, read-only by default.
 Entra SOC, Defender XDR hunting and opt-in mailbox controls through token-efficient TOON output.
+Start investigations with the [compact agent guide](https://github.com/knowttl/mg-axi/blob/main/docs/agent-guide.md); use this skill as the complete reference.
 
 ## Mail pack
 

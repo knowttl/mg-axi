@@ -5,11 +5,13 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { capabilityDocument, commandDocument, skillDocument } from "../dist/docs.js";
+import { agentGuideDocument, capabilityDocument, commandDocument, skillDocument } from "../dist/docs.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const skillPath = join(root, "skills", "mg-axi", "SKILL.md");
 const coveragePath = join(root, "docs", "coverage.md");
+const agentGuidePath = join(root, "docs", "agent-guide.md");
+const agentGuide = agentGuideDocument();
 
 const commandsPath = join(root, "docs", "commands.md");
 const commands = commandDocument();
@@ -19,6 +21,7 @@ const skill = skillDocument();
 const coverage = capabilityDocument();
 if (check) {
   const stale = [
+    ...(readFileSync(agentGuidePath, "utf8").replace(/\r\n/g, "\n") === agentGuide ? [] : [agentGuidePath]),
     ...(readFileSync(commandsPath, "utf8").replace(/\r\n/g, "\n") === commands ? [] : [commandsPath]),
     ...(readFileSync(skillPath, "utf8").replace(/\r\n/g, "\n") === skill ? [] : [skillPath]),
     ...(readFileSync(coveragePath, "utf8").replace(/\r\n/g, "\n") === coverage ? [] : [coveragePath]),
@@ -28,6 +31,7 @@ if (check) {
     process.exit(1);
   }
 } else {
+  writeFileSync(agentGuidePath, agentGuide);
   writeFileSync(commandsPath, commands);
   writeFileSync(skillPath, skill);
   writeFileSync(coveragePath, coverage);

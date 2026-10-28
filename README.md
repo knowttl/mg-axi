@@ -53,7 +53,7 @@ npx skills add knowttl/mg-axi --skill mg-axi
 Restart the agent session after hook installation.
 Hooks inject local profile, authentication-cache and write-policy context without Graph calls; the skill supplies command guidance.
 Either option works independently and grants no permissions.
-The [generated skill](skills/mg-axi/SKILL.md) is the full command reference.
+Start with the [compact investigation guide](docs/agent-guide.md); the [generated skill](skills/mg-axi/SKILL.md) is the full command reference.
 There is no CLI uninstall command: remove only `mg-axi-hook` SessionStart entries from `~/.claude/settings.json` and `~/.codex/hooks.json`, and delete `~/.config/opencode/plugins/axi-mg-axi-hook.js`.
 Preserve other hooks and shared settings; see [hook details](docs/agent-setup.md).
 

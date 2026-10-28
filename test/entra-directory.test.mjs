@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { decode } from "@toon-format/toon";
 import { executeArgv } from "../dist/cli.js";
 import { Profiles } from "../dist/profiles.js";
+import { runApiGet } from "../dist/api.js";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
@@ -187,6 +188,97 @@ function runDirectoryCli(args, state, mode, denied = false) {
 }
 
 for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+  for (const [command, navigation] of [["owners", "registeredOwners"], ["users", "registeredUsers"]]) {
+    test(`${mode} device ${command} projects registered users and preserves limited information`, async () => {
+      const state = setupProfiles();
+      try {
+        const fixture = transport(() => json(200, { value: [
+          { id: mUser.id, displayName: "Adele", userPrincipalName: "adele@example.com", secret: "omit" },
+          { "@odata.type": "#microsoft.graph.user", id: mLimited.id, displayName: null, userPrincipalName: null },
+        ] }));
+        const { requests, calls, overrides } = overridesFor(mode, fixture);
+        const result = await executeArgv(["entra", "device", command, d1.id, "--profile", profile], overrides);
+        assert.deepEqual(result[command], [
+          { id: mUser.id, displayName: "Adele", userPrincipalName: "adele@example.com" },
+          { "@odata.type": "#microsoft.graph.user", id: mLimited.id, displayName: null, userPrincipalName: null },
+        ]);
+        assert.equal(result.complete, true);
+        assert.equal(result.count, `2 ${command}`);
+        assert.ok(result.help.some(hint => hint.includes("limited read consent")));
+        const url = new URL(requests[0].url);
+        assert.equal(url.pathname, `/v1.0/devices/${d1.id}/${navigation}`);
+        assert.equal(url.searchParams.get("$select"), "id,displayName,userPrincipalName");
+        assert.equal(url.searchParams.get("$count"), "true");
+        assert.equal(requests[0].headers.ConsistencyLevel, "eventual");
+        if (mode === "delegated") assert.deepEqual(calls[0][1], deviceScopes);
+      } finally {
+        teardownProfiles(state);
+      }
+    });
+
+    test(`${mode} device ${command} returns empty collections explicitly`, async () => {
+      const state = setupProfiles();
+      try {
+        const { overrides } = overridesFor(mode, transport(() => json(200, { value: [] })));
+        const result = await executeArgv(["entra", "device", command, d1.id, "--profile", profile], overrides);
+        assert.deepEqual(result[command], []);
+        assert.equal(result.count, `0 ${command}`);
+        assert.equal(result.complete, true);
+      } finally {
+        teardownProfiles(state);
+      }
+    });
+
+    test(`${mode} device ${command} resumes a capped page without losing rows`, async () => {
+      const state = setupProfiles();
+      try {
+        const { overrides, requests } = overridesFor(mode, transport(() => json(200, { value: [mUser, mLimited] })));
+        const argv = ["entra", "device", command, d1.id, "--profile", profile, "--limit", "1"];
+        const first = await executeArgv(argv, overrides);
+        assert.equal(first.complete, false);
+        assert.equal(first[command][0].id, mUser.id);
+        const second = await executeArgv([...argv, "--cursor", first.cursor], overrides);
+        assert.equal(second.complete, true);
+        assert.equal(second[command][0].id, mLimited.id);
+        assert.equal(requests.length, 1);
+      } finally {
+        teardownProfiles(state);
+      }
+    });
+
+    test(`${mode} raw device ${command} uses the reviewed projection`, async () => {
+      const { overrides, requests } = overridesFor(mode, transport(() => json(200, { value: [
+        { id: mUser.id, displayName: "Adele", userPrincipalName: "adele@example.com", secret: "omit" },
+      ] })));
+      const result = await runApiGet({ path: `/devices/${d1.id}/${navigation}`, apiVersion: "v1.0",
+        profile: { mode, tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"],
+          preview: false, sensitiveAreas: [], ...(mode === "delegated"
+            ? { token: { stored: true } } : { auth: "federated", token: { env: "MG_AXI_TOKEN" } }) },
+        ...(mode === "delegated" ? { scopes: deviceScopes.join(" ") } : {}),
+      }, overrides);
+      assert.ok(JSON.stringify(result).includes("adele@example.com"));
+      assert.ok(!JSON.stringify(result).includes("omit"));
+      assert.equal(new URL(requests[0].url).pathname, `/v1.0/devices/${d1.id}/${navigation}`);
+    });
+
+    test(`${mode} executable device ${command} renders rows and permission denials`, () => {
+      const state = setupProfiles();
+      try {
+        const args = ["entra", "device", command, d1.id, "--profile", profile];
+        const result = runDirectoryCli(args, state, mode);
+        assert.equal(result.status, 0, result.stdout);
+        assert.equal(result.stderr, "");
+        assert.deepEqual(decode(result.stdout)[command].map(row => row.id), members.map(row => row.id));
+        const denied = runDirectoryCli(args, state, mode, true);
+        assert.equal(denied.status, 1);
+        assert.match(denied.stdout, /Device.Read.All/);
+        assert.match(denied.stdout, /Directory Readers/);
+      } finally {
+        teardownProfiles(state);
+      }
+    });
+  }
+
   test(`${mode} lists devices with compact rows preserving null and missing`, async () => {
     const state = setupProfiles();
     try {

@@ -1,4 +1,5 @@
 import { AxiError } from "axi-sdk-js";
+import { DEVICE_PERSON_FIELDS } from "./entra-directory.js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { KNOWN_CONTACTED_REVIEWER_FIELDS, KNOWN_DECISION_FIELDS, KNOWN_DEFINITION_FIELDS, KNOWN_INSTANCE_FIELDS, KNOWN_STAGE_FIELDS } from "./entra-access-reviews.js";
@@ -389,6 +390,14 @@ export const REVIEWED_ROUTES: readonly ReviewedRawRoute[] = [
   { id: "v1.0:GET:/devices/{device-id}", kind: "single", query: SINGLE_QUERY, fields: DEVICE_FIELDS,
     access: "D/A Device.Read.All. Delegated callers pass it as --scopes.",
     sources: ["https://learn.microsoft.com/graph/api/device-get?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/devices/{device-id}/registeredOwners", kind: "collection", query: [], fields: DEVICE_PERSON_FIELDS, keepODataType: true,
+    access: "D/A Device.Read.All. Delegated callers also need Directory Readers, Global Reader, Intune Administrator or Windows 365 Administrator.",
+    note: "Reviewed 2026-10-27. Raw reads use local projection without OData query parameters; named reads support advanced selection. Limited-information rows preserve id and null properties.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/device-list-registeredowners?view=graph-rest-1.0"] },
+  { id: "v1.0:GET:/devices/{device-id}/registeredUsers", kind: "collection", query: [], fields: DEVICE_PERSON_FIELDS, keepODataType: true,
+    access: "D/A Device.Read.All. Delegated callers also need Directory Readers, Global Reader, Intune Administrator or Windows 365 Administrator.",
+    note: "Reviewed 2026-10-27. Raw reads use local projection without OData query parameters; named reads support advanced selection. Limited-information rows preserve id and null properties.",
+    sources: ["https://learn.microsoft.com/en-us/graph/api/device-list-registeredusers?view=graph-rest-1.0"] },
   { id: "v1.0:GET:/directory/administrativeUnits", kind: "collection", query: COLLECTION_QUERY, fields: AU_FIELDS,
     access: "D/A AdministrativeUnit.Read.All. Delegated callers pass it as --scopes.",
     note: "P1 for scoped administrators, Free for members; dynamic membership needs additional P1 licensing.",

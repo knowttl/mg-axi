@@ -13,17 +13,17 @@ The two documented attachment /$value routes omitted by the pinned OpenAPI are r
 
 ## Counts
 
-- implemented read leaves: 275 (273 named Graph reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 277 (275 named Graph reads plus reviewed raw api get and doctor health check)
 - implemented write leaves: 17 (named gated mutations below)
 - local leaves: 11 (home, profile, config, auth, login alias and setup views)
 
 Mail ships 9 read commands, 2 guarded downloads and 12 gated mutations (23 mail leaves).
 Guarded downloads count as Graph read leaves in the registry, but require write-policy opt-in, execution and exact resource confirmation because they persist sensitive content locally.
 
-- inventory named-command: 334
+- inventory named-command: 336
 - inventory reviewed-raw-read: 5
 - inventory scheduled: 3742
-- inventory deferred: 4429
+- inventory deferred: 4427
 - inventory intentionally-blocked: 3089
 - inventory deprecated: 870
 - inventory unavailable: 14
@@ -34,10 +34,10 @@ Guarded downloads count as Graph read leaves in the registry, but require write-
 FULL-01 audit (2026-10-07): every agreed v1.0 read has a named command or an
 explicit reviewed blocked/unavailable/deprecated/deferred disposition, and no
 v1.0 row is left scheduled. The deferred tail is declared out of v1.
-- v1.0 named-command: 334, reviewed-raw-read: 5, scheduled: 0
-- v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
+- v1.0 named-command: 336, reviewed-raw-read: 5, scheduled: 0
+- v1.0 deferred (out of v1): 4427, intentionally-blocked: 57, deprecated: 16, unavailable: 14
 - beta scheduled (never agreed for v1): 3742
-PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 334 named / 5 raw (339 backed).
+PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 336 named / 5 raw (341 backed).
 
 ## COMPLETE-01 audit record
 
@@ -46,8 +46,8 @@ COMPLETE-01 audit (2026-10-07): the full agreed Entra capability audit including
 reviewed deferred/blocked/deprecated dispositions rather than scheduled; no agreed v1.0 operation, read or
 write, is left merely scheduled. Beta stays scheduled by definition and was never agreed for v1.
 The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS URLs) stay out.
-- v1.0 named-command: 334 (311 read rows plus 23 write rows; 17 gated write leaves in Named writes below), reviewed-raw-read: 5, scheduled: 0
-- v1.0 deferred (out of v1): 4429, intentionally-blocked: 57, deprecated: 16, unavailable: 14
+- v1.0 named-command: 336 (313 read rows plus 23 write rows; 17 gated write leaves in Named writes below), reviewed-raw-read: 5, scheduled: 0
+- v1.0 deferred (out of v1): 4427, intentionally-blocked: 57, deprecated: 16, unavailable: 14
 - beta scheduled (never agreed for v1): 3742
 - shipped writes: MAIL-05 (`mg-axi mail message tag`, `mg-axi mail message flag`, `mg-axi mail message mark`), MAIL-06 (`mg-axi mail message move`, `mg-axi mail message copy`, `mg-axi mail message trash`), MAIL-07 (`mg-axi mail folder create`, `mg-axi mail folder delete`, `mg-axi mail category create`), MAIL-08 (`mg-axi mail rule create`, `mg-axi mail rule update`, `mg-axi mail rule delete`), WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
 - WRITE-N (remaining agreed mutations): deferred 1878, intentionally-blocked 25 v1.0 plus 2937 beta, deprecated 6 v1.0 plus 398 beta, scheduled 0.
@@ -89,6 +89,8 @@ The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS
 | `mg-axi entra pim group-eligibility-request show` | `GET:/identityGovernance/privilegedAccess/group/eligibilityScheduleRequests/{privilegedAccessGroupEligibilityScheduleRequest-id}` | named-command | EXT-02 |
 | `mg-axi entra device list` | `GET:/devices` | named-command | READ-10 |
 | `mg-axi entra device show` | `GET:/devices/{device-id}` | named-command | READ-10 |
+| `mg-axi entra device owners` | `GET:/devices/{device-id}/registeredOwners` | named-command | READ-10 |
+| `mg-axi entra device users` | `GET:/devices/{device-id}/registeredUsers` | named-command | READ-10 |
 | `mg-axi entra administrative-unit list` | `GET:/directory/administrativeUnits` | named-command | READ-10 |
 | `mg-axi entra administrative-unit show` | `GET:/directory/administrativeUnits/{administrativeUnit-id}` | named-command | READ-10 |
 | `mg-axi entra administrative-unit member list` | `GET:/directory/administrativeUnits/{administrativeUnit-id}/members` | named-command | READ-10 |

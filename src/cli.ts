@@ -27,7 +27,7 @@ import { createMutationCoordinator, mutationFetchTransport, type MutationTranspo
 import { TRANSITIVE_OPERATION, listGroupMemberOf, listGroupMembers, listGroups, showGroup } from "./entra-groups.js";
 import { listDirectoryRoles, showDirectoryRole, listDirectoryRoleTemplates, showDirectoryRoleTemplate, listRoleMembers, listScopedMembers, showScopedMember, listScopedRoleMemberships, showScopedRoleMembership, listRoleAssignments, listPimEligible, listPimActive } from "./entra-roles.js";
 import { listGroupAssignmentSchedules, showGroupAssignmentSchedule, listGroupAssignmentInstances, showGroupAssignmentInstance, listGroupEligibilitySchedules, showGroupEligibilitySchedule, listGroupEligibilityInstances, showGroupEligibilityInstance, listGroupEligibilityRequests, showGroupEligibilityRequest } from "./entra-group-pim.js";
-import { listAdministrativeUnitMembers, listAdministrativeUnits, listDevices, showAdministrativeUnit, showDevice } from "./entra-directory.js";
+import { listAdministrativeUnitMembers, listAdministrativeUnits, listDevicePeople, listDevices, showAdministrativeUnit, showDevice } from "./entra-directory.js";
 import { listSignIns, showSignIn, listDirectoryAudits, showDirectoryAudit, listProvisioning, showProvisioning } from "./entra-audit-logs.js";
 import { listApplicationFederatedCredentials, listApplicationOwners, listApplications, listServicePrincipalAssignedTo, listServicePrincipalFederatedCredentials, listServicePrincipalOwners, listServicePrincipals, showApplication, showApplicationFederatedCredential, showServicePrincipal, showServicePrincipalAppRoleAssignment, showServicePrincipalAssignedTo, showServicePrincipalFederatedCredential } from "./entra-apps.js";
 import { listAppRoleAssignments, listOAuth2Grants } from "./entra-grants.js";
@@ -723,6 +723,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     || leaf.path === "entra pim group-eligibility-instance list" || leaf.path === "entra pim group-eligibility-instance show"
     || leaf.path === "entra pim group-eligibility-request list" || leaf.path === "entra pim group-eligibility-request show"
     || leaf.path === "entra device list" || leaf.path === "entra device show"
+    || leaf.path === "entra device owners" || leaf.path === "entra device users"
     || leaf.path === "entra administrative-unit list" || leaf.path === "entra administrative-unit show"
     || leaf.path === "entra administrative-unit member list") {
     const selected = profiles.resolve(flags.profile as string | undefined);
@@ -769,6 +770,8 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       case "entra pim group-eligibility-request show": return showGroupEligibilityRequest(session, flags, selected.profile, operation, help, selected.name);
       case "entra device list": return listDevices(session, flags, selected.profile, operation, help, selected.name);
       case "entra device show": return showDevice(session, flags, selected.profile, operation, help, selected.name);
+      case "entra device owners":
+      case "entra device users": return listDevicePeople(session, flags, selected.profile, operation, help, positional!, leaf.path.endsWith("owners") ? "owners" : "users");
       case "entra administrative-unit list": return listAdministrativeUnits(session, flags, selected.profile, operation, help, selected.name);
       case "entra administrative-unit show": return showAdministrativeUnit(session, flags, selected.profile, operation, help, selected.name);
       default: return listAdministrativeUnitMembers(session, flags, selected.profile, operation, help, selected.name);

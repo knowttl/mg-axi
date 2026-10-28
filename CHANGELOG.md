@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.17](https://github.com/knowttl/mg-axi/compare/v0.1.16...v0.1.17) (2026-10-28)
+
+
+### Features
+
+* **entra:** add device registered owners and users reads ([#122](https://github.com/knowttl/mg-axi/issues/122)) ([7db929c](https://github.com/knowttl/mg-axi/commit/7db929ccdea1cd726f3238331c2bb120a19ca497))
+
 ## [0.1.16](https://github.com/knowttl/mg-axi/compare/v0.1.15...v0.1.16) (2026-10-27)
 
 

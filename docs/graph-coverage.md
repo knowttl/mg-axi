@@ -1,5 +1,7 @@
 # Microsoft Graph capability and access contract
 
+Contents: [Representative SOC read coverage](#representative-soc-read-coverage) • [Representative extended reads](#representative-extended-reads) • [Licence matrix by area](#licence-matrix-by-area) • [Licensing and completeness findings](#licensing-and-completeness-findings) • [Full-family inventory and truthful coverage](#full-family-inventory-and-truthful-coverage)
+
 Research baseline: 2026-10-03.
 Reverify each operation's linked documentation when implementing it.
 
@@ -86,7 +88,10 @@ These distinctions are supported by [Entra licensing](https://learn.microsoft.co
 
 The licence matrix above distinguishes risky-user API access from risk-detection detail access.
 Workload-identity reads follow the same pattern one level up: the risky-service-principal and service-principal-detection APIs require Workload Identities Premium, and hidden riskDetail/riskLevel values report that licence boundary rather than no risk.
-See [README.md](../README.md) for the implemented risk reads, limited/hidden-value handling and sign-in correlation workflow.
+Use `entra risky-user`, `entra risk-detection`, `entra risky-service-principal` and `entra service-principal-risk-detection` group help to discover implemented risk reads.
+Hidden risk values indicate limited visibility, never an absence of risk.
+Detection `show` output supplies sign-in correlation guidance where available; a null correlationId means no sign-in is associated.
+See the [command reference](commands.md) for executable leaves.
 
 The licensing overview makes base sign-in/audit logs available on Free, while [Graph access guidance](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-access-activity-logs) describes P1/P2 tenants.
 This contract exposes this distinction and adopts a conservative P1/P2 Graph deployment prerequisite rather than flattening the documentation into an unconditional licence claim.
@@ -98,7 +103,8 @@ Use the registration report for aggregate coverage and per-user calls for target
 The [registration report](https://learn.microsoft.com/en-us/graph/api/authenticationmethodsroot-list-userregistrationdetails?view=graph-rest-1.0) does not work for disabled users, so absence is not proof of no MFA.
 
 The v1.0 group-members route documents omitted service principals and suggests beta or expansion as workarounds.
-See [README.md](../README.md) for the current raw and named member-read warning and fallback behavior.
+Raw and named member reads warn that completed pagination does not establish complete membership.
+mg-axi does not silently switch to beta or expansion to bypass the reviewed read surface.
 Current group-list documentation places a write permission in its least-privileged column while listing read alternatives.
 The plan therefore selects a supported read permission for required fields rather than mechanically copying the first cell.
 

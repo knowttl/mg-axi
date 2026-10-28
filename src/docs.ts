@@ -4,10 +4,10 @@ import { DESCRIPTION, HOME_HELP, LEAVES } from "./catalogue.js";
 const UNSUPPORTED_READ_NOTE = "Graph v1.0 does not support the legacy `entra scoped-role-membership list/show`, `entra domain-dns-record list` or `entra directory-object list` routes; those commands fail locally with supported alternatives and their root routes are not available through `api get`.";
 
 // PACK-01: single source for generated release records. The committed
-// skills/mg-axi/SKILL.md and docs/coverage.md are generated from the templates
+// skills/mg-axi/SKILL.md, docs/commands.md and docs/coverage.md use the templates
 // below, the executable catalogue and the discovery inventory, so help, skill
-// and coverage cannot drift apart. tools/generate-docs.mjs writes both
-// files; test/pack.test.mjs fails when they are stale.
+// and coverage cannot drift apart. tools/generate-docs.mjs writes these
+// files; docs:check fails when they are stale.
 //
 // The skill file is generated in full by skillDocument() below: its trigger
 // description, its next-step hints (the same hints the no-args home view
@@ -185,6 +185,26 @@ function mailPackSummary(): string[] {
 // writes need preview plus typed confirmation, no secrets in output, the
 // profile/auth model, offline tests. Long walkthroughs live in leaf --help
 // and docs/ instead.
+export function commandDocument(): string {
+  return [
+    "# Command reference",
+    "",
+    "Contents: [Executable leaves](#executable-leaves) • [Help and permissions](#help-and-permissions)",
+    "",
+    "Generated from the executable catalogue; do not edit by hand.",
+    "",
+    "## Executable leaves",
+    "",
+    skillCommandTable(),
+    "",
+    "## Help and permissions",
+    "",
+    "Run `mg-axi <leaf-path> --help` for accepted flags and defaults without signing in.",
+    "See [write gates](writes.md), [read permissions](graph-coverage.md) and [mail authorization](mail.md).",
+    "",
+  ].join("\n");
+}
+
 export function skillDocument(): string {
   return [
     "---",
@@ -223,7 +243,7 @@ export function skillDocument(): string {
     "Mutation previews and fresh reads additionally request Mail.Read for messages, Mail.ReadBasic for folders and MailboxSettings.Read for rules/categories.",
     "Application roles must be scoped through MemberOfGroup to the owner's chosen mail-enabled security group, using direct membership.",
     "Grant no Mail.* or MailboxSettings.* application permission in Entra: Entra and Exchange grants are additive and unscoped Entra grants bypass the scope.",
-    "Follow the [RBAC for Applications setup recipe](https://github.com/knowttl/mg-axi/blob/main/README.md#scoped-application-setup), including tests of an included and excluded mailbox for every role.",
+    "Follow the [RBAC for Applications setup recipe](https://github.com/knowttl/mg-axi/blob/main/docs/mail.md#scoped-application-setup), including tests of an included and excluded mailbox for every role.",
     "Test-ServicePrincipalAuthorization excludes Entra grants and bypasses the permission cache; normal API calls may take 30 minutes to 2 hours to reflect changes.",
     "The CLI cannot independently verify the Exchange scope or absence of unscoped Entra grants.",
     "Keep User.Read.All for doctor and hosted credential health checks, which test user-list access, not mail authorization.",
@@ -299,20 +319,20 @@ export function skillDocument(): string {
     "Sending, reply, forward and permanent deletion are unsupported.",
     "Mailbox-settings updates, delegated shared mailbox scopes, delta sync, $batch and the Search API are outside this pack.",
     "Raw api get and $expand cannot bypass the named mail surface.",
-    "Use leaf `--help` for exact flags and the [README mail guide](https://github.com/knowttl/mg-axi/blob/main/README.md#mail-pack) for examples.",
+    "Use leaf `--help` for exact flags and the [mail guide](https://github.com/knowttl/mg-axi/blob/main/docs/mail.md) for examples.",
     "",
     "## Other capabilities",
     "",
     "`security hunting query --file <kql>` requires an explicit security pack in enabledPacks and admin-consented ThreatHunting.Read.All (delegated or application); existing Entra grants do not supply it.",
     "Hunting parses KQL locally before the read-only allowlist and credentials. VALIDATION_ERROR (exit 2) includes up to five positioned diagnostics without query excerpts or quoted literals. Parsing does not check table/column availability, types or permissions. Recognized Graph 400 errors expose only the error class and line/column; unknown shapes remain opaque. Server error fixtures are synthetic, unverified live.",
-    "Hunting accepts one restricted table pipeline, never inline KQL, statements, control commands, subqueries or plugins. Default --timespan P1D (maximum 30 days), --limit 100 (maximum 10000); no server cursor exists. --full only removes 500-character text truncation, never redaction or bounds. See README for the accepted operators and functions.",
+    "Hunting accepts one restricted table pipeline, never inline KQL, statements, control commands, subqueries or plugins. Default --timespan P1D (maximum 30 days), --limit 100 (maximum 10000); no server cursor exists. --full only removes 500-character text truncation, never redaction or bounds. See [hunting reference](https://github.com/knowttl/mg-axi/blob/main/docs/security-hunting.md) for the accepted operators and functions.",
     "The generated [command table](#orientation) lists supported named writes through the gated mutation coordinator; raw API remains read-only and every other mutation is refused.",
-    "See [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.",
+    "See [write reference](https://github.com/knowttl/mg-axi/blob/main/docs/writes.md) for write usage, execution gates, identity pinning, permissions, target-role hierarchy and write configuration.",
     "",
     "Run commands non-interactively as `npx -y @knowttl/mg-axi ...`: no global install needed and no interactive prompts.",
     "Version pinning is the installer's choice: use `npx -y @knowttl/mg-axi@<version> ...` to select a specific release.",
     "Run `npx -y @knowttl/mg-axi doctor` first.",
-    "See [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#usage) for doctor profile selection, checks and failure behavior.",
+    "See the [doctor reference](https://github.com/knowttl/mg-axi/blob/main/docs/output-and-paging.md#doctor) for profile selection, checks and failure behavior.",
     "",
     "## Orientation",
     "",
@@ -342,7 +362,7 @@ export function skillDocument(): string {
     "",
     "## Setup (explicit only)",
     "",
-    "Follow [installation guidance](https://github.com/knowttl/mg-axi/blob/main/README.md#quickstart) for npm installation and explicit skill installation; [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#development-and-contributing) also documents checkout builds.",
+    "Follow [installation guidance](https://github.com/knowttl/mg-axi/blob/main/README.md#quickstart) for npm installation and explicit skill installation; [CONTRIBUTING.md](https://github.com/knowttl/mg-axi/blob/main/CONTRIBUTING.md) documents checkout builds.",
     "Create profiles explicitly and keep secrets out of argv and config files:",
     "",
     "```sh",
@@ -376,7 +396,7 @@ export function skillDocument(): string {
     "",
     "Read leaves accept `--profile <name>`.",
     "Profile selection order and env-profile rules live in [README Configuration](https://github.com/knowttl/mg-axi/blob/main/README.md#configuration); an explicitly selected file profile ignores env fields.",
-    "Doctor selection is documented in [README.md](https://github.com/knowttl/mg-axi/blob/main/README.md#usage).",
+    "Doctor selection is documented in the [doctor reference](https://github.com/knowttl/mg-axi/blob/main/docs/output-and-paging.md#doctor).",
     "Without profiles, home, setup and profile list show unconfigured state; Graph read leaves report `PROFILE_REQUIRED`.",
     "",
     "## Safety",
@@ -500,7 +520,7 @@ function completeAuditRecord(rows: InventoryRow[]): string[] {
     `- beta scheduled (never agreed for v1): ${betaScheduled}`,
     `- shipped writes: ${writeStatus.shipped.join(", ")}.`,
     `- WRITE-N (remaining agreed mutations): deferred ${writeN("v1.0", "deferred")}, intentionally-blocked ${writeN("v1.0", "intentionally-blocked")} v1.0 plus ${writeN("beta", "intentionally-blocked")} beta, deprecated ${writeN("v1.0", "deprecated")} v1.0 plus ${writeN("beta", "deprecated")} beta, scheduled ${writeNScheduled}.`,
-    "- outstanding upstream limitations (already documented in the repo): P1 for Conditional Access and P2 for risk-based CA, PIM P2 or ID Governance, riskyUsers P2 and Workload Identities Premium for workload risk with hidden riskDetail/riskLevel without it (docs/graph-coverage.md); conservative P1/P2 Graph prerequisite for sign-in/audit logs, registration report excludes disabled users, no tenant-wide method enumeration (docs/graph-coverage.md); v1.0 group-members route omits service principals (README.md member-read warning); 14 unavailable rows with no documented v1.0 GET contract, invitation Create-only Methods table, org-scoped certificateBasedAuthConfiguration routes only, contacts sync-behavior reads without operation permission docs (inventory reasons); EXT-02c history reads need AccessReview.ReadWrite.All with no read scope and return SAS download URLs (docs/coverage.md); write-side limits beside each command, revoke lag/external-user scope/unknown outcome, CA update lockout gates with no concurrency promise, dismissal is not remediation (README.md, docs/execution.md).",
+    "- outstanding upstream limitations (already documented in the repo): P1 for Conditional Access and P2 for risk-based CA, PIM P2 or ID Governance, riskyUsers P2 and Workload Identities Premium for workload risk with hidden riskDetail/riskLevel without it (docs/graph-coverage.md); conservative P1/P2 Graph prerequisite for sign-in/audit logs, registration report excludes disabled users, no tenant-wide method enumeration (docs/graph-coverage.md); v1.0 group-members route omits service principals (docs/writes.md member-read warning); 14 unavailable rows with no documented v1.0 GET contract, invitation Create-only Methods table, org-scoped certificateBasedAuthConfiguration routes only, contacts sync-behavior reads without operation permission docs (inventory reasons); EXT-02c history reads need AccessReview.ReadWrite.All with no read scope and return SAS download URLs (docs/coverage.md); write-side limits beside each command, revoke lag/external-user scope/unknown outcome, CA update lockout gates with no concurrency promise, dismissal is not remediation (docs/writes.md, docs/execution.md).",
     "",
   ];
 }
@@ -567,6 +587,8 @@ export function capabilityDocument(): string {
     "the command list below is the implemented truth and never counts deferred or",
     "scheduled work as complete.",
     "The two documented attachment /$value routes omitted by the pinned OpenAPI are recorded separately in sources.documentedOperations; discoveredOperations retains the OpenAPI count.",
+    "",
+    "Contents: [Counts](#counts) • [Commands](#commands) • [Scope decisions](#ext-01-domain-scope-decisions) • [Named writes](#named-writes)",
     "",
     "## Counts",
     "",

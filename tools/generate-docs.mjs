@@ -5,17 +5,21 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { capabilityDocument, skillDocument } from "../dist/docs.js";
+import { capabilityDocument, commandDocument, skillDocument } from "../dist/docs.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const skillPath = join(root, "skills", "mg-axi", "SKILL.md");
 const coveragePath = join(root, "docs", "coverage.md");
+
+const commandsPath = join(root, "docs", "commands.md");
+const commands = commandDocument();
 
 const check = process.argv.includes("--check");
 const skill = skillDocument();
 const coverage = capabilityDocument();
 if (check) {
   const stale = [
+    ...(readFileSync(commandsPath, "utf8").replace(/\r\n/g, "\n") === commands ? [] : [commandsPath]),
     ...(readFileSync(skillPath, "utf8").replace(/\r\n/g, "\n") === skill ? [] : [skillPath]),
     ...(readFileSync(coveragePath, "utf8").replace(/\r\n/g, "\n") === coverage ? [] : [coveragePath]),
   ];
@@ -24,6 +28,7 @@ if (check) {
     process.exit(1);
   }
 } else {
+  writeFileSync(commandsPath, commands);
   writeFileSync(skillPath, skill);
   writeFileSync(coveragePath, coverage);
 }

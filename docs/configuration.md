@@ -1,5 +1,7 @@
 # Configuration
 
+Contents: [Delegated credential storage](#delegated-credential-storage) • [Application credentials and headless use](#application-credentials-and-headless-use)
+
 Profiles store tenant/client/cloud identity, authentication mode, policy and credential references, never secret values.
 Only commercial-cloud workforce profiles are supported.
 Unknown configuration fields, unsupported versions/clouds and inline credentials are rejected.
@@ -55,7 +57,7 @@ Access tokens are excluded from the persisted MSAL cache.
 `auth logout` deletes the selected profile's cache and is idempotent; MSAL exposes no upstream token revocation API, so organizational revocation remains separate.
 `auth status` reports the selected identity, Graph endpoint, secret source names or paths, and local availability without signing in or making a live request.
 The old top-level `login` alias remains supported through the next intentionally cut minor release and becomes eligible for removal after that release; patch releases do not expire it.
-See [Versioning and releases](../README.md#versioning-and-releases).
+See [Versioning and releases](../CONTRIBUTING.md#versioning-and-releases).
 Tokens remain opaque and never appear in profile views, stdout or authentication diagnostics.
 Credential acquisition is bound to the configured tenant/client and refreshes at a 60-second expiry margin.
 
@@ -67,7 +69,7 @@ Credential acquisition is bound to the configured tenant/client and refreshes at
 Application profiles use client credentials without a signed-in user and request the configured Graph `.default` audience.
 An administrator grants the required application authorization; delegated `--scopes` cannot narrow an application token.
 Entra operations use Graph application permissions on the app registration.
-Mail uses scoped Exchange RBAC for Applications with no `Mail.*` or `MailboxSettings.*` application grants in Entra; see the [mail setup recipe](../README.md#scoped-application-setup).
+Mail uses scoped Exchange RBAC for Applications with no `Mail.*` or `MailboxSettings.*` application grants in Entra; see the [mail setup recipe](mail.md#scoped-application-setup).
 Application profiles reject device-code opt-in and `login`, and acquisition failures never fall back to user authentication.
 
 Choose exactly one credential provider:
@@ -104,7 +106,7 @@ Federation reads the assertion file on every acquisition so projected tokens can
 Use `--federated-token-file <absolute-path>` for a projected assertion file, or set the default `MG_AXI_TOKEN` assertion value through the environment.
 When the token reference is the default `MG_AXI_TOKEN` env holder and that variable is unset, `AZURE_FEDERATED_TOKEN_FILE` stays accepted as a deprecated alias with a stderr notice.
 It remains supported through the next intentionally cut minor release and becomes eligible for removal after that release; patch releases do not expire it.
-See [Versioning and releases](../README.md#versioning-and-releases).
+See [Versioning and releases](../CONTRIBUTING.md#versioning-and-releases).
 `MG_AXI_TOKEN` takes precedence and the alias must name an absolute file path.
 References, rather than values, are stored in configuration; rotation updates the environment or file without changing the profile.
 Application credentials remain in process memory and are reacquired at a 60-second expiry margin.

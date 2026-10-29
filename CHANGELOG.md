@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.18](https://github.com/knowttl/mg-axi/compare/v0.1.17...v0.1.18) (2026-10-28)
+
+
+### Bug Fixes
+
+* add compact generated investigation guide ([#127](https://github.com/knowttl/mg-axi/issues/127)) ([9c8d0ce](https://github.com/knowttl/mg-axi/commit/9c8d0ce1b06d3a7b1cf9ca66c19013561efc4ea9))
+
 ## [0.1.17](https://github.com/knowttl/mg-axi/compare/v0.1.16...v0.1.17) (2026-10-28)
 
 

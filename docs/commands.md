@@ -8,7 +8,7 @@ Generated from the executable catalogue; do not edit by hand.
 
 | Command | Capability | Effect |
 |---|---|---|
-| `mg-axi home` | native | local |
+| `mg-axi home` | native | read |
 | `mg-axi profile create` | native | local |
 | `mg-axi profile list` | native | local |
 | `mg-axi profile show` | native | local |

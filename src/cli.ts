@@ -70,8 +70,9 @@ import type { ApplicationAuth } from "./app-auth.js";
 function localHome(name?: string, config?: string) {
   const output = home();
   const store = new Profiles(config);
+  let selected: ReturnType<Profiles["resolve"]> | undefined;
   try {
-    const selected = store.resolve(name);
+    selected = store.resolve(name);
     output.profile = selected.name;
     output.tenant = selected.profile.tenantId;
     output.domains = [{ name: "entra", status: selected.profile.enabledPacks.includes("entra") ? "enabled" : "disabled",
@@ -89,7 +90,7 @@ function localHome(name?: string, config?: string) {
   // Point agents at the installable skill until it is installed for their host.
   const hint = skillHint();
   if (hint !== undefined) output.help.push(hint);
-  return output;
+  return { output, selected };
 }
 
 // One dispatch for the hook installer: resolve the sibling hook entry point
@@ -180,7 +181,14 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     if (!group) return leafHelp(leaf);
     return `${leafHelp(leaf)}\n${group.split("\n").slice(1).join("\n")}`;
   }
-  if (leaf.path === "home") return localHome(flags.profile as string | undefined, flags.config as string | undefined);
+  if (leaf.path === "home") {
+    const name = flags.profile as string | undefined;
+    const config = flags.config as string | undefined;
+    const { output, selected } = localHome(name, config);
+    if (flags.offline || !selected) return output;
+    const { liveHome } = await import("./home.js");
+    return liveHome(output, selected, overrides);
+  }
   if (leaf.path.startsWith("mail ")) {
     if (flags["api-version"] !== undefined && flags["api-version"] !== "v1.0") throw new AxiError("Mail supports Graph v1.0 only", "VALIDATION_ERROR", [leafHelp(leaf)]);
     const selected = new Profiles(flags.config as string | undefined).resolve(flags.profile as string | undefined);

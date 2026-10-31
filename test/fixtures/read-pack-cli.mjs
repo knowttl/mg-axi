@@ -9,7 +9,7 @@ import { join } from "node:path";
 // doctor bounded read, through the packaged executable with real profiles.
 // MSAL providers resolve synthetic credentials and every HTTP exchange is a
 // fixture response; unreachable code throws instead of touching a network.
-const { mode, denied, throttled } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const { mode, denied, throttled, home } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
 const moduleUrl = name => process.env.MG_AXI_PACK_ROOT
   ? pathToFileURL(join(process.env.MG_AXI_PACK_ROOT, "dist", name))
   : new URL(`../../dist/${name}`, import.meta.url);
@@ -21,10 +21,17 @@ mock.method(globalThis, "fetch", noNetwork);
 mock.method(Socket.prototype, "connect", noNetwork);
 
 function credential(profile, scopes) {
+  if (home === "offline") assert.fail("Offline and invalid invocations must not authenticate");
+  if (home === "missing") throw new Error("Synthetic missing consent for requested scope");
+  if (home) {
+    assert.equal(scopes.length, 1);
+    assert.ok((mode === "application" ? ["https://graph.microsoft.com/.default"]
+      : ["https://graph.microsoft.com/User.ReadBasic.All", "https://graph.microsoft.com/Mail.ReadBasic"]).includes(scopes[0]));
+  }
   assert.equal(profile.mode, mode);
   return {
     token: `opaque-fixture-${mode}-token`,
-    expiresAt: Date.now() + 3_600_000,
+    expiresAt: Date.now() + (home === "expired" ? -1 : 3_600_000),
     tenantId: profile.tenantId,
     clientId: profile.clientId,
     ...(mode === "delegated" ? { accountId: "synthetic-account" } : {}),
@@ -66,11 +73,31 @@ const signIn = {
   appDisplayName: "SOC console",
 };
 
+let homeRequests = 0;
 mock.module(moduleUrl("api.js"), {
   [exportOption]: { ...await import(moduleUrl("api.js")), fetchTransport: async request => {
     assert.equal(request.headers.Authorization, `Bearer opaque-fixture-${mode}-token`);
     const url = new URL(request.url);
     assert.equal(url.origin, "https://graph.microsoft.com");
+    if (home) {
+      assert.ok(++homeRequests <= 2, "Home must never follow pages or retry");
+      assert.equal(request.method, "GET");
+      assert.equal(url.searchParams.get("$top"), "5");
+      assert.equal(url.searchParams.get("$select"), "id");
+      assert.equal(url.searchParams.has("$skiptoken"), false);
+      if (home === "unavailable") throw new Error("Synthetic offline transport");
+      if (home === "denied" || (home === "partial" && url.pathname.includes("mailFolders"))) {
+        return { status: 403, headers: {}, body: JSON.stringify({ error: { code: "Authorization_RequestDenied" } }) };
+      }
+      if (home === "throttled") return { status: 503, headers: {}, body: "" };
+      const users = url.pathname === "/v1.0/users";
+      assert.ok(users || url.pathname === "/v1.0/me/mailFolders");
+      return { status: 200, headers: {}, body: JSON.stringify(home === "empty" ? { value: [] } : {
+        value: users ? [user, { id: "second-user" }] : [{ id: "inbox" }],
+        "@odata.count": users ? 12 : 1,
+        ...(users ? { "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$skiptoken=next" } : {}),
+      }) };
+    }
     if (throttled) return { status: 429, headers: { "Retry-After": "60" }, body: JSON.stringify({ error: { code: "TooManyRequests" } }) };
     const body = () => {
       if (denied) return { status: 403, body: { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } } };

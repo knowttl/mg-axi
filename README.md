@@ -16,13 +16,20 @@ It serves workforce Entra tenants in the commercial cloud, with opt-in Defender 
 ## Quickstart
 
 Requires Node.js **22.12.0 or later**.
-Install globally, then inspect local state without signing in:
+Install globally, then inspect the home view:
 
 ```sh
 npm install --global @knowttl/mg-axi
 mg-axi
 # Or without installing: npx -y @knowttl/mg-axi
 ```
+
+Configured home returns bounded live Graph samples for the selected profile: up to five users and five root mail folders, one request and a five-second deadline per supported enabled pack, without paging or retries.
+Delegated reads use existing silent `User.ReadBasic.All` and `Mail.ReadBasic` access; application Entra reads use the existing `.default` audience.
+No permissions are added and no interactive sign-in occurs; unavailable consent, credentials or Graph access are reported per pack rather than as zero results.
+Security requires an explicit hunting query, and application mail requires an explicit mailbox, so home reports these as unsupported automatic summaries with discovery hints.
+Use `mg-axi home --offline` for local configuration without credentials or Graph calls.
+Session hooks remain offline and installation stays explicit.
 
 An unconfigured home view includes this synthetic excerpt:
 
@@ -64,7 +71,7 @@ Preserve other hooks and shared settings; see [hook details](docs/agent-setup.md
 
 | Group or pack | Purpose | Access | Reference |
 | --- | --- | --- | --- |
-| Local setup | Profiles, authentication, home, setup and health checks | Local; doctor reads Graph | [Commands](docs/commands.md) |
+| Setup and home | Profiles, authentication, home, setup and health checks | Configured home and doctor read Graph; `home --offline` stays local | [Commands](docs/commands.md) |
 | Entra directory | Users, groups, memberships, devices and deleted objects | Read; gated member/account writes | [Coverage](docs/graph-coverage.md) |
 | Applications and consent | Apps, service principals, owners and grants | Read | [Commands](docs/commands.md) |
 | Roles and governance | Roles, PIM, access reviews, entitlement and lifecycle | Read | [Coverage](docs/coverage.md) |

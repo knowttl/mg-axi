@@ -60,7 +60,8 @@ See [permissions](graph-coverage.md) and [hunting](security-hunting.md) for prer
 
 Use help after a command fails or when leaving this guide's scope, rather than at investigation startup.
 Top-level `mg-axi --help` lists command groups and the version flags; group help lists child commands; leaf help gives exact flags, defaults and examples without signing in.
-No arguments shows local profile/auth/write-policy context without Graph calls.
+No arguments shows bounded live Graph samples for the selected profile's supported enabled packs, using silent authentication and existing access.
+Use `mg-axi home --offline` for local configuration without credential or Graph calls; session hooks also stay offline.
 
 Only the exact read paths above belong in a read allowlist; never allow an entire noun such as `entra user`.
 Hunting is a reviewed read-only POST.

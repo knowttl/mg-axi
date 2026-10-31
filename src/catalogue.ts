@@ -503,7 +503,9 @@ const lifecycleRunSubjectRead = {
   scopes: lifecycleSubjectRead.scopes,
 } as const;
 export const LEAVES: Leaf[] = [
-  { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
+  { path: "home", description: "Show bounded live Graph samples using existing access; silent authentication only", flags: { profile: common.profile,
+    offline: { description: "Show local profile configuration without credentials or Graph calls" },
+  }, examples: ["mg-axi", "mg-axi home --profile soc", "mg-axi home --offline"] },
   { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
     name: { value: "name", required: true, description: "New profile name; existing identities cannot be overwritten" },
     tenant: { value: "tenant-id", required: true, description: "Explicit workforce tenant UUID" },

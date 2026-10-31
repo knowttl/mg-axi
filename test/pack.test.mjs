@@ -137,8 +137,8 @@ test("setup reports unconfigured state without writing configuration", () => {
     assert.equal(output.profiles, "0 profiles configured");
     assert.ok(output.capabilities.implemented.includes("mg-axi setup") || output.capabilities.implemented.includes("setup"));
     assert.ok(output.capabilities.implemented.includes("entra user list"));
-    assert.equal(output.capabilities.reads, 277);
-    assert.equal(output.capabilities.writes, 17);    assert.equal(output.capabilities.local, 11);
+    assert.equal(output.capabilities.reads, 278);
+    assert.equal(output.capabilities.writes, 17);    assert.equal(output.capabilities.local, 10);
     assert.ok(!existsSync(config), "setup writes nothing");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
@@ -227,7 +227,7 @@ for (const enabled of [true, false]) test(`home reports locally ${enabled ? "ena
     writeFileSync(join(home, "config.json"), JSON.stringify({ version: 1,
       profiles: { soc: { ...delegatedJson(), enabledPacks: enabled ? ["entra"] : [] } } }));
     const forbidden = () => { assert.fail("Home must not acquire credentials or contact Graph"); };
-    const output = await executeArgv(["home", "--config", join(home, "config.json"), "--profile", "soc"], {
+    const output = await executeArgv(["home", "--offline", "--config", join(home, "config.json"), "--profile", "soc"], {
       delegated: { credential: forbidden }, application: { credential: forbidden }, transport: forbidden,
     });
     assert.equal(output.profile, "soc");

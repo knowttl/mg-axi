@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { skillHostRows, skillInstalled } from "../dist/skill-hint.js";
+import type { SkillHostRow } from "../dist/skill-hint.js";
 
-const row = overrides => ({ name: "fixture", userDirs: [], projectDirs: [], systemDirs: [], ...overrides });
+const row = (overrides: Partial<SkillHostRow>): SkillHostRow => ({ name: "fixture" as SkillHostRow["name"], userDirs: [], projectDirs: [], systemDirs: [], ...overrides });
 
 test("system folders count as installed without a walk-up", () => {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-skill-hint-"));
@@ -19,7 +20,7 @@ test("system folders count as installed without a walk-up", () => {
 
 test("codex row lists the documented admin skills folder", () => {
   const codex = skillHostRows({}, "/nonexistent-home").find(host => host.name === "codex");
-  assert.deepEqual(codex.systemDirs, ["/etc/codex/skills"]);
+  assert.deepEqual(codex!.systemDirs, ["/etc/codex/skills"]);
 });
 
 test("config-directory overrides reshape their rows", () => {
@@ -28,7 +29,7 @@ test("config-directory overrides reshape their rows", () => {
     "/nonexistent-home",
   );
   const byName = Object.fromEntries(rows.map(host => [host.name, host]));
-  assert.equal(byName["claude-code"].userDirs[0], join("/custom-claude", "skills"));
-  assert.equal(byName["codex"].userDirs[0], join("/custom-codex", "skills"));
-  assert.equal(byName["opencode"].userDirs[0], join("/custom-opencode", "opencode", "skills"));
+  assert.equal(byName["claude-code"]!.userDirs[0], join("/custom-claude", "skills"));
+  assert.equal(byName["codex"]!.userDirs[0], join("/custom-codex", "skills"));
+  assert.equal(byName["opencode"]!.userDirs[0], join("/custom-opencode", "opencode", "skills"));
 });

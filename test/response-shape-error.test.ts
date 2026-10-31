@@ -8,7 +8,7 @@ for (const [method, path] of [
   ["POST", "/security/microsoft.graph.security.runHuntingQuery"],
   ["GET", "/directory/attributeSets"],
   ["GET", "/directory/customSecurityAttributeDefinitions"],
-]) test(`response diagnostics hide every key on ${path}`, () => {
+] as const) test(`response diagnostics hide every key on ${path}`, () => {
   const operation = resolveSessionOperation("v1.0", method, path);
   const response = { status: 200, headers: { "content-type": "application/json; private=ignored" }, body: "" };
   const error = new ResponseShapeError("Graph response is malformed", operation, response,

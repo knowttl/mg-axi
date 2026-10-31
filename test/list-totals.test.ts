@@ -1,3 +1,4 @@
+import { record } from "./fixtures/typed.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { listTotals } from "../dist/list-totals.js";
@@ -12,7 +13,7 @@ for (const [name, shown, total, noun, complete, expected] of [
   ["undefined total resumes as unknown", 2, undefined, "memberships", true, { total: null, count: "2 memberships" }],
   ["empty complete read stays definitive", 0, 0, "groups", true, { total: 0, count: "0 groups" }],
   ["empty unknown read stays definitive", 0, null, "groups", true, { total: null, count: "0 groups" }],
-]) {
+] as const) {
   test(`listTotals ${name}`, () => {
     assert.deepEqual(listTotals(shown, total, noun, complete), expected);
   });
@@ -24,8 +25,8 @@ for (const [name, args] of [
   ["negative total", [1, -1, "groups", true]],
   ["fractional total", [1, 1.5, "groups", true]],
   ["empty noun", [1, null, "", true]],
-]) {
+] as const) {
   test(`listTotals rejects ${name}`, () => {
-    assert.throws(() => listTotals(...args), error => error.code === "VALIDATION_ERROR");
+    assert.throws(() => listTotals(args[0], args[1], args[2], args[3]), error => record(error).code === "VALIDATION_ERROR");
   });
 }

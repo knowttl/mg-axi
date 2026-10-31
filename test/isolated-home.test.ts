@@ -7,7 +7,7 @@ import { test } from "node:test";
 
 for (const marker of ["CLAUDECODE", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "PI_CODING_AGENT", "OPENCODE"]) {
   test(`validation commands do not inherit ${marker}`, () => {
-    const result = spawnSync(process.execPath, [resolve("tools/isolated-home.mjs"), process.execPath, "--input-type=module", "-e", `
+    const result = spawnSync(process.execPath, [resolve("tools/isolated-home.ts"), process.execPath, "--input-type=module", "-e", `
       import assert from "node:assert/strict";
       import { executeArgv } from "./dist/cli.js";
       import { skillHomeHints } from "./dist/docs.js";
@@ -25,7 +25,7 @@ test("validation commands cannot write to the inherited home or XDG config", () 
   const sentinel = mkdtempSync(join(tmpdir(), "mg-axi-owner-sentinel-"));
   try {
     writeFileSync(join(sentinel, "owner"), "untouched");
-    const result = spawnSync(process.execPath, [resolve("tools/isolated-home.mjs"), process.execPath, "--input-type=module", "-e", `
+    const result = spawnSync(process.execPath, [resolve("tools/isolated-home.ts"), process.execPath, "--input-type=module", "-e", `
       import { mkdirSync, writeFileSync } from "node:fs";
       import { homedir } from "node:os";
       import { join } from "node:path";

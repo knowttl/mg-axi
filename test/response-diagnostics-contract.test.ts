@@ -13,7 +13,7 @@ for (const [path, hash] of Object.entries(hashes)) test(`canonical copy SHA-256:
 });
 
 for (const vector of vectors) test(`shared diagnostics vector: ${vector.name}`, () => {
-  const redactor = { text: text => (vector.secrets ?? []).reduce((text, secret) => text.replaceAll(secret, "***redacted***"), text) };
+  const redactor = { text: (text: string) => (vector.secrets ?? []).reduce((text, secret) => text.replaceAll(secret, "***redacted***"), text) };
   const diagnostics = new ResponseDiagnostics(redactor, ["RESPONSE_INVALID"]);
   diagnostics.record(vector.status, new Headers(vector.contentType ? { "content-type": vector.contentType } : {}), vector.data);
   if (vector.issues) diagnostics.validationFailed(vector.issues);

@@ -1,5 +1,5 @@
 // Regenerate PACK-01 release records from their single sources in src/.
-// Usage: node tools/generate-docs.mjs [--check]
+// Usage: node tools/generate-docs.ts [--check]
 // --check exits 1 when a committed file differs instead of rewriting it.
 // Build first: this imports the compiled catalogue and inventory readers.
 import { readFileSync, writeFileSync } from "node:fs";
@@ -27,7 +27,7 @@ if (check) {
     ...(readFileSync(coveragePath, "utf8").replace(/\r\n/g, "\n") === coverage ? [] : [coveragePath]),
   ];
   if (stale.length > 0) {
-    process.stderr.write(`Stale generated docs: ${stale.join(", ")}. Run: node tools/generate-docs.mjs\n`);
+    process.stderr.write(`Stale generated docs: ${stale.join(", ")}. Run: node tools/generate-docs.ts\n`);
     process.exit(1);
   }
 } else {

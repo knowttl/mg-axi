@@ -27,7 +27,7 @@ export async function liveHome(output: ReturnType<typeof home>, selected: Return
       help.push(pack === "security" ? `mg-axi security hunting query ${context} --help` : `mg-axi mail folder list ${context} --help`);
       continue;
     }
-    const scope = `https://graph.microsoft.com/${pack === "entra" ? "User.ReadBasic.All" : "Mail.ReadBasic"}`;
+    const scope = `https://graph.microsoft.com/${pack === "entra" ? "User.Read.All" : "Mail.Read"}`;
     const command = pack === "entra" ? `mg-axi entra user list ${context} --limit 5` : `mg-axi mail folder list --mailbox me ${context} --limit 5`;
     try {
       if (!session) {

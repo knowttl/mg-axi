@@ -25,7 +25,7 @@ mg-axi
 ```
 
 Configured home returns bounded live Graph samples for the selected profile: up to five users and five root mail folders, one request and a five-second deadline per supported enabled pack, without paging or retries.
-Delegated reads use existing silent `User.ReadBasic.All` and `Mail.ReadBasic` access; application Entra reads use the existing `.default` audience.
+Delegated home reads use existing silent `User.Read.All` and `Mail.Read` access; application Entra reads use the existing `.default` audience.
 No permissions are added and no interactive sign-in occurs; unavailable consent, credentials or Graph access are reported per pack rather than as zero results.
 Security requires an explicit hunting query, and application mail requires an explicit mailbox, so home reports these as unsupported automatic summaries with discovery hints.
 Use `mg-axi home --offline` for local configuration without credentials or Graph calls.

@@ -9,7 +9,7 @@ import { join } from "node:path";
 // doctor bounded read, through the packaged executable with real profiles.
 // MSAL providers resolve synthetic credentials and every HTTP exchange is a
 // fixture response; unreachable code throws instead of touching a network.
-const { mode, denied, throttled, home } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
+const { mode, denied, throttled, home, consent } = JSON.parse(process.env.MG_AXI_READ_FIXTURE);
 const moduleUrl = name => process.env.MG_AXI_PACK_ROOT
   ? pathToFileURL(join(process.env.MG_AXI_PACK_ROOT, "dist", name))
   : new URL(`../../dist/${name}`, import.meta.url);
@@ -23,10 +23,11 @@ mock.method(Socket.prototype, "connect", noNetwork);
 function credential(profile, scopes) {
   if (home === "offline") assert.fail("Offline and invalid invocations must not authenticate");
   if (home === "missing") throw new Error("Synthetic missing consent for requested scope");
+  if (consent && scopes.some(scope => !consent.includes(scope))) throw new Error("Synthetic scope not consented");
   if (home) {
     assert.equal(scopes.length, 1);
     assert.ok((mode === "application" ? ["https://graph.microsoft.com/.default"]
-      : ["https://graph.microsoft.com/User.ReadBasic.All", "https://graph.microsoft.com/Mail.ReadBasic"]).includes(scopes[0]));
+      : ["https://graph.microsoft.com/User.Read.All", "https://graph.microsoft.com/Mail.Read"]).includes(scopes[0]));
   }
   assert.equal(profile.mode, mode);
   return {

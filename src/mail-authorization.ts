@@ -20,7 +20,7 @@ export function isMailOperation(operation: { owningSlice: string | null }) {
 
 export function checkMailScopes(profile: AnyProfile, scopes: string[] | undefined, operation: { owningSlice: string | null; path: string }) {
   const scope = operation.owningSlice === "MAIL-03" || operation.path.endsWith("/attachments") ? MAIL_MESSAGE_SCOPE : operation.owningSlice === "MAIL-04" ? MAIL_SETTINGS_SCOPE : MAIL_FOLDER_SCOPE;
-  if (profile.mode === "delegated" && (scopes?.length !== 1 || scopes[0] !== scope)) {
+  if (profile.mode === "delegated" && (scopes?.length !== 1 || (scopes[0] !== scope && !(scope === MAIL_FOLDER_SCOPE && scopes[0] === MAIL_MESSAGE_SCOPE)))) {
     throw new AxiError(`Mail reads require the delegated ${scope} scope`, "VALIDATION_ERROR", ["Use Mail.Read for message show and attachments, MailboxSettings.Read for settings, rules and categories, and Mail.ReadBasic for message lists and folders; shared mailbox scopes are unsupported"]);
   }
 }

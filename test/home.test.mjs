@@ -28,7 +28,7 @@ function run(scenario, args = [], packs = ["entra", "mail", "security"], mode = 
         MG_AXI_CONFIG: join(home, "config.json"), SYNTHETIC_SECRET: "synthetic-secret",
         ...(options.environment ? { MG_AXI_MODE: mode, MG_AXI_TENANT_ID: tenant, MG_AXI_CLIENT_ID: client,
           MG_AXI_TOKEN: "synthetic-cache", MG_AXI_ENABLED_PACKS: JSON.stringify(packs) } : {}),
-        MG_AXI_READ_FIXTURE: JSON.stringify({ mode, home: scenario }),
+        MG_AXI_READ_FIXTURE: JSON.stringify({ mode, home: scenario, consent: options.consent }),
         ...(process.env.MG_AXI_PACK_ROOT ? { MG_AXI_PACK_ROOT: process.env.MG_AXI_PACK_ROOT } : {}) },
     };
     const result = spawnSync(process.execPath, [...prefix, ...args, ...(options.configOverride ? ["--config", config] : [])], spawnOptions);
@@ -66,6 +66,27 @@ test("home reports successful empty Graph collections explicitly", () => {
   assert.deepEqual(result.output.domains.slice(0, 2).map(row => row.summary), [
     "0 users observed; total 0; complete", "0 root folders observed; total 0; complete",
   ]);
+});
+
+test("home uses existing User.Read.All-only consent and preserves it in the directory hint", () => {
+  const result = run("live", [], ["entra"], "delegated", { consent: ["https://graph.microsoft.com/User.Read.All"] });
+  assert.equal(result.status, 0, result.stdout);
+  assert.equal(result.output.domains[0].summary, "2 users observed; total 12; sample only");
+  const hint = result.output.help.find(value => value.includes(" entra user list "));
+  assert.match(hint, / entra user list --profile soc --limit 5 --scopes https:\/\/graph\.microsoft\.com\/User\.Read\.All$/);
+});
+
+test("home reports mail unavailable when only existing directory consent is present", () => {
+  const result = run("live", [], ["entra", "mail"], "delegated", { consent: ["https://graph.microsoft.com/User.Read.All"] });
+  assert.equal(result.output.domains[0].status, "live");
+  assert.equal(result.output.domains[1].status, "unavailable");
+  assert.match(result.output.domains[1].summary, /AUTH_REQUIRED.*Mail.Read access/);
+});
+
+test("home reads mail folders with existing Mail.Read-only consent", () => {
+  const result = run("live", [], ["mail"], "delegated", { consent: ["https://graph.microsoft.com/Mail.Read"] });
+  assert.equal(result.status, 0, result.stdout);
+  assert.equal(result.output.domains[1].summary, "1 root folders observed; total 1; complete");
 });
 
 for (const scenario of ["live", "missing", "denied"]) {

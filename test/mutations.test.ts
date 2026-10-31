@@ -1,3 +1,7 @@
+import type { MutationTransport, MutationTransportRequest, MutationTransportResponse } from "../dist/mutations.js";
+import type { AnyProfile } from "../dist/profiles.js";
+import { record, text as outputText, authFakes, delegatedProvider, type OutputRecord } from "./fixtures/typed.ts";
+import type { GraphTransport } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -12,7 +16,7 @@ import { createMutationCoordinator, createMutationSender } from "../dist/mutatio
 import { PrivateFiles } from "../dist/private-file.js";
 
 // Skipped on Windows pending a fix for a pending-promise hang tracked as follow-up mg-win-hang-followup.
-const test = process.platform === "win32" ? (name, fn) => runTest(name, { skip: true }, fn) : runTest;
+const test = process.platform === "win32" ? (name: string, fn: import("node:test").TestFn) => runTest(name, { skip: true }, fn) : runTest;
 
 // WRITE-00 acceptance: the coordinator is entirely fixture-driven with no
 // real mutation family enabled. Every test drives it through this synthetic
@@ -24,49 +28,49 @@ const NOW = 1_700_000_000_000;
 const TIME = new Date(NOW).toISOString();
 
 const writes = { allowWrites: true, operations: ["mg.fixture.write"] };
-const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
+const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
 const enabledDelegated = { ...delegatedProfile, writes };
-const appProfile = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "federated", token: { env: "MG_AXI_TOKEN" } };
+const appProfile = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "federated", token: { env: "MG_AXI_TOKEN" } } as const;
 const enabledApp = { ...appProfile, writes };
-const mutation = { operation: "mg.fixture.write", method: "POST", version: "v1.0", path: "/v1.0/fixture/notes", effect: "write", target: "fixture-note-1", payload: { text: "reviewed synthetic note" } };
+const mutation = { operation: "mg.fixture.write", method: "POST", version: "v1.0", path: "/v1.0/fixture/notes", effect: "write", target: "fixture-note-1", payload: { text: "reviewed synthetic note" } } as const;
 
-const scratches = [];
-afterEach(() => { while (scratches.length) rmSync(scratches.pop(), { recursive: true, force: true }); });
+const scratches: string[] = [];
+afterEach(() => { while (scratches.length) rmSync(scratches.pop()!, { recursive: true, force: true }); });
 
-function fixture({ handler, credentialTenant = tenant, onCredential } = {}) {
+function fixture({ handler, credentialTenant = tenant, onCredential }: { handler?: MutationTransportResponse | ((request: MutationTransportRequest, count: number) => MutationTransportResponse | Promise<MutationTransportResponse>); credentialTenant?: string; onCredential?: () => void } = {}) {
   const scratch = mkdtempSync(join(tmpdir(), "mg-write00-"));
   scratches.push(scratch);
   const journalPath = join(scratch, "nested", "writes.log");
-  const credentialCalls = [];
-  const requests = [];
-  const credential = account => {
+  const credentialCalls: unknown[][] = [];
+  const requests: MutationTransportRequest[] = [];
+  const credential = <T extends object>(account: T) => {
     onCredential?.();
     return { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: credentialTenant, clientId: client, ...account };
   };
-  const delegated = new DelegatedAuth({
+  const delegated = new DelegatedAuth(delegatedProvider({
     storage: "session-only",
     login: async () => credential({ accountId: "synthetic-account" }),
     silent: async (...args) => { credentialCalls.push(["silent", ...args]); return credential({ accountId: "synthetic-account" }); },
-  });
+  }));
   const application = new ApplicationAuth({
     storage: "session-only",
     acquire: async (...args) => { credentialCalls.push(["acquire", ...args]); return credential({}); },
   });
-  const transport = async request => {
+  const transport: MutationTransport = async request => {
     requests.push(request);
     return typeof handler === "function" ? handler(request, requests.length) : handler ?? { status: 200, headers: {}, body: "{}" };
   };
-  const coordinator = (profile = enabledDelegated, overrides = {}) => createMutationCoordinator({
+  const coordinator = (profile: AnyProfile = enabledDelegated, overrides: Partial<Parameters<typeof createMutationCoordinator>[0]> = {}) => createMutationCoordinator({
     profile, delegated, application, transport, clock: () => NOW, journalPath, ...overrides,
   });
   return { scratch, journalPath, credentialCalls, requests, delegated, application, transport, coordinator };
 }
 
-function journal(path) {
-  return readFileSync(path, "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line));
+function journal(path: string): OutputRecord[] {
+  return readFileSync(path, "utf8").split("\n").filter(Boolean).map(line => record(JSON.parse(line)));
 }
 
-async function withEnv(key, value, action) {
+async function withEnv<T>(key: string, value: string | undefined, action: () => T | Promise<T>) {
   const previous = process.env[key];
   if (value === undefined) delete process.env[key];
   else process.env[key] = value;
@@ -78,7 +82,7 @@ async function withEnv(key, value, action) {
   }
 }
 
-const readState = (current = { notes: ["previous synthetic note"] }) => async () => current;
+const readState = (current: unknown = { notes: ["previous synthetic note"] }) => async () => current;
 
 test("the audit journal honors the coordinator files instead of host defaults", async () => {
   const f = fixture();
@@ -102,7 +106,7 @@ test("an insecure journal fails with CONFIG_INSECURE and sends nothing", async (
   assert.equal(f.requests.length, 0);
 });
 
-for (const path of ["/v1.0/fixture/$count", "/v1.0/fixture/%24value", "/v1.0/fixture/notes/$ref"]) {
+for (const path of ["/v1.0/fixture/$count", "/v1.0/fixture/%24value", "/v1.0/fixture/notes/$ref"] as const) {
   test(`mutation path rejects reserved resource binding ${path} before credentials`, async () => {
     const f = fixture();
     await assert.rejects(f.coordinator().execute({ ...mutation, path }, { readState: readState(), scopes }), { code: "VALIDATION_ERROR" });
@@ -136,7 +140,7 @@ test("exposed scope is frozen: tampering throws and gates still hold", async () 
   const coordinator = f.coordinator(delegatedProfile);
   assert.ok(Object.isFrozen(coordinator.scope));
   assert.equal(coordinator.scope.allowWrites, false);
-  assert.throws(() => coordinator.scope.operations.push("mg.other.write"), TypeError);
+  assert.throws(() => (coordinator.scope.operations as string[]).push("mg.other.write"), TypeError);
   await assert.rejects(coordinator.execute(mutation, { readState: readState() }), { code: "WRITES_DISABLED" });
   assert.equal(f.requests.length, 0);
 });
@@ -161,7 +165,7 @@ test("forced read-only overrides a hand-enabled profile with zero sends", async 
 for (const [mode, profile, credentialOptions] of [
   ["delegated", enabledDelegated, { scopes }],
   ["application", enabledApp, {}],
-]) {
+] as const) {
   test(`forced read-only during the fresh read blocks ${mode} credentials and send`, async () => {
     const f = fixture();
     let reads = 0;
@@ -178,7 +182,7 @@ for (const [mode, profile, credentialOptions] of [
     assert.equal(reads, 2);
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
-    assert.equal(journal(f.journalPath)[1].outcome, "NOT_SENT");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "NOT_SENT");
   });
 
   test(`forced read-only during ${mode} credential acquisition blocks the send`, async () => {
@@ -190,7 +194,7 @@ for (const [mode, profile, credentialOptions] of [
     });
     assert.equal(f.credentialCalls.length, 1);
     assert.equal(f.requests.length, 0);
-    assert.equal(journal(f.journalPath)[1].outcome, "NOT_SENT");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "NOT_SENT");
   });
 }
 
@@ -215,7 +219,7 @@ test("read-time scopes never widen the write scope", async () => {
   assert.equal(f.requests.length, 0);
 });
 
-for (const path of ["", "v1.0/fixture", "/beta/fixture/notes", "/v1.0/../tenants", "/v1.0/a b", "/v1.0/a?b=c", "/v1.0/a#b", "/v1.0/a\\b", "/v1.0/", "/v1.0//notes", "/v1.0/a/{b}", "/v1.0/%2e%2e/x", "/v1.0/a%2fb", "/v1.0/a%5cb", "/v1.0/a%252fb", "/v1.0/%20", "/v1.0/%00", "/v1.0/%7bb%7d", "/v1.0/%zz"]) {
+for (const path of ["", "v1.0/fixture", "/beta/fixture/notes", "/v1.0/../tenants", "/v1.0/a b", "/v1.0/a?b=c", "/v1.0/a#b", "/v1.0/a\\b", "/v1.0/", "/v1.0//notes", "/v1.0/a/{b}", "/v1.0/%2e%2e/x", "/v1.0/a%2fb", "/v1.0/a%5cb", "/v1.0/a%252fb", "/v1.0/%20", "/v1.0/%00", "/v1.0/%7bb%7d", "/v1.0/%zz"] as const) {
   test(`hostile mutation path ${JSON.stringify(path)} is refused with zero sends`, async () => {
     const f = fixture();
     await assert.rejects(
@@ -239,10 +243,10 @@ test("beta version and empty operation or target fail closed with zero sends", a
   assert.equal(f.requests.length, 0);
 });
 
-for (const [name, profile] of [["enabled", enabledDelegated], ["disabled", delegatedProfile], ["application", enabledApp]]) {
+for (const [name, profile] of [["enabled", enabledDelegated], ["disabled", delegatedProfile], ["application", enabledApp]] as const) {
   test(`forged sender authorization on a ${name} profile is refused before credentials or HTTP`, async () => {
     const f = fixture();
-    const sender = createMutationSender({ profile, delegated: f.delegated, application: f.application, transport: f.transport });
+    const sender = createMutationSender({ profile, delegated: authFakes(f.delegated).delegated, application: authFakes(f.application).application, transport: f.transport });
     await assert.rejects(
       sender.send(Object.freeze({ nonce: "forged", method: "POST", url: "https://graph.microsoft.com/v1.0/fixture/notes" }), { scopes }),
       { code: "OPERATION_BLOCKED" },
@@ -254,7 +258,7 @@ for (const [name, profile] of [["enabled", enabledDelegated], ["disabled", deleg
 
 test("forged sender authorization is refused under forced read-only", async () => {
   const f = fixture();
-  const sender = createMutationSender({ profile: enabledDelegated, delegated: f.delegated, application: f.application, transport: f.transport });
+  const sender = createMutationSender({ profile: enabledDelegated, delegated: authFakes(f.delegated).delegated, application: authFakes(f.application).application, transport: f.transport });
   await withEnv("MG_AXI_READ_ONLY", "1", async () => {
     await assert.rejects(
       sender.send(Object.freeze({ nonce: "forged", method: "POST", url: "https://graph.microsoft.com/v1.0/fixture/notes" }), { scopes }),
@@ -272,11 +276,11 @@ test("preview shows the actual redacted change without sending or journaling", a
   );
   assert.equal(seen.url, "https://graph.microsoft.com/v1.0/fixture/notes");
   assert.equal(seen.noop, false);
-  assert.match(seen.currentState, /previous synthetic note/);
-  assert.match(seen.currentState, /\*\*\*redacted\*\*\*/);
-  assert.doesNotMatch(seen.currentState, /fixture-secret/);
-  assert.match(seen.proposedChange, /\*\*\*redacted\*\*\*/);
-  assert.doesNotMatch(seen.proposedChange, /fixture-secret/);
+  assert.match(outputText(seen.currentState), /previous synthetic note/);
+  assert.match(outputText(seen.currentState), /\*\*\*redacted\*\*\*/);
+  assert.doesNotMatch(outputText(seen.currentState), /fixture-secret/);
+  assert.match(outputText(seen.proposedChange), /\*\*\*redacted\*\*\*/);
+  assert.doesNotMatch(outputText(seen.proposedChange), /fixture-secret/);
   assert.equal(f.requests.length, 0);
   assert.throws(() => readFileSync(f.journalPath, "utf8"), /ENOENT/);
 });
@@ -293,7 +297,7 @@ test("omitting execute previews without sending or journaling", async () => {
 for (const confirm of [undefined, "wrong-target"]) {
   test(`disruptive mutation with confirm ${JSON.stringify(confirm)} is refused with zero sends`, async () => {
     const f = fixture();
-    const definition = { ...mutation, effect: "disruptive" };
+    const definition = { ...mutation, effect: "disruptive" as const };
     await assert.rejects(
       f.coordinator().execute(definition, { execute: true, ...(confirm === undefined ? {} : { confirm }), readState: readState(), scopes }),
       { code: confirm === undefined ? "CONFIRM_REQUIRED" : "CONFIRM_MISMATCH" },
@@ -304,7 +308,7 @@ for (const confirm of [undefined, "wrong-target"]) {
 
 test("confirmed execution sends the previewed snapshot once with If-Match and journals intent plus outcome", async () => {
   const f = fixture({ handler: { status: 200, headers: {}, body: '{"id":"1"}' } });
-  const definition = { ...mutation, effect: "disruptive" };
+  const definition = { ...mutation, effect: "disruptive" as const };
   const result = await f.coordinator().execute(definition, {
     execute: true, confirm: "fixture-note-1", ifMatch: '"fixture-etag"',
     readState: readState(), scopes, intentId: "approved-intent",
@@ -314,22 +318,22 @@ test("confirmed execution sends the previewed snapshot once with If-Match and jo
   assert.equal(result.status, 200);
   assert.deepEqual(result.response, { id: "1" });
   assert.equal(f.requests.length, 1);
-  assert.equal(f.requests[0].method, "POST");
-  assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/fixture/notes");
-  assert.equal(f.requests[0].body, JSON.stringify(mutation.payload));
-  assert.equal(f.requests[0].headers["If-Match"], '"fixture-etag"');
-  assert.equal(f.requests[0].headers["Content-Type"], "application/json");
-  assert.equal(f.requests[0].headers.Authorization, "Bearer opaque-fixture-secret");
-  assert.match(f.requests[0].headers["client-request-id"], /^[0-9a-f-]{36}$/);
+  assert.equal(f.requests[0]!.method, "POST");
+  assert.equal(f.requests[0]!.url, "https://graph.microsoft.com/v1.0/fixture/notes");
+  assert.equal(f.requests[0]!.body, JSON.stringify(mutation.payload));
+  assert.equal(f.requests[0]!.headers["If-Match"], '"fixture-etag"');
+  assert.equal(f.requests[0]!.headers["Content-Type"], "application/json");
+  assert.equal(f.requests[0]!.headers.Authorization, "Bearer opaque-fixture-secret");
+  assert.match(outputText(f.requests[0]!.headers["client-request-id"]), /^[0-9a-f-]{36}$/);
   const records = journal(f.journalPath);
   assert.equal(records.length, 2);
-  assert.equal(records[0].kind, "intent");
-  assert.equal(records[1].kind, "outcome");
-  assert.equal(records[1].outcome, "SUCCESS");
-  assert.equal(records[0].intentKey, records[1].intentKey);
-  assert.equal(records[0].time, TIME);
-  assert.equal(records[0].ifMatch, '"fixture-etag"');
-  assert.ok(!("payload" in records[0]) && !("body" in records[0]));
+  assert.equal(records[0]!.kind, "intent");
+  assert.equal(records[1]!.kind, "outcome");
+  assert.equal(records[1]!.outcome, "SUCCESS");
+  assert.equal(records[0]!.intentKey, records[1]!.intentKey);
+  assert.equal(records[0]!.time, TIME);
+  assert.equal(records[0]!.ifMatch, '"fixture-etag"');
+  assert.ok(!("payload" in record(records[0])) && !("body" in record(records[0])));
 });
 
 test("non-disruptive write executes without target confirmation", async () => {
@@ -337,10 +341,10 @@ test("non-disruptive write executes without target confirmation", async () => {
   const result = await f.coordinator().execute(mutation, { execute: true, readState: readState(), scopes, intentId: "plain-write" });
   assert.equal(result.kind, "success");
   assert.equal(f.requests.length, 1);
-  assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+  assert.equal(journal(f.journalPath)[1]!.outcome, "SUCCESS");
 });
 
-for (const status of [200, 201, 202]) {
+for (const status of [200, 201, 202] as const) {
   test(`unreadable HTTP ${status} mutation body warns without changing success or allowing replay`, async () => {
     const f = fixture({ handler: { status, headers: {}, body: "<html>synthetic-login opaque-fixture-secret</html>" } });
     const options = { execute: true, readState: readState(), scopes, intentId: "unreadable-write" };
@@ -349,8 +353,8 @@ for (const status of [200, 201, 202]) {
     assert.equal(result.status, status);
     assert.deepEqual(result.response, {});
     assert.deepEqual(result.responseUnreadable, { code: "RESPONSE_INVALID", httpStatus: status });
-    assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
-    assert.equal(journal(f.journalPath)[1].httpStatus, status);
+    assert.equal(journal(f.journalPath)[1]!.outcome, "SUCCESS");
+    assert.equal(journal(f.journalPath)[1]!.httpStatus, status);
     assert.doesNotMatch(JSON.stringify(result), /synthetic-login|opaque-fixture-secret|<html>/);
     await assert.rejects(f.coordinator().execute(mutation, options), { code: "ALREADY_EXECUTED" });
     assert.equal(f.requests.length, 1);
@@ -368,7 +372,7 @@ for (const { status, body, response } of [
     assert.equal(result.status, status);
     assert.deepEqual(result.response, response);
     assert.equal("responseUnreadable" in result, false);
-    assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "SUCCESS");
   });
 }
 
@@ -376,8 +380,8 @@ test("application profile executes through the .default audience without caller 
   const f = fixture({ handler: { status: 200, headers: {}, body: "{}" } });
   const result = await f.coordinator(enabledApp).execute(mutation, { execute: true, readState: readState(), intentId: "app-write" });
   assert.equal(result.kind, "success");
-  assert.deepEqual(f.credentialCalls[0][0], "acquire");
-  assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+  assert.deepEqual(f.credentialCalls[0]![0], "acquire");
+  assert.equal(journal(f.journalPath)[1]!.outcome, "SUCCESS");
 });
 
 test("application profile rejects caller scopes and delegated requires them", async () => {
@@ -404,7 +408,7 @@ test("credential for another tenant fails closed with zero sends", async () => {
 
 test("already-desired state is a no-op with zero sends and no journal", async () => {
   const f = fixture();
-  const isNoop = current => current?.enabled === false;
+  const isNoop = (current: unknown) => (current as { enabled?: boolean } | undefined)?.enabled === false;
   const result = await f.coordinator().execute(
     { ...mutation, payload: { enabled: false } },
     { execute: true, readState: readState({ enabled: false }), isNoop, scopes },
@@ -430,7 +434,7 @@ test("failed fresh re-read aborts without sending and records NOT_SENT", async (
   assert.equal(f.requests.length, 0);
   const records = journal(f.journalPath);
   assert.equal(records.length, 2);
-  assert.equal(records[1].outcome, "NOT_SENT");
+  assert.equal(records[1]!.outcome, "NOT_SENT");
 });
 
 test("fresh read finding desired state cancels the send and records NOT_SENT", async () => {
@@ -439,12 +443,12 @@ test("fresh read finding desired state cancels the send and records NOT_SENT", a
   const readStateChanging = async () => (++calls === 1 ? { notes: [] } : { notes: ["reviewed synthetic note"] });
   const result = await f.coordinator().execute(mutation, {
     execute: true, readState: readStateChanging,
-    isNoop: current => current?.notes?.includes("reviewed synthetic note") === true,
+    isNoop: current => (current as { notes?: string[] } | undefined)?.notes?.includes("reviewed synthetic note") === true,
     scopes, intentId: "became-desired",
   });
   assert.equal(result.kind, "noop");
   assert.equal(f.requests.length, 0);
-  assert.equal(journal(f.journalPath)[1].outcome, "NOT_SENT");
+  assert.equal(journal(f.journalPath)[1]!.outcome, "NOT_SENT");
 });
 
 test("unavailable intent storage blocks the send", async () => {
@@ -480,7 +484,7 @@ test("definitive server rejection reports failed and persists FAILED", async () 
   assert.equal(result.kind, "failed");
   assert.equal(result.status, 403);
   assert.equal(f.requests.length, 1);
-  assert.equal(journal(f.journalPath)[1].outcome, "FAILED");
+  assert.equal(journal(f.journalPath)[1]!.outcome, "FAILED");
 });
 
 test("ambiguous transport failure reports unknown and the intent can never replay", async () => {
@@ -492,16 +496,16 @@ test("ambiguous transport failure reports unknown and the intent can never repla
   assert.equal(result.auditId, "timeout-intent");
   assert.match(result.guidance, /never replay this intent/);
   assert.equal(f.requests.length, 1);
-  assert.equal(journal(f.journalPath)[1].outcome, "OUTCOME_UNKNOWN");
+  assert.equal(journal(f.journalPath)[1]!.outcome, "OUTCOME_UNKNOWN");
   await assert.rejects(f.coordinator().execute(mutation, options), { code: "ALREADY_EXECUTED" });
   assert.equal(f.requests.length, 1);
 });
 
-for (const status of [408, 500, 502, 503, 504, 599]) {
+for (const status of [408, 500, 502, 503, 504, 599] as const) {
   test(`mutation applied before HTTP ${status} reports unknown and cannot replay`, async () => {
-    const notes = [];
+    const notes: unknown[] = [];
     const f = fixture({ handler: request => {
-      notes.push(JSON.parse(request.body).text);
+      notes.push(JSON.parse(outputText(request.body)).text);
       return { status, headers: {}, body: "{}" };
     } });
     const options = { execute: true, readState: async () => ({ notes: [...notes] }), scopes, intentId: `http-${status}` };
@@ -514,8 +518,8 @@ for (const status of [408, 500, 502, 503, 504, 599]) {
     assert.match(result.guidance, /never replay this intent/);
     const records = journal(f.journalPath);
     assert.equal(records.length, 2);
-    assert.equal(records[1].outcome, "OUTCOME_UNKNOWN");
-    assert.equal(records[1].httpStatus, status);
+    assert.equal(records[1]!.outcome, "OUTCOME_UNKNOWN");
+    assert.equal(records[1]!.httpStatus, status);
     await assert.rejects(f.coordinator().execute(mutation, options), { code: "ALREADY_EXECUTED" });
     assert.equal(f.requests.length, 1);
     assert.deepEqual(notes, [mutation.payload.text]);
@@ -554,21 +558,21 @@ test("every catalogue leaf stays a read except the reviewed named writes", () =>
   reviewed.add("PATCH:/users/{user-id}/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}");
   reviewed.add("DELETE:/users/{user-id}/mailFolders/{mailFolder-id}/messageRules/{messageRule-id}");
   for (const operation of operations) {
-    if (reviewed.has(operation)) continue;
+    if (reviewed.has(outputText(operation))) continue;
     if (operation === "POST:/security/microsoft.graph.security.runHuntingQuery") {
-      assert.equal(LEAVES.find(leaf => leaf.operation === operation).path, "security hunting query");
+      assert.equal(LEAVES.find(leaf => leaf.operation === operation)!.path, "security hunting query");
       continue;
     }
-    assert.match(operation, /^GET:/, `write leaf in catalogue: ${operation}`);
+    assert.match(outputText(operation), /^GET:/, `write leaf in catalogue: ${operation}`);
   }
 });
 
 test("reviewed raw surface never serves a mutation route", async () => {
   const f = fixture({ handler: { status: 200, headers: {}, body: "{}" } });
-  const delegated = new DelegatedAuth({ storage: "session-only", login: async () => { throw new Error("no login"); }, silent: async () => ({ token: "t", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "a" }) });
+  const delegated = new DelegatedAuth(delegatedProvider({ storage: "session-only", login: async () => { throw new Error("no login"); }, silent: async () => ({ token: "t", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "a" }) }));
   const application = new ApplicationAuth({ storage: "session-only", acquire: async () => ({ token: "t", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client }) });
   await assert.rejects(
-    runApiGet({ path: "/groups/fixture-id/members/$ref", apiVersion: "v1.0", profile: delegatedProfile, scopes: "https://graph.microsoft.com/Group.Read.All" }, { delegated, application, transport: f.transport }),
+    runApiGet({ path: "/groups/fixture-id/members/$ref", apiVersion: "v1.0", profile: delegatedProfile, scopes: "https://graph.microsoft.com/Group.Read.All" }, { delegated, application, transport: f.transport as unknown as GraphTransport }),
     { code: "VALIDATION_ERROR" },
   );
   assert.equal(f.requests.length, 0);

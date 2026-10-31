@@ -1,3 +1,5 @@
+import { record, records, text as outputText, strings, authFakes, type CredentialStub } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
@@ -28,10 +30,10 @@ const entraGroups = [...new Set(entraLeaves.flatMap(leaf => {
 for (const path of entraGroups) test(`group help discovers every immediate child of ${path}`, async () => {
   const help = await executeArgv([...path.split(" "), "--help"]);
   assert.equal(typeof help, "string");
-  assert.ok(Buffer.byteLength(help) < 8192);
+  assert.ok(Buffer.byteLength(outputText(help)) < 8192);
   const children = [...new Set(entraLeaves.filter(leaf => leaf.path.startsWith(`${path} `))
     .map(leaf => leaf.path.slice(path.length + 1).split(" ")[0]))];
-  assert.deepEqual(help.split("\n").filter(line => line.endsWith(" --help")),
+  assert.deepEqual(outputText(help).split("\n").filter(line => line.endsWith(" --help")),
     children.map(child => `mg-axi ${path} ${child} --help`));
 });
 
@@ -39,7 +41,7 @@ function dir() {
   return mkdtempSync(join(tmpdir(), "mg-axi-pack-"));
 }
 
-function runPlain(args, home, executable = bin) {
+function runPlain(args: readonly string[], home: string, executable = bin) {
   return spawnSync(process.execPath, [executable, ...args], {
     encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000,
     env: {
@@ -49,7 +51,7 @@ function runPlain(args, home, executable = bin) {
   });
 }
 
-function runPack(args, home, mode, denied = false, throttled = false, packageRoot) {
+function runPack(args: readonly string[], home: string, mode: string, denied = false, throttled = false, packageRoot?: string) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-pack-cli.mjs")).href,
@@ -75,8 +77,8 @@ test("tarball runs named and raw reads without the full discovery inventory", ()
     const [manifest] = JSON.parse(packed.stdout);
     assert.ok(manifest.size < 500_000, `tarball bytes: ${manifest.size}`);
     assert.ok(manifest.unpackedSize < 3_000_000, `unpacked bytes: ${manifest.unpackedSize}`);
-    assert.equal(manifest.files.some(file => file.path === "inventory/operations.json"), false);
-    assert.ok(manifest.files.some(file => file.path === "inventory/runtime.json"));
+    assert.equal(manifest.files.some((file: { path: string }) => file.path === "inventory/operations.json"), false);
+    assert.ok(manifest.files.some((file: { path: string }) => file.path === "inventory/runtime.json"));
     const unpacked = spawnSync("tar", ["-xzf", join(home, manifest.filename), "-C", home], { encoding: "utf8", timeout: 30000 });
     assert.equal(unpacked.status, 0, unpacked.stderr);
     const root = join(home, "package");
@@ -92,7 +94,7 @@ test("tarball runs named and raw reads without the full discovery inventory", ()
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
-function createProfiles(home) {
+function createProfiles(home: string) {
   for (const args of [
     ["profile", "create", "--name", "soc", "--tenant", tenant, "--client", client, "--cloud", "commercial"],
     ["profile", "create", "--name", "batch", "--tenant", tenant, "--client", client, "--cloud", "commercial",
@@ -130,15 +132,15 @@ test("setup reports unconfigured state without writing configuration", () => {
     const result = runPlain(["setup"], home);
     assert.equal(result.status, 0, result.stdout);
     assert.equal(result.stderr, "");
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.command, "mg-axi setup");
     assert.equal(output.config, config);
     assert.equal(output.state, "unconfigured");
     assert.equal(output.profiles, "0 profiles configured");
-    assert.ok(output.capabilities.implemented.includes("mg-axi setup") || output.capabilities.implemented.includes("setup"));
-    assert.ok(output.capabilities.implemented.includes("entra user list"));
-    assert.equal(output.capabilities.reads, 279);
-    assert.equal(output.capabilities.writes, 17);    assert.equal(output.capabilities.local, 10);
+    assert.ok(strings(record(output.capabilities).implemented).includes("mg-axi setup") || strings(record(output.capabilities).implemented).includes("setup"));
+    assert.ok(strings(record(output.capabilities).implemented).includes("entra user list"));
+    assert.equal(record(output.capabilities).reads, 279);
+    assert.equal(record(output.capabilities).writes, 17);    assert.equal(record(output.capabilities).local, 10);
     assert.ok(!existsSync(config), "setup writes nothing");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
@@ -146,8 +148,8 @@ test("setup reports unconfigured state without writing configuration", () => {
 test("setup capability prose lists the shipped read families from the catalogue", () => {
   const home = dir();
   try {
-    const output = decode(runPlain(["setup"], home).stdout);
-    assert.equal(output.capabilities.api,
+    const output = record(decode(runPlain(["setup"], home).stdout));
+    assert.equal(record(output.capabilities).api,
       "Entra user, registration, group, directory-role/PIM, device, administrative-unit, organization and branding, domain and domain DNS, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-in/directory-audit, application/service-principal and consent grants, risk, Conditional Access, identity-provider, federation configurations, deleted directory items, data policy operations, risk prevention, access-review, entitlement catalogs and access packages, entitlement assignments and requests and lifecycle workflows reads plus reviewed raw api get and 17 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update, mail folder creation, empty custom mail folder deletion, mail master category creation, inbox rule creation, inbox rule update, inbox rule deletion, message categorization, message follow-up flag, message read/unread status, message move, message copy, message soft delete to Deleted Items); every other v1.0 operation is deferred out of v1, and every other beta operation remains scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
@@ -159,7 +161,7 @@ test("setup reports configured profiles without credential material", () => {
     const result = runPlain(["setup"], home);
     assert.equal(result.status, 0, result.stdout);
     assert.equal(result.stderr, "");
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.state, "configured");
     assert.deepEqual(output.profiles, [
       { name: "soc", mode: "delegated" },
@@ -173,13 +175,13 @@ test("setup reports configured profiles without credential material", () => {
 test("setup suggests runnable checkout commands", () => {
   const home = dir();
   try {
-    const output = decode(runPlain(["setup"], home).stdout);
+    const output = record(decode(runPlain(["setup"], home).stdout));
     for (const command of [
-      ...output.guidance.slice(1).map(command => `${command} --help`),
-      `${output.help[0]} --help`, ...output.help.slice(1),
+      ...strings(output.guidance).slice(1).map(command => `${command} --help`),
+      `${strings(output.help)[0]} --help`, ...strings(output.help).slice(1),
     ]) {
       const [executable, ...args] = command.split(" ");
-      const result = spawnSync(executable, args, {
+      const result = spawnSync(outputText(executable), args, {
         encoding: "utf8", timeout: 30000,
         env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
           HOME: home, USERPROFILE: home, MG_AXI_CONFIG: join(home, "config.json") },
@@ -191,7 +193,7 @@ test("setup suggests runnable checkout commands", () => {
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
-for (const mode of ["global", "npx"]) test(`setup and doctor preserve the ${mode} invocation`, () => {
+for (const mode of ["global", "npx"] as const) test(`setup and doctor preserve the ${mode} invocation`, () => {
   const home = dir();
   try {
     const directory = mode === "npx" ? join(home, "_npx", "fixture", "node_modules", ".bin") : join(home, "bin");
@@ -201,47 +203,47 @@ for (const mode of ["global", "npx"]) test(`setup and doctor preserve the ${mode
     const env = { PATH: `${directory}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}`,
       HOME: home, USERPROFILE: home, MG_AXI_CONFIG: join(home, "config.json") };
     const command = mode === "npx" ? "npx -y @knowttl/mg-axi" : "mg-axi";
-    const run = args => spawnSync(process.execPath, [executable, ...args], { env, encoding: "utf8", timeout: 30000 });
+    const run = (args: readonly string[]) => spawnSync(process.execPath, [executable, ...args], { env, encoding: "utf8", timeout: 30000 });
     const setup = run(["setup"]);
     assert.equal(setup.status, 0, setup.stdout + setup.stderr);
-    const output = decode(setup.stdout);
-    assert.equal(output.help[0], `${command} doctor`);
-    assert.equal(output.guidance[1], `${command} profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial`);
-    assert.equal(output.installation.some(item => item.includes("pnpm")), false);
+    const output = record(decode(setup.stdout));
+    assert.equal(strings(output.help)[0], `${command} doctor`);
+    assert.equal(strings(output.guidance)[1], `${command} profile create --name soc --tenant <tenant-id> --client <client-id> --cloud commercial`);
+    assert.equal(strings(output.installation).some(item => item.includes("pnpm")), false);
     const doctor = run(["doctor"]);
     assert.equal(doctor.status, 1, doctor.stdout);
     assert.ok(doctor.stdout.includes(`${command} setup`));
     const localHome = run([]);
     assert.equal(localHome.status, 0, localHome.stdout);
-    assert.equal(decode(localHome.stdout).help[0], `${command} profile list`);
+    assert.equal(strings(record(decode(localHome.stdout)).help)[0], `${command} profile list`);
     const read = run(["entra", "user", "list"]);
     assert.equal(read.status, 1, read.stdout);
-    assert.equal(decode(read.stdout).code, "PROFILE_REQUIRED");
-    assert.ok(decode(read.stdout).help.every(hint => hint.startsWith(`${command} `)));
+    assert.equal(record(decode(read.stdout)).code, "PROFILE_REQUIRED");
+    assert.ok(strings(record(decode(read.stdout)).help).every(hint => hint.startsWith(`${command} `)));
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
-for (const enabled of [true, false]) test(`home reports locally ${enabled ? "enabled" : "disabled"} Entra without credentials or Graph`, async () => {
+for (const enabled of [true, false] as const) test(`home reports locally ${enabled ? "enabled" : "disabled"} Entra without credentials or Graph`, async () => {
   const home = dir();
   try {
     writeFileSync(join(home, "config.json"), JSON.stringify({ version: 1,
       profiles: { soc: { ...delegatedJson(), enabledPacks: enabled ? ["entra"] : [] } } }));
     const forbidden = () => { assert.fail("Home must not acquire credentials or contact Graph"); };
     const output = await executeArgv(["home", "--offline", "--config", join(home, "config.json"), "--profile", "soc"], {
-      delegated: { credential: forbidden }, application: { credential: forbidden }, transport: forbidden,
+      delegated: authFakes({ credential: forbidden }).delegated, application: authFakes({ credential: forbidden }).application, transport: forbidden,
     });
-    assert.equal(output.profile, "soc");
-    assert.deepEqual(output.domains, [{ name: "entra", status: enabled ? "enabled" : "disabled",
+    assert.equal(record(output).profile, "soc");
+    assert.deepEqual(record(output).domains, [{ name: "entra", status: enabled ? "enabled" : "disabled",
       summary: "Local profile configuration only; no Graph request made" }]);
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
 test("installed skill links resolve independently of its installation directory", () => {
   const skill = skillDocument();
-  const links = [...skill.matchAll(/\]\(([^)]+)\)/g)].map(match => match[1]).filter(link => !link.startsWith("#"));
+  const links = [...skill.matchAll(/\]\(([^)]+)\)/g)].map(match => match[1]).filter(link => !link!.startsWith("#"));
   assert.ok(links.length >= 8);
   for (const link of links) {
-    const url = new URL(link);
+    const url = new URL(outputText(link));
     assert.equal(url.origin, "https://github.com");
     assert.ok(url.pathname.startsWith("/knowttl/mg-axi/blob/main/"));
   }
@@ -264,7 +266,7 @@ test("setup does not suggest a PATH binary shadowed by another installation", ()
         HOME: home, USERPROFILE: home, MG_AXI_CONFIG: join(home, "config.json") },
     });
     assert.equal(result.status, 0, result.stdout);
-    assert.equal(decode(result.stdout).help[0], `${process.execPath} ${executable} doctor`);
+    assert.equal(strings(record(decode(result.stdout)).help)[0], `${process.execPath} ${executable} doctor`);
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
@@ -274,8 +276,8 @@ test("doctor rejects unknown flags before credentials", () => {
     const result = runPlain(["doctor", "--cursor", "anything"], home);
     assert.equal(result.status, 2);
     assert.equal(result.stderr, "");
-    const output = decode(result.stdout);
-    assert.match(output.error, /unknown flag --cursor/);
+    const output = record(decode(result.stdout));
+    assert.match(outputText(output.error), /unknown flag --cursor/);
     assert.equal(output.code, "VALIDATION_ERROR");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
@@ -286,8 +288,8 @@ test("doctor without profiles fails operationally before any HTTP", () => {
     const result = runPlain(["doctor"], home);
     assert.equal(result.status, 1);
     assert.equal(result.stderr, "");
-    const output = decode(result.stdout);
-    assert.match(output.error, /No profiles are configured/);
+    const output = record(decode(result.stdout));
+    assert.match(outputText(output.error), /No profiles are configured/);
     assert.equal(output.code, "PROFILE_REQUIRED");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
@@ -299,7 +301,7 @@ test("packaged doctor checks a delegated profile with one bounded read", () => {
     const result = runPack(["doctor", "--profile", "soc"], home, "delegated");
     assert.equal(result.status, 0, result.stdout);
     assert.equal(result.stderr, "");
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.count, "1 of 1 profiles ok");
     assert.equal(output.complete, true);
     assert.deepEqual(output.profiles, [{
@@ -318,36 +320,36 @@ test("packaged doctor reports a denied profile as an operational failure", () =>
     const result = runPack(["doctor", "--profile", "soc"], home, "delegated", true);
     assert.equal(result.status, 1, result.stdout);
     assert.equal(result.stderr, "");
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.count, "0 of 1 profiles ok");
     assert.equal(output.complete, false);
-    assert.equal(output.profiles.length, 1);
-    assert.equal(output.profiles[0].status, "failed");
-    assert.equal(output.profiles[0].code, "GRAPH_ERROR");
-    assert.match(output.profiles[0].error, /grant, role, licence or policy/);
-    assert.ok(output.help.length);
+    assert.equal(records(output.profiles).length, 1);
+    assert.equal(records(output.profiles)[0]!.status, "failed");
+    assert.equal(records(output.profiles)[0]!.code, "GRAPH_ERROR");
+    assert.match(outputText(records(output.profiles)[0]!.error), /grant, role, licence or policy/);
+    assert.ok(strings(output.help).length);
     assert.ok(!result.stdout.includes("opaque-fixture-delegated-token"));
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
-for (const mode of ["delegated", "application"]) {
+for (const mode of ["delegated", "application"] as const) {
   test(`packaged doctor reports throttling as failure for ${mode} profiles`, () => {
     const home = dir();
     try {
       createProfiles(home);
       const result = runPack(["doctor", "--profile", mode === "delegated" ? "soc" : "batch"], home, mode, false, true);
       assert.equal(result.status, 1, result.stdout);
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.count, "0 of 1 profiles ok");
       assert.equal(output.complete, false);
-      assert.equal(output.profiles[0].status, "failed");
-      assert.equal(output.profiles[0].code, "GRAPH_ERROR");
-      assert.match(output.profiles[0].error, /deadline exceeded; throttled \(429\)/);
+      assert.equal(records(output.profiles)[0]!.status, "failed");
+      assert.equal(records(output.profiles)[0]!.code, "GRAPH_ERROR");
+      assert.match(outputText(records(output.profiles)[0]!.error), /deadline exceeded; throttled \(429\)/);
     } finally { rmSync(home, { recursive: true, force: true }); }
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`packaged ${mode} critical journey reads users, groups, policies and sign-ins offline`, () => {
     const home = dir();
     try {
@@ -365,14 +367,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         assert.equal(result.status, 0, `${args.join(" ")}:\n${result.stdout}`);
         assert.equal(result.stderr, "");
         assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
-        return decode(result.stdout);
+        return record(decode(result.stdout));
       });
-      assert.equal(outputs[0].users.length, 1);
-      assert.equal(outputs[1].user.id, userId);
-      assert.equal(outputs[2].groups.length, 1);
-      assert.equal(outputs[3].members.length, 1);
-      assert.equal(outputs[4].policies.length, 1);
-      assert.equal(outputs[5].signIns.length, 1);
+      assert.equal(records(outputs[0]!.users).length, 1);
+      assert.equal(record(outputs[1]!.user).id, userId);
+      assert.equal(records(outputs[2]!.groups).length, 1);
+      assert.equal(records(outputs[3]!.members).length, 1);
+      assert.equal(records(outputs[4]!.policies).length, 1);
+      assert.equal(records(outputs[5]!.signIns).length, 1);
     } finally { rmSync(home, { recursive: true, force: true }); }
   });
 }
@@ -391,7 +393,7 @@ function applicationJson() {
 
 // Hand-written configuration without a default profile, so doctor checks
 // every profile instead of selecting one.
-function writeConfig(home) {
+function writeConfig(home: string) {
   const previous = process.env.MG_AXI_CONFIG;
   process.env.MG_AXI_CONFIG = join(home, "config.json");
   writeFileSync(join(home, "config.json"), JSON.stringify({ version: 1,
@@ -444,7 +446,7 @@ test("doctorTargets with no profiles selects nothing before any HTTP", () => {
   }
 });
 
-function fixtureCredential(mode) {
+function fixtureCredential(mode: string): CredentialStub {
   return {
     credential: async profile => ({
       token: `opaque-fixture-${mode}-token`,
@@ -456,8 +458,8 @@ function fixtureCredential(mode) {
   };
 }
 
-function fixtureTransport(requests, deniedModes) {
-  const send = async request => {
+function fixtureTransport(requests: TransportRequest[], deniedModes: readonly string[]) {
+  const send: GraphTransport = async request => {
     requests.push(request);
     const forbidden = deniedModes.some(mode => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`);
     if (forbidden) return { status: 403, headers: {}, body: JSON.stringify({ error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }) };
@@ -466,7 +468,7 @@ function fixtureTransport(requests, deniedModes) {
   return { requests, send };
 }
 
-for (const boundary of ["credential", "transport"]) {
+for (const boundary of ["credential", "transport"] as const) {
   test(`doctor reports a ${boundary} deadline as failure`, async t => {
     const home = dir();
     const configured = writeConfig(home);
@@ -476,11 +478,11 @@ for (const boundary of ["credential", "transport"]) {
     t.mock.method(systemClock, "now", () => now);
     try {
       const result = await runDoctor({ store: configured.store, names: ["soc"], session: new GraphSession({
-        delegated: { credential: async profile => {
+        delegated: authFakes({ credential: async profile => {
           if (boundary === "credential") now = 60_000;
           return credential.credential(profile);
-        } },
-        application: fixtureCredential("application"),
+        } }).delegated,
+        application: authFakes(fixtureCredential("application")).application,
         transport: async request => {
           if (boundary === "transport") now = 60_000;
           return transport(request);
@@ -489,8 +491,8 @@ for (const boundary of ["credential", "transport"]) {
       assert.equal(result.failed, true);
       assert.equal(result.output.complete, false);
       assert.equal(result.output.count, "0 of 1 profiles ok");
-      assert.equal(result.output.profiles[0].status, "failed");
-      assert.match(result.output.profiles[0].error, /deadline exceeded/);
+      assert.equal(records(result.output.profiles)[0]!.status, "failed");
+      assert.match(outputText(records(result.output.profiles)[0]!.error), /deadline exceeded/);
     } finally {
       configured.restore();
       rmSync(home, { recursive: true, force: true });
@@ -502,15 +504,15 @@ for (const [name, value, detail] of [
   ["empty result", [], "0 users matched; the absence of results is the answer"],
   ["buffered row limit", [{ id: userId }, { id: tenant }], "1 user row returned"],
   ["continuation row limit", [{ id: userId }], "1 user row returned"],
-]) {
+] as const) {
   test(`doctor accepts a successful ${name}`, async () => {
     const home = dir();
     const configured = writeConfig(home);
-    const requests = [];
+    const requests: TransportRequest[] = [];
     try {
       const result = await runDoctor({ store: configured.store, names: ["soc"], session: new GraphSession({
-        delegated: fixtureCredential("delegated"),
-        application: fixtureCredential("application"),
+        delegated: authFakes(fixtureCredential("delegated")).delegated,
+        application: authFakes(fixtureCredential("application")).application,
         transport: async request => {
           requests.push(request);
           return { status: 200, headers: {}, body: JSON.stringify({ value,
@@ -520,8 +522,8 @@ for (const [name, value, detail] of [
       }) });
       assert.equal(result.failed, false);
       assert.equal(result.output.complete, true);
-      assert.equal(result.output.profiles[0].status, "ok");
-      assert.equal(result.output.profiles[0].detail, detail);
+      assert.equal(records(result.output.profiles)[0]!.status, "ok");
+      assert.equal(records(result.output.profiles)[0]!.detail, detail);
       assert.equal(requests.length, 1);
     } finally {
       configured.restore();
@@ -530,7 +532,7 @@ for (const [name, value, detail] of [
   });
 }
 
-async function doctorArgv(home, requests, deniedModes) {
+async function doctorArgv(home: string, requests: TransportRequest[], deniedModes: readonly string[]) {
   const previousConfig = process.env.MG_AXI_CONFIG;
   const previousExit = process.exitCode;
   process.env.MG_AXI_CONFIG = join(home, "config.json");
@@ -538,8 +540,8 @@ async function doctorArgv(home, requests, deniedModes) {
     return {
       output: await executeArgv(["doctor"], {
         transport: fixtureTransport(requests, deniedModes).send,
-        delegated: fixtureCredential("delegated"),
-        application: fixtureCredential("application"),
+        delegated: authFakes(fixtureCredential("delegated")).delegated,
+        application: authFakes(fixtureCredential("application")).application,
       }),
       exit: process.exitCode,
     };
@@ -552,12 +554,12 @@ async function doctorArgv(home, requests, deniedModes) {
 test("doctor checks every profile with one bounded read each", async () => {
   const home = dir();
   const configured = writeConfig(home);
-  const requests = [];
+  const requests: TransportRequest[] = [];
   try {
     const { output, exit } = await doctorArgv(home, requests, []);
     assert.notEqual(exit, 1);
-    assert.equal(output.count, "2 of 2 profiles ok");
-    assert.equal(output.complete, true);
+    assert.equal(record(output).count, "2 of 2 profiles ok");
+    assert.equal(record(output).complete, true);
     assert.equal(requests.length, 2);
     for (const request of requests) {
       const url = new URL(request.url);
@@ -574,19 +576,19 @@ test("doctor checks every profile with one bounded read each", async () => {
 test("doctor reports mixed success with a nonzero exit and rerun guidance", async () => {
   const home = dir();
   const configured = writeConfig(home);
-  const requests = [];
+  const requests: TransportRequest[] = [];
   try {
     const { output, exit } = await doctorArgv(home, requests, ["application"]);
     assert.equal(exit, 1);
-    assert.equal(output.count, "1 of 2 profiles ok");
-    assert.equal(output.complete, false);
-    assert.deepEqual(output.profiles[0].status, "ok");
-    assert.deepEqual(output.profiles[1], {
+    assert.equal(record(output).count, "1 of 2 profiles ok");
+    assert.equal(record(output).complete, false);
+    assert.deepEqual(records(record(output).profiles)[0]!.status, "ok");
+    assert.deepEqual(records(record(output).profiles)[1], {
       name: "batch", check: "entra user list --limit 1 (v1.0:GET:/users)",
-      status: "failed", code: "GRAPH_ERROR", error: output.profiles[1].error,
+      status: "failed", code: "GRAPH_ERROR", error: records(record(output).profiles)[1]!.error,
     });
-    assert.match(output.profiles[1].error, /grant, role, licence or policy/);
-    assert.ok(output.help.some(hint => hint.includes("doctor --profile batch")));
+    assert.match(outputText(records(record(output).profiles)[1]!.error), /grant, role, licence or policy/);
+    assert.ok(strings(record(output).help).some(hint => hint.includes("doctor --profile batch")));
     assert.equal(requests.length, 2);
   } finally {
     configured.restore();
@@ -601,8 +603,8 @@ test("doctor with no profiles throws before credentials", async () => {
   try {
     await assert.rejects(
       runDoctor({ store: new Profiles(), names: [], session: new GraphSession({
-        delegated: fixtureCredential("delegated"),
-        application: fixtureCredential("application"),
+        delegated: authFakes(fixtureCredential("delegated")).delegated,
+        application: authFakes(fixtureCredential("application")).application,
         transport: async () => { throw new Error("transport must stay untouched"); },
       }) }),
       /No profiles are configured/,
@@ -620,16 +622,16 @@ test("keeps the committed skill file generated from the catalogue", () => {
 
 test("keeps the committed skill command table generated from the catalogue", () => {
   const skill = readFileSync(new URL("../skills/mg-axi/SKILL.md", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-  const block = skill.split("<!-- command-registry:start -->\n")[1]?.split("\n<!-- command-registry:end -->")[0];
+  const block = skill.split("<!-- command-registry:start -->\n")[1]?.split("\n<!-- command-registry:end -->")![0];
   assert.equal(block, skillCommandTable());
 });
 
 test("skill trigger description names the shipped writes and EXT reads", () => {
   const description = skillDescription();
-  for (const write of ["account enable/disable", "session revocation", "group-membership add", "risky-user dismissal", "CA policy update"]) {
+  for (const write of ["account enable/disable", "session revocation", "group-membership add", "risky-user dismissal", "CA policy update"] as const) {
     assert.ok(description.includes(write), `description names write: ${write}`);
   }
-  for (const area of ["domains and DNS records", "certificate authentication", "group lifecycle policies", "attribute sets and custom security attributes", "partner contracts", "delegated administration", "multi-tenant organization", "identity providers", "organization and branding", "access reviews"]) {
+  for (const area of ["domains and DNS records", "certificate authentication", "group lifecycle policies", "attribute sets and custom security attributes", "partner contracts", "delegated administration", "multi-tenant organization", "identity providers", "organization and branding", "access reviews"] as const) {
     assert.ok(description.includes(area), `description names area: ${area}`);
   }
 });
@@ -647,7 +649,7 @@ test("skill next steps match the no-args home view hints", async () => {
     assert.equal(new Set(hints).size, hints.length);
     assert.deepEqual(output.help, hints);
     const repeated = await executeArgv([]);
-    assert.deepEqual(repeated.help, hints);
+    assert.deepEqual(record(repeated).help, hints);
     assert.deepEqual(output.help, hints);
     assert.deepEqual(skillHomeHints(), hints);
     assert.equal(skillDocument(), skill);
@@ -680,9 +682,9 @@ test("generated public documents describe capabilities without delivery instruct
 
 test("write status follows the catalogue, not hard-coded prose", () => {
   const coverage = capabilityDocument();
-  const shipped = coverage.split("Shipped initial writes: ")[1]?.split(".\n")[0] ?? "";
-  const pending = coverage.split("Pending initial writes: ")[1]?.split(".\n")[0] ?? "";
-  for (const slice of ["WRITE-01", "WRITE-02", "WRITE-03", "WRITE-04", "WRITE-05"]) assert.ok(shipped.includes(slice), `${slice} reads shipped`);
+  const shipped = coverage.split("Shipped initial writes: ")[1]?.split(".\n")![0] ?? "";
+  const pending = coverage.split("Pending initial writes: ")[1]?.split(".\n")![0] ?? "";
+  for (const slice of ["WRITE-01", "WRITE-02", "WRITE-03", "WRITE-04", "WRITE-05"] as const) assert.ok(shipped.includes(slice), `${slice} reads shipped`);
   assert.ok(pending === "none", `no initial write reads pending, got: ${pending}`);
   assert.doesNotMatch(coverage, /later writes \(WRITE-04 and beyond\)/);
 });

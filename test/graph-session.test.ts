@@ -1,3 +1,5 @@
+import { record, text as outputText, strings, delegatedProvider, type RawResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
@@ -12,14 +14,14 @@ import { listProvisioning } from "../dist/entra-audit-logs.js";
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
 const audience = "https://graph.microsoft.com/.default";
-const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
-const appProfile = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "federated", token: { env: "MG_AXI_TOKEN" } };
+const delegatedProfile = { mode: "delegated" as const, tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
+const appProfile = { mode: "application" as const, tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "federated" as const, token: { env: "MG_AXI_TOKEN" } } as const;
 const scopes = ["https://graph.microsoft.com/User.Read"];
 const users = resolveSessionOperation("v1.0", "GET", "/users");
 const userById = resolveSessionOperation("v1.0", "GET", "/users/{user-id}");
 // Repository-only discovery rows exercise callers attempting to bypass the runtime index.
-const discovery = new Map(JSON.parse(readFileSync(new URL("../inventory/operations.json", import.meta.url))).operations.map(row => [row.id, row]));
-function discoveryOperation(version, method, path) {
+const discovery = new Map((JSON.parse(readFileSync(new URL("../inventory/operations.json", import.meta.url), "utf8")) as { operations: import("../dist/graph-session.js").SessionOperation[] }).operations.map(row => [row.id, row]));
+function discoveryOperation(version: string, method: string, path: string) {
   const operation = discovery.get(`${version}:${method}:${path}`);
   assert.ok(operation);
   return { ...operation };
@@ -29,24 +31,24 @@ const me = discoveryOperation("v1.0", "GET", "/me");
 const betaUsers = discoveryOperation("beta", "GET", "/users");
 const revokeSessions = resolveSessionOperation("v1.0", "POST", "/users/{user-id}/revokeSignInSessions");
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function fixture(handler) {
-  const credentialCalls = [];
-  const requests = [];
-  const credential = account => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
-  const delegated = new DelegatedAuth({
+function fixture(handler: RawResponseHandler) {
+  const credentialCalls: unknown[][] = [];
+  const requests: TransportRequest[] = [];
+  const credential = <T extends object>(account: T) => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
+  const delegated = new DelegatedAuth(delegatedProvider({
     storage: "session-only",
     login: async () => credential({ accountId: "synthetic-account" }),
     silent: async (...args) => { credentialCalls.push(["silent", ...args]); return credential({ accountId: "synthetic-account" }); },
-  });
+  }));
   const application = new ApplicationAuth({
     storage: "session-only",
     acquire: async (...args) => { credentialCalls.push(["acquire", ...args]); return credential({}); },
   });
-  const transport = async request => {
+  const transport: GraphTransport = async request => {
     requests.push(request);
     const response = typeof handler === "function" ? await handler(request, requests.length) : handler;
     return { headers: {}, body: "", ...response };
@@ -54,12 +56,12 @@ function fixture(handler) {
   return { credentialCalls, requests, session: new GraphSession({ delegated, application, transport }) };
 }
 
-for (const method of ["execute", "collect"]) {
-  for (const body of ["", "<html>synthetic-private-login</html>"]) test(`${method} reports safe diagnostics for an unreadable 2xx body (${body ? "HTML" : "empty"})`, async () => {
+for (const method of ["execute", "collect"] as const) {
+  for (const body of ["", "<html>synthetic-private-login</html>"] as const) test(`${method} reports safe diagnostics for an unreadable 2xx body (${body ? "HTML" : "empty"})`, async () => {
     const f = fixture({ status: 200, headers: { "Content-Type": "text/html; private=synthetic-private-header" }, body });
     await assert.rejects(f.session[method]({ profile: appProfile, operation: users }), error => {
-      assert.equal(error.code, "RESPONSE_INVALID");
-      assert.deepEqual(error.diagnostics, { status: 200, contentType: "text/html", shape: [{ path: "$", type: "string" }], shapeTruncated: false });
+      assert.equal(record(error).code, "RESPONSE_INVALID");
+      assert.deepEqual(record(error).diagnostics, { status: 200, contentType: "text/html", shape: [{ path: "$", type: "string" }], shapeTruncated: false });
       assert.doesNotMatch(JSON.stringify(error), /synthetic-private/);
       return true;
     });
@@ -69,10 +71,10 @@ for (const method of ["execute", "collect"]) {
 for (const body of [{ wrongEnvelope: [{ id: "private-value" }] }, { value: "private-value" }]) test(`collect diagnoses an invalid collection envelope ${JSON.stringify(body)}`, async () => {
   const f = fixture(json(200, body, { "content-type": "application/json" }));
   await assert.rejects(f.session.collect({ profile: appProfile, operation: users }), error => {
-    assert.equal(error.code, "RESPONSE_INVALID");
-    assert.equal(error.diagnostics.status, 200);
-    assert.equal(error.diagnostics.contentType, "application/json");
-    assert.deepEqual(error.diagnostics.issues, [{ path: '$["value"]', received: Object.hasOwn(body, "value") ? "string" : "undefined", expected: "array" }]);
+    assert.equal(record(error).code, "RESPONSE_INVALID");
+    assert.equal(record(record(error).diagnostics).status, 200);
+    assert.equal(record(record(error).diagnostics).contentType, "application/json");
+    assert.deepEqual(record(record(error).diagnostics).issues, [{ path: '$["value"]', received: Object.hasOwn(body, "value") ? "string" : "undefined", expected: "array" }]);
     assert.doesNotMatch(JSON.stringify(error), /private-value/);
     return true;
   });
@@ -82,8 +84,8 @@ test("scalar counts report response-invalid diagnostics without echoing the body
   const operation = resolveSessionOperation("v1.0", "GET", "/directory/attributeSets/$count");
   const f = fixture({ status: 200, headers: { "content-type": "text/html" }, body: "<html>private-count</html>" });
   await assert.rejects(f.session.execute({ profile: appProfile, operation, scalar: true }), error => {
-    assert.equal(error.code, "RESPONSE_INVALID");
-    assert.deepEqual(error.diagnostics, { status: 200, contentType: "text/html", shape: [{ path: "$", type: "string" }], shapeTruncated: false });
+    assert.equal(record(error).code, "RESPONSE_INVALID");
+    assert.deepEqual(record(error).diagnostics, { status: 200, contentType: "text/html", shape: [{ path: "$", type: "string" }], shapeTruncated: false });
     assert.doesNotMatch(JSON.stringify(error), /private-count/);
     return true;
   });
@@ -93,9 +95,9 @@ test("custom-security diagnostics suppress even identifier-shaped response keys"
   const operation = resolveSessionOperation("v1.0", "GET", "/directory/attributeSets");
   const f = fixture(json(200, { TenantPrivateField: { NestedPrivateField: 123 } }, { "content-type": "application/json" }));
   await assert.rejects(f.session.collect({ profile: appProfile, operation }), error => {
-    assert.equal(error.code, "RESPONSE_INVALID");
-    assert.deepEqual(error.diagnostics.shape, [{ path: "$", type: "object" }, { path: '$["<key>"]', type: "object" }, { path: '$["<key>"]["<key>"]', type: "number" }]);
-    assert.deepEqual(error.diagnostics.issuePaths, ['$["<key>"]']);
+    assert.equal(record(error).code, "RESPONSE_INVALID");
+    assert.deepEqual(record(record(error).diagnostics).shape, [{ path: "$", type: "object" }, { path: '$["<key>"]', type: "object" }, { path: '$["<key>"]["<key>"]', type: "number" }]);
+    assert.deepEqual(record(record(error).diagnostics).issuePaths, ['$["<key>"]']);
     assert.doesNotMatch(JSON.stringify(error), /TenantPrivateField|NestedPrivateField|123/);
     return true;
   });
@@ -114,12 +116,12 @@ test("PIM licence errors preserve the diagnosis without suggesting retries", asy
   const operation = resolveSessionOperation("v1.0", "GET", "/roleManagement/directory/roleEligibilityScheduleInstances");
   const message = "The tenant needs to have Microsoft Entra ID P2 or Microsoft Entra ID Governance license.";
   const f = fixture(json(400, { error: { code: "AadPremiumLicenseRequired", message } }));
-  for (const method of ["execute", "collect"]) {
+  for (const method of ["execute", "collect"] as const) {
     await assert.rejects(f.session[method]({ profile: appProfile, operation }), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.match(error.message, /\(400\): graph AadPremiumLicenseRequired/);
-      assert.ok(error.message.includes(message));
-      assert.deepEqual(error.suggestions, []);
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.match(outputText(record(error).message), /\(400\): graph AadPremiumLicenseRequired/);
+      assert.ok(outputText(record(error).message).includes(message));
+      assert.deepEqual(record(error).suggestions, []);
       return true;
     });
   }
@@ -134,11 +136,11 @@ test("Graph preserves a query rejection message when the error code is empty", a
 
 test("unsupported root collections fail before credentials with supported alternatives", async () => {
   const f = fixture(json(200, { value: [] }));
-  for (const [path, hint] of [["/domainDnsRecords", /verification-dns-record/], ["/directoryObjects", /directory-object show/]]) {
+  for (const [path, hint] of [["/domainDnsRecords", /verification-dns-record/], ["/directoryObjects", /directory-object show/]] as const) {
     const operation = discoveryOperation("v1.0", "GET", path);
     await assert.rejects(f.session.collect({ profile: appProfile, operation }), error => {
-      assert.match(error.message, /not supported/);
-      assert.ok(error.suggestions.some(value => hint.test(value)));
+      assert.match(outputText(record(error).message), /not supported/);
+      assert.ok(strings(record(error).suggestions).some(value => hint.test(value)));
       return true;
     });
   }
@@ -150,7 +152,7 @@ test("scoped membership reads select the v1.0 fields and refuse direct root quer
   const row = { id: "membership", roleId: "role", administrativeUnitId: "unit", roleMemberInfo: { id: "member", displayName: "Member" } };
   const f = fixture(request => {
     const url = new URL(request.url);
-    const select = url.searchParams.get("$select").split(",");
+    const select = url.searchParams.get("$select")!.split(",");
     if (select.some(field => !Object.hasOwn(row, field))) return json(400, { error: { code: "Request_BadRequest", message: "Property does not exist" } });
     return json(200, url.pathname.endsWith("/scopedMembers") ? { value: [row] } : row);
   });
@@ -158,7 +160,7 @@ test("scoped membership reads select the v1.0 fields and refuse direct root quer
   const show = resolveSessionOperation("v1.0", "GET", "/directoryRoles/{directoryRole-id}/scopedMembers/{scopedRoleMembership-id}");
   assert.deepEqual((await listScopedMembers(f.session, { role: "role" }, appProfile, list, "help", "batch")).scopedMembers, [row]);
   assert.deepEqual((await showScopedMember(f.session, { role: "role", id: "membership" }, appProfile, show, "help", "batch")).scopedMember, row);
-  for (const path of ["/scopedRoleMemberships", "/scopedRoleMemberships/{scopedRoleMembership-id}"]) {
+  for (const path of ["/scopedRoleMemberships", "/scopedRoleMemberships/{scopedRoleMembership-id}"] as const) {
     await assert.rejects(f.session.execute({ profile: appProfile, operation: discoveryOperation("v1.0", "GET", path), params: { "scopedRoleMembership-id": "membership" } }), /not supported/);
   }
   assert.equal(f.requests.length, 2);
@@ -169,7 +171,7 @@ test("select-rejecting policy reads project compact fields without sending $sele
     [listAuthContexts, "/identity/conditionalAccess/authenticationContextClassReferences", {}, { value: [{ id: "c1", displayName: "Context", description: "Detail" }] }, "authContexts", [{ id: "c1", displayName: "Context" }]],
     [showAuthStrengthPolicy, "/identity/conditionalAccess/authenticationStrength/policies/{authenticationStrengthPolicy-id}", { id: "strength" }, { id: "strength", displayName: "Strength" }, "authStrengthPolicy", { id: "strength", displayName: "Strength" }],
     [listLifecyclePolicies, "/groupLifecyclePolicies", {}, { value: [{ id: "policy", groupLifetimeInDays: 180, managedGroupTypes: "All", alternateNotificationEmails: "admin@example.com" }] }, "groupLifecyclePolicies", [{ id: "policy", groupLifetimeInDays: 180, managedGroupTypes: "All" }]],
-  ]) {
+  ] as const) {
     const f = fixture(request => new URL(request.url).searchParams.has("$select")
       ? json(400, { error: { code: "", message: "Query option 'Select' is not allowed" } })
       : json(200, body));
@@ -187,7 +189,7 @@ test("provisioning list keeps its time bound and projects provisioningAction wit
   const operation = resolveSessionOperation("v1.0", "GET", "/auditLogs/provisioning");
   const result = await listProvisioning(f.session, { since: "2026-09-01T00:00:00Z" }, appProfile, operation, "help", "batch");
   assert.deepEqual(result.provisioning, [{ id: row.id, activityDateTime: row.activityDateTime, provisioningAction: "create", provisioningStatusInfo: row.provisioningStatusInfo }]);
-  assert.equal(new URL(f.requests[0].url).searchParams.get("$filter"), "activityDateTime ge 2026-09-01T00:00:00.000Z");
+  assert.equal(new URL(f.requests[0]!.url).searchParams.get("$filter"), "activityDateTime ge 2026-09-01T00:00:00.000Z");
 });
 
 test("delegated read returns parsed JSON through the authorized URL", async () => {
@@ -195,15 +197,15 @@ test("delegated read returns parsed JSON through the authorized URL", async () =
   const result = await f.session.execute({ profile: delegatedProfile, operation: users, query: { $top: "2" }, scopes });
   assert.deepEqual(result, { value: [{ id: "a" }] });
   assert.equal(f.requests.length, 1);
-  assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/users?%24top=2");
-  assert.equal(f.requests[0].headers.Authorization, "Bearer opaque-fixture-secret");
-  assert.equal(f.requests[0].headers.Accept, "application/json");
-  assert.match(f.requests[0].headers["client-request-id"], /^[0-9a-f-]{36}$/);
+  assert.equal(f.requests[0]!.url, "https://graph.microsoft.com/v1.0/users?%24top=2");
+  assert.equal(f.requests[0]!.headers.Authorization, "Bearer opaque-fixture-secret");
+  assert.equal(f.requests[0]!.headers.Accept, "application/json");
+  assert.match(outputText(f.requests[0]!.headers["client-request-id"]), /^[0-9a-f-]{36}$/);
   assert.equal(f.credentialCalls.length, 1);
-  assert.equal(f.credentialCalls[0][0], "silent");
+  assert.equal(f.credentialCalls[0]![0], "silent");
 });
 
-for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) {
+for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]] as const) {
   for (const [name, body, expected] of [
     ["root string", "AccountKey=fixture-secret", "***redacted***"],
     ["root array", ["SharedAccessKey=fixture-secret", "ordinary", 42, null], ["***redacted***", "ordinary", 42, null]],
@@ -215,7 +217,7 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile,
       { customAccountResetCredentialsUrl: "https://contoso.com/reset", customForgotMyPasswordText: "Forgot your password?", password: "***redacted***", customForgotMyPasswordTextSecret: "***redacted***" }],
     ["branding metadata with secret values", { value: [{ customAccountResetCredentialsUrl: "https://contoso.com/reset?sig=fixture-secret", customForgotMyPasswordText: "AccountKey=fixture-secret" }] },
       { value: [{ customAccountResetCredentialsUrl: "***redacted***", customForgotMyPasswordText: "***redacted***" }] }],
-  ]) test(`${profile.mode} success redacts sentinels in a ${name}`, async () => {
+  ] as const) test(`${profile.mode} success redacts sentinels in a ${name}`, async () => {
     const f = fixture(json(200, body));
     assert.deepEqual(await f.session.execute({ profile, operation: users, ...scopeArgs }), expected);
   });
@@ -231,7 +233,7 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile,
   });
 }
 
-for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: ["https://graph.microsoft.com/IdentityProvider.Read.All"] }], [appProfile, {}]]) {
+for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: ["https://graph.microsoft.com/IdentityProvider.Read.All"] as string[] }], [appProfile, {}]] as const) {
   const operation = resolveSessionOperation("v1.0", "GET", "/identity/identityProviders");
   const rows = [{ id: "Google", clientSecret: "ordinary-secret" }, { id: "buffered-provider", certificateData: "YmFzZTY0LWtleQ==", clientId: "provider-client" }, { id: "builtin" }];
 
@@ -239,7 +241,7 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: ["https://graph
     const f = fixture(json(200, { value: rows }));
     const first = await f.session.collect({ profile, operation, ...scopeArgs, limit: 1 });
     assert.deepEqual(first.value, [{ id: "Google" }]);
-    const cursor = JSON.parse(Buffer.from(first.cursor, "base64url").toString("utf8"));
+    const cursor = JSON.parse(Buffer.from(outputText(first.cursor), "base64url").toString("utf8"));
     assert.deepEqual(cursor.buffered, [{ id: "buffered-provider", clientId: "provider-client" }, { id: "builtin" }]);
     const resumed = await f.session.collect({ profile, operation, ...scopeArgs, cursor: first.cursor });
     assert.deepEqual(resumed.value, [{ id: "buffered-provider", clientId: "provider-client" }, { id: "builtin" }]);
@@ -250,12 +252,12 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: ["https://graph
   test(`${profile.mode} provider cursor scrubs legacy buffered secrets before returning or reserializing`, async () => {
     const f = fixture(json(200, { value: rows }));
     const first = await f.session.collect({ profile, operation, ...scopeArgs, limit: 1 });
-    const cursor = JSON.parse(Buffer.from(first.cursor, "base64url").toString("utf8"));
+    const cursor = JSON.parse(Buffer.from(outputText(first.cursor), "base64url").toString("utf8"));
     cursor.buffered = [rows[1], rows[0]];
     const legacyCursor = Buffer.from(JSON.stringify(cursor)).toString("base64url");
     const resumed = await f.session.collect({ profile, operation, ...scopeArgs, cursor: legacyCursor, limit: 1 });
     assert.deepEqual(resumed.value, [{ id: "buffered-provider", clientId: "provider-client" }]);
-    const next = JSON.parse(Buffer.from(resumed.cursor, "base64url").toString("utf8"));
+    const next = JSON.parse(Buffer.from(outputText(resumed.cursor), "base64url").toString("utf8"));
     assert.deepEqual(next.buffered, [{ id: "Google" }]);
     assert.equal(f.requests.length, 1);
   });
@@ -264,24 +266,24 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: ["https://graph
 test("path parameters bind one encoded resource per placeholder", async () => {
   const f = fixture(json(200, { id: "a" }));
   await f.session.execute({ profile: delegatedProfile, operation: userById, params: { "user-id": "analyst@example.invalid" }, scopes });
-  assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/users/analyst%40example.invalid");
+  assert.equal(f.requests[0]!.url, "https://graph.microsoft.com/v1.0/users/analyst%40example.invalid");
 });
 
-for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) {
-  for (const id of ["$count", "$value", "$ref", "$custom", "%24count", "delta()", "DELTA()", "delta(", "delta)", "delta%28%29"]) {
+for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]] as const) {
+  for (const id of ["$count", "$value", "$ref", "$custom", "%24count", "delta()", "DELTA()", "delta(", "delta)", "delta%28%29"] as const) {
     for (const [method, operation, params] of [
       ["execute", userById, { "user-id": id }],
       ["collect", resolveSessionOperation("v1.0", "GET", "/groups/{group-id}/members"), { "group-id": id }],
-    ]) test(`${profile.mode} ${method} rejects unsafe resource binding ${id} before credentials`, async () => {
+    ] as const) test(`${profile.mode} ${method} rejects unsafe resource binding ${id} before credentials`, async () => {
       const f = fixture(json(200, {}));
-      await assert.rejects(f.session[method]({ profile, operation, params, ...scopeArgs }), { code: "VALIDATION_ERROR" });
+      await assert.rejects(f.session[method]({ profile, operation, params: params as Record<string, string>, ...scopeArgs }), { code: "VALIDATION_ERROR" });
       assert.equal(f.credentialCalls.length, 0);
       assert.equal(f.requests.length, 0);
     });
   }
 }
 
-for (const id of ["$count", "delta()", "DELTA()", "delta(", "delta)"]) {
+for (const id of ["$count", "delta()", "DELTA()", "delta(", "delta)"] as const) {
   test(`continuation authorization rejects unsafe resource binding ${id}`, () => {
     assert.throws(() => authorizeUrl(userById, { "user-id": id }, `/v1.0/users/${encodeURIComponent(id)}`), { code: "VALIDATION_ERROR" });
   });
@@ -299,13 +301,13 @@ test("guest UPN remains bound across a same-resource redirect", async () => {
   assert.deepEqual(f.requests.map(request => request.url), [url, redirectedUrl]);
 });
 
-for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) {
+for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]] as const) {
   for (const params of [{}, { appId: client }]) test(`${profile.mode} embedded path templates with ${Object.keys(params).length} bindings fail before credentials`, async () => {
     const operation = discoveryOperation("beta", "GET", "/applications(appId='{appId}')");
     const f = fixture(json(200, {}));
     await assert.rejects(
-      f.session.execute({ profile: { ...profile, preview: true }, operation, params, ...scopeArgs }),
-      error => error.code === "VALIDATION_ERROR" && /Unknown catalogued/.test(error.message),
+      f.session.execute({ profile: { ...profile, preview: true }, operation, params: params as Record<string, string>, ...scopeArgs }),
+      error => record(error).code === "VALIDATION_ERROR" && /Unknown catalogued/.test(outputText(record(error).message)),
     );
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
@@ -317,7 +319,7 @@ for (const target of ["/v1.0/applications(appId='{appId}')", `/v1.0/applications
   assert.throws(() => authorizeUrl(operation, { appId: client }, target), { code: "POLICY_DENIED" });
 });
 
-for (const method of ["execute", "collect"]) test(`${method} refuses uncatalogued operation ids before credential or HTTP`, async () => {
+for (const method of ["execute", "collect"] as const) test(`${method} refuses uncatalogued operation ids before credential or HTTP`, async () => {
   assert.throws(() => resolveSessionOperation("v1.0", "GET", "/nope"), { code: "VALIDATION_ERROR" });
   const f = fixture(json(200, {}));
   await assert.rejects(
@@ -332,7 +334,7 @@ test("a fabricated executable disposition cannot widen a blocked operation", asy
   const f = fixture(json(200, {}));
   await assert.rejects(
     f.session.execute({ profile: delegatedProfile, operation: { ...blockedDeviceCredentials, disposition: "scheduled" }, params: { "deviceLocalCredentialInfo-id": "fixture-id" }, scopes }),
-    error => error.code === "VALIDATION_ERROR" && /Unknown catalogued/.test(error.message),
+    error => record(error).code === "VALIDATION_ERROR" && /Unknown catalogued/.test(outputText(record(error).message)),
   );
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
@@ -345,15 +347,15 @@ test("mutating a resolved operation cannot change the authoritative inventory", 
   const f = fixture(json(200, {}));
   await f.session.execute({ profile: delegatedProfile, operation, scopes });
   assert.deepEqual(resolveSessionOperation("v1.0", "GET", "/users"), users);
-  assert.equal(f.requests[0].url, "https://graph.microsoft.com/v1.0/users");
+  assert.equal(f.requests[0]!.url, "https://graph.microsoft.com/v1.0/users");
 });
 
 for (const [name, operation, params] of [
   ["intentionally-blocked route", blockedDeviceCredentials, { "deviceLocalCredentialInfo-id": "fixture-id" }],
   ["excluded route", discoveryOperation("v1.0", "GET", "/me/messages/{message-id}/extensions"), { "message-id": "fixture-message" }],
-]) test(`${name} is denied with no credential and no HTTP call`, async () => {
+] as const) test(`${name} is denied with no credential and no HTTP call`, async () => {
   const f = fixture(json(200, {}));
-  await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, params, scopes }), { code: "VALIDATION_ERROR" });
+  await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, params: params as Record<string, string>, scopes }), { code: "VALIDATION_ERROR" });
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
 });
@@ -370,7 +372,7 @@ test("disabled pack is denied before credential or HTTP", async () => {
   const f = fixture(json(200, {}));
   await assert.rejects(
     f.session.execute({ profile: { ...delegatedProfile, enabledPacks: [] }, operation: users, scopes }),
-    error => error.code === "POLICY_DENIED" && /entra/.test(error.message),
+    error => record(error).code === "POLICY_DENIED" && /entra/.test(outputText(record(error).message)),
   );
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
@@ -379,9 +381,9 @@ test("disabled pack is denied before credential or HTTP", async () => {
 for (const [area, id] of [
   ["mail", "v1.0:GET:/me/messages"],
   ["files", "v1.0:GET:/drives"],
-]) test(`sensitive ${area} area is denied without enablement`, async () => {
+] as const) test(`sensitive ${area} area is denied without enablement`, async () => {
   const [version, method, ...route] = id.split(":");
-  const operation = discoveryOperation(version, method, route.join(":"));
+  const operation = discoveryOperation(outputText(version), outputText(method), route.join(":"));
   const f = fixture(json(200, {}));
   await assert.rejects(f.session.execute({ profile: delegatedProfile, operation, scopes }), { code: area === "mail" ? "POLICY_DENIED" : "VALIDATION_ERROR" });
   assert.equal(f.credentialCalls.length, 0);
@@ -399,15 +401,15 @@ test("unshipped beta reads stay absent even with a preview-enabled profile", asy
   assert.equal(allowed.requests.length, 0);
 });
 
-for (const [version, resource] of [["beta", "accessPackageResources"], ["v1.0", "resources"]]) {
+for (const [version, resource] of [["beta", "accessPackageResources"], ["v1.0", "resources"]] as const) {
   for (const [suffix, fileParams] of [
     ["", {}],
     ["/$count", {}],
     ["/{customDataProvidedResourceFile-id}", { "customDataProvidedResourceFile-id": "file-id" }],
     ["/{customDataProvidedResourceFile-id}/$value", { "customDataProvidedResourceFile-id": "file-id" }],
-  ]) {
+  ] as const) {
     const operation = discoveryOperation(version, "GET", `/identityGovernance/entitlementManagement/${resource}/{accessPackageResource-id}/uploadSessions/{customDataProvidedResourceUploadSession-id}/files${suffix}`);
-    for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) test(`${profile.mode} governance file route ${operation.id} is denied before credentials`, async () => {
+    for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]] as const) test(`${profile.mode} governance file route ${operation.id} is denied before credentials`, async () => {
       const f = fixture(json(200, {}));
       await assert.rejects(
         f.session.execute({
@@ -419,7 +421,7 @@ for (const [version, resource] of [["beta", "accessPackageResources"], ["v1.0", 
           },
           ...scopeArgs,
         }),
-        error => error.code === "VALIDATION_ERROR" && /Unknown catalogued/.test(error.message),
+        error => record(error).code === "VALIDATION_ERROR" && /Unknown catalogued/.test(outputText(record(error).message)),
       );
       assert.equal(f.credentialCalls.length, 0);
       assert.equal(f.requests.length, 0);
@@ -427,20 +429,20 @@ for (const [version, resource] of [["beta", "accessPackageResources"], ["v1.0", 
   }
 }
 
-for (const version of ["beta", "v1.0"]) {
-  for (const root of ["/agreements", "/identityGovernance/termsOfUse/agreements"]) {
+for (const version of ["beta", "v1.0"] as const) {
+  for (const root of ["/agreements", "/identityGovernance/termsOfUse/agreements"] as const) {
     for (const [suffix, params] of [
       ["/file", { "agreement-id": "agreement-id" }],
       ["/file/localizations/{agreementFileLocalization-id}/versions/{agreementFileVersion-id}", {
         "agreement-id": "agreement-id", "agreementFileLocalization-id": "localization-id", "agreementFileVersion-id": "version-id",
       }],
-    ]) {
+    ] as const) {
       const operation = discoveryOperation(version, "GET", `${root}/{agreement-id}${suffix}`);
-      for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]]) test(`${profile.mode} agreement file route ${operation.id} is denied before credentials`, async () => {
+      for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile, {}]] as const) test(`${profile.mode} agreement file route ${operation.id} is denied before credentials`, async () => {
         const f = fixture(json(200, {}));
         await assert.rejects(
           f.session.execute({ profile: { ...profile, preview: true }, operation, params, ...scopeArgs }),
-          error => error.code === "VALIDATION_ERROR" && /Unknown catalogued/.test(error.message),
+          error => record(error).code === "VALIDATION_ERROR" && /Unknown catalogued/.test(outputText(record(error).message)),
         );
         assert.equal(f.credentialCalls.length, 0);
         assert.equal(f.requests.length, 0);
@@ -459,7 +461,7 @@ test("application profiles cannot use /me", async () => {
 test("application reads use the configured .default audience", async () => {
   const f = fixture(json(200, { value: [] }));
   await f.session.execute({ profile: appProfile, operation: users });
-  assert.equal(f.requests[0].headers.Authorization, "Bearer opaque-fixture-secret");
+  assert.equal(f.requests[0]!.headers.Authorization, "Bearer opaque-fixture-secret");
   assert.deepEqual(f.credentialCalls, [["acquire", { ...appProfile }, [audience]]]);
 });
 
@@ -470,7 +472,7 @@ test("delegated reads require explicit scopes before HTTP", async () => {
   assert.equal(f.requests.length, 0);
 });
 
-for (const method of ["execute", "collect"]) {
+for (const method of ["execute", "collect"] as const) {
   for (const scope of [
     "https://graph.microsoft.com/Directory.ReadWrite.All",
     "https://graph.microsoft.com/Application.ReadWrite.All",
@@ -480,12 +482,12 @@ for (const method of ["execute", "collect"]) {
     "https://graph.microsoft.com/Mail.Read.Shared",
     "https://example.invalid/User.Read.All",
     "User.Read.All",
-  ]) test(`${method} rejects unsupported read scope ${scope} before credentials`, async () => {
+  ] as const) test(`${method} rejects unsupported read scope ${scope} before credentials`, async () => {
     const f = fixture(json(200, { value: [] }));
     await assert.rejects(f.session[method]({ profile: delegatedProfile, operation: users, scopes: [...scopes, scope] }), error => {
-      assert.equal(error.code, "VALIDATION_ERROR");
-      assert.match(error.suggestions[0], /Supported read scopes:.*https:\/\/graph\.microsoft\.com\/Directory\.Read\.All/);
-      assert.match(error.suggestions[0], /https:\/\/graph\.microsoft\.com\/Application\.Read\.All/);
+      assert.equal(record(error).code, "VALIDATION_ERROR");
+      assert.match(outputText(strings(record(error).suggestions)[0]), /Supported read scopes:.*https:\/\/graph\.microsoft\.com\/Directory\.Read\.All/);
+      assert.match(outputText(strings(record(error).suggestions)[0]), /https:\/\/graph\.microsoft\.com\/Application\.Read\.All/);
       return true;
     });
     assert.deepEqual(f.credentialCalls, []);
@@ -501,7 +503,7 @@ for (const method of ["execute", "collect"]) {
       "https://graph.microsoft.com/Policy.Read.ConditionalAccess",
     ];
     await f.session[method]({ profile: delegatedProfile, operation: users, scopes: requested });
-    assert.deepEqual(f.credentialCalls[0][2], [...requested].sort());
+    assert.deepEqual(f.credentialCalls[0]![2], [...requested].sort());
     assert.equal(f.requests.length, 1);
   });
 }
@@ -526,14 +528,14 @@ test("mutations are rejected before credential or HTTP", async () => {
 test("supported query keys pass through; unknown keys fail before credential or HTTP", async () => {
   const allowed = fixture(json(200, { value: [] }));
   await allowed.session.execute({ profile: delegatedProfile, operation: users, query: { $select: "id,displayName", $top: "5" }, scopes });
-  assert.match(allowed.requests[0].url, /%24select=id%2CdisplayName/);
+  assert.match(allowed.requests[0]!.url, /%24select=id%2CdisplayName/);
   const denied = fixture(json(200, {}));
   await assert.rejects(denied.session.execute({ profile: delegatedProfile, operation: users, query: { $bogus: "1" }, scopes }), { code: "VALIDATION_ERROR" });
   assert.equal(denied.credentialCalls.length, 0);
   assert.equal(denied.requests.length, 0);
 });
 
-for (const value of ["a/b", "..", "a%40b", "", "a?b", "a b", "a\\b"]) test(`hostile path parameter ${JSON.stringify(value)} is rejected before credential or HTTP`, async () => {
+for (const value of ["a/b", "..", "a%40b", "", "a?b", "a b", "a\\b"] as const) test(`hostile path parameter ${JSON.stringify(value)} is rejected before credential or HTTP`, async () => {
   const f = fixture(json(200, {}));
   await assert.rejects(f.session.execute({ profile: delegatedProfile, operation: userById, params: { "user-id": value }, scopes }), { code: "VALIDATION_ERROR" });
   assert.equal(f.credentialCalls.length, 0);
@@ -548,7 +550,7 @@ test("same-route redirect re-attaches the credential to the final response", asy
   assert.deepEqual(result, { value: [{ id: "a" }] });
   assert.equal(f.requests.length, 2);
   assert.ok(f.requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-secret"));
-  assert.equal(f.requests[1].url, "https://graph.microsoft.com/v1.0/users?$top=2");
+  assert.equal(f.requests[1]!.url, "https://graph.microsoft.com/v1.0/users?$top=2");
 });
 
 test("redirect to a blocked route sends no credential and no second request", async () => {
@@ -579,7 +581,7 @@ test("redirects stop after the hop budget", async () => {
   const f = fixture((request, count) => ({ status: 302, headers: { location: `/v1.0/users?$top=${count}` }, body: "" }));
   await assert.rejects(
     f.session.execute({ profile: delegatedProfile, operation: users, scopes }),
-    error => error.code === "POLICY_DENIED" && /exceeds 3 hops/.test(error.message),
+    error => record(error).code === "POLICY_DENIED" && /exceeds 3 hops/.test(outputText(record(error).message)),
   );
   assert.equal(f.requests.length, 4);
 });
@@ -590,12 +592,12 @@ for (const [status, body, code, pattern] of [
   [404, { error: { code: "Request_ResourceNotFound", message: "Resource not found" } }, "GRAPH_ERROR", /not found or inaccessible/],
   [429, { error: { code: "TooManyRequests", message: "Throttled" } }, "GRAPH_ERROR", /retry after 120/],
   [500, { error: { code: "ServiceUnavailable", message: "Boom" } }, "GRAPH_ERROR", /ServiceUnavailable/],
-]) test(`${status} translates without leaking the credential`, async () => {
+] as const) test(`${status} translates without leaking the credential`, async () => {
   const headers = status === 429 ? { "retry-after": "120" } : {};
-  const f = fixture(json(status, body, headers));
+  const f = fixture(json(status, body, headers as Record<string, string>));
   await assert.rejects(
     f.session.execute({ profile: delegatedProfile, operation: users, scopes }),
-    error => error.code === code && pattern.test(error.message) && !`${error.message} ${JSON.stringify(error)}`.includes("opaque-fixture-secret"),
+    error => record(error).code === code && pattern.test(outputText(record(error).message)) && !`${record(error).message} ${JSON.stringify(error)}`.includes("opaque-fixture-secret"),
   );
 });
 
@@ -604,8 +606,8 @@ test("sentinel values are redacted from translated errors", async () => {
   await assert.rejects(
     f.session.execute({ profile: delegatedProfile, operation: users, scopes }),
     error => {
-      const text = `${error.message} ${JSON.stringify(error)}`;
-      return error.code === "GRAPH_ERROR" && !text.includes("eyJmaWtpZS1zZWNyZXQ") && !text.includes("opaque-fixture-secret") && text.includes("***redacted***");
+      const text = `${record(error).message} ${JSON.stringify(error)}`;
+      return record(error).code === "GRAPH_ERROR" && !text.includes("eyJmaWtpZS1zZWNyZXQ") && !text.includes("opaque-fixture-secret") && text.includes("***redacted***");
     },
   );
 });
@@ -614,7 +616,7 @@ test("transport failure before a response becomes a credential-free error", asyn
   const f = fixture(async () => { throw new Error("socket hang up: opaque-fixture-secret"); });
   await assert.rejects(
     f.session.execute({ profile: delegatedProfile, operation: users, scopes }),
-    error => error.code === "GRAPH_ERROR" && !`${error.message} ${JSON.stringify(error)}`.includes("opaque-fixture-secret") && !`${error.message} ${JSON.stringify(error)}`.includes("socket hang up"),
+    error => record(error).code === "GRAPH_ERROR" && !`${record(error).message} ${JSON.stringify(error)}`.includes("opaque-fixture-secret") && !`${record(error).message} ${JSON.stringify(error)}`.includes("socket hang up"),
   );
 });
 
@@ -631,7 +633,7 @@ for (const [name, target, ok] of [
   ["version switch", "https://graph.microsoft.com/beta/users", false],
   ["route switch", "https://graph.microsoft.com/v1.0/groups", false],
   ["unsupported query", "https://graph.microsoft.com/v1.0/users?$bogus=1", false],
-]) test(`continuation authorization ${name} ${ok ? "passes" : "is denied"}`, () => {
+] as const) test(`continuation authorization ${name} ${ok ? "passes" : "is denied"}`, () => {
   if (ok) assert.equal(authorizeUrl(users, {}, target), "https://graph.microsoft.com/v1.0/users?$skiptoken=abc123&$top=5");
   else assert.throws(() => authorizeUrl(users, {}, target), { code: "POLICY_DENIED" });
 });
@@ -684,17 +686,17 @@ const functionCases = [
 ];
 
 for (const { name, operation, params, canonical, scopes: scopeArgs } of functionCases) {
-  for (const [profile, args] of [[delegatedProfile, { scopes: scopeArgs }], [appProfile, {}]]) {
+  for (const [profile, args] of [[delegatedProfile, { scopes: scopeArgs }], [appProfile, {}]] as const) {
     test(`${profile.mode} binds the ${name} to its canonical function URL`, async () => {
       const f = fixture(json(200, { id: "a" }));
-      await f.session.execute({ profile, operation, params, ...args });
-      assert.equal(f.requests[0].url, canonical);
+      await f.session.execute({ profile, operation, params: params as unknown as Record<string, string>, ...args });
+      assert.equal(f.requests[0]!.url, canonical);
     });
   }
 }
 
 for (const { name, operation, params, scopes: scopeArgs, bad } of functionCases) {
-  const key = Object.keys(params)[0];
+  const key = Object.keys(params)[0]!;
   for (const value of bad) {
     test(`${name} refuses injection ${JSON.stringify(String(value).slice(0, 24))} before credentials`, async () => {
       const f = fixture(json(200, {}));
@@ -712,11 +714,11 @@ test("function routes refuse missing and unknown parameters before credentials",
   const f = fixture(json(200, {}));
   await assert.rejects(
     f.session.execute({ profile: delegatedProfile, operation: tenantByDomain, params: {}, scopes: tenantLookupScopes }),
-    error => error.code === "VALIDATION_ERROR" && /Missing path parameter/.test(error.message),
+    error => record(error).code === "VALIDATION_ERROR" && /Missing path parameter/.test(outputText(record(error).message)),
   );
   await assert.rejects(
     f.session.execute({ profile: delegatedProfile, operation: tenantByDomain, params: { domainName: "example.invalid", tenantId: lookupTenantId }, scopes: tenantLookupScopes }),
-    error => error.code === "VALIDATION_ERROR" && /Unknown path parameter/.test(error.message),
+    error => record(error).code === "VALIDATION_ERROR" && /Unknown path parameter/.test(outputText(record(error).message)),
   );
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
@@ -727,7 +729,7 @@ test("a non-allowlisted parenthesised operation is still refused before credenti
   const f = fixture(json(200, {}));
   await assert.rejects(
     f.session.execute({ profile: { ...delegatedProfile, preview: true }, operation, params: { appId: "00000000-0000-4000-8000-000000000000" }, scopes: ["https://graph.microsoft.com/Application.Read.All"] }),
-    error => error.code === "VALIDATION_ERROR" && /Unknown catalogued/.test(error.message),
+    error => record(error).code === "VALIDATION_ERROR" && /Unknown catalogued/.test(outputText(record(error).message)),
   );
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);

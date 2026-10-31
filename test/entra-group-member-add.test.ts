@@ -1,3 +1,7 @@
+import type { MutationTransport, MutationTransportRequest, MutationTransportResponse } from "../dist/mutations.js";
+import type { AnyProfile } from "../dist/profiles.js";
+import { record, text as outputText, strings, authFakes, delegatedProvider, type OutputRecord } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,9 +29,9 @@ const WRITE_SCOPE = "https://graph.microsoft.com/GroupMember.ReadWrite.All";
 const READ_SCOPE = "https://graph.microsoft.com/GroupMember.Read.All";
 
 const writes = { allowWrites: true, operations: [GROUP_MEMBER_ADD_OPERATION] };
-const delegatedBase = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
+const delegatedBase = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
 const enabledDelegated = { ...delegatedBase, writes };
-const appBase = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "federated", token: { env: "MG_AXI_TOKEN" } };
+const appBase = { mode: "application", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, auth: "federated", token: { env: "MG_AXI_TOKEN" } } as const;
 const enabledApp = { ...appBase, writes };
 
 const plainGroup = {
@@ -42,8 +46,8 @@ const plainGroup = {
 };
 const m365Group = { ...plainGroup, securityEnabled: false, groupTypes: ["Unified"] };
 
-const scratches = [];
-afterEach(() => { while (scratches.length) rmSync(scratches.pop(), { recursive: true, force: true }); });
+const scratches: string[] = [];
+afterEach(() => { while (scratches.length) rmSync(scratches.pop()!, { recursive: true, force: true }); });
 
 function scratch() {
   const dir = mkdtempSync(join(tmpdir(), "mg-write01-"));
@@ -51,30 +55,30 @@ function scratch() {
   return dir;
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function fixture({ group = plainGroup, user = json(200, { id: uid }), members = [{ id: other }], post } = {}) {
+function fixture({ group = plainGroup, user = json(200, { id: uid }), members = [{ id: other }], post }: { group?: unknown; user?: TransportResponse | ((request: TransportRequest, count: number) => TransportResponse | Promise<TransportResponse>); members?: unknown; post?: MutationTransportResponse | ((request: MutationTransportRequest, count: number) => MutationTransportResponse | Promise<MutationTransportResponse>) } = {}) {
   const dir = scratch();
   const journalPath = join(dir, "writes.log");
-  const getRequests = [];
-  const postRequests = [];
-  const credentialCalls = [];
+  const getRequests: TransportRequest[] = [];
+  const postRequests: MutationTransportRequest[] = [];
+  const credentialCalls: unknown[][] = [];
   let userReads = 0;
-  const credential = account => ({
+  const credential = <T extends object>(account: T) => ({
     token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account,
   });
-  const delegated = new DelegatedAuth({
+  const delegated = new DelegatedAuth(delegatedProvider({
     storage: "session-only",
     login: async () => credential({ accountId: "synthetic-account" }),
     silent: async (...args) => { credentialCalls.push(["silent", ...args]); return credential({ accountId: "synthetic-account" }); },
-  });
+  }));
   const application = new ApplicationAuth({
     storage: "session-only",
     acquire: async (...args) => { credentialCalls.push(["acquire", ...args]); return credential({}); },
   });
-  const get = async request => {
+  const get: GraphTransport = async request => {
     getRequests.push(request);
     const url = new URL(request.url);
     if (url.pathname === `/v1.0/users/${uid}`) {
@@ -88,13 +92,13 @@ function fixture({ group = plainGroup, user = json(200, { id: uid }), members = 
     if (url.pathname === `/v1.0/groups/${gid}/members`) return json(200, { value: members });
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   };
-  const transport = async request => {
+  const transport: MutationTransport = async request => {
     postRequests.push(request);
     if (typeof post === "function") return post(request, postRequests.length);
     return post ?? { status: 204, headers: {}, body: "" };
   };
   const session = new GraphSession({ delegated, application, transport: get });
-  const run = (flags, profile = enabledDelegated) => addGroupMember({
+  const run = (flags: Parameters<typeof addGroupMember>[0]["flags"], profile: AnyProfile = enabledDelegated) => addGroupMember({
     session, profile, delegated, application, transport,
     flags: { group: gid, user: uid, ...flags },
     profileName: "soc", help: "mg-axi entra group member add --help",
@@ -103,12 +107,12 @@ function fixture({ group = plainGroup, user = json(200, { id: uid }), members = 
   return { dir, journalPath, getRequests, postRequests, credentialCalls, delegated, application, session, getSend: get, postSend: transport, run };
 }
 
-function journal(path) {
-  return readFileSync(path, "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line));
+function journal(path: string): OutputRecord[] {
+  return readFileSync(path, "utf8").split("\n").filter(Boolean).map(line => record(JSON.parse(line)));
 }
 
-async function withEnv(entries, action) {
-  const previous = {};
+async function withEnv<T>(entries: NodeJS.ProcessEnv, action: () => T | Promise<T>) {
+  const previous: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(entries)) {
     previous[key] = process.env[key];
     if (value === undefined) delete process.env[key];
@@ -127,17 +131,17 @@ async function withEnv(entries, action) {
 test("dry-run previews the exact $ref target without sending or journaling", async () => {
   const f = fixture();
   const result = await f.run({});
-  assert.equal(result.membership.status, "preview");
-  assert.equal(result.membership.group, `https://graph.microsoft.com/v1.0/groups/${gid}`);
-  assert.equal(result.membership.user, `https://graph.microsoft.com/v1.0/directoryObjects/${uid}`);
-  assert.equal(result.preview.operation, GROUP_MEMBER_ADD_OPERATION);
-  assert.equal(result.preview.method, "POST");
-  assert.equal(result.preview.url, `https://graph.microsoft.com/v1.0/groups/${gid}/members/$ref`);
-  assert.equal(result.preview.target, gid);
-  const change = JSON.parse(result.preview.proposedChange);
+  assert.equal(record(result.membership).status, "preview");
+  assert.equal(record(result.membership).group, `https://graph.microsoft.com/v1.0/groups/${gid}`);
+  assert.equal(record(result.membership).user, `https://graph.microsoft.com/v1.0/directoryObjects/${uid}`);
+  assert.equal(record(result.preview).operation, GROUP_MEMBER_ADD_OPERATION);
+  assert.equal(record(result.preview).method, "POST");
+  assert.equal(record(result.preview).url, `https://graph.microsoft.com/v1.0/groups/${gid}/members/$ref`);
+  assert.equal(record(result.preview).target, gid);
+  const change = JSON.parse(outputText(record(result.preview).proposedChange));
   assert.deepEqual(change, { "@odata.id": `https://graph.microsoft.com/v1.0/directoryObjects/${uid}` });
   assert.ok(!JSON.stringify(result).includes("/users/"), "the $ref target is directoryObjects, never users");
-  assert.ok(result.help.some(hint => hint.includes("--execute --confirm")));
+  assert.ok(strings(result.help).some(hint => hint.includes("--execute --confirm")));
   assert.equal(f.postRequests.length, 0);
   assert.throws(() => readFileSync(f.journalPath, "utf8"), /ENOENT/);
 });
@@ -150,27 +154,27 @@ test("confirmed execution posts the directoryObjects $ref once and journals inte
     user: `https://graph.microsoft.com/v1.0/directoryObjects/${uid}`,
     status: "added",
   });
-  assert.match(result.auditId, /^[0-9a-f-]{36}$/);
-  assert.ok(result.help.some(hint => hint.includes("entra group member list")));
+  assert.match(outputText(result.auditId), /^[0-9a-f-]{36}$/);
+  assert.ok(strings(result.help).some(hint => hint.includes("entra group member list")));
   assert.equal(f.postRequests.length, 1);
   const sent = f.postRequests[0];
-  assert.equal(sent.method, "POST");
-  assert.equal(sent.url, `https://graph.microsoft.com/v1.0/groups/${gid}/members/$ref`);
-  assert.equal(sent.body, JSON.stringify({ "@odata.id": `https://graph.microsoft.com/v1.0/directoryObjects/${uid}` }));
-  assert.equal(sent.headers["Content-Type"], "application/json");
-  assert.equal(sent.headers.Authorization, "Bearer opaque-fixture-secret");
+  assert.equal(sent!.method, "POST");
+  assert.equal(sent!.url, `https://graph.microsoft.com/v1.0/groups/${gid}/members/$ref`);
+  assert.equal(sent!.body, JSON.stringify({ "@odata.id": `https://graph.microsoft.com/v1.0/directoryObjects/${uid}` }));
+  assert.equal(sent!.headers["Content-Type"], "application/json");
+  assert.equal(sent!.headers.Authorization, "Bearer opaque-fixture-secret");
   const userReads = f.getRequests.map(request => new URL(request.url)).filter(url => url.pathname === `/v1.0/users/${uid}`);
   assert.equal(userReads.length, 2);
   assert.deepEqual(userReads.map(url => url.searchParams.get("$select")), ["id", "id"]);
   const records = journal(f.journalPath);
   assert.equal(records.length, 2);
-  assert.equal(records[0].kind, "intent");
-  assert.equal(records[0].operation, GROUP_MEMBER_ADD_OPERATION);
-  assert.equal(records[0].target, gid);
-  assert.equal(records[0].time, TIME);
-  assert.equal(records[1].kind, "outcome");
-  assert.equal(records[1].outcome, "SUCCESS");
-  assert.equal(records[1].httpStatus, 204);
+  assert.equal(records[0]!.kind, "intent");
+  assert.equal(records[0]!.operation, GROUP_MEMBER_ADD_OPERATION);
+  assert.equal(records[0]!.target, gid);
+  assert.equal(records[0]!.time, TIME);
+  assert.equal(records[1]!.kind, "outcome");
+  assert.equal(records[1]!.outcome, "SUCCESS");
+  assert.equal(records[1]!.httpStatus, 204);
   assert.ok(!readFileSync(f.journalPath, "utf8").includes("@odata.id"), "journal carries metadata, never the payload");
 });
 
@@ -179,9 +183,9 @@ test("delegated execution requests only the documented write scope for the mutat
   await f.run({ execute: true, confirm: gid });
   const silent = f.credentialCalls.filter(call => call[0] === "silent");
   const scopeSets = silent.map(call => call[2]);
-  assert.ok(scopeSets.some(scopes => scopes.length === 1 && scopes[0] === WRITE_SCOPE), "mutation credential uses GroupMember.ReadWrite.All only");
-  assert.ok(scopeSets.some(scopes => scopes.includes(READ_SCOPE)), "preview reads use the READ-02 read scope");
-  assert.ok(scopeSets.some(scopes => scopes.length === 1 && scopes[0] === "https://graph.microsoft.com/User.ReadBasic.All"));
+  assert.ok(scopeSets.some(scopes => strings(scopes).length === 1 && strings(scopes)[0] === WRITE_SCOPE), "mutation credential uses GroupMember.ReadWrite.All only");
+  assert.ok(scopeSets.some(scopes => strings(scopes).includes(READ_SCOPE)), "preview reads use the READ-02 read scope");
+  assert.ok(scopeSets.some(scopes => strings(scopes).length === 1 && strings(scopes)[0] === "https://graph.microsoft.com/User.ReadBasic.All"));
   assert.deepEqual(GROUP_MEMBER_ADD_SCOPES, [WRITE_SCOPE]);
 });
 
@@ -195,12 +199,12 @@ for (const profile of [enabledDelegated, enabledApp]) {
     ["malformed identity", json(200, { id: 123 })],
     ["wrong identity", json(200, { id: other })],
     ["non-user type", json(200, { id: uid, "@odata.type": "#microsoft.graph.group" })],
-  ]) {
+  ] as const) {
     for (const [path, flags, members] of [
       ["preview", {}, []],
       ["execution", { execute: true, confirm: gid }, []],
       ["no-op", { execute: true, confirm: gid }, [{ id: uid }]],
-    ]) {
+    ] as const) {
       test(`${profile.mode} ${path} refuses ${name} before accepting membership`, async () => {
         const f = fixture({ user: response, members });
         await assert.rejects(f.run(flags, profile), { code: "GRAPH_ERROR" });
@@ -212,7 +216,7 @@ for (const profile of [enabledDelegated, enabledApp]) {
       const f = fixture({ user: (_request, count) => count === 1 ? json(200, { id: uid.toUpperCase() }) : response });
       await assert.rejects(f.run({ execute: true, confirm: gid }, profile), { code: "GRAPH_ERROR" });
       assert.equal(f.postRequests.length, 0);
-      assert.equal(journal(f.journalPath)[1].outcome, "NOT_SENT");
+      assert.equal(journal(f.journalPath)[1]!.outcome, "NOT_SENT");
     });
   }
 }
@@ -220,7 +224,7 @@ for (const profile of [enabledDelegated, enabledApp]) {
 test("already-member preview is a no-op with zero sends and no journal", async () => {
   const f = fixture({ members: [{ id: other }, { id: uid.toUpperCase() }] });
   const result = await f.run({ execute: true, confirm: gid });
-  assert.equal(result.membership.status, "already-member");
+  assert.equal(record(result.membership).status, "already-member");
   assert.equal(result.noop, true);
   assert.equal(f.postRequests.length, 0);
   assert.throws(() => readFileSync(f.journalPath, "utf8"), /ENOENT/);
@@ -229,61 +233,61 @@ test("already-member preview is a no-op with zero sends and no journal", async (
 test("accepted HTML response surfaces a safe warning in group membership output", async () => {
   const f = fixture({ post: { status: 200, headers: {}, body: "<html>synthetic-login opaque-fixture-secret</html>" } });
   const result = await f.run({ execute: true, confirm: gid });
-  assert.equal(result.membership.status, "added");
+  assert.equal(record(result.membership).status, "added");
   assert.deepEqual(result.responseUnreadable, { code: "RESPONSE_INVALID", httpStatus: 200 });
   assert.doesNotMatch(JSON.stringify(result), /synthetic-login|opaque-fixture-secret|<html>/);
-  assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+  assert.equal(journal(f.journalPath)[1]!.outcome, "SUCCESS");
   assert.equal(f.postRequests.length, 1);
 });
 
 test("duplicate-reference 400 is a no-op with a NOOP outcome, not a failure", async () => {
   const f = fixture({ post: json(400, { error: { code: "Request_BadRequest", message: "One or more added object references already exist for the following modified properties: 'members'." } }) });
   const result = await f.run({ execute: true, confirm: gid });
-  assert.equal(result.membership.status, "already-member");
+  assert.equal(record(result.membership).status, "already-member");
   assert.equal(result.noop, true);
-  assert.match(result.auditId, /^[0-9a-f-]{36}$/);
-  assert.match(result.note, /already exists/);
+  assert.match(outputText(result.auditId), /^[0-9a-f-]{36}$/);
+  assert.match(outputText(result.note), /already exists/);
   assert.equal(f.postRequests.length, 1);
   const records = journal(f.journalPath);
   assert.equal(records.length, 2);
-  assert.equal(records[1].outcome, "NOOP");
-  assert.equal(records[1].httpStatus, 400);
+  assert.equal(records[1]!.outcome, "NOOP");
+  assert.equal(records[1]!.httpStatus, 400);
 });
 
 test("non-duplicate 400 stays a failure with replication guidance", async () => {
   const f = fixture({ post: json(400, { error: { code: "Request_BadRequest", message: "The source resource object or one of the objects being referenced don't exist." } }) });
   await assert.rejects(f.run({ execute: true, confirm: gid }), error => {
-    assert.equal(error.code, "GRAPH_ERROR");
-    return error.suggestions.some(hint => /recently created|replication/i.test(hint)) && error.suggestions.some(hint => /never replay/.test(hint));
+    assert.equal(record(error).code, "GRAPH_ERROR");
+    return strings(record(error).suggestions).some(hint => /recently created|replication/i.test(hint)) && strings(record(error).suggestions).some(hint => /never replay/.test(hint));
   });
-  assert.equal(journal(f.journalPath)[1].outcome, "FAILED");
+  assert.equal(journal(f.journalPath)[1]!.outcome, "FAILED");
 });
 
 test("403 denial names the write permission and delegated role requirement", async () => {
   const f = fixture({ post: json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }) });
   await assert.rejects(f.run({ execute: true, confirm: gid }), error => {
-    assert.equal(error.code, "GRAPH_ERROR");
-    return error.suggestions.some(hint => /GroupMember\.ReadWrite\.All/.test(hint))
-      && error.suggestions.some(hint => /Groups Administrator/.test(hint))
-      && error.suggestions.some(hint => /never proves/.test(hint));
+    assert.equal(record(error).code, "GRAPH_ERROR");
+    return strings(record(error).suggestions).some(hint => /GroupMember\.ReadWrite\.All/.test(hint))
+      && strings(record(error).suggestions).some(hint => /Groups Administrator/.test(hint))
+      && strings(record(error).suggestions).some(hint => /never proves/.test(hint));
   });
-  assert.equal(journal(f.journalPath)[1].outcome, "FAILED");
+  assert.equal(journal(f.journalPath)[1]!.outcome, "FAILED");
 });
 
 test("404 reports the group or user as not found with identifier guidance", async () => {
   const f = fixture({ post: json(404, { error: { code: "Request_ResourceNotFound", message: "gone" } }) });
   await assert.rejects(f.run({ execute: true, confirm: gid }), error => {
-    assert.equal(error.code, "GRAPH_ERROR");
-    return /not found or inaccessible/.test(error.message) && error.suggestions.some(hint => /never a UPN/.test(hint));
+    assert.equal(record(error).code, "GRAPH_ERROR");
+    return /not found or inaccessible/.test(outputText(record(error).message)) && strings(record(error).suggestions).some(hint => /never a UPN/.test(hint));
   });
 });
 
 test("role-assignable groups are refused before sending with role-management guidance", async () => {
   const f = fixture({ group: { ...plainGroup, isAssignableToRole: true } });
   await assert.rejects(f.run({ execute: true, confirm: gid }), error => {
-    assert.equal(error.code, "OPERATION_BLOCKED");
-    return /role-assignable/i.test(error.message)
-      && error.suggestions.some(hint => /RoleManagement\.ReadWrite\.Directory/.test(hint));
+    assert.equal(record(error).code, "OPERATION_BLOCKED");
+    return /role-assignable/i.test(outputText(record(error).message))
+      && strings(record(error).suggestions).some(hint => /RoleManagement\.ReadWrite\.Directory/.test(hint));
   });
   assert.equal(f.postRequests.length, 0);
   assert.throws(() => readFileSync(f.journalPath, "utf8"), /ENOENT/);
@@ -292,8 +296,8 @@ test("role-assignable groups are refused before sending with role-management gui
 test("dynamic-membership groups are refused before sending", async () => {
   const f = fixture({ group: { ...plainGroup, membershipRule: "user.department -eq \"Sales\"" } });
   await assert.rejects(f.run({ execute: true, confirm: gid }), error => {
-    assert.equal(error.code, "OPERATION_BLOCKED");
-    return /dynamic/i.test(error.message);
+    assert.equal(record(error).code, "OPERATION_BLOCKED");
+    return /dynamic/i.test(outputText(record(error).message));
   });
   assert.equal(f.postRequests.length, 0);
 });
@@ -301,8 +305,8 @@ test("dynamic-membership groups are refused before sending", async () => {
 test("distribution groups are refused as unmanageable before sending", async () => {
   const f = fixture({ group: { ...plainGroup, securityEnabled: false, groupTypes: [], mailEnabled: true } });
   await assert.rejects(f.run({ execute: true, confirm: gid }), error => {
-    assert.equal(error.code, "OPERATION_BLOCKED");
-    return /security and Microsoft 365/.test(error.message);
+    assert.equal(record(error).code, "OPERATION_BLOCKED");
+    return /security and Microsoft 365/.test(outputText(record(error).message));
   });
   assert.equal(f.postRequests.length, 0);
 });
@@ -310,21 +314,21 @@ test("distribution groups are refused as unmanageable before sending", async () 
 test("Microsoft 365 groups are supported", async () => {
   const f = fixture({ group: m365Group });
   const result = await f.run({ execute: true, confirm: gid });
-  assert.equal(result.membership.status, "added");
+  assert.equal(record(result.membership).status, "added");
   assert.equal(f.postRequests.length, 1);
 });
 
-for (const [groupType, group] of [["security", plainGroup], ["Microsoft 365", m365Group]]) {
+for (const [groupType, group] of [["security", plainGroup], ["Microsoft 365", m365Group]] as const) {
   for (const profile of [enabledDelegated, enabledApp]) {
     for (const [status, flags, members, sends] of [
       ["preview", {}, [{ id: other }], 0],
       ["added", { execute: true, confirm: gid }, [{ id: other }], 1],
       ["already-member", { execute: true, confirm: gid }, [{ id: uid }], 0],
-    ]) {
+    ] as const) {
       test(`null role-assignable state supports ${status} for ${profile.mode} ${groupType} groups`, async () => {
         const f = fixture({ group: { ...group, isAssignableToRole: null }, members });
         const result = await f.run(flags, profile);
-        assert.equal(result.membership.status, status);
+        assert.equal(record(result.membership).status, status);
         assert.equal(f.postRequests.length, sends);
       });
     }
@@ -343,8 +347,8 @@ for (const state of [undefined, "false", 0, {}, []]) {
 test("missing group reads as not found without sending", async () => {
   const f = fixture({ group: null });
   await assert.rejects(f.run({ execute: true, confirm: gid }), error => {
-    assert.equal(error.code, "GRAPH_ERROR");
-    return /not found or inaccessible/.test(error.message);
+    assert.equal(record(error).code, "GRAPH_ERROR");
+    return /not found or inaccessible/.test(outputText(record(error).message));
   });
   assert.equal(f.postRequests.length, 0);
 });
@@ -354,14 +358,14 @@ test("incomplete member window proceeds to the POST instead of claiming absence"
   const journalPath = join(dir, "writes.log");
   const postRequests = [];
   let pages = 0;
-  const credential = account => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
-  const delegated = new DelegatedAuth({
+  const credential = <T extends object>(account: T) => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
+  const delegated = new DelegatedAuth(delegatedProvider({
     storage: "session-only",
     login: async () => credential({ accountId: "synthetic-account" }),
     silent: async () => credential({ accountId: "synthetic-account" }),
-  });
+  }));
   const application = new ApplicationAuth({ storage: "session-only", acquire: async () => credential({}) });
-  const get = async request => {
+  const get: GraphTransport = async request => {
     const url = new URL(request.url);
     if (url.pathname === `/v1.0/groups/${gid}`) return json(200, plainGroup);
     if (url.pathname === `/v1.0/users/${uid}`) return json(200, { id: uid });
@@ -375,7 +379,7 @@ test("incomplete member window proceeds to the POST instead of claiming absence"
     flags: { group: gid, user: uid, execute: true, confirm: gid },
     profileName: "soc", help: "mg-axi entra group member add --help", journalPath, clock: () => NOW,
   });
-  assert.equal(result.membership.status, "added");
+  assert.equal(record(result.membership).status, "added");
   assert.equal(postRequests.length, 1);
 });
 
@@ -401,7 +405,7 @@ for (const [name, flags] of [
   ["non-GUID group", { group: "Engineering", user: uid }],
   ["non-GUID user", { group: gid, user: "adele@contoso.com" }],
   ["empty group", { group: "", user: uid }],
-]) {
+] as const) {
   test(`invalid identifier (${name}) fails before any credential or HTTP`, async () => {
     const f = fixture();
     await assert.rejects(f.run(flags), { code: "VALIDATION_ERROR" });
@@ -438,27 +442,27 @@ test("forced read-only overrides the hand-enabled profile with zero mutation sen
 test("transport failure reports unknown with no-replay guidance and OUTCOME_UNKNOWN", async () => {
   const f = fixture({ post: async () => { throw new Error("socket hang up"); } });
   const result = await f.run({ execute: true, confirm: gid });
-  assert.equal(result.membership.status, "unknown");
-  assert.match(result.auditId, /^[0-9a-f-]{36}$/);
-  assert.match(result.guidance, /never replay this intent/);
-  assert.ok(result.help.some(hint => hint.includes("entra group member list")));
-  assert.equal(journal(f.journalPath)[1].outcome, "OUTCOME_UNKNOWN");
+  assert.equal(record(result.membership).status, "unknown");
+  assert.match(outputText(result.auditId), /^[0-9a-f-]{36}$/);
+  assert.match(outputText(result.guidance), /never replay this intent/);
+  assert.ok(strings(result.help).some(hint => hint.includes("entra group member list")));
+  assert.equal(journal(f.journalPath)[1]!.outcome, "OUTCOME_UNKNOWN");
 });
 
 test("server error reports unknown with the HTTP status", async () => {
   const f = fixture({ post: json(503, { error: { code: "ServiceUnavailable", message: "busy" } }) });
   const result = await f.run({ execute: true, confirm: gid });
-  assert.equal(result.membership.status, "unknown");
+  assert.equal(record(result.membership).status, "unknown");
   assert.equal(result.httpStatus, 503);
-  assert.equal(journal(f.journalPath)[1].outcome, "OUTCOME_UNKNOWN");
+  assert.equal(journal(f.journalPath)[1]!.outcome, "OUTCOME_UNKNOWN");
 });
 
 test("application profile executes without caller scopes", async () => {
   const f = fixture();
   const result = await f.run({ execute: true, confirm: gid }, enabledApp);
-  assert.equal(result.membership.status, "added");
-  assert.deepEqual(f.credentialCalls[0][0], "acquire");
-  assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+  assert.equal(record(result.membership).status, "added");
+  assert.deepEqual(f.credentialCalls[0]![0], "acquire");
+  assert.equal(journal(f.journalPath)[1]!.outcome, "SUCCESS");
 });
 
 test("application profile rejects caller scopes", async () => {
@@ -470,19 +474,19 @@ test("application profile rejects caller scopes", async () => {
 test("member-add help names confirmation, scope and refusal without touching the network", async () => {
   const help = await executeArgv(["entra", "group", "member", "add", "--help"], {
     transport: async () => { throw new Error("transport must stay untouched"); },
-    delegated: new DelegatedAuth({ storage: "session-only", login: async () => { throw new Error("no login"); }, silent: async () => { throw new Error("no credential"); } }),
+    delegated: new DelegatedAuth(delegatedProvider({ storage: "session-only", login: async () => { throw new Error("no login"); }, silent: async () => { throw new Error("no credential"); } })),
     application: new ApplicationAuth({ storage: "session-only", acquire: async () => { throw new Error("no credential"); } }),
   });
-  assert.match(help, /--confirm/);
-  assert.match(help, /GroupMember\.ReadWrite\.All/);
-  assert.match(help, /Role-assignable/);
+  assert.match(outputText(help), /--confirm/);
+  assert.match(outputText(help), /GroupMember\.ReadWrite\.All/);
+  assert.match(outputText(help), /Role-assignable/);
 });
 
 test("the skill table marks the membership write as a write", () => {
   assert.ok(skillCommandTable().split("\n").some(row => row.includes("`mg-axi entra group member add` | native | write |")));
 });
 
-function cliConfig(dir, profile) {
+function cliConfig(dir: string, profile: AnyProfile) {
   writeFileSync(join(dir, "config.json"), JSON.stringify({ version: 1, profiles: { soc: profile } }));
 }
 
@@ -493,10 +497,10 @@ test("CLI dry-run previews through fixtures with no send and no journal", async 
   const f = fixture();
   const output = await withEnv({ MG_AXI_CONFIG: join(dir, "config.json"), MG_AXI_WRITE_LOG: logPath }, async () => executeArgv(
     ["entra", "group", "member", "add", "--group", gid, "--user", uid, "--profile", "soc"],
-    { transport: f.getSend, mutationTransport: f.postSend, delegated: f.delegated, application: f.application },
+    { transport: f.getSend, mutationTransport: f.postSend, delegated: authFakes(f.delegated).delegated, application: authFakes(f.application).application },
   ));
-  assert.equal(output.membership.status, "preview");
-  assert.equal(output.preview.url, `https://graph.microsoft.com/v1.0/groups/${gid}/members/$ref`);
+  assert.equal(record(record(output).membership).status, "preview");
+  assert.equal(record(record(output).preview).url, `https://graph.microsoft.com/v1.0/groups/${gid}/members/$ref`);
   assert.equal(f.postRequests.length, 0);
   assert.throws(() => readFileSync(logPath, "utf8"), /ENOENT/);
 });
@@ -508,12 +512,12 @@ test("CLI confirmed execution sends through fixtures and journals intent plus SU
   const f = fixture();
   const output = await withEnv({ MG_AXI_CONFIG: join(dir, "config.json"), MG_AXI_WRITE_LOG: logPath }, async () => executeArgv(
     ["entra", "group", "member", "add", "--group", gid, "--user", uid, "--profile", "soc", "--execute", "--confirm", gid],
-    { transport: f.getSend, mutationTransport: f.postSend, delegated: f.delegated, application: f.application },
+    { transport: f.getSend, mutationTransport: f.postSend, delegated: authFakes(f.delegated).delegated, application: authFakes(f.application).application },
   ));
-  assert.equal(output.membership.status, "added");
+  assert.equal(record(record(output).membership).status, "added");
   assert.equal(f.postRequests.length, 1);
   const records = journal(logPath);
   assert.equal(records.length, 2);
-  assert.equal(records[0].kind, "intent");
-  assert.equal(records[1].outcome, "SUCCESS");
+  assert.equal(records[0]!.kind, "intent");
+  assert.equal(records[1]!.outcome, "SUCCESS");
 });

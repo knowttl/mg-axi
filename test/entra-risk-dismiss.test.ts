@@ -1,3 +1,6 @@
+import type { MutationTransport, MutationTransportRequest } from "../dist/mutations.js";
+import { record, text as outputText, strings, authFakes, type CredentialStub, type CredentialArgs, type OutputRecord } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,23 +38,23 @@ function setupProfiles() {
 }
 
 // Hand-enabling mirrors production: no command writes the writes object.
-function enableWrites(dir, name = "soc") {
+function enableWrites(dir: string, name = "soc") {
   const path = join(dir, "config.json");
   const config = JSON.parse(readFileSync(path, "utf8"));
   config.profiles[name].writes = { allowWrites: true, operations: ["entra.risky-user.dismiss"] };
   writeFileSync(path, JSON.stringify(config, null, 2));
 }
 
-function teardown(state) {
+function teardown(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function json(status, body) {
+function json(status: number, body: unknown): TransportResponse {
   return { status, headers: {}, body: JSON.stringify(body) };
 }
 
-function riskRow(riskState) {
+function riskRow(riskState: unknown) {
   return {
     id: userId,
     userPrincipalName: "analyst@contoso.com",
@@ -66,31 +69,31 @@ function riskRow(riskState) {
 // "malformed" for a row without an object ID. Every read must hit the
 // READ-06 risky-user show route with the risk-state select. mutation:
 // scripted POST answers or thrown errors.
-function fixture({ reads = ["atRisk"], mutation = [{ status: 204, body: "" }] } = {}) {
-  const readRequests = [];
-  const mutRequests = [];
-  const credCalls = [];
+function fixture({ reads = ["atRisk"], mutation = [{ status: 204, body: "" }] }: { reads?: readonly unknown[]; mutation?: readonly (Error | { status: number; body?: unknown })[] } = {}) {
+  const readRequests: TransportRequest[] = [];
+  const mutRequests: MutationTransportRequest[] = [];
+  const credCalls: [string, ...CredentialArgs][] = [];
   let readIndex = 0;
   let mutIndex = 0;
-  const transport = async request => {
+  const transport: GraphTransport = async request => {
     readRequests.push(request);
     const url = new URL(request.url);
     assert.equal(url.pathname, `/v1.0/identityProtection/riskyUsers/${userId}`);
     assert.equal(url.searchParams.get("$select"), READ_SELECT);
     const next = readIndex < reads.length ? reads[readIndex++] : reads[reads.length - 1];
     if (next !== null && typeof next === "object") {
-      return json(next.status, { error: { code: "fixture-read-error", message: "synthetic read failure" } });
+      return json((next as { status: number }).status, { error: { code: "fixture-read-error", message: "synthetic read failure" } });
     }
     if (next === "malformed") return json(200, { riskState: "atRisk" });
     return json(200, riskRow(next));
   };
-  const mutationTransport = async request => {
+  const mutationTransport: MutationTransport = async request => {
     mutRequests.push(request);
     const next = mutIndex < mutation.length ? mutation[mutIndex++] : mutation[mutation.length - 1];
     if (next instanceof Error) throw next;
-    return { status: next.status, headers: {}, body: next.body ?? "" };
+    return { status: next!.status, headers: {}, body: (next!.body as string | undefined) ?? "" };
   };
-  const credential = mode => ({
+  const credential = (mode: string): CredentialStub => ({
     credential: async (...args) => {
       credCalls.push([mode, ...args]);
       return {
@@ -105,15 +108,15 @@ function fixture({ reads = ["atRisk"], mutation = [{ status: 204, body: "" }] } 
   const delegated = credential("delegated");
   const application = credential("application");
   const journalPath = join(mkdtempSync(join(tmpdir(), "mg-axi-write-05-journal-")), "writes.log");
-  const overrides = { transport, delegated, application, mutationTransport, journalPath };
+  const overrides = { transport, delegated: authFakes(delegated).delegated, application: authFakes(application).application, mutationTransport, journalPath };
   return { readRequests, mutRequests, credCalls, journalPath, overrides };
 }
 
-function journal(path) {
-  return readFileSync(path, "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line));
+function journal(path: string): OutputRecord[] {
+  return readFileSync(path, "utf8").split("\n").filter(Boolean).map(line => record(JSON.parse(line)));
 }
 
-async function withEnv(key, value, action) {
+async function withEnv<T>(key: string, value: string | undefined, action: () => T | Promise<T>) {
   const previous = process.env[key];
   if (value === undefined) delete process.env[key];
   else process.env[key] = value;
@@ -125,7 +128,7 @@ async function withEnv(key, value, action) {
   }
 }
 
-function dismissArgs(user, extra = []) {
+function dismissArgs(user: string, extra: readonly string[] = []) {
   return ["entra", "risky-user", "dismiss", "--user", user, "--profile", "soc", ...extra];
 }
 
@@ -135,7 +138,7 @@ test("preview shows the current risk state and sends nothing", async () => {
     enableWrites(state.dir);
     const f = fixture({ reads: ["atRisk"] });
     const result = await executeArgv(dismissArgs(userId), f.overrides);
-    assert.deepEqual(result.preview, {
+    assert.deepEqual(record(result).preview, {
       operation: "entra.risky-user.dismiss",
       target: userId,
       method: "POST",
@@ -145,9 +148,9 @@ test("preview shows the current risk state and sends nothing", async () => {
       desired: "dismissed",
       noop: false,
     });
-    assert.ok(result.help.some(hint => hint.includes("--execute") && hint.includes("--confirm") && hint.includes(userId)));
-    assert.ok(result.help.some(hint => hint.includes("not remediation") && hint.includes("revoking sessions")));
-    assert.ok(result.help.some(hint => hint.includes("P2")));
+    assert.ok(strings(record(result).help).some(hint => hint.includes("--execute") && hint.includes("--confirm") && hint.includes(userId)));
+    assert.ok(strings(record(result).help).some(hint => hint.includes("not remediation") && hint.includes("revoking sessions")));
+    assert.ok(strings(record(result).help).some(hint => hint.includes("P2")));
     assert.equal(f.mutRequests.length, 0);
     assert.ok(!existsSync(f.journalPath), "dry-run journals nothing");
   } finally { teardown(state); }
@@ -189,29 +192,29 @@ test("dismiss sends the exact POST target and single-user body, then verifies", 
     enableWrites(state.dir);
     const f = fixture({ reads: ["atRisk", "atRisk", "atRisk", "dismissed"] });
     const result = await executeArgv(dismissArgs(userId, ["--execute", "--confirm", userId]), f.overrides);
-    assert.deepEqual(result.dismissal, { user: riskRow("dismissed") });
-    assert.equal(typeof result.auditId, "string");
+    assert.deepEqual(record(result).dismissal, { user: riskRow("dismissed") });
+    assert.equal(typeof record(result).auditId, "string");
     assert.equal(f.mutRequests.length, 1);
     const [sent] = f.mutRequests;
-    assert.equal(sent.method, "POST");
-    assert.equal(sent.url, MUTATION_URL);
-    assert.equal(sent.body, JSON.stringify({ userIds: [userId] }));
-    assert.equal(sent.headers["Content-Type"], "application/json");
-    assert.match(sent.headers.Authorization, /^Bearer opaque-fixture-delegated-token$/);
-    assert.equal(typeof sent.headers["client-request-id"], "string");
+    assert.equal(sent!.method, "POST");
+    assert.equal(sent!.url, MUTATION_URL);
+    assert.equal(sent!.body, JSON.stringify({ userIds: [userId] }));
+    assert.equal(sent!.headers["Content-Type"], "application/json");
+    assert.match(outputText(sent!.headers.Authorization), /^Bearer opaque-fixture-delegated-token$/);
+    assert.equal(typeof sent!.headers["client-request-id"], "string");
     assert.ok(f.credCalls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(WRITE_SCOPES)));
     assert.ok(f.credCalls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(READ_SCOPES)));
     const records = journal(f.journalPath);
     assert.equal(records.length, 2);
-    assert.equal(records[0].kind, "intent");
-    assert.equal(records[0].operation, "entra.risky-user.dismiss");
-    assert.equal(records[0].method, "POST");
-    assert.equal(records[0].target, userId);
-    assert.equal(records[0].effect, "disruptive");
-    assert.equal(records[1].kind, "outcome");
-    assert.equal(records[1].outcome, "SUCCESS");
-    assert.equal(records[1].httpStatus, 204);
-    assert.equal(records[1].intentKey, records[0].intentKey);
+    assert.equal(records[0]!.kind, "intent");
+    assert.equal(records[0]!.operation, "entra.risky-user.dismiss");
+    assert.equal(records[0]!.method, "POST");
+    assert.equal(records[0]!.target, userId);
+    assert.equal(records[0]!.effect, "disruptive");
+    assert.equal(records[1]!.kind, "outcome");
+    assert.equal(records[1]!.outcome, "SUCCESS");
+    assert.equal(records[1]!.httpStatus, 204);
+    assert.equal(records[1]!.intentKey, records[0]!.intentKey);
     const file = readFileSync(f.journalPath, "utf8");
     assert.ok(!file.includes("opaque-fixture"), "journal carries no credentials");
     assert.ok(!file.includes("userIds"), "journal carries no payload");
@@ -237,7 +240,7 @@ for (const extra of [[], ["--execute"]]) test(`dismiss ${extra.join(" ") || "pre
     const args = extra.length ? dismissArgs(userId, ["--execute"]) : dismissArgs(userId);
     if (!extra.length) {
       const result = await executeArgv(args, f.overrides);
-      assert.equal(result.preview.noop, false);
+      assert.equal(record(record(result).preview).noop, false);
       return;
     }
     await assert.rejects(executeArgv(args, f.overrides), { code: "CONFIRM_REQUIRED" });
@@ -271,7 +274,7 @@ test("post-dismiss reread mismatch reports a conflict", async () => {
     assert.match(error.suggestions.join("\n"), /[Rr]ead back/);
     assert.match(error.suggestions.join("\n"), /Never replay this intent/);
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "SUCCESS");
   } finally { teardown(state); }
 });
 
@@ -297,7 +300,7 @@ for (const scenario of [
     assert.match(guidance, /A 403 never proves which prerequisite is missing/);
     assert.equal(f.mutRequests.length, scenario.sends);
     if (scenario.outcome === null) assert.ok(!existsSync(f.journalPath));
-    else assert.equal(journal(f.journalPath)[1].outcome, scenario.outcome);
+    else assert.equal(journal(f.journalPath)[1]!.outcome, scenario.outcome);
     if (scenario.code === "OUTCOME_UNKNOWN") assert.match(guidance, /never replay this intent/);
   } finally { teardown(state); }
 });
@@ -315,11 +318,11 @@ test("denial surfaces P2, permission and role guidance", async () => {
     assert.match(guidance, /Security Administrator/);
     assert.match(guidance, /P2/);
     assert.match(guidance, /never replay/i);
-    assert.equal(journal(f.journalPath)[1].outcome, "FAILED");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "FAILED");
   } finally { teardown(state); }
 });
 
-for (const status of [400, 404, 429]) test(`dismissal refusal ${status} preserves status without permission or role diagnosis`, async () => {
+for (const status of [400, 404, 429] as const) test(`dismissal refusal ${status} preserves status without permission or role diagnosis`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -331,7 +334,7 @@ for (const status of [400, 404, 429]) test(`dismissal refusal ${status} preserve
     assert.equal(error.suggestions.length, 1);
     assert.ok(error.suggestions[0].includes(`read back '${userId}' and never replay`));
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(journal(f.journalPath)[1].httpStatus, status);
+    assert.equal(journal(f.journalPath)[1]!.httpStatus, status);
   } finally { teardown(state); }
 });
 
@@ -370,7 +373,7 @@ test("transport failure records an unknown outcome", async () => {
     assert.equal(error.code, "OUTCOME_UNKNOWN");
     assert.match(error.suggestions.join("\n"), /Never replay this intent/);
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(journal(f.journalPath)[1].outcome, "OUTCOME_UNKNOWN");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "OUTCOME_UNKNOWN");
   } finally { teardown(state); }
 });
 
@@ -384,7 +387,7 @@ test("server error after send records an unknown outcome with no replay", async 
     assert.equal(error.code, "OUTCOME_UNKNOWN");
     assert.match(error.suggestions.join("\n"), /Never replay this intent/);
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(journal(f.journalPath)[1].outcome, "OUTCOME_UNKNOWN");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "OUTCOME_UNKNOWN");
   } finally { teardown(state); }
 });
 
@@ -419,8 +422,8 @@ test("failed fresh read journals NOT_SENT and sends nothing", async () => {
     assert.equal(f.mutRequests.length, 0);
     const records = journal(f.journalPath);
     assert.equal(records.length, 2);
-    assert.equal(records[0].kind, "intent");
-    assert.equal(records[1].outcome, "NOT_SENT");
+    assert.equal(records[0]!.kind, "intent");
+    assert.equal(records[1]!.outcome, "NOT_SENT");
   } finally { teardown(state); }
 });
 
@@ -461,7 +464,7 @@ test("application mode uses the .default audience and succeeds", async () => {
       ["entra", "risky-user", "dismiss", "--user", userId, "--profile", "batch", "--execute", "--confirm", userId],
       f.overrides,
     );
-    assert.deepEqual(result.dismissal, { user: riskRow("dismissed") });
+    assert.deepEqual(record(result).dismissal, { user: riskRow("dismissed") });
     assert.equal(f.mutRequests.length, 1);
     assert.ok(f.credCalls.length > 0);
     for (const [mode, , scopes] of f.credCalls) {
@@ -481,8 +484,8 @@ test("setup counts the dismissal write beside reads and local leaves", async () 
   const state = setupProfiles();
   try {
     const output = setupView(new Profiles());
-    assert.equal(output.capabilities.reads, 279);
-    assert.equal(output.capabilities.writes, 17);    assert.equal(output.capabilities.local, 10);
-    assert.ok(output.capabilities.implemented.includes("entra risky-user dismiss"));
+    assert.equal(record(output.capabilities).reads, 279);
+    assert.equal(record(output.capabilities).writes, 17);    assert.equal(record(output.capabilities).local, 10);
+    assert.ok(strings(record(output.capabilities).implemented).includes("entra risky-user dismiss"));
   } finally { teardown(state); }
 });

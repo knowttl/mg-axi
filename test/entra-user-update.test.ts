@@ -1,3 +1,6 @@
+import type { MutationTransport, MutationTransportRequest } from "../dist/mutations.js";
+import { record, text as outputText, strings, authFakes, type CredentialStub, type CredentialArgs, type OutputRecord } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,32 +35,32 @@ function setupProfiles() {
 }
 
 // Hand-enabling mirrors production: no command writes the writes object.
-function enableWrites(dir, name = "soc") {
+function enableWrites(dir: string, name = "soc") {
   const path = join(dir, "config.json");
   const config = JSON.parse(readFileSync(path, "utf8"));
   config.profiles[name].writes = { allowWrites: true, operations: ["entra.user.update"] };
   writeFileSync(path, JSON.stringify(config, null, 2));
 }
 
-function teardown(state) {
+function teardown(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function json(status, body) {
+function json(status: number, body: unknown): TransportResponse {
   return { status, headers: {}, body: JSON.stringify(body) };
 }
 
 // reads: scripted accountEnabled answers (boolean, null, or { status } for
 // read errors); every read must hit the READ-01 user route with the
 // id and accountEnabled select. mutation: scripted PATCH answers or thrown errors.
-function fixture({ reads = [true], mutation = [{ status: 204, body: "" }] } = {}) {
-  const readRequests = [];
-  const mutRequests = [];
-  const credCalls = [];
+function fixture({ reads = [true], mutation = [{ status: 204, body: "" }] }: { reads?: readonly unknown[]; mutation?: readonly (Error | { status: number; body?: unknown })[] } = {}) {
+  const readRequests: TransportRequest[] = [];
+  const mutRequests: MutationTransportRequest[] = [];
+  const credCalls: [string, ...CredentialArgs][] = [];
   let readIndex = 0;
   let mutIndex = 0;
-  const transport = async request => {
+  const transport: GraphTransport = async request => {
     readRequests.push(request);
     const url = new URL(request.url);
     const match = /^\/v1\.0\/users\/([^/]+)$/.exec(url.pathname);
@@ -65,17 +68,17 @@ function fixture({ reads = [true], mutation = [{ status: 204, body: "" }] } = {}
     assert.equal(url.searchParams.get("$select"), "id,accountEnabled");
     const next = readIndex < reads.length ? reads[readIndex++] : reads[reads.length - 1];
     if (next !== null && typeof next === "object") {
-      return json(next.status, { error: { code: "fixture-read-error", message: "synthetic read failure" } });
+      return json((next as { status: number }).status, { error: { code: "fixture-read-error", message: "synthetic read failure" } });
     }
     return json(200, { id: userId, accountEnabled: next });
   };
-  const mutationTransport = async request => {
+  const mutationTransport: MutationTransport = async request => {
     mutRequests.push(request);
     const next = mutIndex < mutation.length ? mutation[mutIndex++] : mutation[mutation.length - 1];
     if (next instanceof Error) throw next;
-    return { status: next.status, headers: {}, body: next.body ?? "" };
+    return { status: next!.status, headers: {}, body: (next!.body as string | undefined) ?? "" };
   };
-  const credential = mode => ({
+  const credential = (mode: string): CredentialStub => ({
     credential: async (...args) => {
       credCalls.push([mode, ...args]);
       return {
@@ -90,15 +93,15 @@ function fixture({ reads = [true], mutation = [{ status: 204, body: "" }] } = {}
   const delegated = credential("delegated");
   const application = credential("application");
   const journalPath = join(mkdtempSync(join(tmpdir(), "mg-axi-write-02-journal-")), "writes.log");
-  const overrides = { transport, delegated, application, mutationTransport, journalPath };
+  const overrides = { transport, delegated: authFakes(delegated).delegated, application: authFakes(application).application, mutationTransport, journalPath };
   return { readRequests, mutRequests, credCalls, journalPath, overrides };
 }
 
-function journal(path) {
-  return readFileSync(path, "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line));
+function journal(path: string): OutputRecord[] {
+  return readFileSync(path, "utf8").split("\n").filter(Boolean).map(line => record(JSON.parse(line)));
 }
 
-async function withEnv(key, value, action) {
+async function withEnv<T>(key: string, value: string | undefined, action: () => T | Promise<T>) {
   const previous = process.env[key];
   if (value === undefined) delete process.env[key];
   else process.env[key] = value;
@@ -110,7 +113,7 @@ async function withEnv(key, value, action) {
   }
 }
 
-function updateArgs(user, desired, extra = []) {
+function updateArgs(user: string, desired: string, extra: readonly string[] = []) {
   return ["entra", "user", "update", "--user", user, "--account-enabled", desired, "--profile", "soc", ...extra];
 }
 
@@ -120,7 +123,7 @@ test("preview shows the desired-state diff and sends nothing", async () => {
     enableWrites(state.dir);
     const f = fixture({ reads: [true] });
     const result = await executeArgv(updateArgs(userId, "false"), f.overrides);
-    assert.deepEqual(result.preview, {
+    assert.deepEqual(record(result).preview, {
       operation: "entra.user.update",
       target: userId,
       method: "PATCH",
@@ -130,7 +133,7 @@ test("preview shows the desired-state diff and sends nothing", async () => {
       desired: false,
       noop: false,
     });
-    assert.ok(result.help.some(hint => hint.includes("--execute") && hint.includes("--confirm") && hint.includes(userId)));
+    assert.ok(strings(record(result).help).some(hint => hint.includes("--execute") && hint.includes("--confirm") && hint.includes(userId)));
     assert.equal(f.mutRequests.length, 0);
     assert.ok(!existsSync(f.journalPath), "dry-run journals nothing");
   } finally { teardown(state); }
@@ -142,29 +145,29 @@ test("disable sends the exact PATCH target and body, then verifies", async () =>
     enableWrites(state.dir);
     const f = fixture({ reads: [true, true, true, false] });
     const result = await executeArgv(updateArgs(userId, "false", ["--execute", "--confirm", userId]), f.overrides);
-    assert.deepEqual(result.user, { id: userId, accountEnabled: false });
-    assert.equal(typeof result.auditId, "string");
+    assert.deepEqual(record(result).user, { id: userId, accountEnabled: false });
+    assert.equal(typeof record(result).auditId, "string");
     assert.equal(f.mutRequests.length, 1);
     const [sent] = f.mutRequests;
-    assert.equal(sent.method, "PATCH");
-    assert.equal(sent.url, MUTATION_URL);
-    assert.equal(sent.body, JSON.stringify({ accountEnabled: false }));
-    assert.equal(sent.headers["Content-Type"], "application/json");
-    assert.match(sent.headers.Authorization, /^Bearer opaque-fixture-delegated-token$/);
-    assert.equal(typeof sent.headers["client-request-id"], "string");
+    assert.equal(sent!.method, "PATCH");
+    assert.equal(sent!.url, MUTATION_URL);
+    assert.equal(sent!.body, JSON.stringify({ accountEnabled: false }));
+    assert.equal(sent!.headers["Content-Type"], "application/json");
+    assert.match(outputText(sent!.headers.Authorization), /^Bearer opaque-fixture-delegated-token$/);
+    assert.equal(typeof sent!.headers["client-request-id"], "string");
     assert.ok(f.credCalls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(WRITE_SCOPES)));
     assert.ok(f.credCalls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(READ_SCOPES)));
     const records = journal(f.journalPath);
     assert.equal(records.length, 2);
-    assert.equal(records[0].kind, "intent");
-    assert.equal(records[0].operation, "entra.user.update");
-    assert.equal(records[0].method, "PATCH");
-    assert.equal(records[0].target, userId);
-    assert.equal(records[0].effect, "disruptive");
-    assert.equal(records[1].kind, "outcome");
-    assert.equal(records[1].outcome, "SUCCESS");
-    assert.equal(records[1].httpStatus, 204);
-    assert.equal(records[1].intentKey, records[0].intentKey);
+    assert.equal(records[0]!.kind, "intent");
+    assert.equal(records[0]!.operation, "entra.user.update");
+    assert.equal(records[0]!.method, "PATCH");
+    assert.equal(records[0]!.target, userId);
+    assert.equal(records[0]!.effect, "disruptive");
+    assert.equal(records[1]!.kind, "outcome");
+    assert.equal(records[1]!.outcome, "SUCCESS");
+    assert.equal(records[1]!.httpStatus, 204);
+    assert.equal(records[1]!.intentKey, records[0]!.intentKey);
     const file = readFileSync(f.journalPath, "utf8");
     assert.ok(!file.includes("opaque-fixture"), "journal carries no credentials");
     assert.ok(!file.includes("accountEnabled"), "journal carries no payload");
@@ -177,14 +180,14 @@ test("enable requires confirmation and records a disruptive write", async () => 
     enableWrites(state.dir);
     const f = fixture({ reads: [false, false, false, true] });
     const preview = await executeArgv(updateArgs(userId, "true"), fixture({ reads: [false] }).overrides);
-    assert.equal(preview.preview.effect, "disruptive");
-    assert.ok(preview.help.some(hint => hint.includes("--execute") && hint.includes(`--confirm ${userId}`)));
+    assert.equal(record(record(preview).preview).effect, "disruptive");
+    assert.ok(strings(record(preview).help).some(hint => hint.includes("--execute") && hint.includes(`--confirm ${userId}`)));
     const result = await executeArgv(updateArgs(userId, "true", ["--execute", "--confirm", userId]), f.overrides);
-    assert.deepEqual(result.user, { id: userId, accountEnabled: true });
+    assert.deepEqual(record(result).user, { id: userId, accountEnabled: true });
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(f.mutRequests[0].body, JSON.stringify({ accountEnabled: true }));
+    assert.equal(f.mutRequests[0]!.body, JSON.stringify({ accountEnabled: true }));
     assert.ok(f.credCalls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(WRITE_SCOPES)));
-    assert.equal(journal(f.journalPath)[0].effect, "disruptive");
+    assert.equal(journal(f.journalPath)[0]!.effect, "disruptive");
   } finally { teardown(state); }
 });
 
@@ -195,7 +198,7 @@ for (const [target, desired] of [
   ["AdeleV@contoso.com", false],
   ["alice_example.com#EXT#@tenant.onmicrosoft.com", true],
   ["alice_example.com#EXT#@tenant.onmicrosoft.com", false],
-]) test(`already-desired ${desired} for ${target} returns the Graph object ID without sending`, async () => {
+] as const) test(`already-desired ${desired} for ${target} returns the Graph object ID without sending`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -210,7 +213,7 @@ for (const [target, desired] of [
   } finally { teardown(state); }
 });
 
-for (const [desired, current] of [["true", false], ["false", true], ["true", true], ["false", false]]) test(`${desired} from ${current} without --confirm is refused before credentials`, async () => {
+for (const [desired, current] of [["true", false], ["false", true], ["true", true], ["false", false]] as const) test(`${desired} from ${current} without --confirm is refused before credentials`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -221,7 +224,7 @@ for (const [desired, current] of [["true", false], ["false", true], ["true", tru
   } finally { teardown(state); }
 });
 
-for (const desired of ["true", "false"]) test(`${desired} with mismatched --confirm is refused before credentials`, async () => {
+for (const desired of ["true", "false"] as const) test(`${desired} with mismatched --confirm is refused before credentials`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -246,7 +249,7 @@ test("post-write reread mismatch reports a conflict", async () => {
     assert.match(error.suggestions.join("\n"), /[Rr]ead back/);
     assert.match(error.suggestions.join("\n"), /Never replay this intent/);
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "SUCCESS");
   } finally { teardown(state); }
 });
 
@@ -262,11 +265,11 @@ test("denial surfaces the permission pair and role hierarchy", async () => {
     assert.match(guidance, /User\.EnableDisableAccount\.All \+ User\.Read\.All|User\.EnableDisableAccount\.All plus User\.Read\.All/);
     assert.match(guidance, /Privileged Authentication Administrator/);
     assert.match(guidance, /never replay/i);
-    assert.equal(journal(f.journalPath)[1].outcome, "FAILED");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "FAILED");
   } finally { teardown(state); }
 });
 
-for (const status of [400, 404, 429]) test(`PATCH refusal ${status} preserves status without permission or role diagnosis`, async () => {
+for (const status of [400, 404, 429] as const) test(`PATCH refusal ${status} preserves status without permission or role diagnosis`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -278,7 +281,7 @@ for (const status of [400, 404, 429]) test(`PATCH refusal ${status} preserves st
     assert.equal(error.suggestions.length, 1);
     assert.ok(error.suggestions[0].includes(`read back '${userId}' and never replay`));
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(journal(f.journalPath)[1].httpStatus, status);
+    assert.equal(journal(f.journalPath)[1]!.httpStatus, status);
   } finally { teardown(state); }
 });
 
@@ -317,7 +320,7 @@ test("transport failure records an unknown outcome", async () => {
     assert.equal(error.code, "OUTCOME_UNKNOWN");
     assert.match(error.suggestions.join("\n"), /Never replay this intent/);
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(journal(f.journalPath)[1].outcome, "OUTCOME_UNKNOWN");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "OUTCOME_UNKNOWN");
   } finally { teardown(state); }
 });
 
@@ -353,8 +356,8 @@ test("failed fresh read journals NOT_SENT and sends nothing", async () => {
     assert.equal(f.mutRequests.length, 0);
     const records = journal(f.journalPath);
     assert.equal(records.length, 2);
-    assert.equal(records[0].kind, "intent");
-    assert.equal(records[1].outcome, "NOT_SENT");
+    assert.equal(records[0]!.kind, "intent");
+    assert.equal(records[1]!.outcome, "NOT_SENT");
   } finally { teardown(state); }
 });
 
@@ -373,7 +376,7 @@ test("beta api-version is refused before credentials", async () => {
   } finally { teardown(state); }
 });
 
-for (const value of ["maybe", "TRUE", "FALSE", " true ", " false "]) test(`account-enabled ${JSON.stringify(value)} is a usage error`, async () => {
+for (const value of ["maybe", "TRUE", "FALSE", " true ", " false "] as const) test(`account-enabled ${JSON.stringify(value)} is a usage error`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -407,7 +410,7 @@ test("application mode uses the .default audience and succeeds", async () => {
       ["entra", "user", "update", "--user", userId, "--account-enabled", "false", "--profile", "batch", "--execute", "--confirm", userId],
       f.overrides,
     );
-    assert.deepEqual(result.user, { id: userId, accountEnabled: false });
+    assert.deepEqual(record(result).user, { id: userId, accountEnabled: false });
     assert.equal(f.mutRequests.length, 1);
     assert.ok(f.credCalls.length > 0);
     for (const [mode, , scopes] of f.credCalls) {
@@ -416,18 +419,18 @@ test("application mode uses the .default audience and succeeds", async () => {
   } finally { teardown(state); }
 });
 
-for (const upn of ["AdeleV@contoso.com", "alice_example.com#EXT#@tenant.onmicrosoft.com"]) test(`UPN ${upn} resolves once and pins preview, PATCH and rereads to the object ID`, async () => {
+for (const upn of ["AdeleV@contoso.com", "alice_example.com#EXT#@tenant.onmicrosoft.com"] as const) test(`UPN ${upn} resolves once and pins preview, PATCH and rereads to the object ID`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
     const f = fixture({ reads: [true, true, true, false] });
     const preview = await executeArgv(updateArgs(upn, "false"), fixture().overrides);
-    assert.equal(preview.preview.url, MUTATION_URL);
-    assert.equal(preview.preview.target, upn);
+    assert.equal(record(record(preview).preview).url, MUTATION_URL);
+    assert.equal(record(record(preview).preview).target, upn);
     const result = await executeArgv(updateArgs(upn, "false", ["--execute", "--confirm", upn]), f.overrides);
-    assert.deepEqual(result.user, { id: userId, accountEnabled: false });
-    assert.equal(f.mutRequests[0].url, MUTATION_URL);
-    assert.equal(f.mutRequests[0].body, JSON.stringify({ accountEnabled: false }));
+    assert.deepEqual(record(result).user, { id: userId, accountEnabled: false });
+    assert.equal(f.mutRequests[0]!.url, MUTATION_URL);
+    assert.equal(f.mutRequests[0]!.body, JSON.stringify({ accountEnabled: false }));
     assert.equal(f.readRequests.length, 4);
     assert.deepEqual(f.readRequests.map(request => new URL(request.url).pathname), [
       `/v1.0/users/${encodeURIComponent(upn)}`,
@@ -435,8 +438,8 @@ for (const upn of ["AdeleV@contoso.com", "alice_example.com#EXT#@tenant.onmicros
       `/v1.0/users/${userId}`,
       `/v1.0/users/${userId}`,
     ]);
-    assert.equal(journal(f.journalPath)[0].target, upn);
-    assert.equal(journal(f.journalPath)[0].url, MUTATION_URL);
+    assert.equal(journal(f.journalPath)[0]!.target, upn);
+    assert.equal(journal(f.journalPath)[0]!.url, MUTATION_URL);
   } finally { teardown(state); }
 });
 
@@ -445,7 +448,7 @@ for (const [profileName, desired, current] of [
   ["soc", false, true],
   ["batch", true, false],
   ["batch", false, true],
-]) test(`${profileName} update to ${desired} keeps the original identity after UPN reassignment`, async () => {
+] as const) test(`${profileName} update to ${desired} keeps the original identity after UPN reassignment`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir, profileName);
@@ -464,9 +467,9 @@ for (const [profileName, desired, current] of [
       "entra", "user", "update", "--user", upn, "--account-enabled", String(desired),
       "--profile", profileName, "--execute", "--confirm", upn,
     ], f.overrides);
-    assert.deepEqual(result.user, { id: userId, accountEnabled: desired });
+    assert.deepEqual(record(result).user, { id: userId, accountEnabled: desired });
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(f.mutRequests[0].url, MUTATION_URL);
+    assert.equal(f.mutRequests[0]!.url, MUTATION_URL);
     assert.deepEqual(f.readRequests.map(request => new URL(request.url).pathname), [
       `/v1.0/users/${encodeURIComponent(upn)}`,
       `/v1.0/users/${userId}`,
@@ -476,7 +479,7 @@ for (const [profileName, desired, current] of [
   } finally { teardown(state); }
 });
 
-for (const user of ["..", "a/b", "a\\b", "a?b", "a%23b", "a%2fb", "a b"]) test(`unsafe account target ${user} is refused before credentials`, async () => {
+for (const user of ["..", "a/b", "a\\b", "a?b", "a%23b", "a%2fb", "a b"] as const) test(`unsafe account target ${user} is refused before credentials`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -494,8 +497,8 @@ test("unreadable current state never counts as desired", async () => {
     enableWrites(state.dir);
     const f = fixture({ reads: [null] });
     const result = await executeArgv(updateArgs(userId, "false"), f.overrides);
-    assert.equal(result.preview.current, null);
-    assert.equal(result.preview.noop, false);
+    assert.equal(record(record(result).preview).current, null);
+    assert.equal(record(record(result).preview).noop, false);
     assert.equal(f.mutRequests.length, 0);
   } finally { teardown(state); }
 });
@@ -511,8 +514,8 @@ test("setup counts the write beside reads and local leaves", async () => {
   const state = setupProfiles();
   try {
     const output = setupView(new Profiles());
-    assert.equal(output.capabilities.reads, 279);
-    assert.equal(output.capabilities.writes, 17);    assert.equal(output.capabilities.local, 10);
-    assert.ok(output.capabilities.implemented.includes("entra user update"));
+    assert.equal(record(output.capabilities).reads, 279);
+    assert.equal(record(output.capabilities).writes, 17);    assert.equal(record(output.capabilities).local, 10);
+    assert.ok(strings(record(output.capabilities).implemented).includes("entra user update"));
   } finally { teardown(state); }
 });

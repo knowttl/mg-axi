@@ -1,3 +1,4 @@
+import { record } from "./fixtures/typed.ts";
 // Session-start hook: local-only summary, setup installer and argv strictness.
 // Every journey runs the packaged binaries against disposable homes and
 // configs; no test signs in or contacts Graph. The fetch poison-pill run
@@ -18,7 +19,7 @@ const client = "22222222-2222-4222-8222-222222222222";
 const appClient = "33333333-3333-4333-8333-333333333333";
 const bin = resolve("dist/bin/mg-axi.js");
 const hookBin = resolve("dist/bin/mg-axi-hook.js");
-const poison = pathToFileURL(resolve("test/fixtures/hook-net-guard.mjs")).href;
+const poison = pathToFileURL(resolve("test/fixtures/hook-net-guard.ts")).href;
 const version = JSON.parse(readFileSync(resolve("package.json"), "utf8")).version;
 
 function home() {
@@ -26,11 +27,11 @@ function home() {
   return { dir, config: join(dir, "config.json") };
 }
 
-function baseEnv(dir, config) {
+function baseEnv(dir: string, config: string) {
   return { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: config };
 }
 
-function createProfiles(env) {
+function createProfiles(env: NodeJS.ProcessEnv) {
   for (const args of [
     ["profile", "create", "--name", "soc", "--tenant", tenant, "--client", client, "--cloud", "commercial"],
     ["profile", "create", "--name", "batch", "--tenant", tenant, "--client", appClient, "--cloud", "commercial",
@@ -41,7 +42,7 @@ function createProfiles(env) {
   }
 }
 
-function runHook(env, args = [], extraArgs = []) {
+function runHook(env: NodeJS.ProcessEnv, args: readonly string[] = [], extraArgs: readonly string[] = []) {
   return spawnSync(process.execPath, [...extraArgs, hookBin, ...args], { encoding: "utf8", input: "", timeout: 30000, env });
 }
 
@@ -78,7 +79,7 @@ test("hook never prints credential references", () => {
     const env = baseEnv(dir, config);
     createProfiles(env);
     const stored = JSON.parse(readFileSync(config, "utf8"));
-    const keys = Object.values(stored.profiles).map(profile => JSON.stringify(profile.token));
+    const keys = Object.values(stored.profiles).map(profile => JSON.stringify(record(profile).token));
     assert.ok(keys.length > 0);
     const result = runHook(env);
     assert.equal(result.status, 0);
@@ -137,7 +138,7 @@ test("hook resolves Windows file holders through injected files end to end", { s
 });
 
 test("hook names only real catalogue leaves in its hints", async () => {
-  for (const leaf of ["setup", "doctor"]) assert.ok(LEAVES.some(item => item.path === leaf), `catalogue lacks ${leaf}`);
+  for (const leaf of ["setup", "doctor"] as const) assert.ok(LEAVES.some(item => item.path === leaf), `catalogue lacks ${leaf}`);
   const { dir, config } = home();
   try {
     const env = baseEnv(dir, config);
@@ -197,7 +198,7 @@ test("setup hooks installs stable SessionStart entries idempotently", () => {
     ];
     const linkedBin = join(dir, "mg-axi");
     symlinkSync(bin, linkedBin);
-    const args = ["--import", pathToFileURL(resolve("test/fixtures/stable-hook-path.mjs")).href, linkedBin, "setup", "hooks"];
+    const args = ["--import", pathToFileURL(resolve("test/fixtures/stable-hook-path.ts")).href, linkedBin, "setup", "hooks"];
     const first = spawnSync(process.execPath, args,
       { encoding: "utf8", input: "", timeout: 30000, env });
     assert.equal(first.status, 0, first.stdout + first.stderr);
@@ -215,7 +216,7 @@ test("setup hooks installs stable SessionStart entries idempotently", () => {
 test("setup hooks refuses a worktree target without touching the selected home", () => {
   const { dir, config } = home();
   try {
-    const result = spawnSync(process.execPath, ["--import", pathToFileURL(resolve("test/fixtures/stable-hook-path.mjs")).href, bin, "setup", "hooks"],
+    const result = spawnSync(process.execPath, ["--import", pathToFileURL(resolve("test/fixtures/stable-hook-path.ts")).href, bin, "setup", "hooks"],
       { encoding: "utf8", timeout: 30000, env: { ...baseEnv(dir, config), MG_AXI_TEST_WORKTREE: "1" } });
     assert.equal(result.status, 1, result.stdout);
     assert.match(result.stdout, /HOOK_INSTALL_FAILED/);
@@ -224,7 +225,7 @@ test("setup hooks refuses a worktree target without touching the selected home",
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-for (const linked of [false, true]) {
+for (const linked of [false, true] as const) {
   test(`setup hooks refuses a ${linked ? "symlinked" : "copied"} temporary target`, () => {
     const { dir, config } = home();
     const build = mkdtempSync(join(tmpdir(), "mg-axi-build-"));

@@ -1,3 +1,6 @@
+import type { MutationTransport, MutationTransportRequest } from "../dist/mutations.js";
+import { record, records, text as outputText, strings, authFakes, type CredentialStub, type CredentialArgs, type OutputRecord } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,7 +29,7 @@ const READ_SCOPES = ["https://graph.microsoft.com/Policy.Read.All"];
 const MUTATION_URL = `https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies/${policyId}`;
 const POLICY_SELECT = "id,displayName,state,conditions,grantControls,sessionControls";
 
-function basePolicy(overrides = {}) {
+function basePolicy(overrides: OutputRecord = {}) {
   return {
     id: policyId,
     displayName: "Baseline CA policy",
@@ -42,7 +45,7 @@ function basePolicy(overrides = {}) {
   };
 }
 
-function allUsersPolicy(overrides = {}) {
+function allUsersPolicy(overrides: OutputRecord = {}) {
   return basePolicy({
     conditions: { ...basePolicy().conditions, users: { includeUsers: ["All"], excludeUsers: [], excludeGroups: [] } },
     ...overrides,
@@ -60,32 +63,32 @@ function setupProfiles() {
 }
 
 // Hand-enabling mirrors production: no command writes the writes object.
-function enableWrites(dir, name = "soc") {
+function enableWrites(dir: string, name = "soc") {
   const path = join(dir, "config.json");
   const config = JSON.parse(readFileSync(path, "utf8"));
   config.profiles[name].writes = { allowWrites: true, operations: ["entra.conditional-access.policy.update"] };
   writeFileSync(path, JSON.stringify(config, null, 2));
 }
 
-function teardown(state) {
+function teardown(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function json(status, body) {
+function json(status: number, body: unknown): TransportResponse {
   return { status, headers: {}, body: JSON.stringify(body) };
 }
 
 // reads: scripted policy answers (object, or { status } for read errors);
 // every read must hit the READ-03 policy show route with the reviewed
 // select. mutation: scripted PATCH answers or thrown errors.
-function fixture({ reads = [basePolicy()], mutation = [{ status: 204, body: "" }] } = {}) {
-  const readRequests = [];
-  const mutRequests = [];
-  const credCalls = [];
+function fixture({ reads = [basePolicy()], mutation = [{ status: 204, body: "" }] }: { reads?: readonly unknown[]; mutation?: readonly (Error | { status: number; body?: unknown })[] } = {}) {
+  const readRequests: TransportRequest[] = [];
+  const mutRequests: MutationTransportRequest[] = [];
+  const credCalls: [string, ...CredentialArgs][] = [];
   let readIndex = 0;
   let mutIndex = 0;
-  const transport = async request => {
+  const transport: GraphTransport = async request => {
     readRequests.push(request);
     const url = new URL(request.url);
     const match = /^\/v1\.0\/identity\/conditionalAccess\/policies\/([^/]+)$/.exec(url.pathname);
@@ -93,17 +96,17 @@ function fixture({ reads = [basePolicy()], mutation = [{ status: 204, body: "" }
     assert.equal(url.searchParams.get("$select"), POLICY_SELECT);
     const next = readIndex < reads.length ? reads[readIndex++] : reads[reads.length - 1];
     if (next !== null && typeof next === "object" && "status" in next && !("id" in next)) {
-      return json(next.status, { error: { code: "fixture-read-error", message: "synthetic read failure" } });
+      return json((next as { status: number }).status, { error: { code: "fixture-read-error", message: "synthetic read failure" } });
     }
     return json(200, next);
   };
-  const mutationTransport = async request => {
+  const mutationTransport: MutationTransport = async request => {
     mutRequests.push(request);
     const next = mutIndex < mutation.length ? mutation[mutIndex++] : mutation[mutation.length - 1];
     if (next instanceof Error) throw next;
-    return { status: next.status, headers: {}, body: next.body ?? "" };
+    return { status: next!.status, headers: {}, body: (next!.body as string | undefined) ?? "" };
   };
-  const credential = mode => ({
+  const credential = (mode: string): CredentialStub => ({
     credential: async (...args) => {
       credCalls.push([mode, ...args]);
       return {
@@ -118,15 +121,15 @@ function fixture({ reads = [basePolicy()], mutation = [{ status: 204, body: "" }
   const delegated = credential("delegated");
   const application = credential("application");
   const journalPath = join(mkdtempSync(join(tmpdir(), "mg-axi-write-04-journal-")), "writes.log");
-  const overrides = { transport, delegated, application, mutationTransport, journalPath };
+  const overrides = { transport, delegated: authFakes(delegated).delegated, application: authFakes(application).application, mutationTransport, journalPath };
   return { readRequests, mutRequests, credCalls, journalPath, overrides };
 }
 
-function journal(path) {
-  return readFileSync(path, "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line));
+function journal(path: string): OutputRecord[] {
+  return readFileSync(path, "utf8").split("\n").filter(Boolean).map(line => record(JSON.parse(line)));
 }
 
-async function withEnv(key, value, action) {
+async function withEnv<T>(key: string, value: string | undefined, action: () => T | Promise<T>) {
   const previous = process.env[key];
   if (value === undefined) delete process.env[key];
   else process.env[key] = value;
@@ -138,7 +141,7 @@ async function withEnv(key, value, action) {
   }
 }
 
-function updateArgs(extra = []) {
+function updateArgs(extra: readonly string[] = []) {
   return ["entra", "conditional-access", "policy", "update", "--id", policyId, "--profile", "soc", ...extra];
 }
 
@@ -148,20 +151,20 @@ test("preview shows the current-versus-proposed diff and sends nothing", async (
     enableWrites(state.dir);
     const f = fixture();
     const result = await executeArgv(updateArgs(["--state", "disabled"]), f.overrides);
-    assert.equal(result.preview.operation, "entra.conditional-access.policy.update");
-    assert.equal(result.preview.target, policyId);
-    assert.equal(result.preview.method, "PATCH");
-    assert.equal(result.preview.url, MUTATION_URL);
-    assert.equal(result.preview.effect, "disruptive");
-    assert.deepEqual(result.preview.changes, [{ field: "state", current: "enabled", proposed: "disabled" }]);
-    assert.equal(result.preview.noop, false);
-    assert.deepEqual(result.preview.lockout, {
+    assert.equal(record(record(result).preview).operation, "entra.conditional-access.policy.update");
+    assert.equal(record(record(result).preview).target, policyId);
+    assert.equal(record(record(result).preview).method, "PATCH");
+    assert.equal(record(record(result).preview).url, MUTATION_URL);
+    assert.equal(record(record(result).preview).effect, "disruptive");
+    assert.deepEqual(record(record(result).preview).changes, [{ field: "state", current: "enabled", proposed: "disabled" }]);
+    assert.equal(record(record(result).preview).noop, false);
+    assert.deepEqual(record(record(result).preview).lockout, {
       available: true,
       level: "none",
       findings: ["policy state 'disabled' does not enforce access"],
     });
-    assert.match(result.preview.concurrency, /no ETag|no If-Match|no concurrency/i);
-    assert.ok(result.help.some(hint => hint.includes("--execute") && hint.includes("--confirm") && hint.includes(policyId)));
+    assert.match(outputText(record(record(result).preview).concurrency), /no ETag|no If-Match|no concurrency/i);
+    assert.ok(strings(record(result).help).some(hint => hint.includes("--execute") && hint.includes("--confirm") && hint.includes(policyId)));
     assert.equal(f.mutRequests.length, 0);
     assert.ok(!existsSync(f.journalPath), "dry-run journals nothing");
   } finally { teardown(state); }
@@ -187,19 +190,19 @@ test("policy diff redacts secrets while PATCH retains reviewed values", async ()
     ];
     const f = fixture({ reads: [basePolicy({ displayName: "AccountKey=old-private-name" })] });
     const result = await executeArgv(updateArgs(fields), f.overrides);
-    assert.deepEqual(result.preview.changes.map(change => change.proposed), [
+    assert.deepEqual(records(record(record(result).preview).changes).map(change => change.proposed), [
       "***redacted***",
       "disabled",
       { applications: { includeApplications: ["***redacted***", "ordinary-app"] } },
       { builtInControls: ["mfa"], customAuthenticationFactors: ["***redacted***"] },
       { applicationEnforcedRestrictions: { isEnabled: true, token: "***redacted***" } },
     ]);
-    assert.equal(result.preview.changes[0].current, "***redacted***");
-    assert.equal(result.preview.noop, false);
+    assert.equal(records(record(record(result).preview).changes)[0]!.current, "***redacted***");
+    assert.equal(record(record(result).preview).noop, false);
     assert.equal(f.mutRequests.length, 0);
     await executeArgv(updateArgs([...fields, "--execute", "--confirm", policyId]), f.overrides);
     assert.equal(f.mutRequests.length, 1);
-    assert.deepEqual(JSON.parse(f.mutRequests[0].body), payload);
+    assert.deepEqual(JSON.parse(outputText(f.mutRequests[0]!.body)), payload);
   } finally { teardown(state); }
 });
 
@@ -211,18 +214,18 @@ for (const [field, flag, current, proposed, raw] of [
     { termsOfUse: ["***redacted***"] }, '{"termsOfUse":["***redacted***"]}'],
   ["sessionControls", "session-controls", { cloudAppSecurity: { sessionControlType: "AccountKey=old-private-control" } },
     { cloudAppSecurity: { sessionControlType: "***redacted***" } }, '{"cloudAppSecurity":{"sessionControlType":"***redacted***"}}'],
-]) {
+] as const) {
   test(`redacted current ${field} cannot prove a preview no-op`, async () => {
     const state = setupProfiles();
     try {
       enableWrites(state.dir);
       const f = fixture({ reads: [basePolicy({ state: "disabled", [field]: current })] });
       const result = await executeArgv(updateArgs([`--${flag}`, raw]), f.overrides);
-      assert.equal(result.preview.noop, false);
+      assert.equal(record(record(result).preview).noop, false);
       assert.equal(f.mutRequests.length, 0);
     } finally { teardown(state); }
   });
-  for (const readIndex of [0, 1, 2]) test(`redacted current ${field} at read ${readIndex} cannot prove a no-op`, async () => {
+  for (const readIndex of [0, 1, 2] as const) test(`redacted current ${field} at read ${readIndex} cannot prove a no-op`, async () => {
     const state = setupProfiles();
     try {
       enableWrites(state.dir);
@@ -233,10 +236,10 @@ for (const [field, flag, current, proposed, raw] of [
       const f = fixture({ reads });
       const result = await executeArgv(updateArgs([`--${flag}`, raw,
         "--execute", "--confirm", policyId]), f.overrides);
-      assert.deepEqual(result.policy, { id: policyId });
+      assert.deepEqual(record(result).policy, { id: policyId });
       assert.equal(f.mutRequests.length, 1);
-      assert.deepEqual(JSON.parse(f.mutRequests[0].body), { [field]: proposed });
-      assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+      assert.deepEqual(JSON.parse(outputText(f.mutRequests[0]!.body)), { [field]: proposed });
+      assert.equal(journal(f.journalPath)[1]!.outcome, "SUCCESS");
     } finally { teardown(state); }
   });
 }
@@ -247,30 +250,30 @@ test("disable sends the exact PATCH target and body with the documented scopes",
     enableWrites(state.dir);
     const f = fixture();
     const result = await executeArgv(updateArgs(["--state", "disabled", "--execute", "--confirm", policyId]), f.overrides);
-    assert.deepEqual(result.policy, { id: policyId });
-    assert.equal(typeof result.auditId, "string");
+    assert.deepEqual(record(result).policy, { id: policyId });
+    assert.equal(typeof record(result).auditId, "string");
     assert.equal(f.mutRequests.length, 1);
     const [sent] = f.mutRequests;
-    assert.equal(sent.method, "PATCH");
-    assert.equal(sent.url, MUTATION_URL);
-    assert.equal(sent.body, JSON.stringify({ state: "disabled" }));
-    assert.equal(sent.headers["Content-Type"], "application/json");
-    assert.match(sent.headers.Authorization, /^Bearer opaque-fixture-delegated-token$/);
-    assert.equal(typeof sent.headers["client-request-id"], "string");
+    assert.equal(sent!.method, "PATCH");
+    assert.equal(sent!.url, MUTATION_URL);
+    assert.equal(sent!.body, JSON.stringify({ state: "disabled" }));
+    assert.equal(sent!.headers["Content-Type"], "application/json");
+    assert.match(outputText(sent!.headers.Authorization), /^Bearer opaque-fixture-delegated-token$/);
+    assert.equal(typeof sent!.headers["client-request-id"], "string");
     assert.ok(f.credCalls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(WRITE_SCOPES)));
     assert.ok(f.credCalls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(READ_SCOPES)));
     assert.equal(f.readRequests.length, 3);
     const records = journal(f.journalPath);
     assert.equal(records.length, 2);
-    assert.equal(records[0].kind, "intent");
-    assert.equal(records[0].operation, "entra.conditional-access.policy.update");
-    assert.equal(records[0].method, "PATCH");
-    assert.equal(records[0].target, policyId);
-    assert.equal(records[0].effect, "disruptive");
-    assert.equal(records[1].kind, "outcome");
-    assert.equal(records[1].outcome, "SUCCESS");
-    assert.equal(records[1].httpStatus, 204);
-    assert.equal(records[1].intentKey, records[0].intentKey);
+    assert.equal(records[0]!.kind, "intent");
+    assert.equal(records[0]!.operation, "entra.conditional-access.policy.update");
+    assert.equal(records[0]!.method, "PATCH");
+    assert.equal(records[0]!.target, policyId);
+    assert.equal(records[0]!.effect, "disruptive");
+    assert.equal(records[1]!.kind, "outcome");
+    assert.equal(records[1]!.outcome, "SUCCESS");
+    assert.equal(records[1]!.httpStatus, 204);
+    assert.equal(records[1]!.intentKey, records[0]!.intentKey);
     const file = readFileSync(f.journalPath, "utf8");
     assert.ok(!file.includes("opaque-fixture"), "journal carries no credentials");
     assert.ok(!file.includes("disabled"), "journal carries no payload");
@@ -287,10 +290,10 @@ test("the PATCH body carries only reviewed fields", async () => {
       "--state", "disabled",
       "--execute", "--confirm", policyId,
     ]), f.overrides);
-    assert.deepEqual(result.policy, { id: policyId });
+    assert.deepEqual(record(result).policy, { id: policyId });
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(f.mutRequests[0].body, JSON.stringify({ displayName: "Renamed policy", state: "disabled" }));
-    assert.deepEqual(Object.keys(JSON.parse(f.mutRequests[0].body)).sort(),
+    assert.equal(f.mutRequests[0]!.body, JSON.stringify({ displayName: "Renamed policy", state: "disabled" }));
+    assert.deepEqual(Object.keys(JSON.parse(f.mutRequests[0]!.body)).sort(),
       ["displayName", "state"].sort());
   } finally { teardown(state); }
 });
@@ -337,7 +340,7 @@ test("an update without any reviewed field is a usage error", async () => {
   } finally { teardown(state); }
 });
 
-for (const value of ["ENABLED", "on", ""]) test(`state ${JSON.stringify(value)} is a usage error`, async () => {
+for (const value of ["ENABLED", "on", ""] as const) test(`state ${JSON.stringify(value)} is a usage error`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -348,7 +351,7 @@ for (const value of ["ENABLED", "on", ""]) test(`state ${JSON.stringify(value)} 
   } finally { teardown(state); }
 });
 
-for (const value of ["not-json", "[1,2]", "null", "42"]) test(`conditions ${JSON.stringify(value)} must be a JSON object`, async () => {
+for (const value of ["not-json", "[1,2]", "null", "42"] as const) test(`conditions ${JSON.stringify(value)} must be a JSON object`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -371,7 +374,7 @@ for (const [name, scope] of [
   ["excluded platforms", { platforms: { includePlatforms: ["all"], excludePlatforms: ["windows"] } }],
   ["risk condition", { signInRiskLevels: ["high"] }],
   ["user risk condition", { userRiskLevels: ["low", "medium"] }],
-]) test(`scoped lockout warning for ${name} permits acknowledged execution`, async () => {
+] as const) test(`scoped lockout warning for ${name} permits acknowledged execution`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -382,8 +385,8 @@ for (const [name, scope] of [
     });
     const f = fixture({ reads: [policy] });
     const preview = await executeArgv(updateArgs(["--state", "enabled"]), f.overrides);
-    assert.equal(preview.preview.lockout.level, "elevated");
-    assert.match(preview.preview.lockout.findings.join("\n"), /scoped warning/);
+    assert.equal(record(record(record(preview).preview).lockout).level, "elevated");
+    assert.match(strings(record(record(record(preview).preview).lockout).findings).join("\n"), /scoped warning/);
     await assert.rejects(
       executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId]), f.overrides),
       { code: "LOCKOUT_ACK_REQUIRED" },
@@ -391,7 +394,7 @@ for (const [name, scope] of [
     assert.equal(f.mutRequests.length, 0);
     await executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId, "--acknowledge-lockout-risk"]), f.overrides);
     assert.equal(f.mutRequests.length, 1);
-    assert.deepEqual(JSON.parse(f.mutRequests[0].body), { state: "enabled" });
+    assert.deepEqual(JSON.parse(outputText(f.mutRequests[0]!.body)), { state: "enabled" });
   } finally { teardown(state); }
 });
 
@@ -421,7 +424,7 @@ for (const [name, scope] of [
     locations: { includeLocations: ["All"], excludeLocations: [] },
     applications: { includeApplications: ["All"], excludeApplications: ["33333333-3333-4333-8333-333333333333"] },
   }],
-]) test(`full lockout refusal for ${name} cannot be acknowledged`, async () => {
+] as const) test(`full lockout refusal for ${name} cannot be acknowledged`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -432,7 +435,7 @@ for (const [name, scope] of [
     });
     const f = fixture({ reads: [policy] });
     const preview = await executeArgv(updateArgs(["--state", "enabled"]), f.overrides);
-    assert.equal(preview.preview.lockout.level, "refused");
+    assert.equal(record(record(record(preview).preview).lockout).level, "refused");
     await assert.rejects(
       executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId, "--acknowledge-lockout-risk"]), f.overrides),
       { code: "OPERATION_BLOCKED" },
@@ -455,7 +458,7 @@ for (const [name, scope] of [
   ["malformed locations", { locations: "All" }],
   ["missing location inclusions", { locations: { excludeLocations: [] } }],
   ["missing location exclusions", { locations: { includeLocations: ["All"] } }],
-]) test(`unavailable lockout analysis for ${name} disables enforcement`, async () => {
+] as const) test(`unavailable lockout analysis for ${name} disables enforcement`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -466,7 +469,7 @@ for (const [name, scope] of [
     });
     const f = fixture({ reads: [policy] });
     const preview = await executeArgv(updateArgs(["--state", "enabled"]), f.overrides);
-    assert.equal(preview.preview.lockout.available, false);
+    assert.equal(record(record(record(preview).preview).lockout).available, false);
     await assert.rejects(
       executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId, "--acknowledge-lockout-risk"]), f.overrides),
       { code: "OPERATION_BLOCKED", message: /stays disabled without lockout analysis/ },
@@ -475,7 +478,7 @@ for (const [name, scope] of [
   } finally { teardown(state); }
 });
 
-for (const readIndex of [1, 2]) test(`fresh read ${readIndex} refuses expansion to full lockout`, async () => {
+for (const readIndex of [1, 2] as const) test(`fresh read ${readIndex} refuses expansion to full lockout`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -512,12 +515,12 @@ test("lockout refusal: enabling block for all users without exclusions is refuse
       updateArgs(["--grant-controls", JSON.stringify({ operator: "OR", builtInControls: ["block", "mfa"] })]),
       fixture({ reads: [blocking] }).overrides,
     );
-    assert.deepEqual(preview.preview.lockout, {
+    assert.deepEqual(record(record(preview).preview).lockout, {
       available: true,
       level: "refused",
       findings: ["enabled all-users block policy covers browser and modern clients on all cloud apps or admin portals; no verified exclusion protects admins and break-glass access, so full lockout is refused"],
     });
-    assert.equal(preview.preview.noop, false);
+    assert.equal(record(record(preview).preview).noop, false);
     const f = fixture({ reads: [blocking] });
     const error = await executeArgv(updateArgs([
       "--grant-controls", JSON.stringify({ operator: "OR", builtInControls: ["block", "mfa"] }),
@@ -541,8 +544,8 @@ test("lockout acknowledgement: all-users coverage without exclusions needs expli
       updateArgs(["--state", "enabled"]),
       fixture({ reads: [broad] }).overrides,
     );
-    assert.equal(preview.preview.lockout.level, "elevated");
-    assert.ok(preview.help.some(hint => hint.includes("--acknowledge-lockout-risk")));
+    assert.equal(record(record(record(preview).preview).lockout).level, "elevated");
+    assert.ok(strings(record(preview).help).some(hint => hint.includes("--acknowledge-lockout-risk")));
     const refused = fixture({ reads: [broad] });
     const error = await executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId]), refused.overrides)
       .then(() => assert.fail("unacknowledged risk must refuse"), caught => caught);
@@ -552,10 +555,10 @@ test("lockout acknowledgement: all-users coverage without exclusions needs expli
     const result = await executeArgv(updateArgs([
       "--state", "enabled", "--execute", "--confirm", policyId, "--acknowledge-lockout-risk",
     ]), f.overrides);
-    assert.deepEqual(result.policy, { id: policyId });
+    assert.deepEqual(record(result).policy, { id: policyId });
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(f.mutRequests[0].body, JSON.stringify({ state: "enabled" }));
-    assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+    assert.equal(f.mutRequests[0]!.body, JSON.stringify({ state: "enabled" }));
+    assert.equal(journal(f.journalPath)[1]!.outcome, "SUCCESS");
   } finally { teardown(state); }
 });
 
@@ -574,7 +577,7 @@ for (const targeting of [
     });
     const f = fixture({ reads: [policy] });
     const preview = await executeArgv(updateArgs(["--state", "enabled"]), f.overrides);
-    assert.equal(preview.preview.lockout.level, "elevated");
+    assert.equal(record(record(record(preview).preview).lockout).level, "elevated");
     await assert.rejects(
       executeArgv(updateArgs(["--state", "enabled", "--execute", "--confirm", policyId]), f.overrides),
       { code: "LOCKOUT_ACK_REQUIRED" },
@@ -583,12 +586,12 @@ for (const targeting of [
     const result = await executeArgv(updateArgs([
       "--state", "enabled", "--execute", "--confirm", policyId, "--acknowledge-lockout-risk",
     ]), f.overrides);
-    assert.deepEqual(result.policy, { id: policyId });
+    assert.deepEqual(record(result).policy, { id: policyId });
     assert.equal(f.mutRequests.length, 1);
   } finally { teardown(state); }
 });
 
-for (const missing of ["excludeUsers", "excludeGroups"]) test(`omitted ${missing} disables conditions updates`, async () => {
+for (const missing of ["excludeUsers", "excludeGroups"] as const) test(`omitted ${missing} disables conditions updates`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -597,7 +600,7 @@ for (const missing of ["excludeUsers", "excludeGroups"]) test(`omitted ${missing
     const f = fixture();
     const fields = ["--conditions", JSON.stringify(conditions)];
     const preview = await executeArgv(updateArgs(fields), f.overrides);
-    assert.equal(preview.preview.lockout.available, false);
+    assert.equal(record(record(record(preview).preview).lockout).available, false);
     await assert.rejects(
       executeArgv(updateArgs([...fields, "--execute", "--confirm", policyId, "--acknowledge-lockout-risk"]), f.overrides),
       { code: "OPERATION_BLOCKED", message: /stays disabled without lockout analysis/ },
@@ -607,7 +610,7 @@ for (const missing of ["excludeUsers", "excludeGroups"]) test(`omitted ${missing
   } finally { teardown(state); }
 });
 
-for (const field of ["includeUsers", "includeGroups", "includeRoles", "excludeUsers", "excludeGroups", "excludeRoles"]) test(`unreadable ${field} disables enforcement`, async () => {
+for (const field of ["includeUsers", "includeGroups", "includeRoles", "excludeUsers", "excludeGroups", "excludeRoles"] as const) test(`unreadable ${field} disables enforcement`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -623,7 +626,7 @@ for (const field of ["includeUsers", "includeGroups", "includeRoles", "excludeUs
   } finally { teardown(state); }
 });
 
-for (const readIndex of [1, 2]) test(`fresh read ${readIndex} rechecks protected-account coverage`, async () => {
+for (const readIndex of [1, 2] as const) test(`fresh read ${readIndex} rechecks protected-account coverage`, async () => {
   const state = setupProfiles();
   try {
     enableWrites(state.dir);
@@ -648,7 +651,7 @@ test("disabled operation: unreadable conditions keep enforcement changes disable
       updateArgs(["--state", "enabled"]),
       fixture({ reads: [blind] }).overrides,
     );
-    assert.deepEqual(preview.preview.lockout, {
+    assert.deepEqual(record(record(preview).preview).lockout, {
       available: false,
       reason: "policy conditions are unreadable, so lockout risk cannot be assessed",
     });
@@ -671,9 +674,9 @@ test("display-name-only changes need no lockout analysis", async () => {
     const result = await executeArgv(updateArgs([
       "--display-name", "Renamed policy", "--execute", "--confirm", policyId,
     ]), f.overrides);
-    assert.deepEqual(result.policy, { id: policyId });
+    assert.deepEqual(record(result).policy, { id: policyId });
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(f.mutRequests[0].body, JSON.stringify({ displayName: "Renamed policy" }));
+    assert.equal(f.mutRequests[0]!.body, JSON.stringify({ displayName: "Renamed policy" }));
   } finally { teardown(state); }
 });
 
@@ -732,7 +735,7 @@ test("transport failure records an unknown outcome", async () => {
     assert.equal(error.code, "OUTCOME_UNKNOWN");
     assert.match(error.suggestions.join("\n"), /Never replay this intent/);
     assert.equal(f.mutRequests.length, 1);
-    assert.equal(journal(f.journalPath)[1].outcome, "OUTCOME_UNKNOWN");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "OUTCOME_UNKNOWN");
   } finally { teardown(state); }
 });
 
@@ -748,7 +751,7 @@ test("denial surfaces the permission pair and administrator roles", async () => 
     assert.match(guidance, /Policy\.ReadWrite\.ConditionalAccess/);
     assert.match(guidance, /Conditional Access Administrator/);
     assert.match(guidance, /never replay/i);
-    assert.equal(journal(f.journalPath)[1].outcome, "FAILED");
+    assert.equal(journal(f.journalPath)[1]!.outcome, "FAILED");
   } finally { teardown(state); }
 });
 
@@ -778,8 +781,8 @@ test("failed fresh read journals NOT_SENT and sends nothing", async () => {
     assert.equal(f.mutRequests.length, 0);
     const records = journal(f.journalPath);
     assert.equal(records.length, 2);
-    assert.equal(records[0].kind, "intent");
-    assert.equal(records[1].outcome, "NOT_SENT");
+    assert.equal(records[0]!.kind, "intent");
+    assert.equal(records[1]!.outcome, "NOT_SENT");
   } finally { teardown(state); }
 });
 
@@ -809,7 +812,7 @@ test("application mode uses the .default audience and succeeds", async () => {
         "--profile", "batch", "--execute", "--confirm", policyId],
       f.overrides,
     );
-    assert.deepEqual(result.policy, { id: policyId });
+    assert.deepEqual(record(result).policy, { id: policyId });
     assert.equal(f.mutRequests.length, 1);
     assert.ok(f.credCalls.length > 0);
     for (const [mode, , scopes] of f.credCalls) {

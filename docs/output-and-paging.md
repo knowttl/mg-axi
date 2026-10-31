@@ -35,7 +35,27 @@ Unreviewed routes, secret-returning routes, mail/file content, beta raw reads an
 Returned data is restricted to reviewed fields; completeness describes the requested collection, not full Graph property coverage.
 Secret material, authentication-method phone numbers and data-policy storage locations are redacted, including in full output, previews and audit metadata.
 
-### TOON output behavior
+## Response diagnostics
+
+Structured output, errors and response diagnostics use TOON on stdout; progress and deprecation notices use stderr.
+Empty or non-JSON read bodies, malformed collection envelopes and non-numeric scalar count bodies fail with `code: RESPONSE_INVALID` (exit 1).
+Read responses with status 204 or 205 return no body without this error.
+Malformed command-specific data can still fail as `GRAPH_ERROR`.
+Treat malformed responses as unknown, never as empty results.
+
+Response-invalid errors include `status`, `contentType`, `shape` and `shapeTruncated`.
+Status is the HTTP status or `null` when invalid; content type is the bounded media type without parameters, or `null` when missing or invalid.
+Shape entries report paths and received types, plus array lengths; arrays are sampled at their first element.
+Traversal is bounded, and `shapeTruncated` indicates omitted structure.
+Collection-envelope failures also include bounded `issues` and `issuePaths`, with received and expected types and an `issuePathsTruncated` indicator.
+Response values, raw bodies and validator messages are never printed in these diagnostics.
+Only conservative identifier keys can appear in paths; other keys become `<key>` and secret redaction still applies.
+Mail, hunting and custom-security-attribute routes replace every key name with `<key>`, including issue paths.
+Use this evidence to check API compatibility or proxy behavior.
+
+Accepted mutation responses retain their separate [responseUnreadable warning contract](execution.md#named-writes); do not replay a mutation because its response could not be decoded.
+
+## TOON output behavior
 
 | Control | Behavior |
 | --- | --- |

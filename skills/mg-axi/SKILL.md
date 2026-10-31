@@ -515,7 +515,7 @@ Without profiles, home, setup and profile list show unconfigured state; Graph re
 Reads run through a session that authorizes only catalogued operations before silent credential acquisition; only explicit `auth login` opens a browser or prints a device-code challenge.
 Writes preview before sending and need `--execute` plus a typed `--confirm` repeating the target; an already-desired value is a no-op with exit 0, never an error.
 Structured output, errors and response diagnostics use TOON on stdout.
-Malformed read bodies, collection envelopes and scalar counts fail as `RESPONSE_INVALID` with bounded HTTP status, content type and shape diagnostics; values are never printed, and mail, hunting and custom-security-attribute key names are suppressed.
+See [response diagnostics](https://github.com/knowttl/mg-axi/blob/main/docs/output-and-paging.md#response-diagnostics) for malformed-response evidence and handling.
 Text truncates at 500 characters (`--full` restores text, never redaction); row caps resume through opaque cursors.
 Secrets stay in credential references, never in argv, config files or output; credential fields carry expiry metadata only.
 Tests run offline with fixture credentials; never point tests at a real tenant.

@@ -20,16 +20,12 @@ const noNetwork = () => { throw new Error("Network access is disabled in the off
 mock.method(globalThis, "fetch", noNetwork);
 mock.method(Socket.prototype, "connect", noNetwork);
 
+const credentials = [];
 function credential(profile, scopes) {
+  credentials.push({ mode: profile.mode, scopes });
   if (home === "offline") assert.fail("Offline and invalid invocations must not authenticate");
   if (home === "missing") throw new Error("Synthetic missing consent for requested scope");
   if (consent && scopes.some(scope => !consent.includes(scope))) throw new Error("Synthetic scope not consented");
-  if (home) {
-    assert.equal(scopes.length, 1);
-    assert.ok((mode === "application" ? ["https://graph.microsoft.com/.default"]
-      : ["https://graph.microsoft.com/User.Read.All", "https://graph.microsoft.com/Mail.Read"]).includes(scopes[0]));
-  }
-  assert.equal(profile.mode, mode);
   return {
     token: `opaque-fixture-${mode}-token`,
     expiresAt: Date.now() + (home === "expired" ? -1 : 3_600_000),
@@ -74,25 +70,45 @@ const signIn = {
   appDisplayName: "SOC console",
 };
 
-let homeRequests = 0;
-mock.module(moduleUrl("api.js"), {
-  [exportOption]: { ...await import(moduleUrl("api.js")), fetchTransport: async request => {
+const requests = [];
+process.once("exit", () => {
+  for (const credential of credentials) {
+    assert.equal(credential.mode, mode);
+    if (home) {
+      assert.notEqual(home, "offline", "Offline invocations must not authenticate");
+      assert.equal(credential.scopes.length, 1);
+      assert.ok((mode === "application" ? ["https://graph.microsoft.com/.default"]
+        : ["https://graph.microsoft.com/User.Read.All", "https://graph.microsoft.com/Mail.Read"]).includes(credential.scopes[0]));
+    }
+  }
+  if (home) {
+    assert.ok(requests.length <= (home === "offline" ? 0 : 2), "Home must never follow pages or retry");
+    assert.equal(new Set(requests.map(request => new URL(request.url).pathname)).size, requests.length, "Home must read each pack at most once");
+  }
+  for (const request of requests) {
     assert.equal(request.headers.Authorization, `Bearer opaque-fixture-${mode}-token`);
     const url = new URL(request.url);
     assert.equal(url.origin, "https://graph.microsoft.com");
     if (home) {
-      assert.ok(++homeRequests <= 2, "Home must never follow pages or retry");
       assert.equal(request.method, "GET");
       assert.equal(url.searchParams.get("$top"), "5");
       assert.equal(url.searchParams.get("$select"), "id");
       assert.equal(url.searchParams.has("$skiptoken"), false);
+      assert.ok(["/v1.0/users", "/v1.0/me/mailFolders"].includes(url.pathname));
+    }
+  }
+});
+mock.module(moduleUrl("api.js"), {
+  [exportOption]: { ...await import(moduleUrl("api.js")), fetchTransport: async request => {
+    requests.push(request);
+    const url = new URL(request.url);
+    if (home) {
       if (home === "unavailable") throw new Error("Synthetic offline transport");
       if (home === "denied" || (home === "partial" && url.pathname.includes("mailFolders"))) {
         return { status: 403, headers: {}, body: JSON.stringify({ error: { code: "Authorization_RequestDenied" } }) };
       }
       if (home === "throttled") return { status: 503, headers: {}, body: "" };
       const users = url.pathname === "/v1.0/users";
-      assert.ok(users || url.pathname === "/v1.0/me/mailFolders");
       return { status: 200, headers: {}, body: JSON.stringify(home === "empty" ? { value: [] } : {
         value: users ? [user, { id: "second-user" }] : [{ id: "inbox" }],
         "@odata.count": users ? 12 : 1,
@@ -103,6 +119,7 @@ mock.module(moduleUrl("api.js"), {
     const body = () => {
       if (denied) return { status: 403, body: { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } } };
       if (url.pathname === "/v1.0/users") return { status: 200, body: { value: [user] } };
+      if (url.pathname === "/v1.0/me/mailFolders") return { status: 200, body: { value: [{ id: "inbox", displayName: "Inbox" }] } };
       if (url.pathname === `/v1.0/users/${user.id}`) return { status: 200, body: user };
       if (url.pathname === "/v1.0/groups") return { status: 200, body: { value: [group] } };
       if (url.pathname === `/v1.0/groups/${group.id}/members`) return { status: 200, body: { value: [member] } };

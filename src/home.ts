@@ -28,7 +28,7 @@ export async function liveHome(output: ReturnType<typeof home>, selected: Return
       continue;
     }
     const scope = `https://graph.microsoft.com/${pack === "entra" ? "User.Read.All" : "Mail.Read"}`;
-    const command = pack === "entra" ? `mg-axi entra user list ${context} --limit 5` : `mg-axi mail folder list --mailbox me ${context} --limit 5`;
+    const command = `${pack === "entra" ? `mg-axi entra user list ${context} --limit 5` : `mg-axi mail folder list --mailbox me ${context} --limit 5`}${profile.mode === "delegated" ? ` --scopes ${scope}` : ""}`;
     try {
       if (!session) {
         const delegated = overrides.delegated ?? new (await import("./auth.js")).DelegatedAuth(new (await import("./msal-provider.js")).MsalProvider());
@@ -46,7 +46,7 @@ export async function liveHome(output: ReturnType<typeof home>, selected: Return
       domains.push({ name: pack, status: unavailable ? "unavailable" : "live",
         summary: unavailable ? "Graph sample incomplete; no count established"
           : `${result.value.length} ${noun} observed; total ${result.total ?? (result.complete ? result.value.length : "unknown")}; ${result.complete ? "complete" : "sample only"}` });
-      help.push(`${command}${profile.mode === "delegated" && pack === "entra" ? ` --scopes ${scope}` : ""}`);
+      help.push(command);
     } catch (error) {
       const code = error instanceof AxiError ? error.code : "GRAPH_ERROR";
       const authentication = code.startsWith("AUTH_");

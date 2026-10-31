@@ -18,7 +18,7 @@ export async function readMailFolders(session: GraphSession, flags: Record<strin
   const operation = resolveSessionOperation("v1.0", "GET", path);
   const params: Record<string, string> = mailbox === "me" ? {} : { "user-id": mailbox };
   if (show) params["mailFolder-id"] = String(flags.id);
-  const scopes = profile.mode === "delegated" ? [MAIL_FOLDER_SCOPE] : undefined;
+  const scopes = flags.scopes === undefined ? (profile.mode === "delegated" ? [MAIL_FOLDER_SCOPE] : undefined) : String(flags.scopes).split(",");
   const defaults = show ? SHOW_FIELDS : LIST_FIELDS;
   const fields = flags.fields === undefined ? defaults : String(flags.fields).split(",");
   if (!fields.length || fields.some(field => !SHOW_FIELDS.includes(field))) throw new AxiError("Unknown folder field", "VALIDATION_ERROR", [help, `Reviewed folder fields: ${SHOW_FIELDS.join(", ")}`]);
@@ -56,6 +56,6 @@ export async function readMailFolders(session: GraphSession, flags: Record<strin
       ...(truncated ? ["Repeat the same command with --full for complete text; redaction remains"] : []),
       ...(!folders.length && result.complete ? ["0 folders returned directly under the mailbox root; hidden folders are excluded"] : []),
       ...(!result.complete ? ["Resume with the same flags plus --cursor <cursor-from-output>"] : []),
-      "mg-axi mail folder show --mailbox <user-id-or-upn-or-me> --id <folder-id> --profile <name>",
+      `mg-axi mail folder show --mailbox <user-id-or-upn-or-me> --id <folder-id> --profile <name>${flags.scopes === undefined ? "" : ` --scopes ${String(flags.scopes)}`}`,
     ] };
 }

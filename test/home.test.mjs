@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { decode } from "@toon-format/toon";
+import { invocation } from "../dist/invocation.js";
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
@@ -35,8 +36,10 @@ function run(scenario, args = [], packs = ["entra", "mail", "security"], mode = 
     assert.equal(result.stderr, "", result.stderr);
     const output = decode(result.stdout);
     if (options.checkHints) options.checkHints(output, hint => {
-      const followed = spawnSync("sh", ["-c", `exec "$@" ${hint.slice("mg-axi ".length)}`, "home-hint", process.execPath, ...prefix], {
-        ...spawnOptions, env: { ...spawnOptions.env, MG_AXI_READ_FIXTURE: JSON.stringify({ mode }) },
+      const { command } = invocation(prefix.at(-1), spawnOptions.env);
+      assert.ok(hint.startsWith(`${command} `), hint);
+      const followed = spawnSync("sh", ["-c", `exec "$@" ${hint.slice(command.length + 1)}`, "home-hint", process.execPath, ...prefix], {
+        ...spawnOptions, env: { ...spawnOptions.env, MG_AXI_READ_FIXTURE: JSON.stringify({ mode, consent: options.consent }) },
       });
       assert.equal(followed.stderr, "", followed.stderr);
       assert.equal(followed.status, 0, followed.stdout);
@@ -83,8 +86,13 @@ test("home reports mail unavailable when only existing directory consent is pres
   assert.match(result.output.domains[1].summary, /AUTH_REQUIRED.*Mail.Read access/);
 });
 
-test("home reads mail folders with existing Mail.Read-only consent", () => {
-  const result = run("live", [], ["mail"], "delegated", { consent: ["https://graph.microsoft.com/Mail.Read"] });
+test("home and its folder follow-up use existing Mail.Read-only consent", () => {
+  const result = run("live", [], ["mail"], "delegated", { consent: ["https://graph.microsoft.com/Mail.Read"],
+    checkHints(output, follow) {
+      const folders = follow(output.help.find(hint => hint.includes(" mail folder list ")));
+      assert.equal(folders.folders[0].displayName, "Inbox");
+    },
+  });
   assert.equal(result.status, 0, result.stdout);
   assert.equal(result.output.domains[1].summary, "1 root folders observed; total 1; complete");
 });
@@ -94,13 +102,13 @@ for (const scenario of ["live", "missing", "denied"]) {
     test(`home hints preserve alternate config and ${environment ? "environment" : "configured"} identity for ${scenario}`, () => {
       const result = run(scenario, [], undefined, "delegated", { configOverride: true, environment,
         checkHints(output, follow, config) {
-          const hints = output.help.filter(hint => hint.startsWith("mg-axi "));
+          const hints = output.help.filter(hint => / (?:home|entra|mail|security|auth) /.test(hint));
           for (const hint of hints) {
             assert.ok(hint.includes(`--config '${config.replaceAll("'", "'\\''")}'`), hint);
             if (environment) assert.doesNotMatch(hint, /--profile/);
             else assert.match(hint, /--profile soc/);
           }
-          const offline = follow(hints[0]);
+          const offline = follow(hints.find(hint => hint.includes(" home --offline ")));
           assert.equal(offline.profile, environment ? "env" : "soc");
           assert.equal(offline.tenant, tenant);
           if (scenario === "live") {
@@ -117,7 +125,9 @@ for (const scenario of ["live", "missing", "denied"]) {
 test("a configured profile named env remains explicitly selected in hints", () => {
   const result = run("live", ["--profile", "env"], undefined, "delegated", { profileName: "env" });
   assert.equal(result.status, 0, result.stdout);
-  for (const hint of result.output.help.filter(hint => hint.startsWith("mg-axi "))) assert.match(hint, /--profile env/);
+  const hints = result.output.help.filter(hint => / (?:home|entra|mail|security|auth) /.test(hint));
+  assert.ok(hints.length > 0);
+  for (const hint of hints) assert.match(hint, /--profile env/);
 });
 
 for (const scenario of ["missing", "expired", "denied", "unavailable", "throttled"]) {

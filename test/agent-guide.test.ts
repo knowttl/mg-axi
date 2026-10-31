@@ -1,3 +1,5 @@
+import { record, text, authFakes, type OutputRecord } from "./fixtures/typed.ts";
+import type { TransportRequest } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -7,8 +9,8 @@ import { executeArgv } from "../dist/cli.js";
 import { Profiles } from "../dist/profiles.js";
 
 const guide = readFileSync(new URL("../docs/agent-guide.md", import.meta.url), "utf8");
-const examples = [...guide.matchAll(/\| `mg-axi ([^`]+)` \|/g)].map(match => match[1]);
-const cases = [
+const examples = [...guide.matchAll(/\| `mg-axi ([^`]+)` \|/g)].map(match => match[1]!);
+const cases: [string, string, OutputRecord][] = [
   ["/users", "users", { id: "synthetic-user", displayName: "Synthetic Analyst", userPrincipalName: "analyst@example.invalid" }],
   ["/users/synthetic-user", "user", { id: "synthetic-user", displayName: "Synthetic Analyst", userType: "Member" }],
   ["/groups/synthetic-group/transitiveMembers", "members", { id: "synthetic-user", displayName: "Synthetic Analyst", "@odata.type": "#microsoft.graph.user" }],
@@ -34,32 +36,32 @@ for (const [index, [path, key, row]] of cases.entries()) {
     value.profiles.soc.enabledPacks = ["entra", "security"];
     writeFileSync(config, JSON.stringify(value));
     const file = join(dir, "hunt.kql");
-    writeFileSync(file, guide.match(/```kql\n([\s\S]*?)```/)[1]);
+    writeFileSync(file, guide.match(/```kql\n([\s\S]*?)```/)![1]!);
     // Guide examples use only double-quoted filter arguments and plain words.
-    const args = [...examples[index].matchAll(/"([^"]*)"|(\S+)/g)].map(match => match[1] ?? match[2]);
+    const args = [...examples[index]!.matchAll(/"([^"]*)"|(\S+)/g)].map(match => match[1] ?? match[2]!);
     const fileIndex = args.indexOf("--file");
     if (fileIndex !== -1) args[fileIndex + 1] = file;
-    const requests = [];
+    const requests: TransportRequest[] = [];
     const correlating = key === "riskDetection";
-    const result = await executeArgv([...args, "--config", config], {
-      delegated: { credential: async profile => ({ token: "synthetic-token", tenantId: profile.tenantId, clientId: profile.clientId, accountId: "synthetic-account", expiresAt: Date.now() + 3600000 }) },
+    const result = record(await executeArgv([...args, "--config", config], {
+      delegated: authFakes({ credential: async profile => ({ token: "synthetic-token", tenantId: profile.tenantId, clientId: profile.clientId, accountId: "synthetic-account", expiresAt: Date.now() + 3600000 }) }).delegated,
       transport: async request => {
         requests.push(request);
         if (correlating && requests.length === 2) {
           assert.equal(new URL(request.url).pathname, "/v1.0/auditLogs/signIns");
           assert.equal(request.method, "GET");
-          return { status: 200, headers: {}, body: JSON.stringify({ value: [{ id: row.requestId, userId: row.userId, createdDateTime: row.activityDateTime, correlationId: row.correlationId }] }) };
+          return { status: 200, headers: {}, body: JSON.stringify({ value: [{ id: row!.requestId, userId: row!.userId, createdDateTime: row!.activityDateTime, correlationId: row!.correlationId }] }) };
         }
         assert.equal(new URL(request.url).pathname, `/v1.0${path}`);
         const hunting = path === "/security/runHuntingQuery";
         assert.equal(request.method, hunting ? "POST" : "GET");
         const body = hunting ? { schema: Object.keys(row).map(name => ({ name, type: "String" })), results: [row] }
-          : / show /.test(examples[index]) || correlating ? row : { value: [row] };
+          : / show /.test(text(examples[index])) || correlating ? row : { value: [row] };
         return { status: 200, headers: {}, body: JSON.stringify(body) };
       },
-    });
+    }));
     assert.equal(requests.length, correlating ? 2 : 1);
-    assert.deepEqual(result[key], / show /.test(examples[index]) || correlating ? row : [row]);
+    assert.deepEqual(result[key], / show /.test(text(examples[index])) || correlating ? row : [row]);
     if (correlating) assert.equal(result.status, "exact");
   });
 }

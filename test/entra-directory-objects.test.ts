@@ -1,3 +1,5 @@
+import { record, text, strings, authFakes, delegatedProvider, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -46,12 +48,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: [string, ...CredentialArgs][]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push([mode, ...args]);
@@ -66,9 +68,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -76,7 +78,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -96,14 +98,14 @@ function directoryObjectTransport() {
     }
     const single = /^\/v1\.0\/directoryObjects\/([^/]+)$/.exec(path);
     if (single) {
-      const found = directoryObjects.find(row => row.id === decodeURIComponent(single[1]));
+      const found = directoryObjects.find(row => row.id === decodeURIComponent(single[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such directory object" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: [string, ...CredentialArgs][] = []) {
   const fixture = handler ?? directoryObjectTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -111,13 +113,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runDirectoryObjectCli(args, state, mode, denied = false) {
+function runDirectoryObjectCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-directory-objects-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -131,7 +133,7 @@ function runDirectoryObjectCli(args, state, mode, denied = false) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} refuses unsupported directory-object lists before credentials`, async () => {
     const state = setupProfiles();
     try {
@@ -175,11 +177,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "directory-object", "show", "--id", obj1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "directory-object", "show", "--id", obj1.id, "--profile", profile], overrides));
       assert.deepEqual(result.directoryObject, { id: obj1.id, deletedDateTime: null, "@odata.type": "#microsoft.graph.user" });
-      const missing = await executeArgv(["entra", "directory-object", "show", "--id", obj3.id, "--profile", profile], overrides);
+      const missing = record(await executeArgv(["entra", "directory-object", "show", "--id", obj3.id, "--profile", profile], overrides));
       assert.deepEqual(missing.directoryObject, { id: obj3.id });
-      const secret = await executeArgv(["entra", "directory-object", "show", "--id", obj2.id, "--profile", profile], overrides);
+      const secret = record(await executeArgv(["entra", "directory-object", "show", "--id", obj2.id, "--profile", profile], overrides));
       assert.deepEqual(secret.directoryObject, { id: obj2.id, "@odata.type": "#microsoft.graph.servicePrincipal" });
     } finally {
       teardownProfiles(state);
@@ -193,8 +195,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       await assert.rejects(
         executeArgv(["entra", "directory-object", "show", "--id", obj1.id, "--profile", profile, "--select", "id,displayName"], overrides),
         error => {
-          assert.equal(error.code, "VALIDATION_ERROR");
-          return /Unknown directory-object property displayName/.test(error.message);
+          assert.equal(record(error).code, "VALIDATION_ERROR");
+          return /Unknown directory-object property displayName/.test(text(record(error).message));
         },
       );
       assert.equal(calls.length, 0);
@@ -208,10 +210,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "directory-object", "count", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "directory-object", "count", "--profile", profile], overrides));
       assert.deepEqual(result, { count: { returned: 3, complete: true } });
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/directoryObjects/$count");
+      assert.equal(requests[0]!.url, "https://graph.microsoft.com/v1.0/directoryObjects/$count");
     } finally {
       teardownProfiles(state);
     }
@@ -249,9 +251,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { overrides } = overridesFor(mode);
       await assert.rejects(executeArgv(["entra", "directory-object", "show", "--id", "object-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -264,16 +266,16 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const { overrides } = overridesFor(mode, denied);
       await assert.rejects(executeArgv(["entra", "directory-object", "show", "--id", obj1.id, "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("Directory.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
-        assert.ok(error.suggestions.some(hint => hint.includes("never diagnose role or licence solely from HTTP 403")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Directory.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Personal Microsoft accounts are not supported")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose role or licence solely from HTTP 403")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "directory-object", "count", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("Directory.Read.All")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Directory.Read.All")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -286,18 +288,18 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runDirectoryObjectCli(["entra", "directory-object", "list", "--profile", profile], state, mode);
       assert.equal(listed.status, 2, listed.stdout);
       assert.equal(listed.stderr, "");
-      const listOut = decode(listed.stdout);
+      const listOut = record(decode(listed.stdout));
       assert.equal(listOut.code, "VALIDATION_ERROR");
-      assert.match(listOut.error, /not supported/);
+      assert.match(text(listOut.error), /not supported/);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runDirectoryObjectCli(["entra", "directory-object", "show", "--id", obj1.id, "--profile", profile], state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      assert.deepEqual(decode(shown.stdout).directoryObject, { id: obj1.id, deletedDateTime: null, "@odata.type": "#microsoft.graph.user" });
+      assert.deepEqual(record(decode(shown.stdout)).directoryObject, { id: obj1.id, deletedDateTime: null, "@odata.type": "#microsoft.graph.user" });
 
       const counted = runDirectoryObjectCli(["entra", "directory-object", "count", "--profile", profile], state, mode);
       assert.equal(counted.status, 0, counted.stdout);
-      assert.deepEqual(decode(counted.stdout).count, { returned: 2, complete: true });
+      assert.deepEqual(record(decode(counted.stdout)).count, { returned: 2, complete: true });
       assert.ok(!counted.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -308,9 +310,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runDirectoryObjectCli(["entra", "directory-object", "show", "--id", obj1.id, "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
+      assert.match(text(output.error), /grant, role, licence or policy/);
       assert.equal(output.directoryObjects, undefined);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -320,7 +322,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["directory-object", "list"], ["--limit", "1"]],
     [["directory-object", "show"], ["--id", obj1.id]],
     [["directory-object", "count"], []],
-  ]) {
+  ] as const) {
     for (const preview of [false, true]) {
       test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
         const state = setupProfiles();
@@ -349,7 +351,7 @@ test("application directory-object reads refuse delegated scopes before credenti
   try {
     const { requests, calls, overrides } = overridesFor("application");
     await assert.rejects(
-      executeArgv(["entra", "directory-object", "list", "--profile", "batch", "--scopes", directoryObjectScopes[0]], overrides),
+      executeArgv(["entra", "directory-object", "list", "--profile", "batch", "--scopes", directoryObjectScopes[0]!], overrides),
       { code: "VALIDATION_ERROR", message: "Application profiles use the configured Graph .default audience; delegated scopes are unavailable" },
     );
     assert.equal(calls.length, 0);
@@ -364,14 +366,14 @@ test("truncated directory-object detail carries a --full hint", async () => {
   try {
     const longRow = transport(() => json(200, { "@odata.type": "#microsoft.graph.group", id: longId }));
     const { overrides } = overridesFor("delegated", longRow);
-    const partial = await executeArgv(["entra", "directory-object", "show", "--id", obj1.id, "--profile", "soc",
-      "--select", "id"], overrides);
+    const partial = record(await executeArgv(["entra", "directory-object", "show", "--id", obj1.id, "--profile", "soc",
+      "--select", "id"], overrides));
     const truncated = partial.directoryObject;
-    assert.match(truncated.id, /truncated, \d+ chars total/);
-    assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "directory-object", "show", "--id", obj1.id, "--profile", "soc", "--full",
-      "--select", "id"], overrides);
-    assert.equal(full.directoryObject.id, longId);
+    assert.match(text(record(truncated).id), /truncated, \d+ chars total/);
+    assert.ok(strings(partial.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "directory-object", "show", "--id", obj1.id, "--profile", "soc", "--full",
+      "--select", "id"], overrides));
+    assert.equal(record(full.directoryObject).id, longId);
     assert.equal(full.help, undefined);
   } finally {
     teardownProfiles(state);
@@ -383,24 +385,24 @@ test("raw directory-object lists refuse unsupported root queries before credenti
   const { DelegatedAuth } = await import("../dist/auth.js");
   const { ApplicationAuth } = await import("../dist/app-auth.js");
   const credentialCalls = [];
-  const requests = [];
+  const requests: TransportRequest[] = [];
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
   const deps = {
-    delegated: new DelegatedAuth({ storage: "session-only", login: async () => credential, silent: async (...args) => { credentialCalls.push(args); return credential; } }),
+    delegated: new DelegatedAuth(delegatedProvider({ storage: "session-only", login: async () => credential, silent: async (...args) => { credentialCalls.push(args); return credential; } })),
     application: new ApplicationAuth({ storage: "session-only", acquire: async (...args) => { credentialCalls.push(args); return credential; } }),
-    transport: async request => { requests.push(request); return { headers: {}, body: JSON.stringify({ value: [obj1, obj2] }) }; },
+    transport: async (request: TransportRequest) => { requests.push(request); return { status: 200, headers: {}, body: JSON.stringify({ value: [obj1, obj2] }) }; },
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
-  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
+  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } } as const;
   for (const profile of [delegatedProfile, appProfile]) {
     await assert.rejects(runApiGet({ path: "/directoryObjects", apiVersion: "v1.0", profile,
-      ...(profile.mode === "delegated" ? { scopes: directoryObjectScopes[0] } : {}) }, deps), /not in the reviewed raw inventory/);
+      ...(profile.mode === "delegated" ? { scopes: directoryObjectScopes[0]! } : {}) }, deps), /not in the reviewed raw inventory/);
     await assert.rejects(
       runApiGet({ path: "/directoryObjects", apiVersion: "v1.0", profile, odata: "$select=id,displayName",
-        ...(profile.mode === "delegated" ? { scopes: directoryObjectScopes[0] } : {}) }, deps),
+        ...(profile.mode === "delegated" ? { scopes: directoryObjectScopes[0]! } : {}) }, deps),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /not in the reviewed raw inventory/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /not in the reviewed raw inventory/.test(text(record(error).message));
       },
     );
   }
@@ -413,11 +415,11 @@ test("raw directory-object show keeps the discriminator without subtype secrets"
   const { DelegatedAuth } = await import("../dist/auth.js");
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
   const deps = {
-    delegated: new DelegatedAuth({ storage: "session-only", login: async () => credential, silent: async () => credential }),
+    delegated: new DelegatedAuth(delegatedProvider({ storage: "session-only", login: async () => credential, silent: async () => credential })),
     application: new (await import("../dist/app-auth.js")).ApplicationAuth({ storage: "session-only", acquire: async () => credential }),
     transport: async () => ({ status: 200, headers: {}, body: JSON.stringify(obj2) }),
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
-  const shown = await runApiGet({ path: `/directoryObjects/${obj2.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: directoryObjectScopes[0] }, deps);
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
+  const shown = await runApiGet({ path: `/directoryObjects/${obj2.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: directoryObjectScopes[0]! }, deps);
   assert.deepEqual(shown, { id: obj2.id, "@odata.type": "#microsoft.graph.servicePrincipal" });
 });

@@ -1,3 +1,5 @@
+import { record, text, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,12 +43,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: [string, ...CredentialArgs][]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push([mode, ...args]);
@@ -61,13 +63,13 @@ function credentialService(mode, calls) {
   };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
 function tenantInformationTransport() {
-  const requests = [];
-  const send = async request => {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const url = new URL(request.url);
     if (url.pathname === "/v1.0/tenantRelationships/findTenantInformationByDomainName(domainName=%27example.invalid%27)") return json(200, infoByDomain);
@@ -77,7 +79,7 @@ function tenantInformationTransport() {
   return { requests, send };
 }
 
-function overridesFor(mode, fixture, calls = []) {
+function overridesFor(mode: string, fixture?: TransportFixture, calls: [string, ...CredentialArgs][] = []) {
   const transport = fixture ?? tenantInformationTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -85,20 +87,20 @@ function overridesFor(mode, fixture, calls = []) {
     calls,
     overrides: {
       transport: transport.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} shows tenant information by domain name with the reviewed set`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "tenant-information", "show", "--domain-name", "example.invalid", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "tenant-information", "show", "--domain-name", "example.invalid", "--profile", profile], overrides));
       assert.deepEqual(result.tenantInformation, projectedByDomain);
-      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByDomainName(domainName=%27example.invalid%27)");
+      assert.equal(requests[0]!.url, "https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByDomainName(domainName=%27example.invalid%27)");
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(tenantInformationScopes)));
@@ -111,9 +113,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "tenant-information", "show", "--tenant-id", lookupTenantId, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "tenant-information", "show", "--tenant-id", lookupTenantId, "--profile", profile], overrides));
       assert.deepEqual(result.tenantInformation, infoByTenant);
-      assert.equal(requests[0].url, `https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByTenantId(tenantId=%27${lookupTenantId}%27)`);
+      assert.equal(requests[0]!.url, `https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByTenantId(tenantId=%27${lookupTenantId}%27)`);
     } finally {
       teardownProfiles(state);
     }
@@ -125,11 +127,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, calls, overrides } = overridesFor(mode);
       await assert.rejects(
         executeArgv(["entra", "tenant-information", "show", "--profile", profile], overrides),
-        error => error.code === "VALIDATION_ERROR" && /exactly one of --domain-name or --tenant-id/.test(error.message),
+        error => record(error).code === "VALIDATION_ERROR" && /exactly one of --domain-name or --tenant-id/.test(text(record(error).message)),
       );
       await assert.rejects(
         executeArgv(["entra", "tenant-information", "show", "--domain-name", "example.invalid", "--tenant-id", lookupTenantId, "--profile", profile], overrides),
-        error => error.code === "VALIDATION_ERROR" && /cannot be combined/.test(error.message),
+        error => record(error).code === "VALIDATION_ERROR" && /cannot be combined/.test(text(record(error).message)),
       );
       assert.equal(calls.length, 0);
       assert.equal(requests.length, 0);
@@ -147,13 +149,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["--tenant-id", "x') OR '1'='1"], /Invalid tenant ID/],
     [["--tenant-id", "a%2Fb"], /Invalid tenant ID/],
     [["--tenant-id", "$batch"], /Invalid tenant ID/],
-  ]) test(`${mode} tenant-information show refuses ${flags[0]} injection before credentials`, async () => {
+  ] as const) test(`${mode} tenant-information show refuses ${flags[0]} injection before credentials`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
       await assert.rejects(
         executeArgv(["entra", "tenant-information", "show", ...flags, "--profile", profile], overrides),
-        error => error.code === "VALIDATION_ERROR" && pattern.test(error.message),
+        error => record(error).code === "VALIDATION_ERROR" && pattern.test(text(record(error).message)),
       );
       assert.equal(calls.length, 0);
       assert.equal(requests.length, 0);
@@ -167,9 +169,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { overrides } = overridesFor(mode);
       await assert.rejects(executeArgv(["entra", "tenant-information", "show", "--domain-name", "missing.invalid", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -180,17 +182,17 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const denied = (() => {
-        const requests = [];
-        return { requests, send: async request => { requests.push(request); return json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }); } };
+        const requests: TransportRequest[] = [];
+        return { requests, send: async (request: TransportRequest) => { requests.push(request); return json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }); } };
       })();
       const { overrides } = overridesFor(mode, denied);
       await assert.rejects(executeArgv(["entra", "tenant-information", "show", "--domain-name", "example.invalid", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("CrossTenantInformation.ReadBasic.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("No Entra role is required")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
-        assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("CrossTenantInformation.ReadBasic.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("No Entra role is required")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Personal Microsoft accounts are not supported")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -203,7 +205,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, calls, overrides } = overridesFor(mode);
       await assert.rejects(
         executeArgv(["entra", "tenant-information", "show", "--domain-name", "example.invalid", "--profile", profile, "--api-version", "beta"], overrides),
-        error => error.code === "VALIDATION_ERROR" && /v1.0 only/.test(error.message),
+        error => record(error).code === "VALIDATION_ERROR" && /v1.0 only/.test(text(record(error).message)),
       );
       assert.equal(calls.length, 0);
       assert.equal(requests.length, 0);

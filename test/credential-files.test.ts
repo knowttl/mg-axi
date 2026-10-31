@@ -1,3 +1,5 @@
+import type { DelegatedProfile } from "../dist/profiles.js";
+import { record, records, text, strings } from "./fixtures/typed.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
@@ -19,7 +21,7 @@ function fixture() {
   const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: dir, USERPROFILE: dir,
     XDG_CONFIG_HOME: join(dir, "config"), XDG_STATE_HOME: join(dir, "state"), XDG_CACHE_HOME: join(dir, "cache"),
     APPDATA: join(dir, "appdata"), LOCALAPPDATA: join(dir, "localappdata") };
-  const run = (args, extra = {}) => spawnSync(process.execPath, ["dist/bin/mg-axi.js", ...args], { encoding: "utf8", input: "", timeout: 10000, env: { ...env, ...extra } });
+  const run = (args: readonly string[], extra: NodeJS.ProcessEnv = {}) => spawnSync(process.execPath, ["dist/bin/mg-axi.js", ...args], { encoding: "utf8", input: "", timeout: 10000, env: { ...env, ...extra } });
   return { dir, env, run, clean: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
@@ -29,11 +31,11 @@ for (const [platform, env, kind, expected] of [
   ["darwin", {}, "state", "/home/test/.local/state/mg-axi"],
   ["win32", { XDG_CONFIG_HOME: "/ignored", APPDATA: "C:\\Roaming" }, "config", "C:\\Roaming\\mg-axi"],
   ["win32", { XDG_STATE_HOME: "/ignored", LOCALAPPDATA: "C:\\Local" }, "state", "C:\\Local\\mg-axi"],
-]) test(`directory resolution uses ${platform} ${kind} conventions: ${expected}`, () => {
+] as const) test(`directory resolution uses ${platform} ${kind} conventions: ${expected}`, () => {
   assert.equal(toolDirectory(kind, env, platform, "/home/test"), expected);
 });
 
-for (const [value, expected] of [[undefined, false], ["0", false], ["FALSE", false], ["1", true], ["TrUe", true]]) test(`read-only boolean ${value} is ${expected}`, () => {
+for (const [value, expected] of [[undefined, false], ["0", false], ["FALSE", false], ["1", true], ["TrUe", true]] as const) test(`read-only boolean ${value} is ${expected}`, () => {
   assert.equal(readOnlyForced({ MG_AXI_READ_ONLY: value }), expected);
 });
 
@@ -54,7 +56,7 @@ test("config flag overrides environment and config path reads no content", () =>
   try {
     const result = f.run(["config", "path", "--config", join(f.dir, "flag.json")], { MG_AXI_CONFIG: join(f.dir, "env.json") });
     assert.equal(result.status, 0, result.stdout);
-    assert.equal(decode(result.stdout).config, join(f.dir, "flag.json"));
+    assert.equal(record(decode(result.stdout)).config, join(f.dir, "flag.json"));
     assert.equal(existsSync(join(f.dir, "flag.json")), false);
   } finally { f.clean(); }
 });
@@ -66,11 +68,11 @@ test("legacy config is never parsed and reports both paths and the move command"
     writeFileSync(join(f.dir, ".mg-axi/config.json"), "not JSON and not read");
     const result = f.run(["profile", "list"]);
     assert.notEqual(result.status, 0);
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.code, "CONFIG_MOVED");
-    assert.match(output.error, /\.mg-axi/);
-    assert.match(output.error, /config[/\\]mg-axi/);
-    assert.match(output.help.join(" "), /mv|Move-Item/);
+    assert.match(text(output.error), /\.mg-axi/);
+    assert.match(text(output.error), /config[/\\]mg-axi/);
+    assert.match(strings(output.help).join(" "), /mv|Move-Item/);
   } finally { f.clean(); }
 });
 
@@ -83,11 +85,11 @@ test("legacy journal is never read and reports both paths and the move command",
     writeFileSync(join(f.dir, ".mg-axi/writes.log"), "fixture legacy journal");
     const result = f.run(["entra", "user", "revoke-sessions", "--user", "44444444-4444-4444-8444-444444444444", "--profile", "soc"]);
     assert.notEqual(result.status, 0);
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.code, "CONFIG_MOVED");
-    assert.match(output.error, /\.mg-axi/);
-    assert.match(output.error, /writes\.log/);
-    assert.match(output.help.join(" "), /mv|Move-Item/);
+    assert.match(text(output.error), /\.mg-axi/);
+    assert.match(text(output.error), /writes\.log/);
+    assert.match(strings(output.help).join(" "), /mv|Move-Item/);
     assert.doesNotMatch(result.stdout + result.stderr, /fixture legacy journal/);
   } finally { f.clean(); }
 });
@@ -103,7 +105,7 @@ test("an existing state journal takes precedence over the legacy journal", () =>
     mkdirSync(state, { recursive: true });
     writeFileSync(join(state, "writes.log"), "");
     const result = f.run(["entra", "user", "revoke-sessions", "--user", "44444444-4444-4444-8444-444444444444", "--profile", "soc"]);
-    assert.notEqual(decode(result.stdout).code, "CONFIG_MOVED");
+    assert.notEqual(record(decode(result.stdout)).code, "CONFIG_MOVED");
   } finally { f.clean(); }
 });
 
@@ -111,20 +113,20 @@ test("profile environment selects explicitly and the only-profile fallback works
   const f = fixture();
   try {
     const config = join(f.dir, "config.json");
-    const create = name => f.run(["profile", "create", "--config", config, "--name", name, "--tenant", "11111111-1111-4111-8111-111111111111", "--client", "22222222-2222-4222-8222-222222222222", "--cloud", "commercial"]);
+    const create = (name: string) => f.run(["profile", "create", "--config", config, "--name", name, "--tenant", "11111111-1111-4111-8111-111111111111", "--client", "22222222-2222-4222-8222-222222222222", "--cloud", "commercial"]);
     assert.equal(create("first").status, 0);
     const only = JSON.parse(readFileSync(config, "utf8"));
     delete only.defaultProfile;
     writeFileSync(config, JSON.stringify(only));
-    assert.equal(decode(f.run(["profile", "show", "--config", config]).stdout).name, "first");
+    assert.equal(record(decode(f.run(["profile", "show", "--config", config]).stdout)).name, "first");
     assert.equal(create("second").status, 0);
-    assert.equal(decode(f.run(["profile", "show", "--config", config], { MG_AXI_PROFILE: "second" }).stdout).name, "second");
-    assert.equal(decode(f.run(["profile", "show", "--config", config, "--profile", "first"], { MG_AXI_PROFILE: "second" }).stdout).name, "first");
-    assert.equal(decode(f.run(["profile", "show", "--config", config], { MG_AXI_PROFILE: "missing" }).stdout).code, "PROFILE_NOT_FOUND");
+    assert.equal(record(decode(f.run(["profile", "show", "--config", config], { MG_AXI_PROFILE: "second" }).stdout)).name, "second");
+    assert.equal(record(decode(f.run(["profile", "show", "--config", config, "--profile", "first"], { MG_AXI_PROFILE: "second" }).stdout)).name, "first");
+    assert.equal(record(decode(f.run(["profile", "show", "--config", config], { MG_AXI_PROFILE: "missing" }).stdout)).code, "PROFILE_NOT_FOUND");
     const multiple = JSON.parse(readFileSync(config, "utf8"));
     delete multiple.defaultProfile;
     writeFileSync(config, JSON.stringify(multiple));
-    assert.equal(decode(f.run(["profile", "show", "--config", config]).stdout).code, "PROFILE_AMBIGUOUS");
+    assert.equal(record(decode(f.run(["profile", "show", "--config", config]).stdout)).code, "PROFILE_AMBIGUOUS");
   } finally { f.clean(); }
 });
 
@@ -135,7 +137,7 @@ test("config read checks reject writable JSON before parsing it", { skip: proces
     writeFileSync(config, "unparsed fixture content");
     chmodSync(config, 0o666);
     const result = f.run(["profile", "list", "--config", config]);
-    assert.equal(decode(result.stdout).code, "CONFIG_INSECURE");
+    assert.equal(record(decode(result.stdout)).code, "CONFIG_INSECURE");
     assert.doesNotMatch(result.stdout + result.stderr, /unparsed fixture content/);
   } finally { f.clean(); }
 });
@@ -148,14 +150,14 @@ test("auth status and logout are offline and never create credentials for a new 
     profiles.create("soc", "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "commercial", false);
     const status = f.run(["auth", "status", "--config", config]);
     assert.equal(status.status, 0, status.stdout);
-    const output = decode(status.stdout);
+    const output = record(decode(status.stdout));
     assert.equal(output.profile, "soc");
     assert.equal(output.endpoint, "https://graph.microsoft.com");
-    assert.equal(output.sources[0].available, false);
-    assert.match(output.sources[0].source, /stored:.*credentials\.json$/);
+    assert.equal(records(output.sources)[0]!.available, false);
+    assert.match(text(records(output.sources)[0]!.source), /stored:.*credentials\.json$/);
     const logout = f.run(["auth", "logout", "--config", config]);
     assert.equal(logout.status, 0, logout.stdout);
-    assert.equal(decode(logout.stdout).status, "signed out");
+    assert.equal(record(decode(logout.stdout)).status, "signed out");
     assert.equal(existsSync(join(process.platform === "win32" ? f.env.LOCALAPPDATA : f.env.XDG_STATE_HOME, "mg-axi/credentials.json")), false);
   } finally { f.clean(); }
 });
@@ -163,17 +165,17 @@ test("auth status and logout are offline and never create credentials for a new 
 test("auth status verifies the Windows DACL and exposes only cache availability", () => {
   const f = fixture();
   try {
-    const events = [];
+    const events: { path: string; action: string }[] = [];
     const files = new PrivateFiles("win32", (path, _directory, action) => { events.push({ path, action }); });
     const config = join(f.dir, "config.json");
     const profiles = new Profiles(config, files);
     profiles.create("soc", "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "commercial", false);
-    const profile = profiles.resolve().profile;
+    const profile = profiles.resolve().profile as DelegatedProfile;
     const credentials = new Credentials(join(f.dir, "credentials.json"), files);
     credentials.write(profile, JSON.stringify({ RefreshToken: { fixture: { secret: "fixture-private-refresh-token" } }, AccessToken: { fixture: { secret: "fixture-private-access-token" } } }));
     profiles.verifyPermissions();
     const status = authStatus("soc", profile, credentials);
-    assert.equal(status.sources[0].available, true);
+    assert.equal(status.sources[0]!.available, true);
     assert.doesNotMatch(JSON.stringify(status), /fixture-private/);
     assert.doesNotMatch(readFileSync(credentials.path, "utf8"), /fixture-private-access-token/);
     assert.ok(events.some(event => event.path === config && event.action === "verify"));
@@ -192,13 +194,13 @@ test("complete env profiles precede defaults and explicit file profiles ignore e
     const env = { MG_AXI_MODE: "application", MG_AXI_AUTH: "client-secret", MG_AXI_TENANT_ID: "33333333-3333-4333-8333-333333333333", MG_AXI_CLIENT_ID: "44444444-4444-4444-8444-444444444444", MG_AXI_CLIENT_SECRET: "fixture-env-secret-quote\"/" };
     const selected = f.run(["profile", "show", "--config", config], env);
     assert.equal(selected.status, 0, selected.stdout);
-    assert.equal(decode(selected.stdout).name, "env");
+    assert.equal(record(decode(selected.stdout)).name, "env");
     assert.doesNotMatch(selected.stdout + selected.stderr, /fixture-env-secret/);
     const explicit = f.run(["profile", "show", "--config", config, "--profile", "soc"], env);
-    assert.equal(decode(explicit.stdout).name, "soc");
+    assert.equal(record(decode(explicit.stdout)).name, "soc");
     const status = f.run(["auth", "status", "--config", join(f.dir, "absent.json")], env);
     assert.equal(status.status, 0, status.stdout);
-    assert.equal(decode(status.stdout).sources[0].source, "env:MG_AXI_CLIENT_SECRET");
+    assert.equal(records(record(decode(status.stdout)).sources)[0]!.source, "env:MG_AXI_CLIENT_SECRET");
     assert.doesNotMatch(status.stdout + status.stderr, /fixture-env-secret/);
   } finally { f.clean(); }
 });
@@ -210,7 +212,7 @@ test("partial env profiles fail before falling through to a file default", () =>
     const profiles = new Profiles(config);
     profiles.create("soc", "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222", "commercial", false);
     const result = f.run(["profile", "show", "--config", config], { MG_AXI_TENANT_ID: "11111111-1111-4111-8111-111111111111" });
-    assert.equal(decode(result.stdout).code, "CONFIG_INVALID");
+    assert.equal(record(decode(result.stdout)).code, "CONFIG_INVALID");
   } finally { f.clean(); }
 });
 
@@ -222,7 +224,7 @@ test("secret-only environment falls through to the only file profile", () => {
     assert.equal(created.status, 0, created.stdout);
     const shown = f.run(["profile", "show", "--config", config], { MG_AXI_TOKEN: "fixture-headless-assertion" });
     assert.equal(shown.status, 0, shown.stdout);
-    assert.equal(decode(shown.stdout).name, "soc");
+    assert.equal(record(decode(shown.stdout)).name, "soc");
     assert.doesNotMatch(shown.stdout + shown.stderr, /fixture-headless-assertion/);
   } finally { f.clean(); }
 });
@@ -232,7 +234,7 @@ for (const patch of [{ token: "fixture-inline-secret" }, { token: { env: "1INVAL
   try {
     const path = join(f.dir, "config.json");
     writeFileSync(path, JSON.stringify({ version: 1, profiles: { fixture: { mode: "delegated", tenantId: "11111111-1111-4111-8111-111111111111", clientId: "22222222-2222-4222-8222-222222222222", ...patch } } }), { mode: 0o600 });
-    assert.throws(() => new Profiles(path).list(), error => error.code === "CONFIG_INVALID" && !JSON.stringify(error).includes("fixture-inline-secret"));
+    assert.throws(() => new Profiles(path).list(), error => record(error).code === "CONFIG_INVALID" && !JSON.stringify(error).includes("fixture-inline-secret"));
   } finally { f.clean(); }
 });
 
@@ -251,7 +253,7 @@ test("auth login and its legacy alias reject disabled device code before network
     for (const command of [["auth", "login"], ["login"]]) {
       const result = f.run([...command, "--config", config, "--method", "device-code", "--scopes", "https://graph.microsoft.com/User.Read.All"]);
       assert.notEqual(result.status, 0);
-      assert.match(decode(result.stdout).error, /disabled/);
+      assert.match(text(record(decode(result.stdout)).error), /disabled/);
       assert.equal(result.stderr, "");
     }
   } finally { f.clean(); }
@@ -271,7 +273,7 @@ test("Unix reads reject exposed secrets, writable configs, links and wrong owner
     chmodSync(path, 0o666);
     assert.throws(() => files.read(path, false), { code: "CONFIG_INSECURE" });
     chmodSync(path, 0o600);
-    assert.throws(() => new PrivateFiles("linux", undefined, process.getuid() + 1).read(path), { code: "CONFIG_INSECURE" });
+    assert.throws(() => new PrivateFiles("linux", undefined, process.getuid!() + 1).read(path), { code: "CONFIG_INSECURE" });
     symlinkSync(path, join(f.dir, "link"));
     assert.throws(() => files.read(join(f.dir, "link")), { code: "CONFIG_INSECURE" });
   } finally { f.clean(); }
@@ -282,7 +284,7 @@ test("Unix symlink loops fail as insecure, never a raw ELOOP", { skip: process.p
   try {
     const loop = join(f.dir, "loop");
     symlinkSync(loop, loop);
-    assert.throws(() => new PrivateFiles().read(join(loop, "entry")), error => error.code === "CONFIG_INSECURE" && error.message.includes(join(loop, "entry")));
+    assert.throws(() => new PrivateFiles().read(join(loop, "entry")), error => record(error).code === "CONFIG_INSECURE" && text(record(error).message).includes(join(loop, "entry")));
   } finally { f.clean(); }
 });
 
@@ -292,7 +294,7 @@ test("protect maps symlink loops to CONFIG_INSECURE", { skip: process.platform =
     const loop = join(f.dir, "loop");
     symlinkSync(loop, loop);
     const target = join(loop, "entry");
-    assert.throws(() => new PrivateFiles().protect(target), error => error.code === "CONFIG_INSECURE" && error.message.includes(target));
+    assert.throws(() => new PrivateFiles().protect(target), error => record(error).code === "CONFIG_INSECURE" && text(record(error).message).includes(target));
   } finally { f.clean(); }
 });
 
@@ -309,7 +311,7 @@ test("check maps unreadable files to CONFIG_INSECURE", { skip: process.platform 
     writeFileSync(path, "fixture", { mode: 0o600 });
     chmodSync(dir, 0o000);
     try {
-      assert.throws(() => new PrivateFiles().check(path), error => error.code === "CONFIG_INSECURE" && error.message.includes(path));
+      assert.throws(() => new PrivateFiles().check(path), error => record(error).code === "CONFIG_INSECURE" && text(record(error).message).includes(path));
     } finally { chmodSync(dir, 0o700); }
   } finally { f.clean(); }
 });
@@ -348,7 +350,7 @@ test("atomic writes protect existing directories and leave no temporary files", 
 test("Windows writes restrict directory and temp DACLs before content is written", () => {
   const f = fixture();
   try {
-    const events = [];
+    const events: { directory: boolean; action: string }[] = [];
     const files = new PrivateFiles("win32", (path, directory, action) => {
       events.push({ directory, action });
       if (!directory && action === "restrict") assert.equal(readFileSync(path, "utf8"), "");

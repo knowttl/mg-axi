@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, delegatedProvider, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -59,12 +61,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: [string, ...CredentialArgs][]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push([mode, ...args]);
@@ -79,9 +81,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -89,7 +91,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -106,14 +108,14 @@ function syncTransport() {
     }
     const single = /^\/v1\.0\/directory\/onPremisesSynchronization\/([^/]+)$/.exec(path);
     if (single) {
-      const found = synchronizations.find(row => row.id === decodeURIComponent(single[1]));
+      const found = synchronizations.find(row => row.id === decodeURIComponent(single[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such synchronization" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: [string, ...CredentialArgs][] = []) {
   const fixture = handler ?? syncTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -121,13 +123,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runSyncCli(args, state, mode, denied = false) {
+function runSyncCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-on-premises-synchronization-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -145,15 +147,15 @@ test("delegated lists synchronizations with the reviewed set preserving null and
   const state = setupProfiles();
   try {
     const { requests, calls, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc"], overrides));
     assert.deepEqual(result.synchronizations, [sync1, { id: sync2.id, configuration: null, features: sync2.features }, sync3]);
     assert.deepEqual(result.count, "3 synchronizations");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
-    assert.ok(result.help.some(hint => hint.includes("entra on-premises-synchronization show --id <synchronization-id>")));
+    assert.ok(strings(result.help).some(hint => hint.includes("entra on-premises-synchronization show --id <synchronization-id>")));
     assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-delegated-token"));
-    assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/directory/onPremisesSynchronization?"));
-    const sent = new URL(requests[0].url).searchParams;
+    assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/directory/onPremisesSynchronization?"));
+    const sent = new URL(requests[0]!.url).searchParams;
     assert.equal(sent.get("$select"), "id,configuration,features");
     assert.ok(!sent.has("$filter"));
     assert.ok(!JSON.stringify(result).includes("opaque-fixture-delegated-token"));
@@ -167,12 +169,12 @@ test("delegated resumes a capped synchronization list through its opaque cursor"
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc", "--limit", "1"], overrides);
-    assert.deepEqual(first.synchronizations.map(row => row.id), [sync1.id]);
+    const first = record(await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc", "--limit", "1"], overrides));
+    assert.deepEqual(records(first.synchronizations).map(row => row.id), [sync1.id]);
     assert.equal(first.complete, false);
     assert.equal(typeof first.cursor, "string");
-    const second = await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
-    assert.deepEqual(second.synchronizations.map(row => row.id), [sync2.id, sync3.id]);
+    const second = record(await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc", "--cursor", text(first.cursor)], overrides));
+    assert.deepEqual(records(second.synchronizations).map(row => row.id), [sync2.id, sync3.id]);
     assert.deepEqual(second.count, "2 synchronizations");
     assert.equal(second.total, null);
     assert.equal(second.complete, true);
@@ -185,9 +187,9 @@ test("delegated shows one synchronization with the full reviewed set", async () 
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "on-premises-synchronization", "show", "--id", sync1.id, "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "on-premises-synchronization", "show", "--id", sync1.id, "--profile", "soc"], overrides));
     assert.deepEqual(result.synchronization, sync1);
-    const missing = await executeArgv(["entra", "on-premises-synchronization", "show", "--id", sync3.id, "--profile", "soc"], overrides);
+    const missing = record(await executeArgv(["entra", "on-premises-synchronization", "show", "--id", sync3.id, "--profile", "soc"], overrides));
     assert.deepEqual(missing.synchronization, { id: sync3.id });
   } finally {
     teardownProfiles(state);
@@ -198,8 +200,8 @@ test("delegated show projects --fields locally from the fetched --select set", a
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "on-premises-synchronization", "show", "--id", sync1.id, "--profile", "soc",
-      "--select", "id,features", "--fields", "features"], overrides);
+    const result = record(await executeArgv(["entra", "on-premises-synchronization", "show", "--id", sync1.id, "--profile", "soc",
+      "--select", "id,features", "--fields", "features"], overrides));
     assert.deepEqual(result.synchronization, { features: sync1.features });
     await assert.rejects(
       executeArgv(["entra", "on-premises-synchronization", "show", "--id", sync1.id, "--profile", "soc",
@@ -235,8 +237,8 @@ test("delegated synchronization list has no --filter flag to misuse", async () =
     await assert.rejects(
       executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc", "--filter", "id eq 'x'"], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /unknown flag --filter/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /unknown flag --filter/.test(text(record(error).message));
       },
     );
     assert.equal(calls.length, 0);
@@ -257,8 +259,8 @@ for (const command of [
       await assert.rejects(
         executeArgv(["entra", ...command, "--profile", "batch"], overrides),
         error => {
-          assert.equal(error.code, "VALIDATION_ERROR");
-          return /need a delegated profile; Graph documents no supported application permission/.test(error.message);
+          assert.equal(record(error).code, "VALIDATION_ERROR");
+          return /need a delegated profile; Graph documents no supported application permission/.test(text(record(error).message));
         },
       );
       assert.equal(calls.length, 0);
@@ -274,12 +276,12 @@ test("delegated empty synchronization lists stay definitive", async () => {
   try {
     const empty = transport(() => json(200, { value: [] }));
     const { overrides } = overridesFor("delegated", empty);
-    const listed = await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc"], overrides);
+    const listed = record(await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc"], overrides));
     assert.deepEqual(listed.synchronizations, []);
     assert.deepEqual(listed.count, "0 synchronizations");
     assert.equal(listed.total, null);
     assert.equal(listed.complete, true);
-    assert.ok(listed.help.some(hint => hint.includes("not configured for the tenant")));
+    assert.ok(strings(listed.help).some(hint => hint.includes("not configured for the tenant")));
   } finally {
     teardownProfiles(state);
   }
@@ -290,9 +292,9 @@ test("delegated unknown synchronization ids report absence, not emptiness", asyn
   try {
     const { overrides } = overridesFor("delegated");
     await assert.rejects(executeArgv(["entra", "on-premises-synchronization", "show", "--id", "synchronization-missing", "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-      return /not found or inaccessible \(404\)/.test(error.message);
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+      return /not found or inaccessible \(404\)/.test(text(record(error).message));
     });
   } finally {
     teardownProfiles(state);
@@ -305,16 +307,16 @@ test("delegated denied synchronization reads surface scope, role and licensing",
     const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
     const { overrides } = overridesFor("delegated", denied);
     await assert.rejects(executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.ok(error.suggestions.some(hint => hint.includes("OnPremDirectorySynchronization.Read.All")));
-      assert.ok(error.suggestions.some(hint => hint.includes("Global Administrator")));
-      assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
-      return /grant, role, licence/.test(error.message);
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("OnPremDirectorySynchronization.Read.All")));
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Global Administrator")));
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+      return /grant, role, licence/.test(text(record(error).message));
     });
     await assert.rejects(executeArgv(["entra", "on-premises-synchronization", "show", "--id", sync1.id, "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.ok(error.suggestions.some(hint => hint.includes("OnPremDirectorySynchronization.Read.All")));
-      return /grant, role, licence/.test(error.message);
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("OnPremDirectorySynchronization.Read.All")));
+      return /grant, role, licence/.test(text(record(error).message));
     });
   } finally {
     teardownProfiles(state);
@@ -327,8 +329,8 @@ test("delegated executable lists and shows synchronization reads", () => {
     const listed = runSyncCli(["entra", "on-premises-synchronization", "list", "--profile", "soc"], state, "delegated");
     assert.equal(listed.status, 0, listed.stdout);
     assert.equal(listed.stderr, "");
-    const listOut = decode(listed.stdout);
-    assert.deepEqual(listOut.synchronizations.map(row => row.id), [sync1.id, sync2.id]);
+    const listOut = record(decode(listed.stdout));
+    assert.deepEqual(records(listOut.synchronizations).map(row => row.id), [sync1.id, sync2.id]);
     assert.deepEqual(listOut.count, "2 synchronizations");
     assert.equal(listOut.total, null);
     assert.equal(listOut.complete, true);
@@ -336,7 +338,7 @@ test("delegated executable lists and shows synchronization reads", () => {
 
     const shown = runSyncCli(["entra", "on-premises-synchronization", "show", "--id", sync1.id, "--profile", "soc"], state, "delegated");
     assert.equal(shown.status, 0, shown.stdout);
-    assert.deepEqual(decode(shown.stdout).synchronization, sync1);
+    assert.deepEqual(record(decode(shown.stdout)).synchronization, sync1);
     assert.ok(!shown.stdout.includes("opaque-fixture-delegated-token"));
   } finally { teardownProfiles(state); }
 });
@@ -347,9 +349,9 @@ test("delegated executable denied synchronization reads fail operationally on st
     const result = runSyncCli(["entra", "on-premises-synchronization", "list", "--profile", "soc"], state, "delegated", true);
     assert.equal(result.status, 1, result.stdout);
     assert.equal(result.stderr, "");
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.code, "GRAPH_ERROR");
-    assert.match(output.error, /grant, role, licence or policy/);
+    assert.match(text(output.error), /grant, role, licence or policy/);
     assert.equal(output.synchronizations, undefined);
     assert.ok(!result.stdout.includes("opaque-fixture-delegated-token"));
   } finally { teardownProfiles(state); }
@@ -358,7 +360,7 @@ test("delegated executable denied synchronization reads fail operationally on st
 for (const [command, args] of [
   [["on-premises-synchronization", "list"], []],
   [["on-premises-synchronization", "show"], ["--id", sync1.id]],
-]) {
+] as const) {
   for (const preview of [false, true]) {
     test(`delegated ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
       const state = setupProfiles();
@@ -386,15 +388,15 @@ test("truncated synchronization text carries a --full hint without lifting caps"
   try {
     const longRow = transport(() => json(200, { value: [{ id: longId }] }));
     const { overrides } = overridesFor("delegated", longRow);
-    const partial = await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc",
-      "--select", "id"], overrides);
-    const truncated = partial.synchronizations.find(row => row.id.startsWith("sync-"));
-    assert.match(truncated.id, /truncated, \d+ chars total/);
-    assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc", "--full",
-      "--select", "id"], overrides);
-    assert.equal(full.synchronizations.find(row => row.id.startsWith("sync-")).id, longId);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const partial = record(await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc",
+      "--select", "id"], overrides));
+    const truncated = records(partial.synchronizations).find(row => text(row.id).startsWith("sync-"));
+    assert.match(text(truncated!.id), /truncated, \d+ chars total/);
+    assert.ok(strings(partial.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "on-premises-synchronization", "list", "--profile", "soc", "--full",
+      "--select", "id"], overrides));
+    assert.equal(records(full.synchronizations).find(row => text(row.id).startsWith("sync-"))!.id, longId);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -405,22 +407,22 @@ test("raw on-premises-synchronization reads serve delegated callers and refuse a
   const { DelegatedAuth } = await import("../dist/auth.js");
   const { ApplicationAuth } = await import("../dist/app-auth.js");
   const credentialCalls = [];
-  const requests = [];
+  const requests: TransportRequest[] = [];
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
   const deps = {
-    delegated: new DelegatedAuth({ storage: "session-only", login: async () => credential, silent: async (...args) => { credentialCalls.push(args); return credential; } }),
+    delegated: new DelegatedAuth(delegatedProvider({ storage: "session-only", login: async () => credential, silent: async (...args) => { credentialCalls.push(args); return credential; } })),
     application: new ApplicationAuth({ storage: "session-only", acquire: async (...args) => { credentialCalls.push(args); return credential; } }),
-    transport: async request => { requests.push(request); return { headers: {}, body: JSON.stringify({ value: [sync1] }) }; },
+    transport: async (request: TransportRequest) => { requests.push(request); return { status: 200, headers: {}, body: JSON.stringify({ value: [sync1] }) }; },
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
-  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } };
-  const listed = await runApiGet({ path: "/directory/onPremisesSynchronization", apiVersion: "v1.0", profile: delegatedProfile, scopes: syncScopes[0] }, deps);
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
+  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } } as const;
+  const listed = await runApiGet({ path: "/directory/onPremisesSynchronization", apiVersion: "v1.0", profile: delegatedProfile, scopes: syncScopes[0]! }, deps);
   assert.equal(listed.returned, 1);
   await assert.rejects(
     runApiGet({ path: "/directory/onPremisesSynchronization", apiVersion: "v1.0", profile: appProfile }, deps),
     error => {
-      assert.equal(error.code, "VALIDATION_ERROR");
-      return /needs a delegated profile/.test(error.message);
+      assert.equal(record(error).code, "VALIDATION_ERROR");
+      return /needs a delegated profile/.test(text(record(error).message));
     },
   );
   assert.equal(credentialCalls.length, 1);

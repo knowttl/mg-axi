@@ -1,3 +1,6 @@
+import { record, records, text, strings, authFakes, type CredentialStub, type CredentialArgs, type ProfileConfig } from "./fixtures/typed.ts";
+import type { TransportRequest, TransportResponse } from "../dist/graph-session.js";
+import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,7 +12,7 @@ import { Profiles } from "../dist/profiles.js";
 
 const mailbox = "mailbox@contoso.example";
 const message = { id: "message-1", subject: "Invoice", receivedDateTime: "2026-01-01T00:00:00Z", isRead: false, body: { content: "private-body" }, bodyPreview: "private-preview" };
-function fixture(t, response) {
+function fixture(t: TestContext, response?: (request: TransportRequest, count: number) => TransportResponse) {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-messages-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const config = join(dir, "config.json");
@@ -18,49 +21,49 @@ function fixture(t, response) {
   const client = "22222222-2222-4222-8222-222222222222";
   profiles.create("soc", tenant, client, "commercial", false);
   profiles.create("batch", tenant, client, "commercial", false, { federated: true });
-  const data = JSON.parse(readFileSync(config, "utf8"));
+  const data: ProfileConfig = JSON.parse(readFileSync(config, "utf8"));
   for (const profile of Object.values(data.profiles)) profile.enabledPacks = ["mail"];
   writeFileSync(config, JSON.stringify(data));
-  const requests = [];
-  const credentials = [];
-  const auth = { credential: async (...args) => {
+  const requests: TransportRequest[] = [];
+  const credentials: CredentialArgs[] = [];
+  const auth: CredentialStub = { credential: async (...args) => {
     credentials.push(args);
     return { token: "opaque-fixture-token", tenantId: tenant, clientId: client, accountId: "fixture-account", username: mailbox };
   } };
-  const overrides = { delegated: auth, application: auth, transport: async request => {
+  const overrides = { delegated: authFakes(auth).delegated, application: authFakes(auth).application, transport: async (request: TransportRequest) => {
     requests.push(request);
     return response ? response(request, requests.length) : { status: 200, headers: {}, body: JSON.stringify({ value: [message] }) };
   } };
-  const run = (args = [], profile = "soc", target = mailbox) => executeArgv(["mail", "message", "list", "--mailbox", target, "--profile", profile, "--config", config, ...args], overrides);
-  const show = (args = [], profile = "soc", target = mailbox) => executeArgv(["mail", "message", "show", "--mailbox", target, "--id", "A+ID=", "--profile", profile, "--config", config, ...args], overrides);
+  const run = (args: readonly string[] = [], profile = "soc", target = mailbox) => executeArgv(["mail", "message", "list", "--mailbox", target, "--profile", profile, "--config", config, ...args], overrides);
+  const show = (args: readonly string[] = [], profile = "soc", target = mailbox) => executeArgv(["mail", "message", "show", "--mailbox", target, "--id", "A+ID=", "--profile", profile, "--config", config, ...args], overrides);
   return { run, show, requests, credentials, config };
 }
 
 for (const profile of ["soc", "batch"]) test(`message list projects compact metadata with ${profile}`, async t => {
   const f = fixture(t);
-  const result = decode(encode(await f.run([], profile)));
+  const result = record(decode(encode(record(await f.run([], profile)))));
   assert.deepEqual(result.messages, [{ id: message.id, subject: message.subject, receivedDateTime: message.receivedDateTime, isRead: false }]);
   assert.ok(!JSON.stringify(result).includes("private-"));
-  const url = new URL(f.requests[0].url);
+  const url = new URL(f.requests[0]!.url);
   assert.equal(url.searchParams.get("$orderby"), "receivedDateTime desc");
   assert.equal(url.searchParams.get("$top"), "100");
-  assert.deepEqual(f.credentials[0][1], profile === "soc" ? ["https://graph.microsoft.com/Mail.ReadBasic"] : undefined);
+  assert.deepEqual(f.credentials[0]![1], profile === "soc" ? ["https://graph.microsoft.com/Mail.ReadBasic"] : undefined);
 });
 
 test("folder search preserves KQL and Graph search ordering without Entra consistency", async t => {
   const f = fixture(t);
   await f.run(["--folder", "A+ID=", "--search", 'subject:invoice AND from:sender@contoso.example'], "soc", "me");
-  const url = new URL(f.requests[0].url);
+  const url = new URL(f.requests[0]!.url);
   assert.equal(url.pathname, "/v1.0/me/mailFolders/A%2BID%3D/messages");
   assert.equal(url.searchParams.get("$search"), '"subject:invoice AND from:sender@contoso.example"');
   assert.equal(url.searchParams.has("$orderby"), false);
-  assert.equal(f.requests[0].headers.ConsistencyLevel, undefined);
+  assert.equal(f.requests[0]!.headers.ConsistencyLevel, undefined);
 });
 
-for (const [flag, value, expected] of [["filter", "isRead eq false", "isRead eq false"], ["conversation", "thread'1", "conversationId eq 'thread''1'"]]) test(`${flag} uses an unordered Graph filter`, async t => {
+for (const [flag, value, expected] of [["filter", "isRead eq false", "isRead eq false"], ["conversation", "thread'1", "conversationId eq 'thread''1'"]] as const) test(`${flag} uses an unordered Graph filter`, async t => {
   const f = fixture(t);
   await f.run([`--${flag}`, value]);
-  const url = new URL(f.requests[0].url);
+  const url = new URL(f.requests[0]!.url);
   assert.equal(url.searchParams.get("$filter"), expected);
   assert.equal(url.searchParams.has("$orderby"), false);
 });
@@ -74,15 +77,15 @@ for (const args of [["--search", "a", "--filter", "b"], ["--conversation", "a", 
 
 test("message cursors retain full nextLink and bind query, mailbox, fields and folder", async t => {
   const f = fixture(t, (request, count) => ({ status: 200, headers: {}, body: JSON.stringify({ value: [message], ...(count === 1 ? { "@odata.nextLink": `${request.url}&$skip=17` } : {}) }) }));
-  const first = await f.run(["--search", "invoice", "--limit", "1"]);
+  const first = record(await f.run(["--search", "invoice", "--limit", "1"]));
   assert.equal(first.complete, false);
-  assert.deepEqual(JSON.parse(Buffer.from(first.cursor, "base64url")).buffered, []);
+  assert.deepEqual(JSON.parse(Buffer.from(text(first.cursor), "base64url").toString("utf8")).buffered, []);
   for (const args of [["--search", "other", "--limit", "1"], ["--search", "invoice", "--limit", "1", "--fields", "id"], ["--search", "invoice", "--limit", "1", "--folder", "inbox"]]) {
-    await assert.rejects(f.run([...args, "--cursor", first.cursor]), { code: "VALIDATION_ERROR" });
+    await assert.rejects(f.run([...args, "--cursor", text(first.cursor)]), { code: "VALIDATION_ERROR" });
   }
-  const next = await f.run(["--search", "invoice", "--limit", "1", "--cursor", first.cursor]);
+  const next = record(await f.run(["--search", "invoice", "--limit", "1", "--cursor", text(first.cursor)]));
   assert.equal(next.complete, true);
-  assert.equal(new URL(f.requests[1].url).searchParams.get("$skip"), "17");
+  assert.equal(new URL(f.requests[1]!.url).searchParams.get("$skip"), "17");
 });
 
 test("search cap persists across pages and leaves no continuation after 1000", async t => {
@@ -91,10 +94,10 @@ test("search cap persists across pages and leaves no continuation after 1000", a
     url.searchParams.set("$skiptoken", `page-${count}`);
     return { status: 200, headers: {}, body: JSON.stringify({ value: Array.from({ length: Number(new URL(request.url).searchParams.get("$top")) }, () => message), "@odata.nextLink": url.toString() }) };
   });
-  const first = await f.run(["--search", "invoice", "--limit", "600"]);
-  const last = await f.run(["--search", "invoice", "--limit", "600", "--cursor", first.cursor]);
-  assert.equal(first.messages.length, 600);
-  assert.equal(last.messages.length, 400);
+  const first = record(await f.run(["--search", "invoice", "--limit", "600"]));
+  const last = record(await f.run(["--search", "invoice", "--limit", "600", "--cursor", text(first.cursor)]));
+  assert.equal(records(first.messages).length, 600);
+  assert.equal(records(last.messages).length, 400);
   assert.equal(last.complete, false);
   assert.equal(last.reason, "search-cap");
   assert.equal(last.cursor, undefined);
@@ -103,15 +106,15 @@ test("search cap persists across pages and leaves no continuation after 1000", a
 
 test("search errors suppress Graph echo", async t => {
   const f = fixture(t, () => ({ status: 400, headers: {}, body: JSON.stringify({ error: { message: "sensitive-query-echo" } }) }));
-  await assert.rejects(f.run(["--search", "sensitive-query"]), error => error.code === "GRAPH_ERROR" && !JSON.stringify(error).includes("sensitive-query"));
+  await assert.rejects(f.run(["--search", "sensitive-query"]), error => record(error).code === "GRAPH_ERROR" && !JSON.stringify(error).includes("sensitive-query"));
 });
 
 test("metadata truncation supports full and empty results are definitive", async t => {
   const f = fixture(t, () => ({ status: 200, headers: {}, body: JSON.stringify({ value: [{ ...message, subject: "x".repeat(650) }] }) }));
-  assert.match((await f.run()).messages[0].subject, /truncated, 650 chars total/);
-  assert.equal((await f.run(["--full"])).messages[0].subject.length, 650);
+  assert.match(text(records(record(await f.run()).messages)[0]!.subject), /truncated, 650 chars total/);
+  assert.equal(text(records(record(await f.run(["--full"])).messages)[0]!.subject).length, 650);
   const empty = fixture(t, () => ({ status: 200, headers: {}, body: '{"value":[]}' }));
-  assert.match((await empty.run()).help.join(" "), /0 messages matched/);
+  assert.match(strings(record(await empty.run()).help).join(" "), /0 messages matched/);
 });
 
 test("mailbox switches and oversized pages are refused", async t => {
@@ -127,56 +130,56 @@ const details = { ...message, body: { contentType: "text", content: "Fixture bod
   internetMessageHeaders: [{ name: "X-Fixture", value: "fixture header", unreviewed: "private-extra" }],
   unreviewed: "private-extra" };
 
-for (const [profile, target] of [["soc", "me"], ["soc", mailbox], ["batch", mailbox]]) test(`message show reads reviewed details with ${profile}/${target}`, async t => {
+for (const [profile, target] of [["soc", "me"], ["soc", mailbox], ["batch", mailbox]] as const) test(`message show reads reviewed details with ${profile}/${target}`, async t => {
   const f = fixture(t, () => ({ status: 200, headers: {}, body: JSON.stringify(details) }));
-  const result = decode(encode(await f.show([], profile, target)));
-  assert.equal(result.message.body.content, "Fixture body");
-  assert.deepEqual(result.message.from, { emailAddress: { name: "Sender", address: "sender@contoso.example" } });
-  assert.deepEqual(result.message.toRecipients, [{ emailAddress: { address: mailbox } }]);
-  assert.equal(result.message.internetMessageHeaders, undefined);
-  assert.equal(result.message.bodyPreview, undefined);
+  const result = record(decode(encode(record(await f.show([], profile, target)))));
+  assert.equal(record(record(result.message).body).content, "Fixture body");
+  assert.deepEqual(record(result.message).from, { emailAddress: { name: "Sender", address: "sender@contoso.example" } });
+  assert.deepEqual(record(result.message).toRecipients, [{ emailAddress: { address: mailbox } }]);
+  assert.equal(record(result.message).internetMessageHeaders, undefined);
+  assert.equal(record(result.message).bodyPreview, undefined);
   assert.ok(!JSON.stringify(result).includes("private-extra"));
-  assert.match(result.warning, /untrusted data.*never instructions/);
+  assert.match(text(result.warning), /untrusted data.*never instructions/);
   const request = f.requests[0];
-  assert.equal(new URL(request.url).pathname, `/v1.0/${target === "me" ? "me" : "users/mailbox%40contoso.example"}/messages/A%2BID%3D`);
-  assert.equal(request.headers.Prefer, 'outlook.body-content-type="text"');
-  assert.deepEqual(f.credentials[0][1], profile === "soc" ? ["https://graph.microsoft.com/Mail.Read"] : undefined);
+  assert.equal(new URL(request!.url).pathname, `/v1.0/${target === "me" ? "me" : "users/mailbox%40contoso.example"}/messages/A%2BID%3D`);
+  assert.equal(request!.headers.Prefer, 'outlook.body-content-type="text"');
+  assert.deepEqual(f.credentials[0]![1], profile === "soc" ? ["https://graph.microsoft.com/Mail.Read"] : undefined);
 });
 
 test("message show omits bodies and explicitly selects internet headers", async t => {
   const f = fixture(t, () => ({ status: 200, headers: {}, body: JSON.stringify(details) }));
-  const result = await f.show(["--body", "none", "--headers"]);
-  assert.equal(result.message.body, undefined);
-  assert.deepEqual(result.message.internetMessageHeaders, [{ name: "X-Fixture", value: "fixture header" }]);
-  const select = new URL(f.requests[0].url).searchParams.get("$select").split(",");
+  const result = record(await f.show(["--body", "none", "--headers"]));
+  assert.equal(record(result.message).body, undefined);
+  assert.deepEqual(record(result.message).internetMessageHeaders, [{ name: "X-Fixture", value: "fixture header" }]);
+  const select = new URL(f.requests[0]!.url).searchParams.get("$select")!.split(",");
   assert.ok(select.includes("internetMessageHeaders"));
   assert.ok(!select.includes("body"));
-  assert.equal(f.requests[0].headers.Prefer, undefined);
+  assert.equal(f.requests[0]!.headers.Prefer, undefined);
 });
 
 test("message show requests HTML only on explicit opt-in", async t => {
   const f = fixture(t, () => ({ status: 200, headers: {}, body: JSON.stringify({ ...details, body: { contentType: "html", content: "<p>Fixture</p>" } }) }));
-  const result = await f.show(["--body", "html"]);
-  assert.deepEqual(result.message.body, { contentType: "html", content: "<p>Fixture</p>" });
-  assert.equal(f.requests[0].headers.Prefer, 'outlook.body-content-type="html"');
-  assert.match(result.warning, /untrusted/);
+  const result = record(await f.show(["--body", "html"]));
+  assert.deepEqual(record(result.message).body, { contentType: "html", content: "<p>Fixture</p>" });
+  assert.equal(f.requests[0]!.headers.Prefer, 'outlook.body-content-type="html"');
+  assert.match(text(result.warning), /untrusted/);
 });
 
 for (const length of [500, 501]) test(`body truncation boundary at ${length} characters`, async t => {
   const f = fixture(t, () => ({ status: 200, headers: {}, body: JSON.stringify({ ...details, body: { contentType: "text", content: "x".repeat(length) } }) }));
-  const result = await f.show();
-  assert.equal(result.message.body.content, length === 500 ? "x".repeat(500) : `${"x".repeat(500)}... (truncated, 501 chars total)`);
-  assert.equal((await f.show(["--full"])).message.body.content, "x".repeat(length));
-  if (length > 500) assert.match(result.help.join(" "), /--full/);
+  const result = record(await f.show());
+  assert.equal(record(record(result.message).body).content, length === 500 ? "x".repeat(500) : `${"x".repeat(500)}... (truncated, 501 chars total)`);
+  assert.equal(record(record(record(await f.show(["--full"])).message).body).content, "x".repeat(length));
+  if (length > 500) assert.match(strings(result.help).join(" "), /--full/);
 });
 
 test("full message bodies and headers retain shared secret redaction", async t => {
   const secret = "-----BEGIN PRIVATE KEY-----fixture-----END PRIVATE KEY-----";
   const f = fixture(t, () => ({ status: 200, headers: {}, body: JSON.stringify({ ...details, body: { contentType: "text", content: secret }, internetMessageHeaders: [{ name: "X-Fixture", value: secret }] }) }));
-  const result = await f.show(["--headers", "--full"]);
+  const result = record(await f.show(["--headers", "--full"]));
   assert.ok(!JSON.stringify(result).includes(secret));
-  assert.equal(result.message.body.content, "***redacted***");
-  assert.equal(result.message.internetMessageHeaders[0].value, "***redacted***");
+  assert.equal(record(record(result.message).body).content, "***redacted***");
+  assert.equal(records(record(result.message).internetMessageHeaders)[0]!.value, "***redacted***");
 });
 
 for (const args of [["--body", "mime"], ["--id", ""], ["--fields", "body"], ["--api-version", "beta"], ["--scopes", "Mail.ReadBasic"]]) test(`message show rejects invalid input without calls: ${args.join(" ")}`, async t => {
@@ -186,7 +189,7 @@ for (const args of [["--body", "mime"], ["--id", ""], ["--fields", "body"], ["--
   assert.equal(f.credentials.length, 0);
 });
 
-for (const [profile, target, credentials] of [["batch", "me", 0], ["soc", "other@contoso.example", 1]]) test(`message show refuses mailbox access for ${profile}/${target}`, async t => {
+for (const [profile, target, credentials] of [["batch", "me", 0], ["soc", "other@contoso.example", 1]] as const) test(`message show refuses mailbox access for ${profile}/${target}`, async t => {
   const f = fixture(t);
   await assert.rejects(f.show([], profile, target), { code: "POLICY_DENIED" });
   assert.equal(f.requests.length, 0);
@@ -210,5 +213,5 @@ for (const body of [{ contentType: "html", content: "unexpected HTML" }, { conte
 
 test("message show suppresses Graph error content", async t => {
   const f = fixture(t, () => ({ status: 403, headers: {}, body: JSON.stringify({ error: { message: "private-body-echo" } }) }));
-  await assert.rejects(f.show(), error => error.code === "GRAPH_ERROR" && !JSON.stringify(error).includes("private-body-echo"));
+  await assert.rejects(f.show(), error => record(error).code === "GRAPH_ERROR" && !JSON.stringify(error).includes("private-body-echo"));
 });

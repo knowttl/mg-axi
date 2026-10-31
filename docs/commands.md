@@ -165,6 +165,7 @@ Generated from the executable catalogue; do not edit by hand.
 | `mg-axi entra risky-user show` | native | read |
 | `mg-axi entra risky-user dismiss` | native | write |
 | `mg-axi entra risk-detection list` | native | read |
+| `mg-axi entra risk-detection correlate` | native | read |
 | `mg-axi entra risk-detection show` | native | read |
 | `mg-axi entra risky-service-principal list` | native | read |
 | `mg-axi entra risky-service-principal show` | native | read |

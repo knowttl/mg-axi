@@ -21,7 +21,7 @@ Keep its command path and review resource arguments and filters for the case.
 | Inspect a sign-in failure | `mg-axi entra sign-in show --profile soc --id synthetic-sign-in --select id,userId,status --fields id,userId,status` |
 | Find directory changes | `mg-axi entra directory-audit list --profile soc --since 2026-09-01T00:00:00Z --until 2026-09-02T00:00:00Z --limit 20 --fields id,activityDateTime,activityDisplayName,result` |
 | Find active user risk | `mg-axi entra risky-user list --profile soc --filter "riskState eq 'atRisk'" --limit 20 --fields id,riskLevel,riskState` |
-| Correlate detections with sign-ins | `mg-axi entra risk-detection list --profile soc --since 2026-09-01T00:00:00Z --until 2026-09-02T00:00:00Z --select id,userId,correlationId,riskEventType --limit 20 --fields id,userId,correlationId,riskEventType` |
+| Correlate a detection with sign-ins | `mg-axi entra risk-detection correlate --profile soc --id synthetic-detection --limit 20` |
 | Find an application without per-row show calls | `mg-axi entra application list --profile soc --filter "displayName eq 'Synthetic App'" --select id,appId,displayName --limit 10 --fields id,appId,displayName` |
 | Read granted delegated consent | `mg-axi entra service-principal oauth2-grant list --profile soc --service-principal synthetic-sp --select id,clientId,resourceId,scope --limit 20 --fields id,clientId,resourceId,scope` |
 | Hunt Defender events synchronously | `mg-axi security hunting query --profile soc --file hunt.kql --timespan P1D --limit 20` |
@@ -53,8 +53,12 @@ See [permissions](graph-coverage.md) and [hunting](security-hunting.md) for prer
   Incomplete hunting exits 1; narrow filters/window when `complete: false`, since there is no cursor.
   Project columns in KQL; hunting has no `--fields` or `--select`.
 - Strings truncate at 500 characters; `--full` removes text truncation while retaining redaction and budgets.
-  No combined detection-to-sign-in pivot exists: use a separate bounded sign-in query for the detection's user and activity window; a null detection correlationId means no associated sign-in.
-  Sign-in output does not expose correlationId; user/time matching alone does not prove exact correlation.
+  Detection correlation carries userId and a window five minutes either side of activityDateTime into a sign-in query, within a combined 20 requests, 5 MB and 30 seconds.
+  It needs existing IdentityRiskEvent.Read.All and AuditLog.Read.All permissions, supported delegated roles and Entra ID P1/P2; it never adds consent.
+  Both matching correlationId and detection.requestId = signIn.id establish exact evidence; user/time matches alone remain candidates, even when only one is returned.
+  Multiple candidates are ambiguous; check complete and reason before interpreting matches or absence, and widen the bounded sign-in query when necessary.
+  A null detection correlationId means no associated sign-in and skips the sign-in query; missing user/time evidence reports unavailable.
+  Sign-in list/show now expose the reviewed correlationId property through --select/--fields.
 
 ## Help, safety and failures
 

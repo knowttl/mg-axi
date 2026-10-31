@@ -1825,6 +1825,11 @@ export const LEAVES: Leaf[] = [
     cursor: riskRead.cursor,
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit Graph scopes using full https://graph.microsoft.com/ names; defaults to IdentityRiskEvent.Read.All" },
   }, examples: ["mg-axi entra risk-detection list --profile soc --since 2026-09-01T00:00:00Z", "mg-axi entra risk-detection list --profile soc --since 2026-09-01T00:00:00Z --filter \"riskState eq 'atRisk'\" --limit 10", "mg-axi entra risk-detection list --profile soc --since 2026-09-01T00:00:00Z --all"] },
+  { path: "entra risk-detection correlate", description: "Read a detection and correlate sign-ins for its user within five minutes either side of activityDateTime; requires existing IdentityRiskEvent.Read.All and AuditLog.Read.All grants, supported delegated roles and Entra ID P1/P2. Reports exact identifier evidence, candidates, ambiguity and partial results within a combined 20 requests, 5 MB and 30 seconds", operation: "GET:/identityProtection/riskDetections/{riskDetection-id}", flags: {
+    ...common,
+    id: { value: "risk-detection-id", required: true, description: "Risk detection object ID; its user and activity window scope the sign-in query automatically" },
+    limit: { value: "positive-integer", default: "100", description: "Maximum sign-ins to inspect; incomplete output never claims a unique match or absence" },
+  }, examples: ["mg-axi entra risk-detection correlate --id <risk-detection-id> --profile soc", "mg-axi entra risk-detection correlate --id <risk-detection-id> --profile soc --limit 20"] },
   { path: "entra risk-detection show", description: "Show one risk detection with the full reviewed property set and sign-in correlation guidance; a null correlationId means no sign-in is associated and there is no riskySignIns endpoint", operation: "GET:/identityProtection/riskDetections/{riskDetection-id}", flags: {
     ...common, id: { value: "risk-detection-id", required: true, description: "Risk detection object ID" },
     select: riskRead.select,

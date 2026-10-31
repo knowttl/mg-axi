@@ -32,6 +32,7 @@ import type { AnyProfile } from "./profiles.js";
 export const KNOWN_SIGNIN_FIELDS: readonly string[] = [
   "id",
   "createdDateTime",
+  "correlationId",
   "userId",
   "userPrincipalName",
   "userDisplayName",

@@ -163,6 +163,8 @@ export interface ExecuteArgs {
   mailBodyType?: "text" | "html";
   signal?: AbortSignal;
   clock?: Clock;
+  // Compound reads account for this stage before allocating the next stage.
+  usage?: { requests: number; bytes: number };
 }
 
 export interface CollectionBudget {
@@ -172,6 +174,8 @@ export interface CollectionBudget {
 }
 
 export interface CollectArgs extends ExecuteArgs {
+  // Investigation reads retain earlier pages when a later request fails.
+  partialOnError?: boolean;
   // Row cap: the remainder of an already fetched page is buffered into the
   // cursor, never discarded.
   limit?: number;
@@ -851,7 +855,7 @@ export class GraphSession {
       if (error instanceof DeadlineExceeded) throw new AxiError(`Graph deadline for ${operation.id} is exceeded`, "GRAPH_ERROR", ["Narrow the query before retrying"]);
       throw error;
     }
-    return this.send(operation, params, url, token, { signal, clock, deadline, consistencyLevel: args.consistencyLevel, scalar: args.scalar, mailBodyType: args.mailBodyType });
+    return this.send(operation, params, url, token, { signal, clock, deadline, consistencyLevel: args.consistencyLevel, scalar: args.scalar, mailBodyType: args.mailBodyType, usage: args.usage });
   }
 
   // CORE-02: follow @odata.nextLink continuations through the same
@@ -989,6 +993,7 @@ export class GraphSession {
         } catch (error) {
           signal?.throwIfAborted();
           if (error instanceof DeadlineExceeded) return partial("deadline exceeded", fetchUrl, pending);
+          if (args.partialOnError) return partial(`Graph request for ${operation.id} failed before a response was received`, fetchUrl, pending);
           throw new AxiError(`Graph request for ${operation.id} failed before a response was received`, "GRAPH_ERROR", [
             `Check network access to https://${GRAPH_HOST}`,
             "Transport failures carry no Graph diagnosis; do not retry blindly",
@@ -1021,7 +1026,11 @@ export class GraphSession {
           await clock.sleep(wait, signal);
           continue;
         }
-        if (status < 200 || status >= 300) throw this.translateError(operation, response);
+        if (status < 200 || status >= 300) {
+          const error = this.translateError(operation, response);
+          if (args.partialOnError) return partial(error.message, fetchUrl, pending);
+          throw error;
+        }
         if (status === 204 || status === 205) {
           remember(current);
           remember(fetchUrl);
@@ -1105,7 +1114,7 @@ export class GraphSession {
     return undefined;
   }
 
-  private async send(operation: SessionOperation, params: Record<string, string>, url: string, token: string, opts: { signal?: AbortSignal; clock: Clock; deadline: number; consistencyLevel?: "eventual"; scalar?: boolean; mailBodyType?: "text" | "html" }): Promise<unknown> {
+  private async send(operation: SessionOperation, params: Record<string, string>, url: string, token: string, opts: { signal?: AbortSignal; clock: Clock; deadline: number; consistencyLevel?: "eventual"; scalar?: boolean; mailBodyType?: "text" | "html"; usage?: { requests: number; bytes: number } }): Promise<unknown> {
     const clock = opts.clock;
     const signal = opts.signal;
     const deadline = opts.deadline;
@@ -1142,6 +1151,11 @@ export class GraphSession {
         ]);
       }
       requests += 1;
+      if (opts.usage) {
+        opts.usage.requests += 1;
+        opts.usage.bytes += Math.max(bodyBytes(response.body), response.receivedBodyBytes ?? 0);
+        if (opts.usage.bytes > DEFAULT_MAX_BYTES) throw new AxiError("Compound read byte budget exceeded", "GRAPH_ERROR", ["Retry a narrower read"]);
+      }
       if (response.status === 301 || response.status === 302 || response.status === 303 || response.status === 307 || response.status === 308) {
         const location = header(response.headers, "location");
         if (!location) throw new AxiError(`Graph redirect for ${operation.id} is missing its target`, "GRAPH_ERROR", ["A redirect without a target cannot be re-authorized"]);

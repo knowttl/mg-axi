@@ -16,7 +16,7 @@ const cases = [
   ["/auditLogs/signIns/synthetic-sign-in", "signIn", { id: "synthetic-sign-in", userId: "synthetic-user", status: { errorCode: 50076 } }],
   ["/auditLogs/directoryAudits", "directoryAudits", { id: "synthetic-audit", activityDateTime: "2026-09-01T12:00:00Z", activityDisplayName: "Update user", result: "success" }],
   ["/identityProtection/riskyUsers", "riskyUsers", { id: "synthetic-user", riskLevel: "high", riskState: "atRisk" }],
-  ["/identityProtection/riskDetections", "riskDetections", { id: "synthetic-detection", userId: "synthetic-user", correlationId: "synthetic-correlation", riskEventType: "unfamiliarFeatures" }],
+  ["/identityProtection/riskDetections/synthetic-detection", "riskDetection", { id: "synthetic-detection", userId: "synthetic-user", activityDateTime: "2026-09-01T12:00:00Z", requestId: "synthetic-sign-in", correlationId: "synthetic-correlation" }],
   ["/applications", "applications", { id: "synthetic-app", appId: "33333333-3333-4333-8333-333333333333", displayName: "Synthetic App" }],
   ["/servicePrincipals/synthetic-sp/oauth2PermissionGrants", "oauth2PermissionGrants", { id: "synthetic-grant", clientId: "synthetic-sp", resourceId: "synthetic-resource", scope: "User.Read" }],
   ["/security/runHuntingQuery", "results", { Timestamp: "2026-09-01T12:00:00Z", DeviceName: "synthetic-device", FileName: "synthetic.exe" }],
@@ -40,19 +40,26 @@ for (const [index, [path, key, row]] of cases.entries()) {
     const fileIndex = args.indexOf("--file");
     if (fileIndex !== -1) args[fileIndex + 1] = file;
     const requests = [];
+    const correlating = key === "riskDetection";
     const result = await executeArgv([...args, "--config", config], {
       delegated: { credential: async profile => ({ token: "synthetic-token", tenantId: profile.tenantId, clientId: profile.clientId, accountId: "synthetic-account", expiresAt: Date.now() + 3600000 }) },
       transport: async request => {
         requests.push(request);
+        if (correlating && requests.length === 2) {
+          assert.equal(new URL(request.url).pathname, "/v1.0/auditLogs/signIns");
+          assert.equal(request.method, "GET");
+          return { status: 200, headers: {}, body: JSON.stringify({ value: [{ id: row.requestId, userId: row.userId, createdDateTime: row.activityDateTime, correlationId: row.correlationId }] }) };
+        }
         assert.equal(new URL(request.url).pathname, `/v1.0${path}`);
         const hunting = path === "/security/runHuntingQuery";
         assert.equal(request.method, hunting ? "POST" : "GET");
         const body = hunting ? { schema: Object.keys(row).map(name => ({ name, type: "String" })), results: [row] }
-          : / show /.test(examples[index]) ? row : { value: [row] };
+          : / show /.test(examples[index]) || correlating ? row : { value: [row] };
         return { status: 200, headers: {}, body: JSON.stringify(body) };
       },
     });
-    assert.equal(requests.length, 1);
-    assert.deepEqual(result[key], / show /.test(examples[index]) ? row : [row]);
+    assert.equal(requests.length, correlating ? 2 : 1);
+    assert.deepEqual(result[key], / show /.test(examples[index]) || correlating ? row : [row]);
+    if (correlating) assert.equal(result.status, "exact");
   });
 }

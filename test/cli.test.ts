@@ -1,3 +1,4 @@
+import { record, records, text as outputText, strings } from "./fixtures/typed.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -8,7 +9,7 @@ import { performance } from "node:perf_hooks";
 import { decode } from "@toon-format/toon";
 
 const bin = resolve("dist/bin/mg-axi.js");
-function run(args, executable = bin, options = {}) {
+function run(args: readonly string[], executable = bin, options: { init?: (dir: string) => void; env?: NodeJS.ProcessEnv | ((dir: string) => NodeJS.ProcessEnv); cwd?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-cli-"));
   try {
     options.init?.(dir);
@@ -25,10 +26,10 @@ test("home reports unavailable tenant state on stdout without credentials", () =
   const result = run([]);
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
-  const output = decode(result.stdout);
-  assert.equal(output.bin.replace(/^~(?=[/\\])/, homedir()), bin);
-  assert.match(output.tenant, /unavailable/);
-  assert.equal(output.domains[0].status, "unconfigured");
+  const output = record(decode(result.stdout));
+  assert.equal(outputText(output.bin).replace(/^~(?=[/\\])/, homedir()), bin);
+  assert.match(outputText(output.tenant), /unavailable/);
+  assert.equal(records(output.domains)[0]!.status, "unconfigured");
 });
 
 const SKILL_HINT = "npx skills add knowttl/mg-axi --skill mg-axi";
@@ -39,19 +40,19 @@ const SKILL_HOSTS = [
   { name: "opencode", env: { OPENCODE: "1" }, userDirs: [join(".config", "opencode", "skills"), join(".claude", "skills"), join(".agents", "skills")], projectDirs: [join(".opencode", "skills"), join(".claude", "skills"), join(".agents", "skills")] },
 ];
 
-function homeHelp(result) {
+function homeHelp(result: import("node:child_process").SpawnSyncReturns<string>) {
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
-  return decode(result.stdout).help;
+  return strings(record(decode(result.stdout)).help);
 }
 
-function mkSkill(skillsDir) {
+function mkSkill(skillsDir: string) {
   mkdirSync(join(skillsDir, "mg-axi"), { recursive: true });
   writeFileSync(join(skillsDir, "mg-axi", "SKILL.md"), "---\nname: mg-axi\n---\n");
 }
 
 for (const host of SKILL_HOSTS) test(`home appends the skill install hint for ${host.name} when the skill is missing`, () => {
-  assert.equal(homeHelp(run([], bin, { env: host.env })).at(-1), SKILL_HINT);
+  assert.equal(strings(homeHelp(run([], bin, { env: host.env }))).at(-1), SKILL_HINT);
 });
 
 for (const host of SKILL_HOSTS) for (const userDir of host.userDirs) test(`home omits the skill install hint for ${host.name} once installed at user level (${userDir})`, () => {
@@ -59,7 +60,7 @@ for (const host of SKILL_HOSTS) for (const userDir of host.userDirs) test(`home 
     env: host.env,
     init: dir => mkSkill(join(dir, userDir)),
   }));
-  assert.ok(!help.includes(SKILL_HINT));
+  assert.ok(!strings(help).includes(SKILL_HINT));
 });
 
 for (const host of SKILL_HOSTS) for (const projectDir of host.projectDirs) test(`home omits the skill install hint for ${host.name} once installed at project level (${projectDir})`, () => {
@@ -71,7 +72,7 @@ for (const host of SKILL_HOSTS) for (const projectDir of host.projectDirs) test(
       mkdirSync(join(dir, "proj", "sub"), { recursive: true });
     },
   }));
-  assert.ok(!help.includes(SKILL_HINT));
+  assert.ok(!strings(help).includes(SKILL_HINT));
 });
 
 test("home honours CLAUDE_CONFIG_DIR for the Claude Code personal skills folder", () => {
@@ -79,7 +80,7 @@ test("home honours CLAUDE_CONFIG_DIR for the Claude Code personal skills folder"
     env: dir => ({ CLAUDECODE: "1", CLAUDE_CONFIG_DIR: join(dir, "custom-claude") }),
     init: dir => mkSkill(join(dir, "custom-claude", "skills")),
   }));
-  assert.ok(!help.includes(SKILL_HINT));
+  assert.ok(!strings(help).includes(SKILL_HINT));
 });
 
 test("home honours CODEX_HOME for the Codex skills folder", () => {
@@ -87,7 +88,7 @@ test("home honours CODEX_HOME for the Codex skills folder", () => {
     env: dir => ({ CODEX_THREAD_ID: "thread-fixture", CODEX_HOME: join(dir, "custom-codex") }),
     init: dir => mkSkill(join(dir, "custom-codex", "skills")),
   }));
-  assert.ok(!help.includes(SKILL_HINT));
+  assert.ok(!strings(help).includes(SKILL_HINT));
 });
 
 test("home honours XDG_CONFIG_HOME for the OpenCode skills folder", () => {
@@ -95,7 +96,7 @@ test("home honours XDG_CONFIG_HOME for the OpenCode skills folder", () => {
     env: dir => ({ OPENCODE: "1", XDG_CONFIG_HOME: join(dir, "custom-config") }),
     init: dir => mkSkill(join(dir, "custom-config", "opencode", "skills")),
   }));
-  assert.ok(!help.includes(SKILL_HINT));
+  assert.ok(!strings(help).includes(SKILL_HINT));
 });
 
 test("home honours OPENCODE_CONFIG_DIR for the OpenCode skills folder", () => {
@@ -103,11 +104,11 @@ test("home honours OPENCODE_CONFIG_DIR for the OpenCode skills folder", () => {
     env: dir => ({ OPENCODE: "1", OPENCODE_CONFIG_DIR: join(dir, "custom-opencode") }),
     init: dir => mkSkill(join(dir, "custom-opencode", "opencode", "skills")),
   }));
-  assert.ok(!help.includes(SKILL_HINT));
+  assert.ok(!strings(help).includes(SKILL_HINT));
 });
 
 test("home omits the skill install hint outside a known agent host", () => {
-  assert.ok(!homeHelp(run([])).includes(SKILL_HINT));
+  assert.ok(!strings(homeHelp(run([]))).includes(SKILL_HINT));
 });
 
 // One host's copy never hides another host's hint: each entry installs the
@@ -124,7 +125,7 @@ for (const host of CROSS_HOST) test(`home still shows the skill install hint for
     env: host.env,
     init: dir => mkSkill(join(dir, host.userDir)),
   }));
-  assert.equal(help.at(-1), SKILL_HINT);
+  assert.equal(strings(help).at(-1), SKILL_HINT);
 });
 
 for (const host of CROSS_HOST) test(`home still shows the skill install hint for ${host.name} when the skill lives only in another host's project folder (${host.projectDir})`, () => {
@@ -136,7 +137,7 @@ for (const host of CROSS_HOST) test(`home still shows the skill install hint for
       mkdirSync(join(dir, "proj", "sub"), { recursive: true });
     },
   }));
-  assert.equal(help.at(-1), SKILL_HINT);
+  assert.equal(strings(help).at(-1), SKILL_HINT);
 });
 
 test("home still shows the hint when mg-axi exists without a SKILL.md file", () => {
@@ -144,7 +145,7 @@ test("home still shows the hint when mg-axi exists without a SKILL.md file", () 
     env: { CLAUDECODE: "1" },
     init: dir => mkdirSync(join(dir, ".claude", "skills", "mg-axi"), { recursive: true }),
   }));
-  assert.equal(help.at(-1), SKILL_HINT);
+  assert.equal(strings(help).at(-1), SKILL_HINT);
 });
 
 test("home omits the hint in a linked worktree via the main checkout's project skills", () => {
@@ -157,7 +158,7 @@ test("home omits the hint in a linked worktree via the main checkout's project s
       writeFileSync(join(dir, "wt", ".git"), `gitdir: ${join(dir, "main", ".git", "worktrees", "wt")}\n`);
     },
   }));
-  assert.ok(!help.includes(SKILL_HINT));
+  assert.ok(!strings(help).includes(SKILL_HINT));
 });
 
 test("home still shows the hint in a worktree that has its own .claude/skills folder", () => {
@@ -171,7 +172,7 @@ test("home still shows the hint in a worktree that has its own .claude/skills fo
       writeFileSync(join(dir, "wt", ".git"), `gitdir: ${join(dir, "main", ".git", "worktrees", "wt")}\n`);
     },
   }));
-  assert.equal(help.at(-1), SKILL_HINT);
+  assert.equal(strings(help).at(-1), SKILL_HINT);
 });
 
 test("top help lists immediate commands within a small output budget", () => {
@@ -179,13 +180,13 @@ test("top help lists immediate commands within a small output budget", () => {
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
   assert.ok(Buffer.byteLength(result.stdout) < 2048);
-  for (const command of ["entra", "profile", "auth", "api", "setup", "doctor"]) {
+  for (const command of ["entra", "profile", "auth", "api", "setup", "doctor"] as const) {
     assert.ok(result.stdout.includes(`mg-axi ${command} --help`));
   }
   assert.doesNotMatch(result.stdout, /entra user list|--scopes/);
 });
 
-for (const path of ["entra", "entra user", "entra group member", "entra lifecycle run", "profile", "auth", "api"]) {
+for (const path of ["entra", "entra user", "entra group member", "entra lifecycle run", "profile", "auth", "api"] as const) {
   test(`group help for ${path} is bounded and local`, () => {
     const result = run([...path.split(" "), "--help"]);
     assert.equal(result.status, 0, result.stdout);
@@ -206,15 +207,15 @@ for (const [args, expected, excluded] of [
   [["api"], "mg-axi api get --help", "entra user"],
   [["entra", "--help", "--typo"], "mg-axi entra user --help", "entra user list"],
   [["entra", "--help=false"], "mg-axi entra user --help", "entra user list"],
-]) test(`unknown or incomplete command ${args.join(" ")} gives nearest-group guidance`, () => {
+] as const) test(`unknown or incomplete command ${args.join(" ")} gives nearest-group guidance`, () => {
   const result = run(args);
   assert.equal(result.status, 2);
   assert.equal(result.stderr, "");
   assert.ok(Buffer.byteLength(result.stdout) < 8192);
-  const output = decode(result.stdout);
+  const output = record(decode(result.stdout));
   assert.equal(output.code, "VALIDATION_ERROR");
-  assert.ok(output.help.join("\n").includes(expected));
-  assert.ok(!output.help.join("\n").includes(excluded));
+  assert.ok(strings(output.help).join("\n").includes(expected));
+  assert.ok(!strings(output.help).join("\n").includes(excluded));
 });
 
 test("leaf help includes flags, defaults and examples without requiring an ID", () => {
@@ -288,22 +289,22 @@ for (const [name, args, error] of [
   ["non-GET api verb", ["api", "delete", "/users"], /reviewed GET reads only/],
   ["prototype name", ["constructor"], /unknown/],
   ["trailing version", ["home", "--version"], /unknown flag/],
-]) test(`${name} fails with usage output`, () => {
+] as const) test(`${name} fails with usage output`, () => {
   const result = run(args);
   assert.equal(result.status, 2);
   assert.equal(result.stderr, "");
-  const output = decode(result.stdout);
-  assert.match(output.error, error);
+  const output = record(decode(result.stdout));
+  assert.match(outputText(output.error), error);
   assert.equal(output.code, "VALIDATION_ERROR");
-  assert.ok(output.help.length);
+  assert.ok(strings(output.help).length);
 });
 
-for (const version of ["v1.0", "beta"]) test(`valid ${version} leaf resolves its profile before execution`, () => {
+for (const version of ["v1.0", "beta"] as const) test(`valid ${version} leaf resolves its profile before execution`, () => {
   const result = run(["entra", "user", "show", "--id", "fixture", "--api-version", version]);
   assert.equal(result.status, 1);
   assert.equal(result.stderr, "");
-  const output = decode(result.stdout);
-  assert.match(output.error, /No configured profile selected/);
+  const output = record(decode(result.stdout));
+  assert.match(outputText(output.error), /No configured profile selected/);
   assert.equal(output.code, "PROFILE_REQUIRED");
 });
 
@@ -680,27 +681,27 @@ test("group member list without a profile fails operationally on stdout", () => 
   const result = run(["entra", "group", "member", "list", "--group", "fixture"]);
   assert.equal(result.status, 1);
   assert.equal(result.stderr, "");
-  const output = decode(result.stdout);
+  const output = record(decode(result.stdout));
   assert.equal(output.code, "PROFILE_REQUIRED");
-  assert.ok(output.help.length);
+  assert.ok(strings(output.help).length);
 });
 
 test("directory-role show without a profile fails operationally on stdout", () => {
   const result = run(["entra", "directory-role", "show", "--id", "fixture"]);
   assert.equal(result.status, 1);
   assert.equal(result.stderr, "");
-  const output = decode(result.stdout);
+  const output = record(decode(result.stdout));
   assert.equal(output.code, "PROFILE_REQUIRED");
-  assert.ok(output.help.length);
+  assert.ok(strings(output.help).length);
 });
 
 test("user list without a profile fails operationally on stdout", () => {
   const result = run(["entra", "user", "list"]);
   assert.equal(result.status, 1);
   assert.equal(result.stderr, "");
-  const output = decode(result.stdout);
+  const output = record(decode(result.stdout));
   assert.equal(output.code, "PROFILE_REQUIRED");
-  assert.ok(output.help.length);
+  assert.ok(strings(output.help).length);
 });
 
 test("version probes work with the command graph absent", () => {
@@ -711,7 +712,7 @@ test("version probes work with the command graph absent", () => {
     cpSync("dist/version.js", join(dir, "dist/version.js"));
     cpSync("package.json", join(dir, "package.json"));
     cpSync("node_modules", join(dir, "node_modules"), { recursive: true, dereference: true });
-    for (const flag of ["-v", "-V", "--version"]) {
+    for (const flag of ["-v", "-V", "--version"] as const) {
       const result = run([flag], join(dir, "dist/bin/mg-axi.js"));
       assert.equal(result.status, 0);
       assert.equal(result.stderr, "");
@@ -723,7 +724,7 @@ test("version probes work with the command graph absent", () => {
 });
 
 test("version latency stays near the Node startup floor", () => {
-  const measure = args => {
+  const measure = (args: readonly string[]) => {
     const start = performance.now();
     const result = spawnSync(process.execPath, args, { encoding: "utf8", input: "", timeout: 10000 });
     assert.equal(result.status, 0);

@@ -1,3 +1,5 @@
+import { record, records, text as outputText, delegatedProvider, type RawResponseHandler, type OutputRecord } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ApplicationAuth } from "../dist/app-auth.js";
@@ -6,28 +8,28 @@ import { GraphSession, resolveSessionOperation } from "../dist/graph-session.js"
 
 const tenant = "11111111-1111-4111-8111-111111111111";
 const client = "22222222-2222-4222-8222-222222222222";
-const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
+const delegatedProfile = { mode: "delegated" as const, tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
 const scopes = ["https://graph.microsoft.com/User.Read"];
 const users = resolveSessionOperation("v1.0", "GET", "/users");
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function fixture(handler, credentialHandler) {
-  const credentialCalls = [];
-  const requests = [];
+function fixture(handler: RawResponseHandler, credentialHandler?: (credential: import("../dist/auth.js").Credential) => import("../dist/auth.js").Credential | Promise<import("../dist/auth.js").Credential>) {
+  const credentialCalls: unknown[][] = [];
+  const requests: TransportRequest[] = [];
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
-  const delegated = new DelegatedAuth({
+  const delegated = new DelegatedAuth(delegatedProvider({
     storage: "session-only",
     login: async () => credential,
     silent: async (...args) => { credentialCalls.push(["silent", ...args]); return credentialHandler ? credentialHandler(credential) : credential; },
-  });
+  }));
   const application = new ApplicationAuth({ storage: "session-only", acquire: async (...args) => {
     credentialCalls.push(["acquire", ...args]);
     return credentialHandler ? credentialHandler(credential) : credential;
   } });
-  const transport = async request => {
+  const transport: GraphTransport = async request => {
     requests.push(request);
     const response = typeof handler === "function" ? await handler(request, requests.length) : handler;
     return { headers: {}, body: "", ...response };
@@ -37,16 +39,16 @@ function fixture(handler, credentialHandler) {
 
 function fakeClock(start = 1_000_000) {
   let t = start;
-  const sleeps = [];
+  const sleeps: number[] = [];
   return {
     sleeps,
     clock: {
       now: () => t,
-      sleep: (ms, signal) => new Promise((resolve, reject) => {
+      sleep: (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
         signal?.throwIfAborted();
         const onAbort = () => {
           clearImmediate(timer);
-          reject(signal.reason);
+          reject(signal!.reason);
         };
         const timer = setImmediate(() => {
           signal?.removeEventListener("abort", onAbort);
@@ -60,14 +62,14 @@ function fakeClock(start = 1_000_000) {
   };
 }
 
-function decodeCursor(cursor) {
+function decodeCursor(cursor: string) {
   return JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
 }
 
-async function cursorWith(overrides) {
+async function cursorWith(overrides: OutputRecord) {
   const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
   const partial = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, limit: 1 });
-  return Buffer.from(JSON.stringify({ ...decodeCursor(partial.cursor), ...overrides })).toString("base64url");
+  return Buffer.from(JSON.stringify({ ...decodeCursor(outputText(partial.cursor)), ...overrides })).toString("base64url");
 }
 
 test("collect follows exact nextLink and preserves required headers", async () => {
@@ -82,11 +84,11 @@ test("collect follows exact nextLink and preserves required headers", async () =
   assert.equal(result.requests, 2);
   assert.ok(result.bytes > 0);
   assert.equal(f.requests.length, 2);
-  assert.equal(f.requests[1].url, next);
+  assert.equal(f.requests[1]!.url, next);
   assert.ok(f.requests.every(r => r.headers.Authorization === "Bearer opaque-fixture-secret"));
   assert.ok(f.requests.every(r => r.headers.Accept === "application/json"));
-  assert.match(f.requests[0].headers["client-request-id"], /^[0-9a-f-]{36}$/);
-  assert.notEqual(f.requests[0].headers["client-request-id"], f.requests[1].headers["client-request-id"]);
+  assert.match(outputText(f.requests[0]!.headers["client-request-id"]), /^[0-9a-f-]{36}$/);
+  assert.notEqual(f.requests[0]!.headers["client-request-id"], f.requests[1]!.headers["client-request-id"]);
 });
 
 test("collect redacts sentinels on every page", async () => {
@@ -111,7 +113,7 @@ for (const [name, response, reason] of [
   ["rejected nextLink", json(200, { value: [], "@odata.nextLink": "https://example.invalid/v1.0/users" }), /denied/i],
   ["missing redirect target", { status: 302 }, /missing its target/],
   ["rejected redirect target", { status: 302, headers: { location: "https://example.invalid/v1.0/users" } }, /denied/i],
-]) {
+] as const) {
   test(`partialOnError preserves earlier rows after ${name}`, async () => {
     const next = "https://graph.microsoft.com/v1.0/users?$skiptoken=page2";
     const f = fixture((request, count) => count === 1
@@ -120,10 +122,10 @@ for (const [name, response, reason] of [
     const result = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, partialOnError: true });
     assert.deepEqual(result.value, [{ id: "a" }]);
     assert.equal(result.complete, false);
-    assert.match(result.reason, reason);
+    assert.match(outputText(result.reason), reason);
     assert.equal(result.requests, 2);
     assert.equal(f.requests.length, 2);
-    assert.equal(decodeCursor(result.cursor).next, next);
+    assert.equal(decodeCursor(outputText(result.cursor)).next, next);
   });
 }
 
@@ -171,7 +173,7 @@ test("byte budget preserves unreturned rows in the cursor", async () => {
   const cursor = decodeCursor(first.cursor);
   assert.deepEqual(cursor.buffered, [{ id: "a" }]);
   const second = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor });
-  assert.ok(second.value.some(row => row.id === "a"));
+  assert.ok(second.value.some(row => record(row).id === "a"));
   assert.equal(second.complete, true);
 });
 
@@ -180,14 +182,14 @@ for (const [name, response, buffered] of [
   ["empty success", { status: 204, body: "" }, []],
   ["redirect", { status: 302, headers: { location: "/v1.0/users?$skiptoken=target" } }, []],
   ["throttle", { status: 503, headers: { "retry-after": "3600" } }, []],
-]) test(`${name} counts original response bytes supplied by a transforming transport`, async () => {
+] as const) test(`${name} counts original response bytes supplied by a transforming transport`, async () => {
   const f = fixture({ ...response, receivedBodyBytes: 100 });
   const result = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, budget: { maxBytes: 50 } });
   assert.equal(result.complete, false);
-  assert.match(result.reason, /byte budget/);
+  assert.match(outputText(result.reason), /byte budget/);
   assert.equal(result.bytes, 100);
   assert.equal(f.requests.length, 1);
-  assert.deepEqual(decodeCursor(result.cursor).buffered, buffered);
+  assert.deepEqual(decodeCursor(outputText(result.cursor)).buffered, buffered);
 });
 
 test("deadline exceeded by a Retry-After wait ends as partial", async () => {
@@ -222,7 +224,7 @@ test("Retry-After HTTP dates resolve through the fake clock", async () => {
   const result = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, clock: fake.clock });
   assert.equal(result.complete, true);
   assert.equal(fake.sleeps.length, 1);
-  assert.ok(Math.abs(fake.sleeps[0] - 3000) < 5);
+  assert.ok(Math.abs(fake.sleeps[0]! - 3000) < 5);
 });
 
 test("absent Retry-After uses bounded backoff, not real time", async () => {
@@ -240,7 +242,7 @@ test("oversized Retry-After never retries a single read", async () => {
   const f = fixture(json(429, { error: { code: "TooManyRequests", message: "slow" } }, { "retry-after": "120" }));
   await assert.rejects(
     f.session.execute({ profile: delegatedProfile, operation: users, scopes, clock: fake.clock }),
-    error => error.code === "GRAPH_ERROR" && /retry after 120/.test(error.message),
+    error => record(error).code === "GRAPH_ERROR" && /retry after 120/.test(outputText(record(error).message)),
   );
   assert.deepEqual(fake.sleeps, []);
   assert.equal(f.requests.length, 1);
@@ -316,7 +318,7 @@ test("$search with eventual consistency sends the header on every page", async (
   const f = fixture((request, count) => count === 1
     ? json(200, { value: [{ id: "a" }], "@odata.nextLink": next })
     : json(200, { value: [{ id: "b" }] }));
-  const result = await f.session.collect({ profile: delegatedProfile, operation: users, query: { $search: "\"displayName:ana\"", $select: "id" }, consistencyLevel: "eventual", scopes });
+  const result = await f.session.collect({ profile: delegatedProfile, operation: users, query: { $search: "\"displayName:ana\"", $select: "id" }, consistencyLevel: "eventual" as const, scopes });
   assert.equal(result.complete, true);
   assert.ok(f.requests.every(r => r.headers.ConsistencyLevel === "eventual"));
 });
@@ -336,7 +338,7 @@ test("aborted signals fail fast before HTTP", async () => {
   controller.abort();
   await assert.rejects(
     f.session.collect({ profile: delegatedProfile, operation: users, scopes, signal: controller.signal }),
-    error => error.name === "AbortError" || /abort/i.test(error.message),
+    error => record(error).name === "AbortError" || /abort/i.test(outputText(record(error).message)),
   );
   assert.equal(f.requests.length, 0);
 });
@@ -344,13 +346,13 @@ test("aborted signals fail fast before HTTP", async () => {
 test("cancellation while waiting for Retry-After aborts the collection", async () => {
   const f = fixture(json(429, { error: { code: "TooManyRequests", message: "slow" } }, { "retry-after": "5" }));
   const controller = new AbortController();
-  const hanging = { now: () => 1_000_000, sleep: (ms, signal) => new Promise((resolve, reject) => {
+  const hanging = { now: () => 1_000_000, sleep: (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
     if (signal?.aborted) return reject(signal.reason ?? new DOMException("aborted", "AbortError"));
     signal?.addEventListener("abort", () => reject(signal.reason ?? new DOMException("aborted", "AbortError")), { once: true });
   }) };
   const pending = f.session.collect({ profile: delegatedProfile, operation: users, scopes, clock: hanging, signal: controller.signal });
   setImmediate(() => controller.abort());
-  await assert.rejects(pending, error => error.name === "AbortError" || /abort/i.test(error.message));
+  await assert.rejects(pending, error => record(error).name === "AbortError" || /abort/i.test(outputText(record(error).message)));
   assert.equal(f.requests.length, 1);
 });
 
@@ -364,7 +366,7 @@ test("invalid budgets fail before credential or HTTP", async () => {
   assert.equal(f.requests.length, 0);
 });
 
-for (const next of ["https://example.invalid/", "https://graph.microsoft.com/v1.0/applications", "https://graph.microsoft.com/v1.0/users/other"]) {
+for (const next of ["https://example.invalid/", "https://graph.microsoft.com/v1.0/applications", "https://graph.microsoft.com/v1.0/users/other"] as const) {
   test(`cursor destination is authorized before credentials: ${next}`, async () => {
     const f = fixture(json(200, { value: [] }));
     const cursor = await cursorWith({ next, buffered: [], seen: [] });
@@ -381,7 +383,7 @@ for (const [name, response, budget] of [
   ["redirect byte budget", json(302, {}, { location: "/v1.0/users?$skiptoken=target" }), { maxBytes: 1 }],
   ["retry request budget", json(429, {}, { "retry-after": "1" }), { maxRequests: 1 }],
   ["retry deadline", json(429, {}, { "retry-after": "5" }), { deadlineMs: 1000 }],
-]) {
+] as const) {
   test(`unfinished ${name} request can resume`, async () => {
     const f = fixture((request, count) => count === 1 ? response : json(200, { value: [{ id: "resumed" }] }));
     const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, budget, clock: fakeClock().clock });
@@ -393,42 +395,42 @@ for (const [name, response, budget] of [
   });
 }
 
-for (const method of ["collect", "execute"]) {
+for (const method of ["collect", "execute"] as const) {
   test(`${method} keeps continuation token case distinct`, async () => {
     const f = fixture((request, count) => method === "collect"
       ? json(200, { value: [{ id: count }], ...(count < 3 ? { "@odata.nextLink": `https://graph.microsoft.com/v1.0/users?$skiptoken=${count === 1 ? "AbC" : "abc"}` } : {}) })
       : count < 3 ? json(302, {}, { location: `/v1.0/users?$skiptoken=${count === 1 ? "AbC" : "abc"}` }) : json(200, { value: [{ id: 3 }] }));
     const result = await f.session[method]({ profile: delegatedProfile, operation: users, scopes });
     assert.equal(f.requests.length, 3);
-    assert.equal(result.value.at(-1).id, 3);
+    assert.equal(records(record(result).value).at(-1)!.id, 3);
   });
 
   test(`${method} bounds an unresponsive transport and aborts it`, async () => {
-    const f = fixture(() => new Promise(() => {}));
+    const f = fixture(() => new Promise<never>(() => {}));
     const pending = f.session[method]({ profile: delegatedProfile, operation: users, scopes, clock: fakeClock().clock });
     if (method === "collect") {
       const result = await pending;
-      assert.equal(result.complete, false);
-      assert.match(result.reason, /deadline/);
-      assert.equal(decodeCursor(result.cursor).seen.length, 0);
+      assert.equal(record(result).complete, false);
+      assert.match(outputText(record(result).reason), /deadline/);
+      assert.equal(decodeCursor(outputText(record(result).cursor)).seen.length, 0);
     } else {
-      await assert.rejects(pending, error => error.code === "GRAPH_ERROR" && /deadline/.test(error.message));
+      await assert.rejects(pending, error => record(error).code === "GRAPH_ERROR" && /deadline/.test(outputText(record(error).message)));
     }
-    assert.equal(f.requests[0].signal.aborted, true);
+    assert.equal(f.requests[0]!.signal!.aborted, true);
   });
 
   test(`${method} rejects a success received after its deadline`, async () => {
     let now = 0;
-    const clock = { now: () => now, sleep: () => new Promise(() => {}) };
+    const clock = { now: () => now, sleep: () => new Promise<void>(() => {}) };
     const f = fixture(() => { now = 30_001; return json(200, { value: [{ id: "late" }] }); });
     const pending = f.session[method]({ profile: delegatedProfile, operation: users, scopes, clock });
     if (method === "collect") {
       const result = await pending;
-      assert.equal(result.complete, false);
-      assert.match(result.reason, /deadline/);
-      assert.deepEqual(result.value, []);
+      assert.equal(record(result).complete, false);
+      assert.match(outputText(record(result).reason), /deadline/);
+      assert.deepEqual(record(result).value, []);
     } else {
-      await assert.rejects(pending, error => error.code === "GRAPH_ERROR" && /deadline/.test(error.message));
+      await assert.rejects(pending, error => record(error).code === "GRAPH_ERROR" && /deadline/.test(outputText(record(error).message)));
     }
   });
 
@@ -439,20 +441,20 @@ for (const method of ["collect", "execute"]) {
     [{ $expand: "*" }, "VALIDATION_ERROR"],
     [{ $search: '"displayName:ana"', $expand: "manager" }, "VALIDATION_ERROR"],
     [{ $count: "true", $expand: "manager" }, "VALIDATION_ERROR"],
-  ]) {
+  ] as const) {
     test(`${method} rejects unsafe query ${JSON.stringify(query)} before credentials`, async () => {
       const f = fixture(json(200, { value: [] }));
-      await assert.rejects(f.session[method]({ profile: delegatedProfile, operation: users, scopes, query, consistencyLevel: "eventual" }), { code });
+      await assert.rejects(f.session[method]({ profile: delegatedProfile, operation: users, scopes, query: query as Record<string, string>, consistencyLevel: "eventual" as const }), { code });
       assert.equal(f.credentialCalls.length, 0);
       assert.equal(f.requests.length, 0);
     });
   }
 }
 
-for (const [status, code] of [[401, "AUTH_REQUIRED"], [403, "GRAPH_ERROR"], [404, "GRAPH_ERROR"], [500, "GRAPH_ERROR"]]) {
+for (const [status, code] of [[401, "AUTH_REQUIRED"], [403, "GRAPH_ERROR"], [404, "GRAPH_ERROR"], [500, "GRAPH_ERROR"]] as const) {
   test(`byte budget preserves terminal ${status} error`, async () => {
     const f = fixture(json(status, { error: { code: "Denied", message: "terminal failure" } }));
-    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, budget: { maxBytes: 1 } }), error => error.code === code && error.message.includes(String(status)));
+    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, budget: { maxBytes: 1 } }), error => record(error).code === code && outputText(record(error).message).includes(String(status)));
     assert.equal(f.requests.length, 1);
   });
 }
@@ -462,12 +464,12 @@ for (const [query, code] of [
   ["$search=x&$expand=manager", "VALIDATION_ERROR"],
   ["$count=true&$expand=manager", "VALIDATION_ERROR"],
   ["$expand=files&$expand=manager", "POLICY_DENIED"],
-]) {
+] as const) {
   const target = `https://graph.microsoft.com/v1.0/users?${query}`;
   test(`cursor validates query context: ${query}`, async () => {
     const f = fixture(json(200, { value: [] }));
-    const cursor = await cursorWith({ next: target, buffered: [], seen: [], consistencyLevel: "eventual" });
-    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor, consistencyLevel: "eventual" }), { code });
+    const cursor = await cursorWith({ next: target, buffered: [], seen: [], consistencyLevel: "eventual" as const });
+    await assert.rejects(f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor, consistencyLevel: "eventual" as const }), { code });
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
   });
@@ -475,38 +477,38 @@ for (const [query, code] of [
     ["collect", json(200, { value: [], "@odata.nextLink": target })],
     ["collect", json(302, {}, { location: target })],
     ["execute", json(302, {}, { location: target })],
-  ]) {
+  ] as const) {
     test(`${method} validates ${response.status} target query: ${query}`, async () => {
       const f = fixture(response);
-      await assert.rejects(f.session[method]({ profile: delegatedProfile, operation: users, scopes, consistencyLevel: "eventual" }), { code });
+      await assert.rejects(f.session[method]({ profile: delegatedProfile, operation: users, scopes, consistencyLevel: "eventual" as const }), { code });
       assert.equal(f.requests.length, 1);
     });
   }
 }
 
-for (const method of ["collect", "execute"]) {
+for (const method of ["collect", "execute"] as const) {
   test(`${method} still accepts a metadata expansion`, async () => {
     const f = fixture(json(200, { value: [{ id: "a", manager: { id: "b" } }] }));
     const result = await f.session[method]({ profile: delegatedProfile, operation: users, scopes, query: { $expand: "manager" } });
-    assert.deepEqual(result.value, [{ id: "a", manager: { id: "b" } }]);
+    assert.deepEqual(record(result).value, [{ id: "a", manager: { id: "b" } }]);
   });
 
   test(`${method} cancels an in-flight transport that ignores the signal`, async () => {
     const controller = new AbortController();
-    const f = fixture(() => { controller.abort(); return new Promise(() => {}); });
+    const f = fixture(() => { controller.abort(); return new Promise<never>(() => {}); });
     await assert.rejects(f.session[method]({ profile: delegatedProfile, operation: users, scopes, signal: controller.signal }), { name: "AbortError" });
     assert.equal(f.requests.length, 1);
   });
 }
 
-for (const retainedSearch of [false, true]) {
+for (const retainedSearch of [false, true] as const) {
   for (const [name, options, throttled] of [
     ["row cap", { limit: 1 }, false],
     ["request budget", { budget: { maxRequests: 1 } }, false],
     ["byte budget", { budget: { maxBytes: 1 } }, false],
     ["throttle", {}, true],
     ["deadline", { budget: { deadlineMs: 1000 } }, true],
-  ]) {
+  ] as const) {
     test(`${name} preserves search context across repeated resumes, retained search: ${retainedSearch}`, async () => {
       const next = `https://graph.microsoft.com/v1.0/users?$skiptoken=opaque${retainedSearch ? '&$search=%22displayName%3Aana%22' : ""}`;
       const f = fixture((request, count) => throttled && count === 1
@@ -514,7 +516,7 @@ for (const retainedSearch of [false, true]) {
         : count === (throttled ? 2 : 1)
           ? json(200, { value: [{ id: "a" }, { id: "b" }], "@odata.nextLink": next })
           : json(200, { value: [{ id: "c" }, { id: "d" }] }));
-      const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, query: { $search: '"displayName:ana"' }, consistencyLevel: "eventual", ...options });
+      const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, query: { $search: '"displayName:ana"' }, consistencyLevel: "eventual" as const, ...options });
       assert.equal(first.complete, false);
       const second = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor, limit: 1 });
       assert.equal(second.complete, false);
@@ -522,7 +524,7 @@ for (const retainedSearch of [false, true]) {
       assert.equal(third.complete, true);
       assert.deepEqual([...first.value, ...second.value, ...third.value], [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }]);
       assert.ok(f.requests.every(request => request.headers.ConsistencyLevel === "eventual"));
-      assert.equal(f.requests.at(-1).url, next);
+      assert.equal(f.requests.at(-1)!.url, next);
     });
   }
 }
@@ -533,7 +535,7 @@ for (const query of [{ $count: "true" }, {}]) {
       ? json(200, { value: [{ id: "a" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$skiptoken=one" })
       : count === 2 ? json(302, {}, { location: "/v1.0/users?$skiptoken=two" })
         : json(200, { value: [{ id: "b" }] }));
-    const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, query, consistencyLevel: "eventual", limit: 1 });
+    const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, query: query as Record<string, string>, consistencyLevel: "eventual" as const, limit: 1 });
     const second = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor });
     assert.equal(second.complete, true);
     assert.deepEqual(second.value, [{ id: "b" }]);
@@ -541,7 +543,7 @@ for (const query of [{ $count: "true" }, {}]) {
   });
 }
 
-for (const overrides of [{ query: { $filter: "id eq 'other'" } }, { consistencyLevel: "eventual" }]) {
+for (const overrides of [{ query: { $filter: "id eq 'other'" } }, { consistencyLevel: "eventual" as const }]) {
   test(`conflicting resume context fails before credentials: ${JSON.stringify(overrides)}`, async () => {
     const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
     const first = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, query: { $select: "id" }, limit: 1 });
@@ -554,8 +556,8 @@ for (const overrides of [{ query: { $filter: "id eq 'other'" } }, { consistencyL
 
 test("matching resume context accepts query keys in a different order", async () => {
   const f = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
-  const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, query: { $search: "ana", $select: "id" }, consistencyLevel: "eventual", limit: 1 });
-  const second = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor, query: { $select: "id", $search: "ana" }, consistencyLevel: "eventual" });
+  const first = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, query: { $search: "ana", $select: "id" }, consistencyLevel: "eventual" as const, limit: 1 });
+  const second = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor, query: { $select: "id", $search: "ana" }, consistencyLevel: "eventual" as const });
   assert.deepEqual(second.value, [{ id: "b" }]);
   assert.equal(second.complete, true);
 });
@@ -564,7 +566,7 @@ for (const context of [
   { query: { $search: "ana" }, consistencyLevel: null },
   { query: { $top: 5 }, consistencyLevel: null },
   { query: { unsupported: "value" }, consistencyLevel: null },
-  { query: {}, consistencyLevel: "strong" },
+  { query: {}, consistencyLevel: "strong" as const },
   { query: [], consistencyLevel: null },
 ]) {
   test(`invalid saved cursor context fails before credentials: ${JSON.stringify(context)}`, async () => {
@@ -586,7 +588,7 @@ for (const budget of [undefined, { maxBytes: 1 }]) {
     const result = budget ? await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor }) : first;
     assert.equal(result.complete, true);
     assert.deepEqual(result.value, [{ id: "a" }, { id: "b" }]);
-    assert.equal(f.requests[1].url, next);
+    assert.equal(f.requests[1]!.url, next);
   });
 }
 
@@ -598,8 +600,8 @@ test("alternate nextLink capitalization is ignored", async () => {
   assert.equal(f.requests.length, 1);
 });
 
-for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } }]) {
-  for (const method of ["collect", "execute"]) {
+for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "application" as const, auth: "federated" as const, token: { env: "MG_AXI_TOKEN" } }]) {
+  for (const method of ["collect", "execute"] as const) {
     const args = { profile, operation: users, ...(profile.mode === "delegated" ? { scopes } : {}) };
 
     test(`${method} with ${profile.mode} credentials rejects pre-aborted calls before acquisition`, async () => {
@@ -613,24 +615,24 @@ for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "applicati
 
     test(`${method} with ${profile.mode} credentials cancels pending acquisition`, async () => {
       const controller = new AbortController();
-      const f = fixture(json(200, { value: [] }), () => { controller.abort(); return new Promise(() => {}); });
+      const f = fixture(json(200, { value: [] }), () => { controller.abort(); return new Promise<never>(() => {}); });
       await assert.rejects(f.session[method]({ ...args, signal: controller.signal }), { name: "AbortError" });
       assert.equal(f.credentialCalls.length, 1);
       assert.equal(f.requests.length, 0);
     });
 
     test(`${method} with ${profile.mode} credentials bounds pending acquisition through the clock`, async () => {
-      const f = fixture(json(200, { value: [] }), () => new Promise(() => {}));
+      const f = fixture(json(200, { value: [] }), () => new Promise<never>(() => {}));
       const pending = f.session[method]({ ...args, clock: fakeClock().clock, budget: { deadlineMs: 1000 } });
       if (method === "collect") {
         const result = await pending;
-        assert.equal(result.complete, false);
-        assert.match(result.reason, /deadline/);
-        assert.equal(result.requests, 0);
-        assert.equal(result.bytes, 0);
-        assert.equal(decodeCursor(result.cursor).next, "https://graph.microsoft.com/v1.0/users");
+        assert.equal(record(result).complete, false);
+        assert.match(outputText(record(result).reason), /deadline/);
+        assert.equal(record(result).requests, 0);
+        assert.equal(record(result).bytes, 0);
+        assert.equal(decodeCursor(outputText(record(result).cursor)).next, "https://graph.microsoft.com/v1.0/users");
       } else {
-        await assert.rejects(pending, error => error.code === "GRAPH_ERROR" && /deadline/.test(error.message));
+        await assert.rejects(pending, error => record(error).code === "GRAPH_ERROR" && /deadline/.test(outputText(record(error).message)));
       }
       assert.equal(f.credentialCalls.length, 1);
       assert.equal(f.requests.length, 0);
@@ -638,43 +640,43 @@ for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "applicati
 
     test(`${method} with ${profile.mode} credentials rejects acquisition that completes too late`, async () => {
       let now = 0;
-      const clock = { now: () => now, sleep: () => new Promise(() => {}) };
+      const clock = { now: () => now, sleep: () => new Promise<void>(() => {}) };
       const f = fixture(json(200, { value: [] }), credential => { now = 30_001; return credential; });
       const pending = f.session[method]({ ...args, clock });
       if (method === "collect") {
         const result = await pending;
-        assert.equal(result.complete, false);
-        assert.match(result.reason, /deadline/);
-        assert.equal(result.requests, 0);
+        assert.equal(record(result).complete, false);
+        assert.match(outputText(record(result).reason), /deadline/);
+        assert.equal(record(result).requests, 0);
       } else {
-        await assert.rejects(pending, error => error.code === "GRAPH_ERROR" && /deadline/.test(error.message));
+        await assert.rejects(pending, error => record(error).code === "GRAPH_ERROR" && /deadline/.test(outputText(record(error).message)));
       }
       assert.equal(f.requests.length, 0);
     });
 
     test(`${method} with ${profile.mode} credentials shares its deadline with transport`, async () => {
       let now = 0;
-      const clock = { now: () => now, sleep: () => new Promise(() => {}) };
+      const clock = { now: () => now, sleep: () => new Promise<void>(() => {}) };
       const f = fixture(() => { now = 30_001; return json(200, { value: [{ id: "late" }] }); }, credential => { now = 29_990; return credential; });
       const pending = f.session[method]({ ...args, clock });
       if (method === "collect") {
         const result = await pending;
-        assert.equal(result.complete, false);
-        assert.match(result.reason, /deadline/);
+        assert.equal(record(result).complete, false);
+        assert.match(outputText(record(result).reason), /deadline/);
       } else {
-        await assert.rejects(pending, error => error.code === "GRAPH_ERROR" && /deadline/.test(error.message));
+        await assert.rejects(pending, error => record(error).code === "GRAPH_ERROR" && /deadline/.test(outputText(record(error).message)));
       }
       assert.equal(f.requests.length, 1);
     });
 
     test(`${method} with ${profile.mode} credentials still succeeds before the shared deadline`, async () => {
       let now = 0;
-      const clock = { now: () => now, sleep: () => new Promise(() => {}) };
+      const clock = { now: () => now, sleep: () => new Promise<void>(() => {}) };
       const f = fixture(() => { now = 200; return json(200, { value: [{ id: "a" }] }); }, credential => { now = 100; return credential; });
       const result = await f.session[method]({ ...args, clock });
-      assert.deepEqual(result.value, [{ id: "a" }]);
+      assert.deepEqual(record(result).value, [{ id: "a" }]);
       assert.equal(f.requests.length, 1);
-      assert.equal(f.requests[0].headers.Authorization, "Bearer opaque-fixture-secret");
+      assert.equal(f.requests[0]!.headers.Authorization, "Bearer opaque-fixture-secret");
     });
 
     test(`${method} with ${profile.mode} credentials preserves authentication failures`, async () => {
@@ -688,8 +690,8 @@ for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "applicati
 test("credential deadline preserves buffered rows and context on a resumed collection", async () => {
   const next = "https://graph.microsoft.com/v1.0/users?$skiptoken=next";
   const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }], "@odata.nextLink": next }));
-  const first = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, query: { $search: "ana" }, consistencyLevel: "eventual", limit: 1 });
-  const blocked = fixture(json(200, { value: [] }), () => new Promise(() => {}));
+  const first = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, query: { $search: "ana" }, consistencyLevel: "eventual" as const, limit: 1 });
+  const blocked = fixture(json(200, { value: [] }), () => new Promise<never>(() => {}));
   const partial = await blocked.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor, clock: fakeClock().clock });
   assert.equal(partial.complete, false);
   assert.deepEqual(partial.value, []);
@@ -698,8 +700,8 @@ test("credential deadline preserves buffered rows and context on a resumed colle
   const resumed = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: partial.cursor });
   assert.equal(resumed.complete, true);
   assert.deepEqual(resumed.value, [{ id: "b" }, { id: "c" }]);
-  assert.equal(f.requests[0].url, next);
-  assert.equal(f.requests[0].headers.ConsistencyLevel, "eventual");
+  assert.equal(f.requests[0]!.url, next);
+  assert.equal(f.requests[0]!.headers.ConsistencyLevel, "eventual");
 });
 
 for (const next of [undefined, "https://graph.microsoft.com/v1.0/groups/group-a/members?$skiptoken=next"]) {
@@ -717,21 +719,21 @@ for (const next of [undefined, "https://graph.microsoft.com/v1.0/groups/group-a/
   });
 }
 
-for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } }]) {
+for (const profile of [delegatedProfile, { ...delegatedProfile, mode: "application" as const, auth: "federated" as const, token: { env: "MG_AXI_TOKEN" } }]) {
   for (const next of [undefined, "https://graph.microsoft.com/v1.0/users?$skiptoken=next"]) {
     for (const [field, changedProfile, changedScopes] of [
       ["tenant", { ...profile, tenantId: "44444444-4444-4444-8444-444444444444" }, undefined],
       ["client", { ...profile, clientId: "55555555-5555-4555-8555-555555555555" }, undefined],
       ["credential reference", { ...profile, token: { env: "OTHER_TOKEN" } }, undefined],
-      ["authentication mode", profile.mode === "delegated" ? { ...profile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } } : delegatedProfile, undefined],
+      ["authentication mode", profile.mode === "delegated" ? { ...profile, mode: "application" as const, auth: "federated" as const, token: { env: "MG_AXI_TOKEN" } } : delegatedProfile, undefined],
       ["scopes", profile, ["https://graph.microsoft.com/Directory.Read.All"]],
-    ]) {
+    ] as const) {
       test(`${profile.mode} cursor rejects changed ${field}, nextLink: ${Boolean(next)}`, async () => {
         const originalScopes = profile.mode === "delegated" ? scopes : undefined;
         const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }], ...(next ? { "@odata.nextLink": next } : {}) }));
         const first = await maker.session.collect({ profile, operation: users, scopes: originalScopes, limit: 1 });
         const f = fixture(json(200, { value: [] }));
-        await assert.rejects(f.session.collect({ profile: changedProfile, operation: users, scopes: changedScopes ?? originalScopes, cursor: first.cursor }), { code: "VALIDATION_ERROR" });
+        await assert.rejects(f.session.collect({ profile: changedProfile, operation: users, scopes: (changedScopes ?? originalScopes) as string[] | undefined, cursor: first.cursor }), { code: "VALIDATION_ERROR" });
         assert.equal(f.credentialCalls.length, 0);
         assert.equal(f.requests.length, 0);
       });
@@ -755,14 +757,14 @@ test("same account can resume with a refreshed token and reordered scopes", asyn
   const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
   const first = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes: originalScopes, limit: 1 });
   const f = fixture(json(200, { value: [] }), credential => ({ ...credential, token: "refreshed-opaque-token" }));
-  const resumed = await f.session.collect({ profile: delegatedProfile, operation: users, scopes: [originalScopes[1], ...scopes, ...scopes], cursor: first.cursor });
+  const resumed = await f.session.collect({ profile: delegatedProfile, operation: users, scopes: [originalScopes[1]!, ...scopes, ...scopes], cursor: first.cursor });
   assert.deepEqual(resumed.value, [{ id: "b" }]);
   assert.equal(resumed.complete, true);
   assert.equal(f.requests.length, 0);
 });
 
 test("credential timeout before acquisition still binds the cursor to its original profile", async () => {
-  const maker = fixture(json(200, { value: [] }), () => new Promise(() => {}));
+  const maker = fixture(json(200, { value: [] }), () => new Promise<never>(() => {}));
   const partial = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, clock: fakeClock().clock });
   const f = fixture(json(200, { value: [] }));
   await assert.rejects(f.session.collect({ profile: { ...delegatedProfile, tenantId: "44444444-4444-4444-8444-444444444444" }, operation: users, scopes, cursor: partial.cursor }), { code: "VALIDATION_ERROR" });
@@ -782,9 +784,9 @@ for (const overrides of [{ context: null }, { identity: "invalid" }, { identity:
   });
 }
 
-for (const credential of [{ auth: "federated", token: { env: "MG_AXI_TOKEN" } }, { auth: "certificate", privateKey: { env: "MG_AXI_PRIVATE_KEY" }, thumbprintSha256: "a".repeat(64) }]) {
+for (const credential of [{ auth: "federated" as const, token: { env: "MG_AXI_TOKEN" } }, { auth: "certificate" as const, privateKey: { env: "MG_AXI_PRIVATE_KEY" }, thumbprintSha256: "a".repeat(64) }]) {
   test(`application cursor resumes under the same ${credential.auth} identity`, async () => {
-    const profile = { mode: "application", tenantId: tenant, clientId: client, ...credential };
+    const profile = { mode: "application" as const, tenantId: tenant, clientId: client, ...credential } as import("../dist/profiles.js").AnyProfile;
     const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
     const first = await maker.session.collect({ profile, operation: users, limit: 1 });
     const f = fixture(json(200, { value: [] }), credential => ({ ...credential, token: "refreshed-app-token" }));
@@ -795,13 +797,13 @@ for (const credential of [{ auth: "federated", token: { env: "MG_AXI_TOKEN" } },
   });
 }
 
-for (const credential of [{ auth: "federated", token: { env: "MG_AXI_TOKEN" } }, { auth: "certificate", privateKey: { env: "MG_AXI_PRIVATE_KEY" }, thumbprintSha256: "b".repeat(64) }]) {
+for (const credential of [{ auth: "federated" as const, token: { env: "MG_AXI_TOKEN" } }, { auth: "certificate" as const, privateKey: { env: "MG_AXI_PRIVATE_KEY" }, thumbprintSha256: "b".repeat(64) }]) {
   test(`certificate cursor rejects changed credential details: ${JSON.stringify(credential)}`, async () => {
-    const profile = { mode: "application", tenantId: tenant, clientId: client, auth: "certificate", privateKey: { env: "MG_AXI_PRIVATE_KEY" }, thumbprintSha256: "a".repeat(64) };
+    const profile = { mode: "application" as const, tenantId: tenant, clientId: client, auth: "certificate" as const, privateKey: { env: "MG_AXI_PRIVATE_KEY" }, thumbprintSha256: "a".repeat(64) } as import("../dist/profiles.js").AnyProfile;
     const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
     const first = await maker.session.collect({ profile, operation: users, limit: 1 });
     const f = fixture(json(200, { value: [] }));
-    await assert.rejects(f.session.collect({ profile: { mode: "application", tenantId: tenant, clientId: client, ...credential }, operation: users, cursor: first.cursor }), { code: "VALIDATION_ERROR" });
+    await assert.rejects(f.session.collect({ profile: { mode: "application" as const, tenantId: tenant, clientId: client, ...credential } as import("../dist/profiles.js").AnyProfile, operation: users, cursor: first.cursor }), { code: "VALIDATION_ERROR" });
     assert.equal(f.credentialCalls.length, 0);
     assert.equal(f.requests.length, 0);
   });
@@ -850,7 +852,7 @@ test("partial results carry the total and resumes keep it without a new count", 
   assert.equal(first.complete, false);
   assert.equal(first.total, 3);
   assert.deepEqual(first.value, [{ id: "a" }]);
-  const stored = decodeCursor(first.cursor);
+  const stored = decodeCursor(outputText(first.cursor));
   assert.equal(stored.total, 3);
   const f = fixture(json(200, { value: [{ id: "d" }] }));
   const resumed = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, cursor: first.cursor });
@@ -863,7 +865,7 @@ test("cursors issued before totals resume as unknown", async () => {
   const maker = fixture(json(200, { value: [{ id: "a" }, { id: "b" }] }));
   const first = await maker.session.collect({ profile: delegatedProfile, operation: users, scopes, limit: 1 });
   assert.equal(first.total, null);
-  const legacy = { ...decodeCursor(first.cursor) };
+  const legacy = { ...decodeCursor(outputText(first.cursor)) };
   delete legacy.total;
   const cursor = Buffer.from(JSON.stringify(legacy), "utf8").toString("base64url");
   const f = fixture(json(200, { value: [] }));

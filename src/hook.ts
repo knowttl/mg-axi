@@ -33,7 +33,7 @@ async function probeAuthPresence(profile: AnyProfile, files = new PrivateFiles()
   }
 }
 
-// Next-step hints name real catalogue leaves; test/hook.test.mjs asserts
+// Next-step hints name real catalogue leaves; test/hook.test.ts asserts
 // every `mg-axi ...` command mentioned here exists in the catalogue, so the
 // hook text cannot drift from the single source.
 const CONFIGURED_HINT = "Run npx -y @knowttl/mg-axi doctor --profile <name> to check a profile";

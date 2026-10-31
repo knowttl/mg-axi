@@ -31,7 +31,7 @@
   "packageManager": "pnpm@10.34.6",
   "scripts": {
     "build": "node tools/generate-runtime-index.ts && tsc -p tsconfig.json",
-    "test": "node tools/isolated-home.ts node --test --test-concurrency=4 test/*.test.mjs test/*.test.ts",
+    "test": "node tools/isolated-home.ts node --test --test-concurrency=4 test/*.test.ts",
     "lint": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
     "docs:generate": "node tools/generate-runtime-index.ts && node tools/generate-docs.ts",
     "docs:check": "node tools/generate-runtime-index.ts --check && node tools/generate-docs.ts --check"

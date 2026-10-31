@@ -50,7 +50,7 @@ Safe reads can retry within deadline; exhausted budget reports the cause and com
 Both `execute` and `collect` retry 429/503 responses using Retry-After seconds or HTTP dates, or bounded exponential backoff when the header is absent or invalid.
 Their request, wait and deadline ceilings are defined in [the session implementation](../src/graph-session.ts); `collect` accepts positive integer request, response-body byte and deadline budgets per invocation.
 The deadline includes credential acquisition and in-flight requests, and `signal` cancellation rejects the call rather than returning a partial result.
-The injected `clock` controls deadlines and waits for offline verification in [the collection tests](../test/graph-collections.test.mjs).
+The injected `clock` controls deadlines and waits for offline verification in [the collection tests](../test/graph-collections.test.ts).
 Use request IDs and structured errors, never raw dependency noise or secrets.
 [v1.0](https://learn.microsoft.com/en-us/graph/api/overview?view=graph-rest-1.0) is GA; [beta](https://learn.microsoft.com/en-us/graph/api/overview?view=graph-rest-beta) can break and is not recommended as a production dependency.
 

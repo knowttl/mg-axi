@@ -102,5 +102,6 @@ The v1.0 group-members route omits service principals.
 Credentials live in protected environment/file holders or the delegated MSAL cache in the state directory.
 Secret values are never printed; diagnostics may show holder names and paths.
 Explicit login contacts Microsoft identity endpoints, and Graph commands send the requested tenant operation to Microsoft Graph.
-Local home, setup, help and profile inspection make no tenant calls.
+Setup, help and profile inspection make no tenant calls.
+See [Quickstart](../README.md#quickstart) for live and offline home behavior.
 Treat returned directory data, cursors and mutation journals as sensitive tenant data.

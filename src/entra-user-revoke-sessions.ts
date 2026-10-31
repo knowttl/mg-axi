@@ -220,5 +220,6 @@ export async function revokeUserSessions(args: {
       "Never replay this intent",
     ]);
   }
-  return { user: { id, sessionsRevoked: true }, auditId: result.auditId };
+  return { user: { id, sessionsRevoked: true }, auditId: result.auditId,
+    ...(result.responseUnreadable ? { responseUnreadable: result.responseUnreadable } : {}) };
 }

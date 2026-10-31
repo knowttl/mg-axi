@@ -292,6 +292,7 @@ export async function addGroupMember(args: {
     return {
       membership: { ...membership, status: "added" },
       auditId: result.auditId,
+      ...(result.responseUnreadable ? { responseUnreadable: result.responseUnreadable } : {}),
       help: [readBackHint(groupId, profileName)],
     };
   }

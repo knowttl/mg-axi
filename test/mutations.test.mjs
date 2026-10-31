@@ -340,6 +340,38 @@ test("non-disruptive write executes without target confirmation", async () => {
   assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
 });
 
+for (const status of [200, 201, 202]) {
+  test(`unreadable HTTP ${status} mutation body warns without changing success or allowing replay`, async () => {
+    const f = fixture({ handler: { status, headers: {}, body: "<html>synthetic-login opaque-fixture-secret</html>" } });
+    const options = { execute: true, readState: readState(), scopes, intentId: "unreadable-write" };
+    const result = await f.coordinator().execute(mutation, options);
+    assert.equal(result.kind, "success");
+    assert.equal(result.status, status);
+    assert.deepEqual(result.response, {});
+    assert.deepEqual(result.responseUnreadable, { code: "RESPONSE_INVALID", httpStatus: status });
+    assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+    assert.equal(journal(f.journalPath)[1].httpStatus, status);
+    assert.doesNotMatch(JSON.stringify(result), /synthetic-login|opaque-fixture-secret|<html>/);
+    await assert.rejects(f.coordinator().execute(mutation, options), { code: "ALREADY_EXECUTED" });
+    assert.equal(f.requests.length, 1);
+  });
+}
+
+for (const { status, body, response } of [
+  { status: 200, body: '{"id":"synthetic-note"}', response: { id: "synthetic-note" } },
+  { status: 204, body: "", response: {} },
+]) {
+  test(`readable HTTP ${status} mutation response succeeds without an unreadable warning`, async () => {
+    const f = fixture({ handler: { status, headers: {}, body } });
+    const result = await f.coordinator().execute(mutation, { execute: true, readState: readState(), scopes });
+    assert.equal(result.kind, "success");
+    assert.equal(result.status, status);
+    assert.deepEqual(result.response, response);
+    assert.equal("responseUnreadable" in result, false);
+    assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+  });
+}
+
 test("application profile executes through the .default audience without caller scopes", async () => {
   const f = fixture({ handler: { status: 200, headers: {}, body: "{}" } });
   const result = await f.coordinator(enabledApp).execute(mutation, { execute: true, readState: readState(), intentId: "app-write" });

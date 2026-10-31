@@ -23,6 +23,9 @@ After intent reservation, a failed fresh read, a newly satisfied desired state o
 Outcome audit failure after sending preserves the possibility that the mutation occurred.
 HTTP 4xx responses other than 408 record `FAILED`, except a WRITE-01 duplicate-reference 400 (Graph reporting the membership already exists), which records `NOOP` and returns a no-op instead of a failure; transport failures, HTTP 408 and server errors return `kind: unknown` and record `OUTCOME_UNKNOWN`, with guidance to read back the target before doing anything else.
 An accepted 2xx response records `SUCCESS` even if its response body cannot be decoded.
+When a nonempty accepted body is not valid JSON, mutation output includes a `responseUnreadable` warning with `code: RESPONSE_INVALID` and `httpStatus`.
+The warning contains no response content; read back the target before continuing and never replay the intent.
+Valid JSON and empty responses, including 204 responses, do not produce this warning.
 No mutation is automatically retried or replayed; an already reserved intent ID is refused even after an outcome was recorded.
 Unknown actions, raw writes, secret-returning endpoints, and unsupported beta writes fail closed.
 

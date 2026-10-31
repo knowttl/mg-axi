@@ -127,6 +127,19 @@ for (const body of ["{}", "[]", "null", '{"id":42}', '{"id":""}', "invalid json"
   assert.ok(result.results[0].auditId);
 });
 
+test("accepted HTML mail mutation exposes only a safe unreadable warning", async t => {
+  const f = fixture(t, actions[2], { write: () => ({ status: 200, headers: {}, body: "<html>synthetic-login opaque-fixture-token</html>" }) });
+  const result = decode(encode(await f.run(["--execute", "--confirm", "A+ID=,B+ID="])));
+  assert.deepEqual(result.results.map(row => row.status), ["success", "success"]);
+  assert.deepEqual(result.results.map(row => row.responseUnreadable), [
+    { code: "RESPONSE_INVALID", httpStatus: 200 },
+    { code: "RESPONSE_INVALID", httpStatus: 200 },
+  ]);
+  assert.doesNotMatch(JSON.stringify(result), /synthetic-login|opaque-fixture-token|<html>/);
+  assert.deepEqual(f.journal().filter(row => row.kind === "outcome").map(row => row.outcome), ["SUCCESS", "SUCCESS"]);
+  assert.equal(f.writes.length, 2);
+});
+
 test("copy new ID truncates with full escape hatch", async t => {
   const f = fixture(t, transfers[1], { write: () => ({ status: 201, headers: {}, body: JSON.stringify({ id: "x".repeat(501) }) }) });
   const preview = await f.run(["--execute", "--confirm", "a"], "soc", "me", "a");

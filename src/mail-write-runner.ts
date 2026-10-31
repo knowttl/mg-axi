@@ -37,6 +37,7 @@ export async function runMailWrites(args: {
         ? (result.response as Record<string, unknown>).id : undefined;
       const missingId = args.includeNewId && result.kind === "success" && (typeof newId !== "string" || !newId.trim());
       results.push({ id, status: result.kind, ...("auditId" in result && result.auditId ? { auditId: result.auditId } : {}),
+        ...(result.kind === "success" && result.responseUnreadable ? { responseUnreadable: result.responseUnreadable } : {}),
         ...(args.includeNewId && result.kind === "success" ? missingId
           ? { status: "unknown", guidance: "Graph accepted the change but did not return a resource ID; read back the destination before continuing and never replay this intent" }
           : { newId: redactGraphValue(newId) } : {}),

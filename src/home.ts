@@ -3,14 +3,15 @@ import { GraphSession, resolveSessionOperation } from "./graph-session.js";
 import { fetchTransport } from "./api.js";
 import type { DispatchOverrides } from "./cli.js";
 import type { home } from "./catalogue.js";
-import type { AnyProfile } from "./profiles.js";
+import type { Profiles } from "./profiles.js";
 import { skillHint } from "./skill-hint.js";
 
 // Home only samples collections. No continuation, retry, hunting query,
 // mailbox discovery, interactive authentication or permission escalation.
-export async function liveHome(output: ReturnType<typeof home>, selected: { name: string; profile: AnyProfile }, overrides: DispatchOverrides) {
+export async function liveHome(output: ReturnType<typeof home>, selected: ReturnType<Profiles["resolve"]>, overrides: DispatchOverrides, config?: string) {
   const { profile, name } = selected;
-  const context = `--profile ${name}`;
+  const context = [selected.source === "environment" ? "" : `--profile ${name}`,
+    config?.trim() ? `--config '${config.trim().replaceAll("'", "'\\''")}'` : ""].filter(Boolean).join(" ");
   const domains: { name: string; status: string; summary: string }[] = [];
   const help = [`mg-axi home --offline ${context}`];
   let session: GraphSession | undefined;

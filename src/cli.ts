@@ -187,7 +187,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
     const { output, selected } = localHome(name, config);
     if (flags.offline || !selected) return output;
     const { liveHome } = await import("./home.js");
-    return liveHome(output, selected, overrides);
+    return liveHome(output, selected, overrides, config);
   }
   if (leaf.path.startsWith("mail ")) {
     if (flags["api-version"] !== undefined && flags["api-version"] !== "v1.0") throw new AxiError("Mail supports Graph v1.0 only", "VALIDATION_ERROR", [leafHelp(leaf)]);

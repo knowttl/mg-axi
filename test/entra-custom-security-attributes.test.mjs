@@ -690,17 +690,17 @@ test("malformed custom-security count bodies fail as unknown, not zero", async (
       const malformed = transport(() => ({ status: 200, headers: {}, body }));
       const scoped = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "attribute-set", "count", "--profile", "soc"], scoped.overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
+        assert.equal(error.code, "RESPONSE_INVALID");
         return /non-numeric success body/.test(error.message);
       });
       const defined = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "custom-security-attribute-definition", "count", "--profile", "soc"], defined.overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
+        assert.equal(error.code, "RESPONSE_INVALID");
         return /non-numeric success body/.test(error.message);
       });
       const valued = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "allowed-value", "count", "--definition", def1.id, "--profile", "soc"], valued.overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
+        assert.equal(error.code, "RESPONSE_INVALID");
         return /non-numeric success body/.test(error.message);
       });
     }

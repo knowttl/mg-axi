@@ -9,6 +9,7 @@ import { validateProfile, profileName, type AnyProfile } from "./profiles.js";
 import { findOperation } from "./runtime-index.js";
 import { HUNTING_OPERATION, HUNTING_SCOPE, huntingRequest, huntingServerError } from "./security-hunting.js";
 import { checkMailCredential, checkMailScopes, isMailOperation } from "./mail-authorization.js";
+import { ResponseShapeError } from "./response-shape-error.js";
 
 // CORE-01: the single path that owns Graph URL construction, operation
 // authorization, credential attachment and response validation. Command
@@ -751,13 +752,22 @@ function countOf(body: unknown): number | null {
   return typeof count === "number" && Number.isSafeInteger(count) && count >= 0 ? count : null;
 }
 
-function valuesOf(operation: SessionOperation, body: unknown): unknown[] {
+function valuesOf(operation: SessionOperation, response: TransportResponse, body: unknown): unknown[] {
   if (!body || typeof body !== "object" || Array.isArray(body) || !Object.hasOwn(body, "value")) {
-    throw new AxiError(`Graph returned a malformed collection body for ${operation.id}`, "GRAPH_ERROR", ["Collections carry a value array; treat anything else as unknown, not empty"]);
+    throw new ResponseShapeError(`Graph returned a malformed collection body for ${operation.id}`, operation, response, body, [{ path: ["value"], expected: "array" }]);
   }
   const value = (body as { value?: unknown }).value;
-  if (!Array.isArray(value)) throw new AxiError(`Graph returned a malformed collection body for ${operation.id}`, "GRAPH_ERROR", ["Collections carry a value array; treat anything else as unknown, not empty"]);
+  if (!Array.isArray(value)) throw new ResponseShapeError(`Graph returned a malformed collection body for ${operation.id}`, operation, response, body, [{ path: ["value"], expected: "array" }]);
   return value;
+}
+
+function decodeReadBody(operation: SessionOperation, response: TransportResponse): unknown {
+  if (!response.body) throw new ResponseShapeError(`Graph returned an empty success body for ${operation.id}`, operation, response);
+  try {
+    return redact(JSON.parse(response.body));
+  } catch {
+    throw new ResponseShapeError(`Graph returned a non-JSON success body for ${operation.id}`, operation, response);
+  }
 }
 
 export class GraphSession {
@@ -1019,14 +1029,8 @@ export class GraphSession {
           if (bytes > budget.maxBytes) return partial(`byte budget exceeded after ${bytes} bytes`, current, pending);
           break;
         }
-        if (!response.body) throw new AxiError(`Graph returned an empty success body for ${operation.id}`, "GRAPH_ERROR", ["Empty reads are malformed; treat the result as unknown, not empty"]);
-        let parsed: unknown;
-        try {
-          parsed = redact(JSON.parse(response.body));
-        } catch {
-          throw new AxiError(`Graph returned a non-JSON success body for ${operation.id}`, "GRAPH_ERROR", ["Successful reads are JSON; anything else is malformed"]);
-        }
-        const rows = valuesOf(operation, parsed);
+        const parsed = decodeReadBody(operation, response);
+        const rows = valuesOf(operation, response, parsed);
         if (isMailOperation(operation) && (rows.length > Math.min(Number(query.$top), mailSearch ? 1000 - searchRows - results.length : Infinity) || bytes > budget.maxBytes)) {
           throw new AxiError("Mail page exceeds the requested row or byte budget", "GRAPH_ERROR", ["Reduce --limit; oversized mail pages are never buffered into cursors"]);
         }
@@ -1170,12 +1174,7 @@ export class GraphSession {
     const status = response.status;
     if (status === 204 || status === 205) return null;
     if (status >= 200 && status < 300) {
-      if (!response.body) throw new AxiError(`Graph returned an empty success body for ${operation.id}`, "GRAPH_ERROR", ["Empty reads are malformed; treat the result as unknown, not empty"]);
-      try {
-        return redact(JSON.parse(response.body));
-      } catch {
-        throw new AxiError(`Graph returned a non-JSON success body for ${operation.id}`, "GRAPH_ERROR", ["Successful reads are JSON; anything else is malformed"]);
-      }
+      return decodeReadBody(operation, response);
     }
     throw this.translateError(operation, response);
   }
@@ -1187,7 +1186,7 @@ export class GraphSession {
     if (status >= 200 && status < 300) {
       const text = (response.body ?? "").trim();
       if (/^\d+$/.test(text)) return Number(text);
-      throw new AxiError(`Graph returned a non-numeric success body for ${operation.id}`, "GRAPH_ERROR", ["Scalar count reads carry a plain number; treat anything else as unknown, not empty"]);
+      throw new ResponseShapeError(`Graph returned a non-numeric success body for ${operation.id}`, operation, response);
     }
     throw this.translateError(operation, response);
   }

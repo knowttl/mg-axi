@@ -489,7 +489,7 @@ test("malformed certificate-auth count bodies fail as unknown, not zero", async 
       const malformed = transport(() => ({ status: 200, headers: {}, body }));
       const scoped = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "certificate-auth-pki", "count", "--profile", "soc"], scoped.overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
+        assert.equal(error.code, "RESPONSE_INVALID");
         return /malformed certificate-auth PKI count|non-numeric success body|non-JSON success body/.test(error.message);
       });
     }

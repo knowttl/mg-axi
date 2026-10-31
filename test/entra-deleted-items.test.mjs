@@ -519,7 +519,7 @@ test("malformed deleted-item counts fail closed instead of inventing zero", asyn
     const malformed = transport(() => ({ status: 200, headers: { "Content-Type": "text/plain" }, body: "not-a-count" }));
     const { overrides } = overridesFor("delegated", malformed);
     await assert.rejects(executeArgv(["entra", "deleted-user", "count", "--profile", "soc"], overrides),
-      { code: "GRAPH_ERROR" });
+      { code: "RESPONSE_INVALID" });
   } finally {
     teardownProfiles(state);
   }

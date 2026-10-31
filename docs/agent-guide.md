@@ -84,5 +84,7 @@ Read `code` and `help` before deciding the next action:
 | GRAPH_ERROR / 403 | Check consent, role, licence and policy; 403 does not say which is missing. |
 | GRAPH_ERROR / 404 | Verify the identifier and visibility; missing and inaccessible are indistinguishable. |
 | GRAPH_ERROR / 429 or 503 | Respect retry-after guidance; do not loop blindly after bounded retries. |
-| GRAPH_ERROR / budget, timeout or malformed response | Narrow the query; this is unknown/incomplete, never evidence of an empty result. |
+| GRAPH_ERROR / budget or timeout | Narrow the query; this is unknown/incomplete, never evidence of an empty result. |
+| RESPONSE_INVALID / malformed read body, collection envelope or scalar count | Inspect HTTP status, content type and bounded shape diagnostics to check API compatibility or proxy behavior; values are never printed and sensitive-route keys are suppressed. This is unknown, never empty. |
+| GRAPH_ERROR / malformed command-specific data | Report the API contract mismatch; this is unknown, never empty. |
 | OUTCOME_UNKNOWN (writes) | Read back and reconcile; never replay the write blindly. |

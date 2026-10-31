@@ -19,6 +19,7 @@ import { writeMailFolders } from "./mail-folder-writes.js";
 import { writeMailRules } from "./mail-rule-writes.js";
 import { downloadMail, type BinaryTransport } from "./mail-download.js";
 import { KqlValidationError } from "./kql.js";
+import { ResponseShapeError } from "./response-shape-error.js";
 import { GraphSession, MAX_CURSOR_BYTES, type GraphTransport } from "./graph-session.js";
 import { listUsers, showUser } from "./entra-users.js";
 import { updateUserAccount } from "./entra-user-update.js";
@@ -1574,7 +1575,7 @@ export async function main() {
       },
     },
     formatError: error => ({
-      output: `${redactSecrets(encode(error instanceof AxiError ? { error: error.message, code: error.code, ...(error instanceof KqlValidationError ? { diagnostics: error.diagnostics } : {}), help: hints(error.suggestions) } : { error: "Unable to run mg-axi", help: hints(["mg-axi --help"]) }))}\n`,
+      output: `${redactSecrets(encode(error instanceof AxiError ? { error: error.message, code: error.code, ...(error instanceof ResponseShapeError ? error.diagnostics : {}), ...(error instanceof KqlValidationError ? { diagnostics: error.diagnostics } : {}), help: hints(error.suggestions) } : { error: "Unable to run mg-axi", help: hints(["mg-axi --help"]) }))}\n`,
       exitCode: error instanceof AxiError && error.code === "VALIDATION_ERROR" ? 2 : 1,
     }),
   });

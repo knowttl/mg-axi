@@ -404,7 +404,8 @@ export function skillDocument(): string {
     "",
     "Reads run through a session that authorizes only catalogued operations before silent credential acquisition; only explicit `auth login` opens a browser or prints a device-code challenge.",
     "Writes preview before sending and need `--execute` plus a typed `--confirm` repeating the target; an already-desired value is a no-op with exit 0, never an error.",
-    "Output is TOON on stdout; diagnostics use stderr.",
+    "Structured output, errors and response diagnostics use TOON on stdout.",
+    "Malformed read bodies, collection envelopes and scalar counts fail as `RESPONSE_INVALID` with bounded HTTP status, content type and shape diagnostics; values are never printed, and mail, hunting and custom-security-attribute key names are suppressed.",
     "Text truncates at 500 characters (`--full` restores text, never redaction); row caps resume through opaque cursors.",
     "Secrets stay in credential references, never in argv, config files or output; credential fields carry expiry metadata only.",
     "Tests run offline with fixture credentials; never point tests at a real tenant.",
@@ -499,7 +500,9 @@ Read \`code\` and \`help\` before deciding the next action:
 | GRAPH_ERROR / 403 | Check consent, role, licence and policy; 403 does not say which is missing. |
 | GRAPH_ERROR / 404 | Verify the identifier and visibility; missing and inaccessible are indistinguishable. |
 | GRAPH_ERROR / 429 or 503 | Respect retry-after guidance; do not loop blindly after bounded retries. |
-| GRAPH_ERROR / budget, timeout or malformed response | Narrow the query; this is unknown/incomplete, never evidence of an empty result. |
+| GRAPH_ERROR / budget or timeout | Narrow the query; this is unknown/incomplete, never evidence of an empty result. |
+| RESPONSE_INVALID / malformed read body, collection envelope or scalar count | Inspect HTTP status, content type and bounded shape diagnostics to check API compatibility or proxy behavior; values are never printed and sensitive-route keys are suppressed. This is unknown, never empty. |
+| GRAPH_ERROR / malformed command-specific data | Report the API contract mismatch; this is unknown, never empty. |
 | OUTCOME_UNKNOWN (writes) | Read back and reconcile; never replay the write blindly. |
 `;
 }

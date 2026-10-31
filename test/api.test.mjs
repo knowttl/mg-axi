@@ -700,6 +700,34 @@ function cli(args, config = null, input = "", bootstrap) {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
+for (const [label, body, shape] of [
+  ["HTML login page", "<html>private-response-value</html>", [{ path: "$", type: "string" }]],
+  ["wrong envelope", JSON.stringify({ WrongEnvelope: "private-response-value" }), [{ path: "$", type: "object" }, { path: '$["WrongEnvelope"]', type: "string" }]],
+]) test(`CLI renders safe response diagnostics on stdout for a ${label}`, () => {
+  const bootstrap = `
+    import { MsalProvider } from "./dist/msal-provider.js";
+    import { Socket } from "node:net";
+    Socket.prototype.connect = () => { throw new Error("Unexpected network request"); };
+    MsalProvider.prototype.silent = async profile => ({
+      token: "opaque-fixture-secret", expiresAt: Date.now() + 3600000,
+      tenantId: profile.tenantId, clientId: profile.clientId, accountId: "synthetic-account",
+    });
+    globalThis.fetch = async () => new Response(${JSON.stringify(body)}, { status: 200, headers: { "content-type": "text/html; private=private-header-value" } });
+    process.argv = [process.execPath, ${JSON.stringify(bin)}, ...process.argv.slice(1)];
+    await (await import("./dist/cli.js")).main();
+  `;
+  const result = cli(["api", "get", "/users", "--scopes", scopes], profileConfig, "", bootstrap);
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, "");
+  const output = decode(result.stdout);
+  assert.equal(output.code, "RESPONSE_INVALID");
+  assert.equal(output.status, 200);
+  assert.equal(output.contentType, "text/html");
+  assert.deepEqual(output.shape, shape);
+  assert.doesNotMatch(result.stdout, /private-response-value|private-header-value|opaque-fixture-secret/);
+  assert.match(output.help.join(" "), /API compatibility and proxy/);
+});
+
 test("api get help shows the positional path and reviewed flags", () => {
   const result = cli(["api", "get", "--help"]);
   assert.equal(result.status, 0);

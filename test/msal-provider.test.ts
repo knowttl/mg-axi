@@ -59,7 +59,7 @@ try {
 const footer = `
 } finally { rmSync(dir, { recursive: true, force: true }); }
 `;
-function run(script) {
+function run(script: string) {
   const result = spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "--experimental-test-module-mocks", "--input-type=module", "-e", harness + script + footer], { encoding: "utf8", timeout: 10000 });
   assert.equal(result.status, 0, result.stderr);
 }

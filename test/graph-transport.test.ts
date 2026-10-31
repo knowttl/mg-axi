@@ -3,9 +3,11 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import { fetchTransport } from "../dist/api.js";
+import type { AddressInfo } from "node:net";
+import { record, text } from "./fixtures/typed.ts";
 
 test("fetch transport sends hunting JSON and refuses oversized response streams", async () => {
-  const requests = [];
+  const requests: { method: string | undefined; body: string }[] = [];
   const server = createServer(async (request, response) => {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
@@ -17,17 +19,17 @@ test("fetch transport sends hunting JSON and refuses oversized response streams"
   await once(server, "listening");
   try {
     const body = JSON.stringify({ Query: "EmailEvents | take 2", Timespan: "P1D" });
-    await assert.rejects(fetchTransport({ method: "POST", url: `http://127.0.0.1:${server.address().port}/hunting`,
+    await assert.rejects(fetchTransport({ method: "POST", url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/hunting`,
       headers: { Authorization: "Bearer offline-fixture", "Content-Type": "application/json; charset=utf-8" }, body }),
-    error => error.code === "GRAPH_ERROR" && /5 MB/.test(error.message));
+    error => record(error).code === "GRAPH_ERROR" && /5 MB/.test(text(record(error).message)));
     assert.deepEqual(requests, [{ method: "POST", body }]);
   } finally {
-    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });
 
 test("fetch transport returns redirects for session authorization without following them", async () => {
-  const requests = [];
+  const requests: (string | undefined)[] = [];
   const server = createServer((request, response) => {
     requests.push(request.url);
     if (request.url === "/allowed") {
@@ -43,7 +45,7 @@ test("fetch transport returns redirects for session authorization without follow
   try {
     const result = await fetchTransport({
       method: "GET",
-      url: `http://127.0.0.1:${server.address().port}/allowed`,
+      url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/allowed`,
       headers: { Authorization: "Bearer offline-fixture" },
     });
     assert.equal(result.status, 302);
@@ -51,6 +53,6 @@ test("fetch transport returns redirects for session authorization without follow
     assert.equal(result.body, "redirect body");
     assert.deepEqual(requests, ["/allowed"]);
   } finally {
-    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });

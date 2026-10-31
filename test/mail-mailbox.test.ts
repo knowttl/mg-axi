@@ -5,13 +5,16 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { executeArgv } from "../dist/cli.js";
 import { Profiles } from "../dist/profiles.js";
+import type { TransportRequest } from "../dist/graph-session.js";
+import type { TestContext } from "node:test";
+import { authFakes } from "./fixtures/typed.ts";
 
 const commands = [
   ["folder", "list"], ["folder", "show", "--id", "inbox"], ["message", "list"],
   ["message", "show", "--id", "a", "--body", "none"], ["attachment", "list", "--id", "a"],
   ["settings", "show"], ["rule", "list"], ["rule", "show", "--id", "a"], ["category", "list"],
 ];
-function fixture(t) {
+function fixture(t: TestContext) {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-mail-mailbox-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const config = join(dir, "config.json");
@@ -20,9 +23,9 @@ function fixture(t) {
   profiles.create("batch", tenant, client, "commercial", false, { federated: true });
   const data = JSON.parse(readFileSync(config, "utf8")); data.profiles.batch.enabledPacks = ["mail"];
   writeFileSync(config, JSON.stringify(data));
-  const requests = [], credentials = [];
-  const run = (command, mailbox) => executeArgv(["mail", ...command, "--mailbox", mailbox, "--profile", "batch", "--config", config], {
-    application: { credential: async () => { credentials.push(true); return { token: "opaque-fixture-token", tenantId: tenant, clientId: client }; } },
+  const requests: TransportRequest[] = [], credentials: boolean[] = [];
+  const run = (command: string[], mailbox: string) => executeArgv(["mail", ...command, "--mailbox", mailbox, "--profile", "batch", "--config", config], {
+    application: authFakes({ credential: async () => { credentials.push(true); return { token: "opaque-fixture-token", tenantId: tenant, clientId: client }; } }).application,
     transport: async request => { requests.push(request); return { status: 200, headers: {}, body: JSON.stringify(command[1] === "list" ? { value: [] } : { id: "a" }) }; },
   });
   return { run, requests, credentials };
@@ -33,7 +36,7 @@ for (const command of commands) {
     const f = fixture(t);
     await f.run(command, mailbox);
     assert.equal(f.requests.length, 1);
-    const url = new URL(f.requests[0].url);
+    const url = new URL(f.requests[0]!.url);
     assert.equal(url.pathname.split("/")[3], encodeURIComponent(mailbox));
     assert.equal(url.hash, "");
   });

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.19](https://github.com/knowttl/mg-axi/compare/v0.1.18...v0.1.19) (2026-10-31)
+
+
+### Features
+
+* add bounded live Graph home summaries ([#135](https://github.com/knowttl/mg-axi/issues/135)) ([28aa189](https://github.com/knowttl/mg-axi/commit/28aa1890f773bfa1c8f63cb9ad73c34e009e4265))
+* add bounded risk detection to sign-in correlation ([#136](https://github.com/knowttl/mg-axi/issues/136)) ([6fd6a9c](https://github.com/knowttl/mg-axi/commit/6fd6a9c334b688cc7644e9b32a3150ee549f3f0a))
+
+
+### Bug Fixes
+
+* preserve safe diagnostics for malformed Graph responses ([#133](https://github.com/knowttl/mg-axi/issues/133)) ([f0fe02f](https://github.com/knowttl/mg-axi/commit/f0fe02f64873e5c53c0f4032a094b753255bf22e))
+* surface unreadable mutation response warnings ([#131](https://github.com/knowttl/mg-axi/issues/131)) ([17710da](https://github.com/knowttl/mg-axi/commit/17710dac20179d71300830507c3cbb3f2b092e51))
+* switch no-mistakes reviewer to Codex ([#129](https://github.com/knowttl/mg-axi/issues/129)) ([7b93289](https://github.com/knowttl/mg-axi/commit/7b9328994464860dbbcc7312abf43683aa597a70))
+
 ## [0.1.18](https://github.com/knowttl/mg-axi/compare/v0.1.17...v0.1.18) (2026-10-28)
 
 

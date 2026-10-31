@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, delegatedProvider, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler, type RawResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -48,12 +50,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -68,9 +70,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -78,11 +80,11 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function federationTransport({ denied = false, countBody = "2", countStatus = 200, typesBody = { value: ["saml", "wsFed"] } } = {}) {
+function federationTransport({ denied = false, countBody = "2", countStatus = 200, typesBody = { value: ["saml", "wsFed"] } }: { denied?: boolean; countBody?: string; countStatus?: number; typesBody?: unknown } = {}) {
   return transport(request => {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -100,32 +102,32 @@ function federationTransport({ denied = false, countBody = "2", countStatus = 20
     }
     const single = /^\/v1\.0\/directory\/federationConfigurations\/([^/]+)$/.exec(path);
     if (single) {
-      const found = configurations.find(row => row.id === decodeURIComponent(single[1]));
+      const found = configurations.find(row => row.id === decodeURIComponent(single[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such configuration" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, fixture, calls = []) {
+function overridesFor(mode: string, fixture?: TransportFixture, calls: CredentialArgs[] = []) {
   const credential = credentialService(mode, calls);
   return {
-    requests: fixture.requests,
+    requests: fixture!.requests,
     calls,
     overrides: {
-      transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      transport: fixture!.send,
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists federation configurations with compact rows, kinds and a count aggregate`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode, federationTransport());
-      const result = await executeArgv(["entra", "federation-configuration", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "federation-configuration", "list", "--profile", profile], overrides));
       assert.deepEqual(result.federationConfigurations, [
         { id: contoso.id, displayName: "Contoso", "@odata.type": "#microsoft.graph.samlOrWsFedExternalDomainFederation" },
         { id: fabrikam.id, displayName: "Fabrikam", "@odata.type": "#microsoft.graph.samlOrWsFedExternalDomainFederation" },
@@ -134,14 +136,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 federation configurations");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra federation-configuration show --id <configuration-id>")));
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
-      assert.ok(result.help.some(hint => hint.includes("--select signingCertificate")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra federation-configuration show --id <configuration-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
+      assert.ok(strings(result.help).some(hint => hint.includes("--select signingCertificate")));
       assert.ok(!JSON.stringify(result).includes(certBlob.slice(0, 32)));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/directory/federationConfigurations?"));
-      if (mode === "delegated") assert.deepEqual(calls[0][1], federationScopes);
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/directory/federationConfigurations?"));
+      if (mode === "delegated") assert.deepEqual(calls[0]![1], federationScopes);
     } finally {
       teardownProfiles(state);
     }
@@ -151,9 +153,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode, federationTransport());
-      const result = await executeArgv(
-        ["entra", "federation-configuration", "list", "--profile", profile, "--select", "id,signingCertificate", "--full"], overrides);
-      assert.equal(result.federationConfigurations[0].signingCertificate, certBlob);
+      const result = record(await executeArgv(
+        ["entra", "federation-configuration", "list", "--profile", profile, "--select", "id,signingCertificate", "--full"], overrides));
+      assert.equal(record(records(result.federationConfigurations)[0]).signingCertificate, certBlob);
     } finally {
       teardownProfiles(state);
     }
@@ -163,15 +165,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode, federationTransport());
-      const result = await executeArgv(["entra", "federation-configuration", "available-types", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "federation-configuration", "available-types", "--profile", profile], overrides));
       assert.deepEqual(result.availableProviderTypes, ["saml", "wsFed"]);
       assert.deepEqual(result.count, { returned: 2, complete: true });
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/directory/federationConfigurations/availableProviderTypes()");
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
-      assert.ok(result.help.some(hint => hint.includes("licensing")));
+      assert.equal(requests[0]!.url, "https://graph.microsoft.com/v1.0/directory/federationConfigurations/availableProviderTypes()");
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
+      assert.ok(strings(result.help).some(hint => hint.includes("licensing")));
       assert.equal(calls.length, 1);
-      if (mode === "delegated") assert.deepEqual(calls[0][1], typesScopes);
+      if (mode === "delegated") assert.deepEqual(calls[0]![1], typesScopes);
     } finally {
       teardownProfiles(state);
     }
@@ -181,7 +183,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode, federationTransport({ typesBody: { value: [] } }));
-      const result = await executeArgv(["entra", "federation-configuration", "available-types", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "federation-configuration", "available-types", "--profile", profile], overrides));
       assert.deepEqual(result.availableProviderTypes, []);
       assert.deepEqual(result.count, { returned: 0, complete: true });
     } finally {
@@ -193,16 +195,16 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode, federationTransport());
-      const first = await executeArgv(["entra", "federation-configuration", "list", "--profile", profile, "--limit", "2"], overrides);
-      assert.equal(first.federationConfigurations.length, 2);
+      const first = record(await executeArgv(["entra", "federation-configuration", "list", "--profile", profile, "--limit", "2"], overrides));
+      assert.equal(records(first.federationConfigurations).length, 2);
       assert.deepEqual(first.count, "2 federation configurations shown, more available");
       assert.equal(first.total, null);
       assert.equal(first.complete, false);
       assert.equal(first.reason, "row limit reached; buffered remainder is preserved in the cursor");
       assert.equal(typeof first.cursor, "string");
       const { overrides: resumeOverrides } = overridesFor(mode, federationTransport());
-      const second = await executeArgv(["entra", "federation-configuration", "list", "--profile", profile, "--cursor", first.cursor], resumeOverrides);
-      assert.equal(second.federationConfigurations.length, 1);
+      const second = record(await executeArgv(["entra", "federation-configuration", "list", "--profile", profile, "--cursor", text(first.cursor)], resumeOverrides));
+      assert.equal(records(second.federationConfigurations).length, 1);
       assert.deepEqual(second.count, "1 federation configurations");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -215,7 +217,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode, federationTransport());
-      const result = await executeArgv(["entra", "federation-configuration", "show", "--id", contoso.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "federation-configuration", "show", "--id", contoso.id, "--profile", profile], overrides));
       assert.deepEqual(result.federationConfiguration, {
         id: contoso.id,
         displayName: "Contoso",
@@ -226,13 +228,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         "@odata.type": "#microsoft.graph.samlOrWsFedExternalDomainFederation",
       });
       assert.ok(!("signingCertificate" in result.federationConfiguration));
-      assert.ok(result.help.some(hint => hint.includes("--select signingCertificate")));
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
-      const blob = await executeArgv(
-        ["entra", "federation-configuration", "show", "--id", contoso.id, "--profile", profile, "--select", "id,signingCertificate", "--full"], overrides);
-      assert.equal(blob.federationConfiguration.signingCertificate, certBlob);
-      const wsFed = await executeArgv(["entra", "federation-configuration", "show", "--id", fabrikam.id, "--profile", profile], overrides);
-      assert.equal(wsFed.federationConfiguration.preferredAuthenticationProtocol, "wsFed");
+      assert.ok(strings(result.help).some(hint => hint.includes("--select signingCertificate")));
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
+      const blob = record(await executeArgv(
+        ["entra", "federation-configuration", "show", "--id", contoso.id, "--profile", profile, "--select", "id,signingCertificate", "--full"], overrides));
+      assert.equal(record(blob.federationConfiguration).signingCertificate, certBlob);
+      const wsFed = record(await executeArgv(["entra", "federation-configuration", "show", "--id", fabrikam.id, "--profile", profile], overrides));
+      assert.equal(record(wsFed.federationConfiguration).preferredAuthenticationProtocol, "wsFed");
     } finally {
       teardownProfiles(state);
     }
@@ -242,15 +244,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode, federationTransport());
-      const result = await executeArgv(["entra", "federation-configuration", "count", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "federation-configuration", "count", "--profile", profile], overrides));
       assert.deepEqual(result.count, { returned: 2, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/directory/federationConfigurations/$count"));
-      const filtered = await executeArgv(
-        ["entra", "federation-configuration", "count", "--profile", profile, "--filter", "displayName eq 'Contoso'"], overrides);
-      assert.equal(filtered.count.returned, 2);
-      assert.ok(new URL(requests[requests.length - 1].url).searchParams.has("$filter"));
-      assert.ok(filtered.help.some(hint => hint.includes("drop --filter for the tenant total")));
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/directory/federationConfigurations/$count"));
+      const filtered = record(await executeArgv(
+        ["entra", "federation-configuration", "count", "--profile", profile, "--filter", "displayName eq 'Contoso'"], overrides));
+      assert.equal(record(filtered.count).returned, 2);
+      assert.ok(new URL(requests[requests.length - 1]!.url).searchParams.has("$filter"));
+      assert.ok(strings(filtered.help).some(hint => hint.includes("drop --filter for the tenant total")));
     } finally {
       teardownProfiles(state);
     }
@@ -266,20 +268,20 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         ["entra", "federation-configuration", "count", "--profile", profile],
       ]) {
         await assert.rejects(executeArgv(args, overrides), error => {
-          assert.equal(error.code, "GRAPH_ERROR");
-          assert.match(error.message, /\(403\)/);
-          assert.match(error.message, /grant, role, licence/);
-          assert.ok(error.suggestions.some(hint => hint.includes("Domain.Read.All")));
-          assert.ok(error.suggestions.some(hint => hint.includes("External Identity Provider Administrator")));
-          assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
-          assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+          assert.equal(record(error).code, "GRAPH_ERROR");
+          assert.match(text(record(error).message), /\(403\)/);
+          assert.match(text(record(error).message), /grant, role, licence/);
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Domain.Read.All")));
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("External Identity Provider Administrator")));
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Personal Microsoft accounts are not supported")));
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
           return true;
         });
       }
       await assert.rejects(executeArgv(["entra", "federation-configuration", "available-types", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("IdentityProvider.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("External Identity Provider Administrator")));
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("IdentityProvider.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("External Identity Provider Administrator")));
         return true;
       });
       assert.ok(calls.length > 0);
@@ -295,7 +297,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, federationTransport());
       await assert.rejects(
         executeArgv(["entra", "federation-configuration", "show", "--id", "no-such-configuration", "--profile", profile], overrides),
-        error => error.code === "GRAPH_ERROR" && /not found or inaccessible/.test(error.message),
+        error => record(error).code === "GRAPH_ERROR" && /not found or inaccessible/.test(text(record(error).message)),
       );
     } finally {
       teardownProfiles(state);
@@ -308,12 +310,12 @@ test("truncated federation text carries a --full hint without lifting row caps",
   try {
     const displayName = "x".repeat(600);
     const { overrides } = overridesFor("delegated", transport(() => json(200, { ...contoso, displayName })));
-    const result = await executeArgv(["entra", "federation-configuration", "show", "--id", contoso.id, "--profile", "soc"], overrides);
-    assert.match(result.federationConfiguration.displayName, /\.\.\. \(truncated, \d+ chars total\)/);
-    assert.ok(result.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "federation-configuration", "show", "--id", contoso.id, "--profile", "soc", "--full"], overrides);
-    assert.equal(full.federationConfiguration.displayName, displayName);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const result = record(await executeArgv(["entra", "federation-configuration", "show", "--id", contoso.id, "--profile", "soc"], overrides));
+    assert.match(text(record(result.federationConfiguration).displayName), /\.\.\. \(truncated, \d+ chars total\)/);
+    assert.ok(strings(result.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "federation-configuration", "show", "--id", contoso.id, "--profile", "soc", "--full"], overrides));
+    assert.equal(record(full.federationConfiguration).displayName, displayName);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -325,7 +327,7 @@ test("a non-numeric federation count body is malformed, never a count", async ()
     const { overrides } = overridesFor("delegated", federationTransport({ countBody: JSON.stringify({ value: [] }) }));
     await assert.rejects(
       executeArgv(["entra", "federation-configuration", "count", "--profile", "soc"], overrides),
-      error => error.code === "RESPONSE_INVALID" && /non-numeric success body/.test(error.message),
+      error => record(error).code === "RESPONSE_INVALID" && /non-numeric success body/.test(text(record(error).message)),
     );
   } finally {
     teardownProfiles(state);
@@ -371,7 +373,7 @@ for (const field of unsupportedFederationFields) {
         const { calls, requests, overrides } = overridesFor("delegated", federationTransport());
         await assert.rejects(
           executeArgv(["entra", "federation-configuration", ...args, field, "--profile", "soc"], overrides),
-          error => error.code === "VALIDATION_ERROR" && error.message.includes(`Unknown federation-configuration property ${field}`),
+          error => record(error).code === "VALIDATION_ERROR" && text(record(error).message).includes(`Unknown federation-configuration property ${field}`),
         );
         assert.equal(calls.length, 0);
         assert.equal(requests.length, 0);
@@ -414,7 +416,7 @@ for (const id of ["$count", "$value", "$ref"]) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   for (const args of [
     ["entra", "federation-configuration", "list", "--profile", profile],
     ["entra", "federation-configuration", "show", "--id", contoso.id, "--profile", profile],
@@ -443,7 +445,7 @@ test("application mode rejects delegated scopes before HTTP", async () => {
   try {
     const { calls, requests, overrides } = overridesFor("application", federationTransport());
     await assert.rejects(
-      executeArgv(["entra", "federation-configuration", "list", "--profile", "batch", "--scopes", federationScopes[0]], overrides),
+      executeArgv(["entra", "federation-configuration", "list", "--profile", "batch", "--scopes", federationScopes[0]!], overrides),
       { code: "VALIDATION_ERROR", message: "Application profiles use the configured Graph .default audience; delegated scopes are unavailable" },
     );
     assert.equal(calls.length, 0);
@@ -458,7 +460,7 @@ test("available federation types application mode rejects delegated scopes befor
   try {
     const { calls, requests, overrides } = overridesFor("application", federationTransport());
     await assert.rejects(
-      executeArgv(["entra", "federation-configuration", "available-types", "--profile", "batch", "--scopes", typesScopes[0]], overrides),
+      executeArgv(["entra", "federation-configuration", "available-types", "--profile", "batch", "--scopes", typesScopes[0]!], overrides),
       { code: "VALIDATION_ERROR", message: "Application profiles use the configured Graph .default audience; delegated scopes are unavailable" },
     );
     assert.equal(calls.length, 0);
@@ -468,20 +470,20 @@ test("available federation types application mode rejects delegated scopes befor
   }
 });
 
-function rawFixture(handler) {
-  const credentialCalls = [];
-  const requests = [];
-  const credential = account => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
-  const delegated = new DelegatedAuth({
+function rawFixture(handler: RawResponseHandler) {
+  const credentialCalls: unknown[][] = [];
+  const requests: TransportRequest[] = [];
+  const credential = <T extends object>(account: T) => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
+  const delegated = new DelegatedAuth(delegatedProvider({
     storage: "session-only",
     login: async () => credential({ accountId: "synthetic-account" }),
     silent: async (...args) => { credentialCalls.push(["silent", ...args]); return credential({ accountId: "synthetic-account" }); },
-  });
+  }));
   const application = new ApplicationAuth({
     storage: "session-only",
     acquire: async (...args) => { credentialCalls.push(["acquire", ...args]); return credential({}); },
   });
-  const transport = async request => {
+  const transport: GraphTransport = async request => {
     requests.push(request);
     const response = typeof handler === "function" ? await handler(request, requests.length) : handler;
     return { headers: {}, body: "", ...response };
@@ -489,9 +491,9 @@ function rawFixture(handler) {
   return { credentialCalls, requests, deps: { delegated, application, transport } };
 }
 
-const delegatedRawProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
+const delegatedRawProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
 
-function rawBody(request) {
+function rawBody(request: TransportRequest): TransportResponse {
   const url = new URL(request.url);
   if (url.pathname === "/v1.0/directory/federationConfigurations") return { status: 200, headers: {}, body: JSON.stringify({ value: configurations }) };
   if (url.pathname === `/v1.0/directory/federationConfigurations/${contoso.id}`) return { status: 200, headers: {}, body: JSON.stringify(contoso) };
@@ -500,10 +502,10 @@ function rawBody(request) {
 
 test("raw api serves reviewed federation list and show with the certificate blob", async () => {
   const f = rawFixture(rawBody);
-  const list = await runApiGet({ path: "/directory/federationConfigurations", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0] }, f.deps);
+  const list = await runApiGet({ path: "/directory/federationConfigurations", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0]! }, f.deps);
   assert.equal(list.returned, 3);
   assert.equal(list.complete, true);
-  const show = await runApiGet({ path: `/directory/federationConfigurations/${contoso.id}`, apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0] }, f.deps);
+  const show = await runApiGet({ path: `/directory/federationConfigurations/${contoso.id}`, apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0]! }, f.deps);
   assert.equal(show.displayName, "Contoso");
   assert.ok(typeof show.signingCertificate === "string");
 });
@@ -511,7 +513,7 @@ test("raw api serves reviewed federation list and show with the certificate blob
 test("raw api refuses the federation $count scalar before credentials", async () => {
   const f = rawFixture(rawBody);
   await assert.rejects(
-    runApiGet({ path: "/directory/federationConfigurations/$count", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0] }, f.deps),
+    runApiGet({ path: "/directory/federationConfigurations/$count", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0]! }, f.deps),
     { code: "VALIDATION_ERROR" },
   );
   assert.equal(f.credentialCalls.length, 0);
@@ -521,8 +523,8 @@ test("raw api refuses the federation $count scalar before credentials", async ()
 test("raw api refuses unreviewed federation $select fields before credentials", async () => {
   const f = rawFixture(rawBody);
   await assert.rejects(
-    runApiGet({ path: "/directory/federationConfigurations", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0], odata: "$select=id,domains" }, f.deps),
-    error => error.code === "VALIDATION_ERROR" && /Unreviewed \$select field domains/.test(error.message),
+    runApiGet({ path: "/directory/federationConfigurations", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0]!, odata: "$select=id,domains" }, f.deps),
+    error => record(error).code === "VALIDATION_ERROR" && /Unreviewed \$select field domains/.test(text(record(error).message)),
   );
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
@@ -533,8 +535,8 @@ for (const field of unsupportedFederationFields) {
     test(`raw federation ${path} refuses ${field} before credentials`, async () => {
       const f = rawFixture(rawBody);
       await assert.rejects(
-        runApiGet({ path, apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0], odata: `$select=id,${field}` }, f.deps),
-        error => error.code === "VALIDATION_ERROR" && error.message.includes(`Unreviewed $select field ${field}`),
+        runApiGet({ path, apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0]!, odata: `$select=id,${field}` }, f.deps),
+        error => record(error).code === "VALIDATION_ERROR" && text(record(error).message).includes(`Unreviewed $select field ${field}`),
       );
       assert.equal(f.credentialCalls.length, 0);
       assert.equal(f.requests.length, 0);

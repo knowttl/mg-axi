@@ -1,3 +1,6 @@
+import type { AnyProfile } from "../dist/profiles.js";
+import { record, records, text, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -69,12 +72,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -89,9 +92,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -99,7 +102,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -109,7 +112,7 @@ function grantTransport(denied = false) {
     const path = url.pathname;
     if (denied) return json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } });
     if (path === `/v1.0/servicePrincipals/${sp}/oauth2PermissionGrants`) {
-      assert.ok(!url.searchParams.get("$select")?.split(",").includes("appRoleId"));
+      assert.ok(!url.searchParams.get("$select")?.split(",")!.includes("appRoleId"));
       if (url.searchParams.has("$skiptoken")) return json(200, { value: [g3] });
       return json(200, {
         value: [g1, g2],
@@ -117,14 +120,14 @@ function grantTransport(denied = false) {
       });
     }
     if (path === `/v1.0/servicePrincipals/${sp}/appRoleAssignments`) {
-      assert.ok(!url.searchParams.get("$select")?.split(",").includes("scope"));
+      assert.ok(!url.searchParams.get("$select")?.split(",")!.includes("scope"));
       return json(200, { value: appRoles });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: CredentialArgs[] = []) {
   const fixture = handler ?? grantTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -132,13 +135,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runGrantsCli(args, state, mode, scopes) {
+function runGrantsCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, scopes?: string) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-grants-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -152,13 +155,13 @@ function runGrantsCli(args, state, mode, scopes) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists delegated grants for the named client preserving null and missing`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
-        "--service-principal", sp, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
+        "--service-principal", sp, "--profile", profile], overrides));
       assert.deepEqual(result.oauth2PermissionGrants, [
         { id: g1.id, consentType: "AllPrincipals", principalId: null, resourceId: graphResource,
           scope: `${g1.scope.slice(0, 500)}... (truncated, ${g1.scope.length} chars total)` },
@@ -168,13 +171,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 oauth2 grants");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("requiredResourceAccess")));
-      assert.ok(result.help.some(hint => hint.includes(`entra service-principal show --id ${sp}`)));
+      assert.ok(strings(result.help).some(hint => hint.includes("requiredResourceAccess")));
+      assert.ok(strings(result.help).some(hint => hint.includes(`entra service-principal show --id ${sp}`)));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/servicePrincipals/${sp}/oauth2PermissionGrants?`));
+      assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com/v1.0/servicePrincipals/${sp}/oauth2PermissionGrants?`));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") {
-        assert.deepEqual(calls[0][1], [grantScopes]);
+        assert.deepEqual(calls[0]![1], [grantScopes]);
       }
     } finally {
       teardownProfiles(state);
@@ -185,8 +188,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "service-principal", "app-role-assignment", "list",
-        "--service-principal", sp, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "service-principal", "app-role-assignment", "list",
+        "--service-principal", sp, "--profile", profile], overrides));
       assert.deepEqual(result.appRoleAssignments, [
         { id: a1.id, appRoleId: a1.appRoleId, resourceDisplayName: "Microsoft Graph", resourceId: graphResource },
         { id: a2.id, appRoleId: a2.appRoleId, resourceDisplayName: "fixture-api", resourceId: a2.resourceId },
@@ -194,11 +197,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "2 app role assignments");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("requiredResourceAccess")));
-      assert.ok(new URL(requests[0].url).pathname.endsWith(`/servicePrincipals/${sp}/appRoleAssignments`));
-      assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,appRoleId,resourceDisplayName,resourceId");
+      assert.ok(strings(result.help).some(hint => hint.includes("requiredResourceAccess")));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith(`/servicePrincipals/${sp}/appRoleAssignments`));
+      assert.equal(new URL(requests[0]!.url).searchParams.get("$select"), "id,appRoleId,resourceDisplayName,resourceId");
       if (mode === "delegated") {
-        assert.deepEqual(calls[0][1], [appRoleScopes]);
+        assert.deepEqual(calls[0]![1], [appRoleScopes]);
       }
     } finally {
       teardownProfiles(state);
@@ -213,8 +216,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         executeArgv(["entra", "service-principal", "oauth2-grant", "list",
           "--service-principal", sp, "--profile", profile], overrides),
         error => {
-          assert.equal(error.code, "GRAPH_ERROR");
-          const text = [error.message, ...error.suggestions].join("\n");
+          assert.equal(record(error).code, "GRAPH_ERROR");
+          const text = [record(error).message, ...strings(record(error).suggestions)].join("\n");
           assert.match(text, /Directory\.Read\.All/);
           assert.match(text, /Directory Readers/);
           assert.match(text, /never request \S*ReadWrite/);
@@ -225,8 +228,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         executeArgv(["entra", "service-principal", "app-role-assignment", "list",
           "--service-principal", sp, "--profile", profile], overrides),
         error => {
-          assert.equal(error.code, "GRAPH_ERROR");
-          const text = [error.message, ...error.suggestions].join("\n");
+          assert.equal(record(error).code, "GRAPH_ERROR");
+          const text = [record(error).message, ...strings(record(error).suggestions)].join("\n");
           assert.match(text, /Application\.Read\.All/);
           assert.match(text, /Application Administrator/);
           assert.match(text, /never request \S*ReadWrite/);
@@ -247,8 +250,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.error, undefined);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
-      assert.equal(output.oauth2PermissionGrants.length, 3);
+      const output = record(decode(result.stdout));
+      assert.equal(records(output.oauth2PermissionGrants).length, 3);
       assert.deepEqual(output.count, "3 oauth2 grants");
       assert.equal(output.total, null);
       assert.equal(output.complete, true);
@@ -266,7 +269,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.error, undefined);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.appRoleAssignments, [
         { id: a1.id, appRoleId: a1.appRoleId, resourceDisplayName: "Microsoft Graph", resourceId: graphResource },
         { id: a2.id, appRoleId: a2.appRoleId, resourceDisplayName: "fixture-api", resourceId: a2.resourceId },
@@ -282,7 +285,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
   for (const [command, property] of [
     [["entra", "service-principal", "oauth2-grant", "list"], "expiryTime"],
     [["entra", "service-principal", "app-role-assignment", "list"], "deletedDateTime"],
-  ]) {
+  ] as const) {
     for (const flag of ["select", "fields"]) {
       test(`${mode} ${command.join(" ")} rejects ${property} in --${flag} before credentials`, async () => {
         const state = setupProfiles();
@@ -291,8 +294,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           await assert.rejects(
             executeArgv([...command, "--service-principal", sp, "--profile", profile, `--${flag}`, `id,${property}`], overrides),
             error => {
-              assert.equal(error.code, "VALIDATION_ERROR");
-              assert.equal(error.message, `Unknown property ${property} in --${flag}`);
+              assert.equal(record(error).code, "VALIDATION_ERROR");
+              assert.equal(record(error).message, `Unknown property ${property} in --${flag}`);
               return true;
             },
           );
@@ -310,15 +313,15 @@ test("delegated grant lists truncate long scopes with a --full hint", async () =
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
-      "--service-principal", sp, "--profile", "soc"], overrides);
-    const grant = result.oauth2PermissionGrants.find(row => row.id === g1.id);
-    assert.match(grant.scope, /truncated, \d+ chars total/);
-    assert.ok(result.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
-      "--service-principal", sp, "--profile", "soc", "--full"], overrides);
-    assert.equal(full.oauth2PermissionGrants.find(row => row.id === g1.id).scope, g1.scope);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const result = record(await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
+      "--service-principal", sp, "--profile", "soc"], overrides));
+    const grant = records(result.oauth2PermissionGrants).find(row => row.id === g1.id);
+    assert.match(text(record(grant).scope), /truncated, \d+ chars total/);
+    assert.ok(strings(result.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
+      "--service-principal", sp, "--profile", "soc", "--full"], overrides));
+    assert.equal(record(records(full.oauth2PermissionGrants).find(row => row.id === g1.id)).scope, g1.scope);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -328,13 +331,13 @@ test("delegated grant filters pass through as plain $filter", async () => {
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "service-principal", "app-role-assignment", "list",
-      "--service-principal", sp, "--profile", "soc", "--filter", `resourceId eq '${graphResource}'`], overrides);
-    assert.equal(result.appRoleAssignments.length, 2);
-    const url = new URL(requests[0].url);
+    const result = record(await executeArgv(["entra", "service-principal", "app-role-assignment", "list",
+      "--service-principal", sp, "--profile", "soc", "--filter", `resourceId eq '${graphResource}'`], overrides));
+    assert.equal(records(result.appRoleAssignments).length, 2);
+    const url = new URL(requests[0]!.url);
     assert.equal(url.searchParams.get("$filter"), `resourceId eq '${graphResource}'`);
     assert.equal(url.searchParams.has("$count"), false);
-    assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+    assert.equal(requests[0]!.headers.ConsistencyLevel, undefined);
   } finally {
     teardownProfiles(state);
   }
@@ -344,16 +347,16 @@ test("delegated grant reads resume a capped list through its opaque cursor", asy
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
-      "--service-principal", sp, "--profile", "soc", "--limit", "2"], overrides);
-    assert.equal(first.oauth2PermissionGrants.length, 2);
+    const first = record(await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
+      "--service-principal", sp, "--profile", "soc", "--limit", "2"], overrides));
+    assert.equal(records(first.oauth2PermissionGrants).length, 2);
     assert.deepEqual(first.count, "2 oauth2 grants shown, more available");
     assert.equal(first.total, null);
     assert.equal(first.complete, false);
-    assert.match(first.reason, /row limit/);
+    assert.match(text(first.reason), /row limit/);
     assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
-    const second = await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
-      "--service-principal", sp, "--profile", "soc", "--cursor", first.cursor], overrides);
+    const second = record(await executeArgv(["entra", "service-principal", "oauth2-grant", "list",
+      "--service-principal", sp, "--profile", "soc", "--cursor", first.cursor], overrides));
     assert.deepEqual(second.oauth2PermissionGrants, [{ id: g3.id, consentType: "AllPrincipals", resourceId: graphResource }]);
     assert.deepEqual(second.count, "1 oauth2 grants");
     assert.equal(second.total, null);
@@ -366,13 +369,13 @@ test("delegated grant reads resume a capped list through its opaque cursor", asy
 test("grant creation routes are refused before credentials", async () => {
   const state = setupProfiles();
   try {
-    const calls = [];
+    const calls: CredentialArgs[] = [];
     const { requests, overrides } = overridesFor("delegated", undefined, calls);
     const { listAppRoleAssignments } = await import("../dist/entra-grants.js");
     const { operationFor, leafHelp, LEAVES } = await import("../dist/catalogue.js");
     const leaf = LEAVES.find(item => item.path === "entra service-principal app-role-assignment list");
     const grantOperation = {
-      ...operationFor(leaf, "v1.0"),
+      ...operationFor(leaf!, "v1.0")!,
       id: "v1.0:POST:/servicePrincipals/{servicePrincipal-id}/appRoleAssignments",
       method: "POST",
       path: "/servicePrincipals/{servicePrincipal-id}/appRoleAssignments",
@@ -381,10 +384,10 @@ test("grant creation routes are refused before credentials", async () => {
     const session = new GraphSession(overrides);
     await assert.rejects(
       listAppRoleAssignments(session, { "service-principal": sp },
-        { mode: "delegated", tenantId: tenant, clientId: client }, grantOperation, leafHelp(leaf), "soc"),
+        { mode: "delegated", tenantId: tenant, clientId: client } as unknown as AnyProfile, grantOperation, leafHelp(leaf!), "soc"),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /two catalogued service-principal grant/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /two catalogued service-principal grant/.test(text(record(error).message));
       },
     );
     assert.equal(requests.length, 0);
@@ -397,7 +400,7 @@ test("grant creation routes are refused before credentials", async () => {
 for (const [command, scope] of [
   ["oauth2-grant", "https://graph.microsoft.com/Directory.ReadWrite.All"],
   ["app-role-assignment", "https://graph.microsoft.com/Application.ReadWrite.All"],
-]) test(`${command} rejects write scopes before credential acquisition`, async () => {
+] as const) test(`${command} rejects write scopes before credential acquisition`, async () => {
   const state = setupProfiles();
   try {
     const { requests, calls, overrides } = overridesFor("delegated");
@@ -418,8 +421,8 @@ test("application mode rejects delegated scopes before HTTP", async () => {
       executeArgv(["entra", "service-principal", "oauth2-grant", "list",
         "--service-principal", sp, "--profile", "batch", "--scopes", grantScopes], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Graph \.default audience/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Graph \.default audience/.test(text(record(error).message));
       },
     );
     await assert.rejects(

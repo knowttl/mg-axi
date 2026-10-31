@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -54,12 +56,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: [string, ...CredentialArgs][]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push([mode, ...args]);
@@ -74,9 +76,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -84,7 +86,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -110,19 +112,19 @@ function certAuthTransport() {
     if (caList) return json(200, { value: authorities });
     const caSingle = new RegExp(`^${base}/([^/]+)/certificateAuthorities/([^/]+)$`).exec(path);
     if (caSingle) {
-      const found = authorities.find(row => row.id === decodeURIComponent(caSingle[2]));
+      const found = authorities.find(row => row.id === decodeURIComponent(caSingle[2]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such authority" } });
     }
     const single = new RegExp(`^${base}/([^/]+)$`).exec(path);
     if (single) {
-      const found = pkis.find(row => row.id === decodeURIComponent(single[1]));
+      const found = pkis.find(row => row.id === decodeURIComponent(single[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such PKI" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: [string, ...CredentialArgs][] = []) {
   const fixture = handler ?? certAuthTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -130,13 +132,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runCertAuthCli(args, state, mode, denied = false) {
+function runCertAuthCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-certificate-auth-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -150,13 +152,13 @@ function runCertAuthCli(args, state, mode, denied = false) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists PKIs with compact rows preserving null and missing`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile,
-        "--select", "id,displayName,status,statusDetails"], overrides);
+      const result = record(await executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile,
+        "--select", "id,displayName,status,statusDetails"], overrides));
       assert.deepEqual(result.certificateAuthPkis, [
         { id: pki1.id, displayName: "Contoso PKI", status: "succeeded",
           statusDetails: `${longStatus.slice(0, 500)}... (truncated, ${longStatus.length} chars total)` },
@@ -165,11 +167,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "2 PKI configurations");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra certificate-auth-pki show --id <pki-id>")));
-      assert.ok(result.help.some(hint => hint.includes("not configured")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra certificate-auth-pki show --id <pki-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("not configured")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com${base}?`));
-      assert.ok(!new URL(requests[0].url).searchParams.has("$filter"));
+      assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com${base}?`));
+      assert.ok(!new URL(requests[0]!.url).searchParams.has("$filter"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(certAuthScopes)));
     } finally {
@@ -181,12 +183,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile,
-        "--filter", "displayName eq 'Contoso PKI'"], overrides);
-      assert.equal(result.certificateAuthPkis.length, 2);
-      const sent = new URL(requests[0].url).searchParams;
+      const result = record(await executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile,
+        "--filter", "displayName eq 'Contoso PKI'"], overrides));
+      assert.equal(records(result.certificateAuthPkis).length, 2);
+      const sent = new URL(requests[0]!.url).searchParams;
       assert.equal(sent.get("$filter"), "displayName eq 'Contoso PKI'");
-      assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+      assert.equal(requests[0]!.headers.ConsistencyLevel, undefined);
     } finally {
       teardownProfiles(state);
     }
@@ -196,12 +198,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.certificateAuthPkis.map(row => row.id), [pki1.id]);
+      const first = record(await executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.certificateAuthPkis).map(row => row.id), [pki1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.certificateAuthPkis.map(row => row.id), [pki2.id]);
+      const second = record(await executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile, "--cursor", text(first.cursor)], overrides));
+      assert.deepEqual(records(second.certificateAuthPkis).map(row => row.id), [pki2.id]);
       assert.deepEqual(second.count, "1 PKI configurations");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -214,14 +216,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "certificate-auth-pki", "show", "--id", pki1.id, "--profile", profile,
-        "--select", "id,deletedDateTime,displayName,status,lastModifiedDateTime"], overrides);
+      const result = record(await executeArgv(["entra", "certificate-auth-pki", "show", "--id", pki1.id, "--profile", profile,
+        "--select", "id,deletedDateTime,displayName,status,lastModifiedDateTime"], overrides));
       assert.deepEqual(result.certificateAuthPki, {
         id: pki1.id, deletedDateTime: null, displayName: "Contoso PKI", status: "succeeded",
         lastModifiedDateTime: "2024-10-16T18:09:56Z",
       });
-      assert.ok(result.help.some(hint => hint.includes("entra certificate-authority list --pki")));
-      const missing = await executeArgv(["entra", "certificate-auth-pki", "show", "--id", pki2.id, "--profile", profile], overrides);
+      assert.ok(strings(result.help).some(hint => hint.includes("entra certificate-authority list --pki")));
+      const missing = record(await executeArgv(["entra", "certificate-auth-pki", "show", "--id", pki2.id, "--profile", profile], overrides));
       assert.deepEqual(missing.certificateAuthPki, { id: pki2.id });
     } finally {
       teardownProfiles(state);
@@ -232,15 +234,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "certificate-auth-pki", "count", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "certificate-auth-pki", "count", "--profile", profile], overrides));
       assert.deepEqual(result.count, { returned: 2, complete: true });
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, `https://graph.microsoft.com${base}/$count`);
-      const filtered = await executeArgv(["entra", "certificate-auth-pki", "count", "--profile", profile,
-        "--filter", "displayName eq 'Contoso PKI'"], overrides);
+      assert.equal(requests[0]!.url, `https://graph.microsoft.com${base}/$count`);
+      const filtered = record(await executeArgv(["entra", "certificate-auth-pki", "count", "--profile", profile,
+        "--filter", "displayName eq 'Contoso PKI'"], overrides));
       assert.deepEqual(filtered.count, { returned: 2, complete: true });
-      assert.ok(filtered.help.some(hint => hint.includes("--filter")));
-      assert.equal(new URL(requests[1].url).searchParams.get("$filter"), "displayName eq 'Contoso PKI'");
+      assert.ok(strings(filtered.help).some(hint => hint.includes("--filter")));
+      assert.equal(new URL(requests[1]!.url).searchParams.get("$filter"), "displayName eq 'Contoso PKI'");
     } finally {
       teardownProfiles(state);
     }
@@ -250,18 +252,18 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "certificate-authority", "list", "--pki", pki1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "certificate-authority", "list", "--pki", pki1.id, "--profile", profile], overrides));
       assert.deepEqual(result.certificateAuthorities, [
         { id: ca1.id, displayName: "Contoso Root CA", certificateAuthorityType: "root", expirationDateTime: "2027-08-29T02:05:57Z" },
         { id: ca2.id },
       ]);
-      assert.ok(!("certificate" in result.certificateAuthorities[0]));
+      assert.ok(!("certificate" in record(result.certificateAuthorities[0])));
       assert.deepEqual(result.count, "2 certificate authorities");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes(`entra certificate-authority show --pki ${pki1.id} --id <authority-id>`)));
-      assert.ok(result.help.some(hint => hint.includes("--select certificate")));
-      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com${base}/${pki1.id}/certificateAuthorities?`));
+      assert.ok(strings(result.help).some(hint => hint.includes(`entra certificate-authority show --pki ${pki1.id} --id <authority-id>`)));
+      assert.ok(strings(result.help).some(hint => hint.includes("--select certificate")));
+      assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com${base}/${pki1.id}/certificateAuthorities?`));
     } finally {
       teardownProfiles(state);
     }
@@ -271,18 +273,18 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "certificate-authority", "show",
-        "--pki", pki1.id, "--id", ca1.id, "--profile", profile], overrides);
-      assert.ok(!("certificate" in result.certificateAuthority));
-      assert.equal(result.certificateAuthority.thumbprint, "C6FA");
-      const blob = await executeArgv(["entra", "certificate-authority", "show",
-        "--pki", pki1.id, "--id", ca1.id, "--profile", profile, "--select", "id,certificate"], overrides);
-      assert.equal(blob.certificateAuthority.id, ca1.id);
-      assert.match(blob.certificateAuthority.certificate, /truncated, \d+ chars total/);
-      assert.ok(blob.help.some(hint => hint.includes("--full")));
-      const full = await executeArgv(["entra", "certificate-authority", "show",
-        "--pki", pki1.id, "--id", ca1.id, "--profile", profile, "--select", "id,certificate", "--full"], overrides);
-      assert.equal(full.certificateAuthority.certificate, certBlob);
+      const result = record(await executeArgv(["entra", "certificate-authority", "show",
+        "--pki", pki1.id, "--id", ca1.id, "--profile", profile], overrides));
+      assert.ok(!("certificate" in record(result.certificateAuthority)));
+      assert.equal(record(result.certificateAuthority).thumbprint, "C6FA");
+      const blob = record(await executeArgv(["entra", "certificate-authority", "show",
+        "--pki", pki1.id, "--id", ca1.id, "--profile", profile, "--select", "id,certificate"], overrides));
+      assert.equal(record(blob.certificateAuthority).id, ca1.id);
+      assert.match(text(record(blob.certificateAuthority).certificate), /truncated, \d+ chars total/);
+      assert.ok(strings(blob.help).some(hint => hint.includes("--full")));
+      const full = record(await executeArgv(["entra", "certificate-authority", "show",
+        "--pki", pki1.id, "--id", ca1.id, "--profile", profile, "--select", "id,certificate", "--full"], overrides));
+      assert.equal(record(full.certificateAuthority).certificate, certBlob);
     } finally {
       teardownProfiles(state);
     }
@@ -292,10 +294,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "certificate-authority", "count", "--pki", pki1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "certificate-authority", "count", "--pki", pki1.id, "--profile", profile], overrides));
       assert.deepEqual(result.count, { returned: 2, complete: true });
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, `https://graph.microsoft.com${base}/${pki1.id}/certificateAuthorities/$count`);
+      assert.equal(requests[0]!.url, `https://graph.microsoft.com${base}/${pki1.id}/certificateAuthorities/$count`);
     } finally {
       teardownProfiles(state);
     }
@@ -306,12 +308,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { overrides } = overridesFor(mode);
       await assert.rejects(executeArgv(["entra", "certificate-auth-pki", "show", "--id", "pki-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "certificate-authority", "show", "--pki", pki1.id, "--id", "ca-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -324,22 +326,22 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const { overrides } = overridesFor(mode, denied);
       await assert.rejects(executeArgv(["entra", "certificate-auth-pki", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("PublicKeyInfrastructure.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Privileged Authentication Administrator or Authentication Administrator")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
-        assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("PublicKeyInfrastructure.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Privileged Authentication Administrator or Authentication Administrator")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Personal Microsoft accounts are not supported")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "certificate-authority", "list", "--pki", pki1.id, "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("PublicKeyInfrastructure.Read.All")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("PublicKeyInfrastructure.Read.All")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "certificate-authority", "count", "--pki", pki1.id, "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("PublicKeyInfrastructure.Read.All")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("PublicKeyInfrastructure.Read.All")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -352,31 +354,31 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runCertAuthCli(["entra", "certificate-auth-pki", "list", "--profile", profile], state, mode);
       assert.equal(listed.status, 0, listed.stdout);
       assert.equal(listed.stderr, "");
-      const listOut = decode(listed.stdout);
-      assert.deepEqual(listOut.certificateAuthPkis.map(row => row.id), [pki1.id, pki2.id]);
+      const listOut = record(decode(listed.stdout));
+      assert.deepEqual(records(listOut.certificateAuthPkis).map(row => row.id), [pki1.id, pki2.id]);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runCertAuthCli(["entra", "certificate-auth-pki", "show", "--id", pki1.id, "--profile", profile], state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      assert.equal(decode(shown.stdout).certificateAuthPki.displayName, "Contoso PKI");
+      assert.equal(record(record(decode(shown.stdout)).certificateAuthPki).displayName, "Contoso PKI");
 
       const counted = runCertAuthCli(["entra", "certificate-auth-pki", "count", "--profile", profile], state, mode);
       assert.equal(counted.status, 0, counted.stdout);
-      assert.deepEqual(decode(counted.stdout).count, { returned: 2, complete: true });
+      assert.deepEqual(record(decode(counted.stdout)).count, { returned: 2, complete: true });
 
       const authoritiesListed = runCertAuthCli(["entra", "certificate-authority", "list", "--pki", pki1.id, "--profile", profile], state, mode);
       assert.equal(authoritiesListed.status, 0, authoritiesListed.stdout);
-      const authoritiesOut = decode(authoritiesListed.stdout);
-      assert.deepEqual(authoritiesOut.certificateAuthorities.map(row => row.id), [ca1.id, ca2.id]);
-      assert.ok(!("certificate" in authoritiesOut.certificateAuthorities[0]));
+      const authoritiesOut = record(decode(authoritiesListed.stdout));
+      assert.deepEqual(records(authoritiesOut.certificateAuthorities).map(row => row.id), [ca1.id, ca2.id]);
+      assert.ok(!("certificate" in record(records(authoritiesOut.certificateAuthorities)[0])));
 
       const authorityShown = runCertAuthCli(["entra", "certificate-authority", "show", "--pki", pki1.id, "--id", ca1.id, "--profile", profile], state, mode);
       assert.equal(authorityShown.status, 0, authorityShown.stdout);
-      assert.equal(decode(authorityShown.stdout).certificateAuthority.thumbprint, "C6FA");
+      assert.equal(record(record(decode(authorityShown.stdout)).certificateAuthority).thumbprint, "C6FA");
 
       const authoritiesCounted = runCertAuthCli(["entra", "certificate-authority", "count", "--pki", pki1.id, "--profile", profile], state, mode);
       assert.equal(authoritiesCounted.status, 0, authoritiesCounted.stdout);
-      assert.deepEqual(decode(authoritiesCounted.stdout).count, { returned: 2, complete: true });
+      assert.deepEqual(record(decode(authoritiesCounted.stdout)).count, { returned: 2, complete: true });
     } finally { teardownProfiles(state); }
   });
 
@@ -386,11 +388,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runCertAuthCli(["entra", "certificate-auth-pki", "list", "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
+      assert.match(text(output.error), /grant, role, licence or policy/);
       assert.equal(output.certificateAuthPkis, undefined);
-      assert.ok(output.help.some(hint => hint.includes("PublicKeyInfrastructure.Read.All")));
+      assert.ok(strings(output.help).some(hint => hint.includes("PublicKeyInfrastructure.Read.All")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -402,7 +404,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["certificate-authority", "list"], ["--pki", pki1.id]],
     [["certificate-authority", "show"], ["--pki", pki1.id, "--id", ca1.id]],
     [["certificate-authority", "count"], ["--pki", pki1.id]],
-  ]) {
+  ] as const) {
     for (const preview of [false, true]) {
       test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
         const state = setupProfiles();
@@ -452,14 +454,14 @@ test("application mode rejects delegated scopes before HTTP", async () => {
   try {
     const { requests, overrides } = overridesFor("application");
     await assert.rejects(
-      executeArgv(["entra", "certificate-auth-pki", "list", "--profile", "batch", "--scopes", certAuthScopes[0]], overrides),
+      executeArgv(["entra", "certificate-auth-pki", "list", "--profile", "batch", "--scopes", certAuthScopes[0]!], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Graph \.default audience/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Graph \.default audience/.test(text(record(error).message));
       },
     );
     await assert.rejects(
-      executeArgv(["entra", "certificate-authority", "count", "--pki", pki1.id, "--profile", "batch", "--scopes", certAuthScopes[0]], overrides),
+      executeArgv(["entra", "certificate-authority", "count", "--pki", pki1.id, "--profile", "batch", "--scopes", certAuthScopes[0]!], overrides),
       { code: "VALIDATION_ERROR" },
     );
     assert.equal(requests.length, 0);
@@ -489,8 +491,8 @@ test("malformed certificate-auth count bodies fail as unknown, not zero", async 
       const malformed = transport(() => ({ status: 200, headers: {}, body }));
       const scoped = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "certificate-auth-pki", "count", "--profile", "soc"], scoped.overrides), error => {
-        assert.equal(error.code, "RESPONSE_INVALID");
-        return /malformed certificate-auth PKI count|non-numeric success body|non-JSON success body/.test(error.message);
+        assert.equal(record(error).code, "RESPONSE_INVALID");
+        return /malformed certificate-auth PKI count|non-numeric success body|non-JSON success body/.test(text(record(error).message));
       });
     }
   } finally {

@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -110,15 +112,15 @@ const eligibilityRequests = [er1];
 const base = "/v1.0/identityGovernance/privilegedAccess/group";
 const routes = {
   assignmentSchedules: `${base}/assignmentSchedules`,
-  assignmentSchedule: id => `${base}/assignmentSchedules/${id}`,
+  assignmentSchedule: (id: string) => `${base}/assignmentSchedules/${id}`,
   assignmentInstances: `${base}/assignmentScheduleInstances`,
-  assignmentInstance: id => `${base}/assignmentScheduleInstances/${id}`,
+  assignmentInstance: (id: string) => `${base}/assignmentScheduleInstances/${id}`,
   eligibilitySchedules: `${base}/eligibilitySchedules`,
-  eligibilitySchedule: id => `${base}/eligibilitySchedules/${id}`,
+  eligibilitySchedule: (id: string) => `${base}/eligibilitySchedules/${id}`,
   eligibilityInstances: `${base}/eligibilityScheduleInstances`,
-  eligibilityInstance: id => `${base}/eligibilityScheduleInstances/${id}`,
+  eligibilityInstance: (id: string) => `${base}/eligibilityScheduleInstances/${id}`,
   eligibilityRequests: `${base}/eligibilityScheduleRequests`,
-  eligibilityRequest: id => `${base}/eligibilityScheduleRequests/${id}`,
+  eligibilityRequest: (id: string) => `${base}/eligibilityScheduleRequests/${id}`,
 };
 
 function setupProfiles() {
@@ -131,12 +133,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -151,9 +153,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -161,11 +163,11 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function scoped(url) {
+function scoped(url: URL) {
   const filter = url.searchParams.get("$filter") ?? "";
   return filter.includes("groupId") || filter.includes("principalId");
 }
@@ -205,7 +207,7 @@ function groupPimTransport(denied = false) {
     if (path === routes.eligibilityInstance(ei1.id)) return json(200, ei1);
     if (path === routes.eligibilityRequests) {
       assert.ok(scoped(url), "eligibility requests list must carry a groupId or principalId $filter");
-      assert.ok(!url.searchParams.get("$select")?.split(",").includes("createdBy"));
+      assert.ok(!url.searchParams.get("$select")?.split(",")!.includes("createdBy"));
       return json(200, { value: eligibilityRequests });
     }
     if (path === routes.eligibilityRequest(er1.id)) return json(200, er1);
@@ -213,7 +215,7 @@ function groupPimTransport(denied = false) {
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: CredentialArgs[] = []) {
   const fixture = handler ?? groupPimTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -221,13 +223,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runGroupPimCli(args, state, mode, scopes) {
+function runGroupPimCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, scopes?: string) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-group-pim-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -246,14 +248,14 @@ function runGroupPimCli(args, state, mode, scopes) {
 
 const filter = `groupId eq '${groupId}'`;
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists group assignment schedules with compact rows`, async () => {
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(
+      const result = record(await executeArgv(
         ["entra", "pim", "group-assignment-schedule", "list", "--profile", profile, "--filter", filter, "--limit", "2"],
-        overrides);
+        overrides));
       assert.deepEqual(result.assignmentSchedules, [
         { id: as1.id, principalId, groupId, accessId: "member", assignmentType: "Assigned" },
         { id: as2.id, principalId: otherPrincipalId, groupId, accessId: "owner", assignmentType: "Activated" },
@@ -261,9 +263,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "2 assignment schedules");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("never the schedule itself") || hint.includes("govern group membership")));
-      assert.ok(new URL(requests[0].url).pathname.endsWith("/privilegedAccess/group/assignmentSchedules"));
-      assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,principalId,groupId,accessId,assignmentType");
+      assert.ok(strings(result.help).some(hint => hint.includes("never the schedule itself") || hint.includes("govern group membership")));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith("/privilegedAccess/group/assignmentSchedules"));
+      assert.equal(new URL(requests[0]!.url).searchParams.get("$select"), "id,principalId,groupId,accessId,assignmentType");
     } finally {
       teardownProfiles(state);
     }
@@ -273,8 +275,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(
-        ["entra", "pim", "group-assignment-schedule", "show", "--id", as1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(
+        ["entra", "pim", "group-assignment-schedule", "show", "--id", as1.id, "--profile", profile], overrides));
       assert.deepEqual(result.assignmentSchedule, as1);
       assert.equal(result.help, undefined);
     } finally {
@@ -286,15 +288,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(
-        ["entra", "pim", "group-assignment-instance", "list", "--profile", profile, "--filter", filter], overrides);
+      const result = record(await executeArgv(
+        ["entra", "pim", "group-assignment-instance", "list", "--profile", profile, "--filter", filter], overrides));
       assert.deepEqual(result.assignmentScheduleInstances, [
         { id: ai1.id, principalId, groupId, accessId: "member", assignmentType: "Activated" },
       ]);
       assert.deepEqual(result.count, "1 assignment instances");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(new URL(requests[0].url).pathname.endsWith("/privilegedAccess/group/assignmentScheduleInstances"));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith("/privilegedAccess/group/assignmentScheduleInstances"));
     } finally {
       teardownProfiles(state);
     }
@@ -304,8 +306,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(
-        ["entra", "pim", "group-assignment-instance", "show", "--id", ai1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(
+        ["entra", "pim", "group-assignment-instance", "show", "--id", ai1.id, "--profile", profile], overrides));
       assert.deepEqual(result.assignmentScheduleInstance, ai1);
       assert.equal(result.help, undefined);
     } finally {
@@ -317,15 +319,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(
-        ["entra", "pim", "group-eligibility-schedule", "list", "--profile", profile, "--filter", filter], overrides);
+      const result = record(await executeArgv(
+        ["entra", "pim", "group-eligibility-schedule", "list", "--profile", profile, "--filter", filter], overrides));
       assert.deepEqual(result.eligibilitySchedules, [
         { id: es1.id, principalId, groupId, accessId: "member", memberType: "Direct" },
       ]);
       assert.deepEqual(result.count, "1 eligibility schedules");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(new URL(requests[0].url).pathname.endsWith("/privilegedAccess/group/eligibilitySchedules"));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith("/privilegedAccess/group/eligibilitySchedules"));
     } finally {
       teardownProfiles(state);
     }
@@ -335,8 +337,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(
-        ["entra", "pim", "group-eligibility-schedule", "show", "--id", es1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(
+        ["entra", "pim", "group-eligibility-schedule", "show", "--id", es1.id, "--profile", profile], overrides));
       assert.deepEqual(result.eligibilitySchedule, es1);
       assert.equal(result.help, undefined);
     } finally {
@@ -348,8 +350,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(
-        ["entra", "pim", "group-eligibility-instance", "list", "--profile", profile, "--filter", filter], overrides);
+      const result = record(await executeArgv(
+        ["entra", "pim", "group-eligibility-instance", "list", "--profile", profile, "--filter", filter], overrides));
       assert.deepEqual(result.eligibilityScheduleInstances, [
         { id: ei1.id, principalId, groupId, accessId: "member", memberType: "Direct" },
       ]);
@@ -365,8 +367,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(
-        ["entra", "pim", "group-eligibility-instance", "show", "--id", ei1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(
+        ["entra", "pim", "group-eligibility-instance", "show", "--id", ei1.id, "--profile", profile], overrides));
       assert.deepEqual(result.eligibilityScheduleInstance, ei1);
       assert.equal(result.help, undefined);
     } finally {
@@ -378,15 +380,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(
-        ["entra", "pim", "group-eligibility-request", "list", "--profile", profile, "--filter", filter], overrides);
+      const result = record(await executeArgv(
+        ["entra", "pim", "group-eligibility-request", "list", "--profile", profile, "--filter", filter], overrides));
       assert.deepEqual(result.eligibilityScheduleRequests, [
         { id: er1.id, action: "adminAssign", status: "Provisioned", principalId, groupId, accessId: "member" },
       ]);
       assert.deepEqual(result.count, "1 eligibility requests");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(!new URL(requests[0].url).searchParams.get("$select")?.split(",").includes("justification"));
+      assert.ok(!new URL(requests[0]!.url).searchParams.get("$select")?.split(",")!.includes("justification"));
     } finally {
       teardownProfiles(state);
     }
@@ -396,10 +398,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(
-        ["entra", "pim", "group-eligibility-request", "show", "--id", er1.id, "--profile", profile], overrides);
-      assert.equal(result.eligibilityScheduleRequest.justification, undefined);
-      assert.equal(result.eligibilityScheduleRequest.action, "adminAssign");
+      const result = record(await executeArgv(
+        ["entra", "pim", "group-eligibility-request", "show", "--id", er1.id, "--profile", profile], overrides));
+      assert.equal(record(result.eligibilityScheduleRequest).justification, undefined);
+      assert.equal(record(result.eligibilityScheduleRequest).action, "adminAssign");
     } finally {
       teardownProfiles(state);
     }
@@ -412,8 +414,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       await assert.rejects(
         executeArgv(["entra", "pim", "group-assignment-schedule", "list", "--profile", profile, "--filter", filter], overrides),
         error => {
-          assert.equal(error.code, "GRAPH_ERROR");
-          const text = [error.message, ...error.suggestions].join("\n");
+          assert.equal(record(error).code, "GRAPH_ERROR");
+          const text = [record(error).message, ...strings(record(error).suggestions)].join("\n");
           assert.match(text, /PrivilegedAssignmentSchedule\.Read\.AzureADGroup/);
           assert.match(text, /Privileged Role Administrator/);
           assert.match(text, /P2 or ID Governance/);
@@ -432,8 +434,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       await assert.rejects(
         executeArgv(["entra", "pim", "group-eligibility-request", "list", "--profile", profile, "--filter", filter], overrides),
         error => {
-          assert.equal(error.code, "GRAPH_ERROR");
-          const text = [error.message, ...error.suggestions].join("\n");
+          assert.equal(record(error).code, "GRAPH_ERROR");
+          const text = [record(error).message, ...strings(record(error).suggestions)].join("\n");
           assert.match(text, /PrivilegedEligibilitySchedule\.Read\.AzureADGroup/);
           assert.match(text, /Privileged Role Administrator/);
           assert.match(text, /P2 or ID Governance/);
@@ -454,9 +456,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.error, undefined);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
-      assert.ok(output.assignmentSchedules.length >= 1);
-      assert.deepEqual(output.count, `${output.assignmentSchedules.length} assignment schedules`);
+      const output = record(decode(result.stdout));
+      assert.ok(records(output.assignmentSchedules).length >= 1);
+      assert.deepEqual(output.count, `${records(output.assignmentSchedules).length} assignment schedules`);
       assert.equal(output.total, null);
     } finally {
       teardownProfiles(state);
@@ -472,7 +474,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.error, undefined);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.count, "1 eligibility requests");
       assert.equal(output.total, null);
     } finally {
@@ -488,8 +490,8 @@ test("delegated group PIM lists reject a missing --filter before credentials", a
     await assert.rejects(
       executeArgv(["entra", "pim", "group-assignment-schedule", "list", "--profile", "soc"], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        assert.match(error.message, /--filter is required/);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        assert.match(text(record(error).message), /--filter is required/);
         return true;
       },
     );
@@ -508,8 +510,8 @@ test("delegated group PIM lists reject an unrelated --filter before credentials"
       executeArgv(["entra", "pim", "group-eligibility-schedule", "list", "--profile", "soc",
         "--filter", "status eq 'Provisioned'"], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        assert.match(error.message, /groupId or principalId/);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        assert.match(text(record(error).message), /groupId or principalId/);
         return true;
       },
     );
@@ -524,13 +526,13 @@ test("delegated group PIM filters pass through as plain $filter", async () => {
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "pim", "group-assignment-instance", "list",
-      "--profile", "soc", "--filter", filter], overrides);
-    assert.equal(result.assignmentScheduleInstances.length, 1);
-    const url = new URL(requests[0].url);
+    const result = record(await executeArgv(["entra", "pim", "group-assignment-instance", "list",
+      "--profile", "soc", "--filter", filter], overrides));
+    assert.equal(records(result.assignmentScheduleInstances).length, 1);
+    const url = new URL(requests[0]!.url);
     assert.equal(url.searchParams.get("$filter"), filter);
     assert.equal(url.searchParams.has("$count"), false);
-    assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+    assert.equal(requests[0]!.headers.ConsistencyLevel, undefined);
   } finally {
     teardownProfiles(state);
   }
@@ -540,16 +542,16 @@ test("delegated group PIM reads resume a capped list through its opaque cursor",
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "pim", "group-assignment-schedule", "list",
-      "--profile", "soc", "--filter", filter, "--limit", "1"], overrides);
-    assert.equal(first.assignmentSchedules.length, 1);
+    const first = record(await executeArgv(["entra", "pim", "group-assignment-schedule", "list",
+      "--profile", "soc", "--filter", filter, "--limit", "1"], overrides));
+    assert.equal(records(first.assignmentSchedules).length, 1);
     assert.deepEqual(first.count, "1 assignment schedules shown, more available");
     assert.equal(first.total, null);
     assert.equal(first.complete, false);
     assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
-    assert.ok(first.help.some(hint => hint.includes("--filter")));
-    const second = await executeArgv(["entra", "pim", "group-assignment-schedule", "list",
-      "--profile", "soc", "--filter", filter, "--cursor", first.cursor], overrides);
+    assert.ok(strings(first.help).some(hint => hint.includes("--filter")));
+    const second = record(await executeArgv(["entra", "pim", "group-assignment-schedule", "list",
+      "--profile", "soc", "--filter", filter, "--cursor", first.cursor], overrides));
     assert.deepEqual(second.assignmentSchedules, [
       { id: as2.id, principalId: otherPrincipalId, groupId, accessId: "owner", assignmentType: "Activated" },
     ]);
@@ -596,15 +598,15 @@ test("delegated eligibility requests truncate long justification with a --full h
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "pim", "group-eligibility-request", "list",
-      "--profile", "soc", "--filter", filter, "--select", "id,action,status,justification"], overrides);
-    const row = result.eligibilityScheduleRequests[0];
-    assert.match(row.justification, /truncated, \d+ chars total/);
-    assert.ok(result.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "pim", "group-eligibility-request", "list",
-      "--profile", "soc", "--filter", filter, "--select", "id,action,status,justification", "--full"], overrides);
-    assert.equal(full.eligibilityScheduleRequests[0].justification, longJustification);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const result = record(await executeArgv(["entra", "pim", "group-eligibility-request", "list",
+      "--profile", "soc", "--filter", filter, "--select", "id,action,status,justification"], overrides));
+    const row = records(result.eligibilityScheduleRequests)[0];
+    assert.match(text(record(row).justification), /truncated, \d+ chars total/);
+    assert.ok(strings(result.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "pim", "group-eligibility-request", "list",
+      "--profile", "soc", "--filter", filter, "--select", "id,action,status,justification", "--full"], overrides));
+    assert.equal(record(records(full.eligibilityScheduleRequests)[0]).justification, longJustification);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -617,8 +619,8 @@ test("delegated group PIM show rejects a malformed body as unknown", async () =>
     await assert.rejects(
       executeArgv(["entra", "pim", "group-assignment-instance", "show", "--id", ai1.id, "--profile", "soc"], overrides),
       error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.match(error.message, /malformed assignmentScheduleInstance body/);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.match(text(record(error).message), /malformed assignmentScheduleInstance body/);
         return true;
       },
     );

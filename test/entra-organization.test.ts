@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -103,12 +105,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: [string, ...CredentialArgs][]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push([mode, ...args]);
@@ -123,9 +125,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -133,7 +135,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -149,19 +151,19 @@ function organizationTransport() {
     }
     const singleLocalization = new RegExp(`^/v1\\.0/organization/${orgId}/branding/localizations/([^/]+)$`).exec(path);
     if (singleLocalization) {
-      const found = localizations.find(row => row.id === decodeURIComponent(singleLocalization[1]));
+      const found = localizations.find(row => row.id === decodeURIComponent(singleLocalization[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such locale" } });
     }
     const singleOrganization = /^\/v1\.0\/organization\/([^/]+)$/.exec(path);
     if (singleOrganization) {
-      const found = organizations.find(row => row.id === decodeURIComponent(singleOrganization[1]));
+      const found = organizations.find(row => row.id === decodeURIComponent(singleOrganization[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such organization" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: [string, ...CredentialArgs][] = []) {
   const fixture = handler ?? organizationTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -169,13 +171,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runOrganizationCli(args, state, mode, denied = false) {
+function runOrganizationCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-organization-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -189,12 +191,12 @@ function runOrganizationCli(args, state, mode, denied = false) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists organizations with compact rows preserving null and missing`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "organization", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "organization", "list", "--profile", profile], overrides));
       assert.deepEqual(result.organizations, [
         { id: org1.id, displayName: "Contoso", tenantType: "AAD", verifiedDomains: org1.verifiedDomains },
         { id: org2.id, displayName: org2.displayName },
@@ -202,10 +204,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "2 organizations");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("no --filter")));
+      assert.ok(strings(result.help).some(hint => hint.includes("no --filter")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/organization?"));
-      assert.ok(!new URL(requests[0].url).searchParams.has("$filter"));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/organization?"));
+      assert.ok(!new URL(requests[0]!.url).searchParams.has("$filter"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(orgScopes)));
     } finally {
@@ -220,8 +222,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       await assert.rejects(
         executeArgv(["entra", "organization", "list", "--profile", profile, "--filter", "displayName eq 'Contoso'"], overrides),
         error => {
-          assert.equal(error.code, "VALIDATION_ERROR");
-          return /unknown flag --filter/.test(error.message);
+          assert.equal(record(error).code, "VALIDATION_ERROR");
+          return /unknown flag --filter/.test(text(record(error).message));
         },
       );
       assert.equal(requests.length, 0);
@@ -234,12 +236,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "organization", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.organizations.map(row => row.id), [org1.id]);
+      const first = record(await executeArgv(["entra", "organization", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.organizations).map(row => row.id), [org1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "organization", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.organizations.map(row => row.id), [org2.id]);
+      const second = record(await executeArgv(["entra", "organization", "list", "--profile", profile, "--cursor", text(first.cursor)], overrides));
+      assert.deepEqual(records(second.organizations).map(row => row.id), [org2.id]);
       assert.deepEqual(second.count, "1 organizations");
       assert.equal(second.total, null);
     } finally {
@@ -251,11 +253,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "organization", "show", "--id", orgId, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "organization", "show", "--id", orgId, "--profile", profile], overrides));
       assert.deepEqual(result.organization, org1);
       assert.equal(result.help, undefined);
-      const technical = await executeArgv(["entra", "organization", "show", "--id", orgId, "--profile", profile,
-        "--select", "id,technicalNotificationMails"], overrides);
+      const technical = record(await executeArgv(["entra", "organization", "show", "--id", orgId, "--profile", profile,
+        "--select", "id,technicalNotificationMails"], overrides));
       assert.deepEqual(technical.organization, { id: orgId, technicalNotificationMails: ["admin@contoso.com"] });
     } finally {
       teardownProfiles(state);
@@ -266,11 +268,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "organization", "branding", "show",
-        "--organization", orgId, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "organization", "branding", "show",
+        "--organization", orgId, "--profile", profile], overrides));
       assert.deepEqual(result.branding, branding);
-      assert.ok(result.help.some(hint => hint.includes("entra organization branding-localization list --organization")));
-      assert.equal(requests[0].headers["Accept-Language"], "0");
+      assert.ok(strings(result.help).some(hint => hint.includes("entra organization branding-localization list --organization")));
+      assert.equal(requests[0]!.headers["Accept-Language"], "0");
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(brandingScopes)));
     } finally {
       teardownProfiles(state);
@@ -281,9 +283,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "organization", "branding-localization", "list",
+      const result = record(await executeArgv(["entra", "organization", "branding-localization", "list",
         "--organization", orgId, "--profile", profile,
-        "--select", "id,signInPageText,usernameHintText,backgroundColor"], overrides);
+        "--select", "id,signInPageText,usernameHintText,backgroundColor"], overrides));
       assert.deepEqual(result.brandingLocalizations, [
         { id: locDefault.id, signInPageText: "Contoso", usernameHintText: "", backgroundColor: "" },
         { id: locFr.id, signInPageText: longWelcome.slice(0, 500) + `... (truncated, ${longWelcome.length} chars total)`, usernameHintText: locFr.usernameHintText, backgroundColor: locFr.backgroundColor },
@@ -291,7 +293,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "2 branding localizations");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("--full")));
+      assert.ok(strings(result.help).some(hint => hint.includes("--full")));
     } finally {
       teardownProfiles(state);
     }
@@ -301,9 +303,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "organization", "branding-localization", "show",
+      const result = record(await executeArgv(["entra", "organization", "branding-localization", "show",
         "--organization", orgId, "--id", locDefault.id, "--profile", profile,
-        "--select", "id,signInPageText"], overrides);
+        "--select", "id,signInPageText"], overrides));
       assert.deepEqual(result.brandingLocalization, { id: locDefault.id, signInPageText: "Contoso" });
     } finally {
       teardownProfiles(state);
@@ -316,21 +318,21 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const missing = transport(() => json(404, { error: { code: "Request_ResourceNotFound", message: "no branding" } }));
       const overrides = {
         transport: missing.send,
-        delegated: credentialService("delegated", []),
-        application: credentialService("application", []),
+        delegated: authFakes(credentialService("delegated", [])).delegated,
+        application: authFakes(credentialService("application", [])).application,
       };
       await assert.rejects(executeArgv(["entra", "organization", "branding", "show",
         "--organization", orgId, "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "organization", "branding-localization", "show",
         "--organization", orgId, "--id", "xx-XX", "--profile", profile],
         { ...overrides, transport: organizationTransport().send }), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -343,22 +345,22 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const overrides = {
         transport: denied.send,
-        delegated: credentialService("delegated", []),
-        application: credentialService("application", []),
+        delegated: authFakes(credentialService("delegated", [])).delegated,
+        application: authFakes(credentialService("application", [])).application,
       };
       await assert.rejects(executeArgv(["entra", "organization", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("Organization.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Directory Readers and Global Reader")));
-        assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Organization.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Directory Readers and Global Reader")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "organization", "branding", "show",
         "--organization", orgId, "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("OrganizationalBranding.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Global Reader or Organizational Branding Administrator")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("OrganizationalBranding.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Global Reader or Organizational Branding Administrator")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -371,32 +373,32 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runOrganizationCli(["entra", "organization", "list", "--profile", profile], state, mode);
       assert.equal(listed.status, 0, listed.stdout);
       assert.equal(listed.stderr, "");
-      const organizationsOut = decode(listed.stdout);
-      assert.deepEqual(organizationsOut.organizations.map(row => row.id), [org1.id, org2.id]);
+      const organizationsOut = record(decode(listed.stdout));
+      assert.deepEqual(records(organizationsOut.organizations).map(row => row.id), [org1.id, org2.id]);
       assert.deepEqual(organizationsOut.count, "2 organizations");
       assert.equal(organizationsOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runOrganizationCli(["entra", "organization", "show", "--id", orgId, "--profile", profile], state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      assert.deepEqual(decode(shown.stdout).organization, org1);
+      assert.deepEqual(record(decode(shown.stdout)).organization, org1);
 
       const branded = runOrganizationCli(["entra", "organization", "branding", "show",
         "--organization", orgId, "--profile", profile], state, mode);
       assert.equal(branded.status, 0, branded.stdout);
-      assert.deepEqual(decode(branded.stdout).branding, branding);
+      assert.deepEqual(record(decode(branded.stdout)).branding, branding);
 
       const locales = runOrganizationCli(["entra", "organization", "branding-localization", "list",
         "--organization", orgId, "--profile", profile,
         "--select", "id,signInPageText,usernameHintText,backgroundColor"], state, mode);
       assert.equal(locales.status, 0, locales.stdout);
-      assert.equal(decode(locales.stdout).brandingLocalizations.length, 2);
+      assert.equal(records(record(decode(locales.stdout)).brandingLocalizations).length, 2);
 
       const locale = runOrganizationCli(["entra", "organization", "branding-localization", "show",
         "--organization", orgId, "--id", locDefault.id, "--profile", profile,
         "--select", "id,signInPageText"], state, mode);
       assert.equal(locale.status, 0, locale.stdout);
-      assert.deepEqual(decode(locale.stdout).brandingLocalization, { id: locDefault.id, signInPageText: "Contoso" });
+      assert.deepEqual(record(decode(locale.stdout)).brandingLocalization, { id: locDefault.id, signInPageText: "Contoso" });
       assert.ok(!locale.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -407,9 +409,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runOrganizationCli(["entra", "organization", "list", "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
+      assert.match(text(output.error), /grant, role, licence or policy/);
       assert.equal(output.organizations, undefined);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -420,16 +422,16 @@ test("truncated localization text carries a --full hint without lifting caps", a
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const partial = await executeArgv(["entra", "organization", "branding-localization", "show",
+    const partial = record(await executeArgv(["entra", "organization", "branding-localization", "show",
       "--organization", orgId, "--id", locFr.id, "--profile", "soc",
-      "--select", "id,signInPageText"], overrides);
-    assert.match(partial.brandingLocalization.signInPageText, /truncated, \d+ chars total/);
-    assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "organization", "branding-localization", "show",
+      "--select", "id,signInPageText"], overrides));
+    assert.match(text(record(partial.brandingLocalization).signInPageText), /truncated, \d+ chars total/);
+    assert.ok(strings(partial.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "organization", "branding-localization", "show",
       "--organization", orgId, "--id", locFr.id, "--profile", "soc", "--full",
-      "--select", "id,signInPageText"], overrides);
-    assert.equal(full.brandingLocalization.signInPageText, longWelcome);
-    assert.ok(!full.help || !full.help.some(hint => hint.includes("--full")));
+      "--select", "id,signInPageText"], overrides));
+    assert.equal(record(full.brandingLocalization).signInPageText, longWelcome);
+    assert.ok(!full.help || !strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -443,8 +445,8 @@ test("Stream image properties fail with a later-piece hint before HTTP", async (
       executeArgv(["entra", "organization", "branding", "show",
         "--organization", orgId, "--profile", "soc", "--select", "id,bannerLogo"], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /later piece/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /later piece/.test(text(record(error).message));
       },
     );
     await assert.rejects(
@@ -463,15 +465,15 @@ test("application mode rejects delegated scopes before HTTP", async () => {
   try {
     const { requests, overrides } = overridesFor("application");
     await assert.rejects(
-      executeArgv(["entra", "organization", "list", "--profile", "batch", "--scopes", orgScopes[0]], overrides),
+      executeArgv(["entra", "organization", "list", "--profile", "batch", "--scopes", orgScopes[0]!], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Graph \.default audience/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Graph \.default audience/.test(text(record(error).message));
       },
     );
     await assert.rejects(
       executeArgv(["entra", "organization", "branding", "show",
-        "--organization", orgId, "--profile", "batch", "--scopes", brandingScopes[0]], overrides),
+        "--organization", orgId, "--profile", "batch", "--scopes", brandingScopes[0]!], overrides),
       { code: "VALIDATION_ERROR" },
     );
     assert.equal(requests.length, 0);
@@ -516,8 +518,8 @@ test("organization reads refuse unshipped beta operations", async () => {
     await assert.rejects(
       executeArgv(["entra", "organization", "list", "--profile", "soc", "--api-version", "beta", "--limit", "1"], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Unknown catalogued/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Unknown catalogued/.test(text(record(error).message));
       },
     );
     await assert.rejects(

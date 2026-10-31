@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, delegatedProvider, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler, type RawResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -49,12 +51,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -69,9 +71,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -79,7 +81,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -99,14 +101,14 @@ function policyTransport() {
     }
     const single = /^\/v1\.0\/dataPolicyOperations\/([^/]+)$/.exec(path);
     if (single) {
-      const found = operations.find(row => row.id === decodeURIComponent(single[1]));
+      const found = operations.find(row => row.id === decodeURIComponent(single[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such operation" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, fixture, calls = []) {
+function overridesFor(mode: string, fixture?: TransportFixture, calls: CredentialArgs[] = []) {
   const transportFixture = fixture ?? policyTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -114,18 +116,18 @@ function overridesFor(mode, fixture, calls = []) {
     calls,
     overrides: {
       transport: transportFixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists operations with compact rows and redacted storage locations`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "data-policy-operation", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "data-policy-operation", "list", "--profile", profile], overrides));
       assert.deepEqual(result.dataPolicyOperations, [
         { id: op1.id, status: "complete", userId: "user-1", submittedDateTime: "2026-09-30T00:00:00Z" },
         { id: op2.id, status: "running", userId: "user-2", submittedDateTime: "2026-10-02T00:00:00Z" },
@@ -134,17 +136,17 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 data-policy operations");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra data-policy-operation show --id <operation-id>")));
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra data-policy-operation show --id <operation-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
       assert.ok(!JSON.stringify(result).includes("contoso.blob.core.windows.net"));
       assert.ok(!JSON.stringify(result).includes("fixture-signature"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/dataPolicyOperations?"));
-      const sent = new URL(requests[0].url).searchParams;
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/dataPolicyOperations?"));
+      const sent = new URL(requests[0]!.url).searchParams;
       assert.equal(sent.get("$select"), "id,status,userId,submittedDateTime");
       assert.ok(!sent.has("$filter"));
-      if (mode === "delegated") assert.deepEqual(calls[0][1], policyScopes);
+      if (mode === "delegated") assert.deepEqual(calls[0]![1], policyScopes);
     } finally {
       teardownProfiles(state);
     }
@@ -154,7 +156,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "data-policy-operation", "show", "--id", op1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "data-policy-operation", "show", "--id", op1.id, "--profile", profile], overrides));
       assert.deepEqual(result.dataPolicyOperation, {
         id: op1.id,
         completedDateTime: "2026-10-01T00:00:00Z",
@@ -164,11 +166,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         submittedDateTime: "2026-09-30T00:00:00Z",
         progress: "100",
       });
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
       assert.ok(!JSON.stringify(result).includes("contoso.blob.core.windows.net"));
-      const running = await executeArgv(["entra", "data-policy-operation", "show", "--id", op2.id, "--profile", profile], overrides);
-      assert.equal(running.dataPolicyOperation.storageLocation, null);
-      const bare = await executeArgv(["entra", "data-policy-operation", "show", "--id", op3.id, "--profile", profile], overrides);
+      const running = record(await executeArgv(["entra", "data-policy-operation", "show", "--id", op2.id, "--profile", profile], overrides));
+      assert.equal(record(running.dataPolicyOperation).storageLocation, null);
+      const bare = record(await executeArgv(["entra", "data-policy-operation", "show", "--id", op3.id, "--profile", profile], overrides));
       assert.deepEqual(bare.dataPolicyOperation, { id: op3.id });
     } finally {
       teardownProfiles(state);
@@ -186,8 +188,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         return json(404, { error: { code: "Unknown", message: "unexpected route" } });
       });
       const { overrides } = overridesFor(mode, plain);
-      const result = await executeArgv(["entra", "data-policy-operation", "show", "--id", "plain-1", "--profile", profile], overrides);
-      assert.equal(result.dataPolicyOperation.storageLocation, "***redacted***");
+      const result = record(await executeArgv(["entra", "data-policy-operation", "show", "--id", "plain-1", "--profile", profile], overrides));
+      assert.equal(record(result.dataPolicyOperation).storageLocation, "***redacted***");
       assert.ok(!JSON.stringify(result).includes("contoso.blob.core.windows.net"));
     } finally {
       teardownProfiles(state);
@@ -198,12 +200,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "data-policy-operation", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.dataPolicyOperations.map(row => row.id), [op1.id]);
+      const first = record(await executeArgv(["entra", "data-policy-operation", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.dataPolicyOperations).map(row => row.id), [op1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "data-policy-operation", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.dataPolicyOperations.map(row => row.id), [op2.id, op3.id]);
+      const second = record(await executeArgv(["entra", "data-policy-operation", "list", "--profile", profile, "--cursor", text(first.cursor)], overrides));
+      assert.deepEqual(records(second.dataPolicyOperations).map(row => row.id), [op2.id, op3.id]);
       assert.deepEqual(second.count, "2 data-policy operations");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -216,11 +218,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "data-policy-operation", "count", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "data-policy-operation", "count", "--profile", profile], overrides));
       assert.deepEqual(result.count, { returned: 3, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/dataPolicyOperations/$count");
+      assert.equal(requests[0]!.url, "https://graph.microsoft.com/v1.0/dataPolicyOperations/$count");
     } finally {
       teardownProfiles(state);
     }
@@ -237,14 +239,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         ["entra", "data-policy-operation", "count", "--profile", profile],
       ]) {
         await assert.rejects(executeArgv(args, overrides), error => {
-          assert.equal(error.code, "GRAPH_ERROR");
-          assert.match(error.message, /\(403\)/);
-          assert.match(error.message, /grant, role, licence/);
-          assert.ok(error.suggestions.some(hint => hint.includes("User.Export.All")));
-          assert.ok(error.suggestions.some(hint => hint.includes("User.Read.All")));
-          assert.ok(error.suggestions.some(hint => hint.includes("Company Administrator")));
-          assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
-          assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+          assert.equal(record(error).code, "GRAPH_ERROR");
+          assert.match(text(record(error).message), /\(403\)/);
+          assert.match(text(record(error).message), /grant, role, licence/);
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("User.Export.All")));
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("User.Read.All")));
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Company Administrator")));
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Personal Microsoft accounts are not supported")));
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
           return true;
         });
       }
@@ -259,7 +261,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode);
       await assert.rejects(
         executeArgv(["entra", "data-policy-operation", "show", "--id", "op-missing", "--profile", profile], overrides),
-        error => error.code === "GRAPH_ERROR" && /not found or inaccessible/.test(error.message),
+        error => record(error).code === "GRAPH_ERROR" && /not found or inaccessible/.test(text(record(error).message)),
       );
     } finally {
       teardownProfiles(state);
@@ -270,7 +272,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["data-policy-operation", "list"], []],
     [["data-policy-operation", "show"], ["--id", op1.id]],
     [["data-policy-operation", "count"], []],
-  ]) {
+  ] as const) {
     for (const preview of [false, true]) {
       test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
         const state = setupProfiles();
@@ -299,13 +301,13 @@ test("truncated operation text carries a --full hint without lifting redaction o
   try {
     const longRow = transport(() => json(200, { value: [{ id: op1.id, status: "complete", userId: longUserId, submittedDateTime: op1.submittedDateTime }] }));
     const { overrides } = overridesFor("delegated", longRow);
-    const partial = await executeArgv(["entra", "data-policy-operation", "list", "--profile", "soc"], overrides);
-    const truncated = partial.dataPolicyOperations.find(row => row.id === op1.id);
-    assert.match(truncated.userId, /truncated, \d+ chars total/);
-    assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "data-policy-operation", "list", "--profile", "soc", "--full"], overrides);
-    assert.equal(full.dataPolicyOperations.find(row => row.id === op1.id).userId, longUserId);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const partial = record(await executeArgv(["entra", "data-policy-operation", "list", "--profile", "soc"], overrides));
+    const truncated = records(partial.dataPolicyOperations).find(row => row.id === op1.id);
+    assert.match(text(record(truncated).userId), /truncated, \d+ chars total/);
+    assert.ok(strings(partial.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "data-policy-operation", "list", "--profile", "soc", "--full"], overrides));
+    assert.equal(record(records(full.dataPolicyOperations).find(row => row.id === op1.id)).userId, longUserId);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -350,11 +352,11 @@ test("application mode rejects delegated scopes before HTTP", async () => {
   try {
     const { calls, requests, overrides } = overridesFor("application");
     await assert.rejects(
-      executeArgv(["entra", "data-policy-operation", "list", "--profile", "batch", "--scopes", policyScopes[0]], overrides),
+      executeArgv(["entra", "data-policy-operation", "list", "--profile", "batch", "--scopes", policyScopes[0]!], overrides),
       { code: "VALIDATION_ERROR", message: "Application profiles use the configured Graph .default audience; delegated scopes are unavailable" },
     );
     await assert.rejects(
-      executeArgv(["entra", "data-policy-operation", "count", "--profile", "batch", "--scopes", policyScopes[0]], overrides),
+      executeArgv(["entra", "data-policy-operation", "count", "--profile", "batch", "--scopes", policyScopes[0]!], overrides),
       { code: "VALIDATION_ERROR" },
     );
     assert.equal(calls.length, 0);
@@ -371,8 +373,8 @@ test("malformed operation count bodies fail as unknown, not zero", async () => {
       const malformed = transport(() => ({ status: 200, headers: {}, body }));
       const scoped = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "data-policy-operation", "count", "--profile", "soc"], scoped.overrides), error => {
-        assert.equal(error.code, "RESPONSE_INVALID");
-        return /non-numeric success body/.test(error.message);
+        assert.equal(record(error).code, "RESPONSE_INVALID");
+        return /non-numeric success body/.test(text(record(error).message));
       });
     }
   } finally {
@@ -413,20 +415,20 @@ for (const id of ["$count", "$value", "$ref"]) {
   });
 }
 
-function rawFixture(handler) {
-  const credentialCalls = [];
-  const requests = [];
-  const credential = account => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
-  const delegated = new DelegatedAuth({
+function rawFixture(handler: RawResponseHandler) {
+  const credentialCalls: unknown[][] = [];
+  const requests: TransportRequest[] = [];
+  const credential = <T extends object>(account: T) => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
+  const delegated = new DelegatedAuth(delegatedProvider({
     storage: "session-only",
     login: async () => credential({ accountId: "synthetic-account" }),
     silent: async (...args) => { credentialCalls.push(["silent", ...args]); return credential({ accountId: "synthetic-account" }); },
-  });
+  }));
   const application = new ApplicationAuth({
     storage: "session-only",
     acquire: async (...args) => { credentialCalls.push(["acquire", ...args]); return credential({}); },
   });
-  const transport = async request => {
+  const transport: GraphTransport = async request => {
     requests.push(request);
     const response = typeof handler === "function" ? await handler(request, requests.length) : handler;
     return { headers: {}, body: "", ...response };
@@ -434,10 +436,10 @@ function rawFixture(handler) {
   return { credentialCalls, requests, deps: { delegated, application, transport } };
 }
 
-const delegatedRawProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
+const delegatedRawProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
 const rawScopes = policyScopes.join(",");
 
-function rawBody(request) {
+function rawBody(request: TransportRequest): TransportResponse {
   const url = new URL(request.url);
   if (url.pathname === "/v1.0/dataPolicyOperations") return { status: 200, headers: {}, body: JSON.stringify({ value: operations }) };
   if (url.pathname === `/v1.0/dataPolicyOperations/${op1.id}`) return { status: 200, headers: {}, body: JSON.stringify(op1) };
@@ -460,7 +462,7 @@ test("raw api redacts storage locations without a sig sentinel in list, show and
   const plainUrl = "https://contoso.blob.core.windows.net/exports/plain.zip";
   const plainOp = { ...op1, id: "op-plain-9", storageLocation: plainUrl };
   const plainOp2 = { ...op2, id: "op-plain-10", storageLocation: plainUrl };
-  const plainBody = request => {
+  const plainBody = (request: TransportRequest) => {
     const url = new URL(request.url);
     if (url.pathname === "/v1.0/dataPolicyOperations") {
       if (url.searchParams.has("$skiptoken")) return { status: 200, headers: {}, body: JSON.stringify({ value: [] }) };
@@ -471,7 +473,7 @@ test("raw api redacts storage locations without a sig sentinel in list, show and
   };
   const f = rawFixture(plainBody);
   const list = await runApiGet({ path: "/dataPolicyOperations", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: rawScopes }, f.deps);
-  assert.equal(list.value[0].storageLocation, "***redacted***");
+  assert.equal(record(records(list.value)[0]).storageLocation, "***redacted***");
   assert.ok(!JSON.stringify(list).includes("contoso.blob.core.windows.net"));
   const show = await runApiGet({ path: `/dataPolicyOperations/${plainOp.id}`, apiVersion: "v1.0", profile: delegatedRawProfile, scopes: rawScopes }, rawFixture(plainBody).deps);
   assert.equal(show.storageLocation, "***redacted***");
@@ -479,7 +481,7 @@ test("raw api redacts storage locations without a sig sentinel in list, show and
   const g = rawFixture(plainBody);
   const partial = await runApiGet({ path: "/dataPolicyOperations", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: rawScopes, limit: 1 }, g.deps);
   assert.equal(partial.complete, false);
-  assert.equal(partial.value[0].storageLocation, "***redacted***");
+  assert.equal(record(records(partial.value)[0]).storageLocation, "***redacted***");
   assert.ok(!JSON.stringify(partial).includes("contoso.blob.core.windows.net"));
 });
 
@@ -497,7 +499,7 @@ test("raw api refuses unreviewed operation $select fields before credentials", a
   const f = rawFixture(rawBody);
   await assert.rejects(
     runApiGet({ path: "/dataPolicyOperations", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: rawScopes, odata: "$select=id,clientSecret" }, f.deps),
-    error => error.code === "VALIDATION_ERROR" && /Unreviewed \$select field clientSecret/.test(error.message),
+    error => record(error).code === "VALIDATION_ERROR" && /Unreviewed \$select field clientSecret/.test(text(record(error).message)),
   );
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);

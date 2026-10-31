@@ -105,6 +105,28 @@ test("hostile nextLink is denied without a second request", async () => {
   assert.equal(f.requests.length, 1);
 });
 
+for (const [name, response, reason] of [
+  ["malformed JSON", { status: 200, body: "{" }, /non-JSON/],
+  ["malformed collection", json(200, { value: {} }), /malformed collection/],
+  ["rejected nextLink", json(200, { value: [], "@odata.nextLink": "https://example.invalid/v1.0/users" }), /denied/i],
+  ["missing redirect target", { status: 302 }, /missing its target/],
+  ["rejected redirect target", { status: 302, headers: { location: "https://example.invalid/v1.0/users" } }, /denied/i],
+]) {
+  test(`partialOnError preserves earlier rows after ${name}`, async () => {
+    const next = "https://graph.microsoft.com/v1.0/users?$skiptoken=page2";
+    const f = fixture((request, count) => count === 1
+      ? json(200, { value: [{ id: "a" }], "@odata.nextLink": next })
+      : response);
+    const result = await f.session.collect({ profile: delegatedProfile, operation: users, scopes, partialOnError: true });
+    assert.deepEqual(result.value, [{ id: "a" }]);
+    assert.equal(result.complete, false);
+    assert.match(result.reason, reason);
+    assert.equal(result.requests, 2);
+    assert.equal(f.requests.length, 2);
+    assert.equal(decodeCursor(result.cursor).next, next);
+  });
+}
+
 test("row cap buffers the remainder instead of discarding it", async () => {
   const next = "https://graph.microsoft.com/v1.0/users?$skiptoken=page2";
   const f = fixture((request, count) => count === 1

@@ -999,60 +999,62 @@ export class GraphSession {
             "Transport failures carry no Graph diagnosis; do not retry blindly",
           ]);
         }
-        bytes += response.receivedBodyBytes ?? bodyBytes(response.body ?? "");
-        const status = response.status;
-        if (status === 301 || status === 302 || status === 303 || status === 307 || status === 308) {
-          const location = header(response.headers, "location");
-          if (!location) throw new AxiError(`Graph redirect for ${operation.id} is missing its target`, "GRAPH_ERROR", ["A redirect without a target cannot be re-authorized"]);
-          if (hops >= MAX_REDIRECTS) throw denied(operation, `the redirect exceeds ${MAX_REDIRECTS} hops`);
-          const target = authorizeUrl(operation, params, location, fetchUrl, consistencyLevel);
-          if (seen.has(digestUrl(target)) || redirects.has(digestUrl(target))) return partial("continuation cycle detected; result is partial, never complete", target, pending);
-          redirects.add(digestUrl(target));
-          fetchUrl = target;
-          hops += 1;
-          if (bytes > budget.maxBytes) return partial(`byte budget exceeded after ${bytes} bytes`, fetchUrl, pending);
-          continue;
-        }
-        if (status === 429 || status === 503) {
-          if (bytes > budget.maxBytes) return partial(`byte budget exceeded after ${bytes} bytes`, fetchUrl, pending);
-          const raw = header(response.headers, "retry-after");
-          let wait = parseRetryAfter(raw, clock.now());
-          if (wait === undefined) wait = backoffMs(throttleAttempt);
-          throttleAttempt += 1;
-          const detail = raw ? `; retry after ${raw}` : "";
-          if (requests >= budget.maxRequests) return partial(`request budget exhausted after ${requests} requests`, fetchUrl, pending);
-          if (clock.now() + wait > deadline) return partial(`deadline exceeded; throttled (${status})${detail} would overrun the budget`, fetchUrl, pending);
-          if (wait > MAX_RETRY_AFTER_MS) return partial(`throttled (${status})${detail}; budget preserves ${results.length + pending.length} rows`, fetchUrl, pending);
-          await clock.sleep(wait, signal);
-          continue;
-        }
-        if (status < 200 || status >= 300) {
-          const error = this.translateError(operation, response);
-          if (args.partialOnError) return partial(error.message, fetchUrl, pending);
-          throw error;
-        }
-        if (status === 204 || status === 205) {
+        try {
+          bytes += response.receivedBodyBytes ?? bodyBytes(response.body ?? "");
+          const status = response.status;
+          if (status === 301 || status === 302 || status === 303 || status === 307 || status === 308) {
+            const location = header(response.headers, "location");
+            if (!location) throw new AxiError(`Graph redirect for ${operation.id} is missing its target`, "GRAPH_ERROR", ["A redirect without a target cannot be re-authorized"]);
+            if (hops >= MAX_REDIRECTS) throw denied(operation, `the redirect exceeds ${MAX_REDIRECTS} hops`);
+            const target = authorizeUrl(operation, params, location, fetchUrl, consistencyLevel);
+            if (seen.has(digestUrl(target)) || redirects.has(digestUrl(target))) return partial("continuation cycle detected; result is partial, never complete", target, pending);
+            redirects.add(digestUrl(target));
+            fetchUrl = target;
+            hops += 1;
+            if (bytes > budget.maxBytes) return partial(`byte budget exceeded after ${bytes} bytes`, fetchUrl, pending);
+            continue;
+          }
+          if (status === 429 || status === 503) {
+            if (bytes > budget.maxBytes) return partial(`byte budget exceeded after ${bytes} bytes`, fetchUrl, pending);
+            const raw = header(response.headers, "retry-after");
+            let wait = parseRetryAfter(raw, clock.now());
+            if (wait === undefined) wait = backoffMs(throttleAttempt);
+            throttleAttempt += 1;
+            const detail = raw ? `; retry after ${raw}` : "";
+            if (requests >= budget.maxRequests) return partial(`request budget exhausted after ${requests} requests`, fetchUrl, pending);
+            if (clock.now() + wait > deadline) return partial(`deadline exceeded; throttled (${status})${detail} would overrun the budget`, fetchUrl, pending);
+            if (wait > MAX_RETRY_AFTER_MS) return partial(`throttled (${status})${detail}; budget preserves ${results.length + pending.length} rows`, fetchUrl, pending);
+            await clock.sleep(wait, signal);
+            continue;
+          }
+          if (status < 200 || status >= 300) throw this.translateError(operation, response);
+          if (status === 204 || status === 205) {
+            remember(current);
+            remember(fetchUrl);
+            current = undefined;
+            if (bytes > budget.maxBytes) return partial(`byte budget exceeded after ${bytes} bytes`, current, pending);
+            break;
+          }
+          const parsed = decodeReadBody(operation, response);
+          const rows = valuesOf(operation, response, parsed);
+          if (isMailOperation(operation) && (rows.length > Math.min(Number(query.$top), mailSearch ? 1000 - searchRows - results.length : Infinity) || bytes > budget.maxBytes)) {
+            throw new AxiError("Mail page exceeds the requested row or byte budget", "GRAPH_ERROR", ["Reduce --limit; oversized mail pages are never buffered into cursors"]);
+          }
+          const pageTotal = countOf(parsed);
+          if (total === null && pageTotal !== null) total = pageTotal;
+          const rawNext = nextLinkOf(parsed);
+          const nextUrl = rawNext ? authorizeUrl(operation, params, rawNext, fetchUrl, consistencyLevel) : undefined;
           remember(current);
           remember(fetchUrl);
-          current = undefined;
+          current = nextUrl;
+          pending = [...pending, ...rows];
           if (bytes > budget.maxBytes) return partial(`byte budget exceeded after ${bytes} bytes`, current, pending);
           break;
+        } catch (error) {
+          signal?.throwIfAborted();
+          if (args.partialOnError && error instanceof AxiError) return partial(error.message, fetchUrl, pending);
+          throw error;
         }
-        const parsed = decodeReadBody(operation, response);
-        const rows = valuesOf(operation, response, parsed);
-        if (isMailOperation(operation) && (rows.length > Math.min(Number(query.$top), mailSearch ? 1000 - searchRows - results.length : Infinity) || bytes > budget.maxBytes)) {
-          throw new AxiError("Mail page exceeds the requested row or byte budget", "GRAPH_ERROR", ["Reduce --limit; oversized mail pages are never buffered into cursors"]);
-        }
-        const pageTotal = countOf(parsed);
-        if (total === null && pageTotal !== null) total = pageTotal;
-        const rawNext = nextLinkOf(parsed);
-        const nextUrl = rawNext ? authorizeUrl(operation, params, rawNext, fetchUrl, consistencyLevel) : undefined;
-        remember(current);
-        remember(fetchUrl);
-        current = nextUrl;
-        pending = [...pending, ...rows];
-        if (bytes > budget.maxBytes) return partial(`byte budget exceeded after ${bytes} bytes`, current, pending);
-        break;
       }
     }
   }

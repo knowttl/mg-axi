@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, delegatedProvider, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -91,12 +93,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: [string, ...CredentialArgs][]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push([mode, ...args]);
@@ -111,9 +113,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -121,7 +123,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -142,14 +144,14 @@ function deletedItemsTransport() {
     }
     const single = /^\/v1\.0\/directory\/deletedItems\/([^/]+)$/.exec(path);
     if (single) {
-      const found = allRows.find(row => row.id === decodeURIComponent(single[1]));
+      const found = allRows.find(row => row.id === decodeURIComponent(single[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such deleted object" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: [string, ...CredentialArgs][] = []) {
   const fixture = handler ?? deletedItemsTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -157,13 +159,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runDeletedItemCli(args, state, mode, denied = false) {
+function runDeletedItemCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-deleted-items-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -177,13 +179,13 @@ function runDeletedItemCli(args, state, mode, denied = false) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   for (const [type, entry] of Object.entries(byType)) {
     test(`${mode} lists deleted ${type} rows with compact defaults and the kind discriminator`, async () => {
       const state = setupProfiles();
       try {
         const { requests, calls, overrides } = overridesFor(mode);
-        const result = await executeArgv(["entra", entry.leaf, "list", "--profile", profile], overrides);
+        const result = record(await executeArgv(["entra", entry.leaf, "list", "--profile", profile], overrides));
         assert.ok(Array.isArray(result.deletedItems));
         assert.equal(result.deletedItems.length, entry.rows.length);
         for (const row of result.deletedItems) {
@@ -193,10 +195,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         assert.deepEqual(result.count, `${entry.rows.length} deleted items`);
         assert.equal(result.total, null);
         assert.equal(result.complete, true);
-        assert.ok(result.help.some(hint => hint.includes("entra deleted-item show --id <object-id>")));
+        assert.ok(strings(result.help).some(hint => hint.includes("entra deleted-item show --id <object-id>")));
         assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-        assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com${entry.listPath}?`));
-        assert.ok(!new URL(requests[0].url).searchParams.has("$filter"));
+        assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com${entry.listPath}?`));
+        assert.ok(!new URL(requests[0]!.url).searchParams.has("$filter"));
         assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
         if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(entry.scopes)));
       } finally {
@@ -208,10 +210,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const state = setupProfiles();
       try {
         const { requests, overrides } = overridesFor(mode);
-        const result = await executeArgv(["entra", entry.leaf, "count", "--profile", profile], overrides);
+        const result = record(await executeArgv(["entra", entry.leaf, "count", "--profile", profile], overrides));
         assert.deepEqual(result, { count: { returned: entry.rows.length, complete: true } });
         assert.equal(requests.length, 1);
-        assert.equal(requests[0].url, `https://graph.microsoft.com${entry.listPath}/$count`);
+        assert.equal(requests[0]!.url, `https://graph.microsoft.com${entry.listPath}/$count`);
       } finally {
         teardownProfiles(state);
       }
@@ -222,7 +224,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "deleted-user", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "deleted-user", "list", "--profile", profile], overrides));
       assert.deepEqual(result.deletedItems, [{
         id: deletedUser.id,
         displayName: deletedUser.displayName,
@@ -242,15 +244,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         executeArgv(["entra", "deleted-application", "list", "--profile", profile,
           "--select", "id,appId,displayName,keyCredentials,passwordCredentials"], overrides),
         error => {
-          assert.equal(error.code, "VALIDATION_ERROR");
-          return /Unknown deleted-item property keyCredentials/.test(error.message);
+          assert.equal(record(error).code, "VALIDATION_ERROR");
+          return /Unknown deleted-item property keyCredentials/.test(text(record(error).message));
         },
       );
       assert.equal(calls.length, 0);
       assert.equal(requests.length, 0);
-      const allowed = await executeArgv(["entra", "deleted-application", "list", "--profile", profile], overrides);
+      const allowed = record(await executeArgv(["entra", "deleted-application", "list", "--profile", profile], overrides));
       assert.ok(!JSON.stringify(allowed).includes("super-secret-value"), "secret values never reach output");
-      assert.equal(allowed.deletedItems[0].appId, deletedApp.appId);
+      assert.equal(record(records(allowed.deletedItems)[0]).appId, deletedApp.appId);
     } finally {
       teardownProfiles(state);
     }
@@ -260,8 +262,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "deleted-group", "list", "--profile", profile,
-        "--select", "id,displayName,groupTypes,securityEnabled,deletedDateTime"], overrides);
+      const result = record(await executeArgv(["entra", "deleted-group", "list", "--profile", profile,
+        "--select", "id,displayName,groupTypes,securityEnabled,deletedDateTime"], overrides));
       assert.deepEqual(result.deletedItems, [{
         id: deletedGroup.id,
         displayName: deletedGroup.displayName,
@@ -270,7 +272,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         deletedDateTime: deletedGroup.deletedDateTime,
         "@odata.type": "#microsoft.graph.group",
       }]);
-      assert.ok(result.help.some(hint => hint.includes("groupTypes")));
+      assert.ok(strings(result.help).some(hint => hint.includes("groupTypes")));
     } finally {
       teardownProfiles(state);
     }
@@ -281,15 +283,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { overrides } = overridesFor(mode);
       const args = ["entra", "deleted-item", "show", "--id", deletedUser.id, "--profile", profile];
-      if (mode === "delegated") args.push("--scopes", userScopes[0]);
-      const result = await executeArgv(args, overrides);
+      if (mode === "delegated") args.push("--scopes", userScopes[0]!);
+      const result = record(await executeArgv(args, overrides));
       assert.deepEqual(result.deletedItem, {
         id: deletedUser.id,
         displayName: deletedUser.displayName,
         deletedDateTime: deletedUser.deletedDateTime,
         "@odata.type": "#microsoft.graph.user",
       });
-      assert.ok(result.help.some(hint => hint.includes("no default scope")));
+      assert.ok(strings(result.help).some(hint => hint.includes("no default scope")));
     } finally {
       teardownProfiles(state);
     }
@@ -301,10 +303,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, calls, overrides } = overridesFor(mode);
       const args = ["entra", "deleted-item", "show", "--id", deletedUser.id, "--profile", profile,
         "--select", "id,appId"];
-      if (mode === "delegated") args.push("--scopes", userScopes[0]);
+      if (mode === "delegated") args.push("--scopes", userScopes[0]!);
       await assert.rejects(executeArgv(args, overrides), error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Unknown deleted-item property appId/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Unknown deleted-item property appId/.test(text(record(error).message));
       });
       assert.equal(calls.length, 0);
       assert.equal(requests.length, 0);
@@ -340,11 +342,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         });
       });
       const { overrides } = overridesFor(mode, paged);
-      const first = await executeArgv(["entra", "deleted-group", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.deletedItems.map(row => row.id), [deletedGroup.id]);
+      const first = record(await executeArgv(["entra", "deleted-group", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.deletedItems).map(row => row.id), [deletedGroup.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "deleted-group", "list", "--profile", profile, "--cursor", first.cursor], overrides);
+      const second = record(await executeArgv(["entra", "deleted-group", "list", "--profile", profile, "--cursor", text(first.cursor)], overrides));
       assert.deepEqual(second.deletedItems, []);
       assert.deepEqual(second.count, "0 deleted items");
       assert.equal(second.total, null);
@@ -358,12 +360,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const listed = await executeArgv(["entra", "deleted-user", "list", "--profile", profile], overrides);
+      const listed = record(await executeArgv(["entra", "deleted-user", "list", "--profile", profile], overrides));
       assert.deepEqual(listed.deletedItems, []);
       assert.deepEqual(listed.count, "0 deleted items");
       assert.equal(listed.total, null);
       assert.equal(listed.complete, true);
-      assert.ok(listed.help.some(hint => hint.includes("absence of results is the answer")));
+      assert.ok(strings(listed.help).some(hint => hint.includes("absence of results is the answer")));
     } finally {
       teardownProfiles(state);
     }
@@ -374,11 +376,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { overrides } = overridesFor(mode);
       const args = ["entra", "deleted-item", "show", "--id", "object-missing", "--profile", profile];
-      if (mode === "delegated") args.push("--scopes", userScopes[0]);
+      if (mode === "delegated") args.push("--scopes", userScopes[0]!);
       await assert.rejects(executeArgv(args, overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -391,16 +393,16 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const { overrides } = overridesFor(mode, denied);
       await assert.rejects(executeArgv(["entra", "deleted-group", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("Group.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
-        assert.ok(error.suggestions.some(hint => hint.includes("never diagnose role or licence solely from HTTP 403")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Group.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Personal Microsoft accounts are not supported")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose role or licence solely from HTTP 403")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "deleted-group", "count", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("Group.Read.All")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Group.Read.All")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -413,18 +415,18 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runDeletedItemCli(["entra", "deleted-group", "list", "--profile", profile], state, mode);
       assert.equal(listed.status, 0, listed.stdout);
       assert.equal(listed.stderr, "");
-      const listOut = decode(listed.stdout);
-      assert.deepEqual(listOut.deletedItems.map(row => row.id), [deletedGroup.id]);
-      assert.deepEqual(listOut.deletedItems.map(row => row["@odata.type"]), ["#microsoft.graph.group"]);
+      const listOut = record(decode(listed.stdout));
+      assert.deepEqual(records(listOut.deletedItems).map(row => row.id), [deletedGroup.id]);
+      assert.deepEqual(records(listOut.deletedItems).map(row => row["@odata.type"]), ["#microsoft.graph.group"]);
       assert.deepEqual(listOut.count, "1 deleted items");
       assert.equal(listOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const showArgs = ["entra", "deleted-item", "show", "--id", deletedUser.id, "--profile", profile];
-      if (mode === "delegated") showArgs.push("--scopes", userScopes[0]);
+      if (mode === "delegated") showArgs.push("--scopes", userScopes[0]!);
       const shown = runDeletedItemCli(showArgs, state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      assert.deepEqual(decode(shown.stdout).deletedItem, {
+      assert.deepEqual(record(decode(shown.stdout)).deletedItem, {
         id: deletedUser.id,
         displayName: deletedUser.displayName,
         deletedDateTime: deletedUser.deletedDateTime,
@@ -433,7 +435,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 
       const counted = runDeletedItemCli(["entra", "deleted-user", "count", "--profile", profile], state, mode);
       assert.equal(counted.status, 0, counted.stdout);
-      assert.deepEqual(decode(counted.stdout).count, { returned: 1, complete: true });
+      assert.deepEqual(record(decode(counted.stdout)).count, { returned: 1, complete: true });
       assert.ok(!counted.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -444,9 +446,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runDeletedItemCli(["entra", "deleted-group", "list", "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
+      assert.match(text(output.error), /grant, role, licence or policy/);
       assert.equal(output.deletedItems, undefined);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -456,7 +458,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["deleted-user", "list"], ["--limit", "1"]],
     [["deleted-group", "count"], []],
     [["deleted-item", "show"], ["--id", deletedUser.id, "--scopes", "https://graph.microsoft.com/User.Read.All"]],
-  ]) {
+  ] as const) {
     for (const preview of [false, true]) {
       test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
         const state = setupProfiles();
@@ -487,8 +489,8 @@ test("delegated deleted-item show needs an explicit type-matching scope", async 
     await assert.rejects(
       executeArgv(["entra", "deleted-item", "show", "--id", deletedUser.id, "--profile", "soc"], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /needs an explicit --scopes matching the object's type/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /needs an explicit --scopes matching the object's type/.test(text(record(error).message));
       },
     );
     assert.equal(calls.length, 0);
@@ -503,7 +505,7 @@ test("application deleted-item reads refuse delegated scopes before credentials"
   try {
     const { requests, calls, overrides } = overridesFor("application");
     await assert.rejects(
-      executeArgv(["entra", "deleted-user", "list", "--profile", "batch", "--scopes", userScopes[0]], overrides),
+      executeArgv(["entra", "deleted-user", "list", "--profile", "batch", "--scopes", userScopes[0]!], overrides),
       { code: "VALIDATION_ERROR", message: "Application profiles use the configured Graph .default audience; delegated scopes are unavailable" },
     );
     assert.equal(calls.length, 0);
@@ -530,15 +532,15 @@ test("truncated deleted-group text carries a --full hint without lifting caps", 
   try {
     const longRow = transport(() => json(200, { value: [longGroup] }));
     const { overrides } = overridesFor("delegated", longRow);
-    const partial = await executeArgv(["entra", "deleted-group", "list", "--profile", "soc",
-      "--select", "id,displayName,deletedDateTime"], overrides);
-    const truncated = partial.deletedItems.find(row => row.id === longGroup.id);
-    assert.match(truncated.displayName, /truncated, \d+ chars total/);
-    assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "deleted-group", "list", "--profile", "soc", "--full",
-      "--select", "id,displayName,deletedDateTime"], overrides);
-    assert.equal(full.deletedItems.find(row => row.id === longGroup.id).displayName, longName);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const partial = record(await executeArgv(["entra", "deleted-group", "list", "--profile", "soc",
+      "--select", "id,displayName,deletedDateTime"], overrides));
+    const truncated = records(partial.deletedItems).find(row => row.id === longGroup.id);
+    assert.match(text(record(truncated).displayName), /truncated, \d+ chars total/);
+    assert.ok(strings(partial.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "deleted-group", "list", "--profile", "soc", "--full",
+      "--select", "id,displayName,deletedDateTime"], overrides));
+    assert.equal(record(records(full.deletedItems).find(row => row.id === longGroup.id)).displayName, longName);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -548,19 +550,19 @@ test("raw deleted-user reads keep the kind discriminator and refuse unreviewed f
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const { ApplicationAuth } = await import("../dist/app-auth.js");
-  const credentialCalls = [];
-  const requests = [];
+  const credentialCalls: unknown[][] = [];
+  const requests: TransportRequest[] = [];
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
   const deps = {
-    delegated: new DelegatedAuth({ storage: "session-only", login: async () => credential, silent: async (...args) => { credentialCalls.push(args); return credential; } }),
+    delegated: new DelegatedAuth(delegatedProvider({ storage: "session-only", login: async () => credential, silent: async (...args) => { credentialCalls.push(args); return credential; } })),
     application: new ApplicationAuth({ storage: "session-only", acquire: async (...args) => { credentialCalls.push(args); return credential; } }),
-    transport: async request => { requests.push(request); return { headers: {}, body: JSON.stringify({ value: [deletedUser] }) }; },
+    transport: async (request: TransportRequest) => { requests.push(request); return { status: 200, headers: {}, body: JSON.stringify({ value: [deletedUser] }) }; },
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
-  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } };
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
+  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } } as const;
   for (const profile of [delegatedProfile, appProfile]) {
     const listed = await runApiGet({ path: "/directory/deletedItems/graph.user", apiVersion: "v1.0", profile,
-      ...(profile.mode === "delegated" ? { scopes: userScopes[0] } : {}) }, deps);
+      ...(profile.mode === "delegated" ? { scopes: userScopes[0]! } : {}) }, deps);
     assert.equal(listed.returned, 1);
     assert.deepEqual(listed.value, [{
       id: deletedUser.id,
@@ -570,10 +572,10 @@ test("raw deleted-user reads keep the kind discriminator and refuse unreviewed f
     }]);
     await assert.rejects(
       runApiGet({ path: "/directory/deletedItems/graph.user", apiVersion: "v1.0", profile, odata: "$select=id,passwordProfile",
-        ...(profile.mode === "delegated" ? { scopes: userScopes[0] } : {}) }, deps),
+        ...(profile.mode === "delegated" ? { scopes: userScopes[0]! } : {}) }, deps),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Unreviewed \$select field passwordProfile/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Unreviewed \$select field passwordProfile/.test(text(record(error).message));
       },
     );
   }
@@ -585,12 +587,12 @@ test("raw deleted-item show keeps the discriminator without per-type detail", as
   const { DelegatedAuth } = await import("../dist/auth.js");
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
   const deps = {
-    delegated: new DelegatedAuth({ storage: "session-only", login: async () => credential, silent: async () => credential }),
+    delegated: new DelegatedAuth(delegatedProvider({ storage: "session-only", login: async () => credential, silent: async () => credential })),
     application: new (await import("../dist/app-auth.js")).ApplicationAuth({ storage: "session-only", acquire: async () => credential }),
     transport: async () => ({ status: 200, headers: {}, body: JSON.stringify(deletedApp) }),
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
-  const shown = await runApiGet({ path: `/directory/deletedItems/${deletedApp.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: appScopes[0] }, deps);
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
+  const shown = await runApiGet({ path: `/directory/deletedItems/${deletedApp.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: appScopes[0]! }, deps);
   assert.deepEqual(shown, {
     id: deletedApp.id,
     displayName: deletedApp.displayName,

@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -76,12 +78,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -96,9 +98,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -106,7 +108,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -123,7 +125,7 @@ function groupTransport() {
     }
     const single = /^\/v1\.0\/groups\/([^/]+)$/.exec(path);
     if (single) {
-      const found = groups.find(group => group.id === decodeURIComponent(single[1]));
+      const found = groups.find(group => group.id === decodeURIComponent(single[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such group" } });
     }
     const rel = /^\/v1\.0\/groups\/[^/]+\/(members|transitiveMembers|memberOf|transitiveMemberOf)$/.exec(path);
@@ -135,7 +137,7 @@ function groupTransport() {
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: CredentialArgs[] = []) {
   const fixture = handler ?? groupTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -143,13 +145,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runGroupCli(args, state, mode, denied = false) {
+function runGroupCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -158,17 +160,17 @@ function runGroupCli(args, state, mode, denied = false) {
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
-      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, directory: [], denied, scopes: groupScopes[0], groups, members, memberOf }),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, directory: [], denied, scopes: groupScopes[0]!, groups, members, memberOf }),
     },
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists groups with compact rows preserving null and missing`, async () => {
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "group", "list", "--profile", profile], overrides));
       assert.deepEqual(result.groups, [
         { id: g1.id, displayName: "Engineering", mail: "eng@contoso.com", groupTypes: ["Unified"] },
         { id: g2.id, displayName: "Helpdesk Admins", mail: null, groupTypes: [] },
@@ -177,9 +179,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 groups");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra group show --id <group-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra group show --id <group-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/groups?"));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/groups?"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
     } finally {
       teardownProfiles(state);
@@ -190,7 +192,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group", "show", "--id", g1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "group", "show", "--id", g1.id, "--profile", profile], overrides));
       assert.deepEqual(result.group, g1);
       assert.equal(result.help, undefined);
     } finally {
@@ -202,10 +204,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group", "show", "--id", g2.id, "--profile", profile], overrides);
-      assert.equal(result.group.isAssignableToRole, true);
-      assert.ok(result.help.some(hint => hint.includes("Role-assignable group")));
-      assert.ok(result.help.some(hint => hint.includes("mg-axi entra group member add")));
+      const result = record(await executeArgv(["entra", "group", "show", "--id", g2.id, "--profile", profile], overrides));
+      assert.equal(record(result.group).isAssignableToRole, true);
+      assert.ok(strings(result.help).some(hint => hint.includes("Role-assignable group")));
+      assert.ok(strings(result.help).some(hint => hint.includes("mg-axi entra group member add")));
     } finally {
       teardownProfiles(state);
     }
@@ -215,8 +217,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", profile,
-        "--select", "id,displayName"], overrides);
+      const result = record(await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", profile,
+        "--select", "id,displayName"], overrides));
       assert.deepEqual(result.members, [
         mUser,
         mGroup,
@@ -226,11 +228,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "4 members");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.warnings.some(warning => warning.includes("service principals")));
-      assert.ok(result.warnings.some(warning => warning.includes("complete membership")));
-      assert.ok(result.help.some(hint => hint.includes("Member.Read.Hidden")));
-      assert.ok(result.help.some(hint => hint.includes("--transitive")));
-      assert.ok(new URL(requests[0].url).pathname.endsWith(`/groups/${g1.id}/members`));
+      assert.ok(strings(result.warnings).some(warning => warning.includes("service principals")));
+      assert.ok(strings(result.warnings).some(warning => warning.includes("complete membership")));
+      assert.ok(strings(result.help).some(hint => hint.includes("Member.Read.Hidden")));
+      assert.ok(strings(result.help).some(hint => hint.includes("--transitive")));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith(`/groups/${g1.id}/members`));
     } finally {
       teardownProfiles(state);
     }
@@ -240,11 +242,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--transitive", "--profile", profile], overrides);
-      assert.equal(result.members.length, 4);
+      const result = record(await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--transitive", "--profile", profile], overrides));
+      assert.equal(records(result.members).length, 4);
       assert.equal(result.warnings, undefined);
-      assert.ok(new URL(requests[0].url).pathname.endsWith(`/groups/${g1.id}/transitiveMembers`));
-      assert.ok(result.help.some(hint => hint.includes("Direct relationships only")));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith(`/groups/${g1.id}/transitiveMembers`));
+      assert.ok(strings(result.help).some(hint => hint.includes("Direct relationships only")));
     } finally {
       teardownProfiles(state);
     }
@@ -254,16 +256,16 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const direct = await executeArgv(["entra", "group", "member-of", "list", "--group", g1.id, "--profile", profile], overrides);
+      const direct = record(await executeArgv(["entra", "group", "member-of", "list", "--group", g1.id, "--profile", profile], overrides));
       assert.deepEqual(direct.memberOf, memberOf);
       assert.deepEqual(direct.count, "1 memberships");
       assert.equal(direct.total, null);
       assert.equal(direct.complete, true);
       assert.equal(direct.warnings, undefined);
-      assert.ok(new URL(requests[0].url).pathname.endsWith(`/groups/${g1.id}/memberOf`));
-      const transitive = await executeArgv(["entra", "group", "member-of", "list", "--group", g1.id, "--transitive", "--profile", profile], overrides);
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith(`/groups/${g1.id}/memberOf`));
+      const transitive = record(await executeArgv(["entra", "group", "member-of", "list", "--group", g1.id, "--transitive", "--profile", profile], overrides));
       assert.deepEqual(transitive.memberOf, memberOf);
-      assert.ok(new URL(requests[1].url).pathname.endsWith(`/groups/${g1.id}/transitiveMemberOf`));
+      assert.ok(new URL(requests[1]!.url).pathname.endsWith(`/groups/${g1.id}/transitiveMemberOf`));
     } finally {
       teardownProfiles(state);
     }
@@ -273,11 +275,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", profile], overrides);
-      const limited = result.members.filter(row => row.id === mLimited.id || row.id === mNullName.id);
+      const result = record(await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", profile], overrides));
+      const limited = records(result.members).filter(row => row.id === mLimited.id || row.id === mNullName.id);
       assert.equal(limited.length, 2);
       assert.deepEqual(limited[0], { id: mLimited.id, "@odata.type": "#microsoft.graph.servicePrincipal" });
-      assert.ok(result.help.some(hint => hint.includes("2 of 4 rows have no non-null selected descriptive properties")));
+      assert.ok(strings(result.help).some(hint => hint.includes("2 of 4 rows have no non-null selected descriptive properties")));
     } finally {
       teardownProfiles(state);
     }
@@ -287,14 +289,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.members.map(row => row.id), [mUser.id]);
+      const first = record(await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.members).map(row => row.id), [mUser.id]);
       assert.deepEqual(first.count, "1 members shown, more available");
       assert.equal(first.total, null);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.members.map(row => row.id), [mGroup.id, mLimited.id, mNullName.id]);
+      const second = record(await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", profile, "--cursor", text(first.cursor)], overrides));
+      assert.deepEqual(records(second.members).map(row => row.id), [mGroup.id, mLimited.id, mNullName.id]);
       assert.deepEqual(second.count, "3 members");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -310,17 +312,17 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const missing = transport(() => json(404, { error: { code: "Request_ResourceNotFound", message: "gone" } }));
       const overrides = {
         transport: denied.send,
-        delegated: credentialService("delegated", []),
-        application: credentialService("application", []),
+        delegated: authFakes(credentialService("delegated", [])).delegated,
+        application: authFakes(credentialService("application", [])).application,
       };
       await assert.rejects(executeArgv(["entra", "group", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /grant, role, licence/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "group", "show", "--id", g1.id, "--profile", profile],
         { ...overrides, transport: missing.send }), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /not found or inaccessible/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /not found or inaccessible/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -333,8 +335,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runGroupCli(["entra", "group", "list", "--profile", profile], state, mode);
       assert.equal(listed.status, 0, listed.stdout);
       assert.equal(listed.stderr, "");
-      const groupsOut = decode(listed.stdout);
-      assert.deepEqual(groupsOut.groups.map(group => group.id), [g1.id, g2.id, g3.id]);
+      const groupsOut = record(decode(listed.stdout));
+      assert.deepEqual(records(groupsOut.groups).map(group => group.id), [g1.id, g2.id, g3.id]);
       assert.deepEqual(groupsOut.count, "3 groups");
       assert.equal(groupsOut.total, null);
       assert.equal(groupsOut.complete, true);
@@ -342,13 +344,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 
       const shown = runGroupCli(["entra", "group", "show", "--id", g1.id, "--profile", profile], state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      assert.deepEqual(decode(shown.stdout).group, g1);
+      assert.deepEqual(record(decode(shown.stdout)).group, g1);
 
       const membersOut = runGroupCli(["entra", "group", "member", "list", "--group", g1.id, "--profile", profile], state, mode);
       assert.equal(membersOut.status, 0, membersOut.stdout);
-      const membersDecoded = decode(membersOut.stdout);
-      assert.equal(membersDecoded.members.length, 4);
-      assert.ok(membersDecoded.warnings.some(warning => warning.includes("service principals")));
+      const membersDecoded = record(decode(membersOut.stdout));
+      assert.equal(records(membersDecoded.members).length, 4);
+      assert.ok(strings(membersDecoded.warnings).some(warning => warning.includes("service principals")));
       assert.ok(!membersOut.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -359,9 +361,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runGroupCli(["entra", "group", "member", "list", "--group", g1.id, "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
+      assert.match(text(output.error), /grant, role, licence or policy/);
       assert.equal(output.members, undefined);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -373,11 +375,11 @@ for (const [relationship, route, transitive] of [
   ["member", "transitiveMembers", true],
   ["member-of", "memberOf", false],
   ["member-of", "transitiveMemberOf", true],
-]) {
+] as const) {
   test(`${route} filtering carries count and consistency through resume`, async () => {
     const state = setupProfiles();
     try {
-      const seen = [];
+      const seen: { url: string; headers: Record<string, string> }[] = [];
       const fixture = transport(request => {
         seen.push({ url: request.url, headers: request.headers });
         assert.equal(new URL(request.url).searchParams.get("$count"), "true");
@@ -392,30 +394,30 @@ for (const [relationship, route, transitive] of [
       });
       const { overrides } = overridesFor("delegated", fixture);
       const command = ["entra", "group", relationship, "list", "--group", g1.id, ...(transitive ? ["--transitive"] : [])];
-      const filtered = await executeArgv([...command,
-        "--profile", "soc", "--filter", "startswith(displayName,'A')", "--limit", "1"], overrides);
-      assert.equal(seen[0].headers.ConsistencyLevel, "eventual");
+      const filtered = record(await executeArgv([...command,
+        "--profile", "soc", "--filter", "startswith(displayName,'A')", "--limit", "1"], overrides));
+      assert.equal(seen[0]!.headers.ConsistencyLevel, "eventual");
       const noun = relationship === "member" ? "members" : "memberships";
       assert.equal(filtered.complete, false);
       assert.equal(filtered.total, 2);
       assert.equal(filtered.count, `1 of 2 ${noun}`);
-      const resumed = await executeArgv([...command,
-        "--profile", "soc", "--cursor", filtered.cursor], overrides);
-      assert.equal(seen[1].headers.ConsistencyLevel, "eventual");
+      const resumed = record(await executeArgv([...command,
+        "--profile", "soc", "--cursor", text(filtered.cursor)], overrides));
+      assert.equal(seen[1]!.headers.ConsistencyLevel, "eventual");
       assert.equal(resumed.complete, true);
       assert.equal(resumed.total, 2);
       assert.equal(resumed.count, `1 of 2 ${noun}`);
       await assert.rejects(executeArgv([...command,
-        "--profile", "soc", "--cursor", filtered.cursor, "--filter", "startswith(displayName,'B')"], overrides),
+        "--profile", "soc", "--cursor", text(filtered.cursor), "--filter", "startswith(displayName,'B')"], overrides),
       { code: "VALIDATION_ERROR" });
       const plain = transport(request => {
         seen.push({ url: request.url, headers: request.headers });
         return json(200, { value: [{ id: g1.id, displayName: "Engineering" }] });
       });
-      const unfiltered = await executeArgv(["entra", "group", "list", "--profile", "soc", "--limit", "1"],
-        overridesFor("delegated", plain).overrides);
-      assert.equal(seen[seen.length - 1].headers.ConsistencyLevel, undefined);
-      assert.equal(new URL(seen[seen.length - 1].url).searchParams.has("$count"), false);
+      const unfiltered = record(await executeArgv(["entra", "group", "list", "--profile", "soc", "--limit", "1"],
+        overridesFor("delegated", plain).overrides));
+      assert.equal(seen[seen.length - 1]!.headers.ConsistencyLevel, undefined);
+      assert.equal(new URL(seen[seen.length - 1]!.url).searchParams.has("$count"), false);
       assert.equal(unfiltered.count, "1 groups");
       assert.equal(unfiltered.total, null);
       assert.equal(unfiltered.complete, true);
@@ -431,16 +433,16 @@ for (const [relationship, route, transitive] of [
     ["missing name projected to id", mLimited, "id,displayName", "id", "1 of 1 rows have no non-null selected descriptive properties"],
     ["nullable mail alone", { id: mGroup.id, "@odata.type": mGroup["@odata.type"], mail: null }, "id,mail", "id,mail", "1 of 1 rows have no non-null selected descriptive properties"],
     ["id-only selection", mLimited, "id", "id", undefined],
-  ]) {
+  ] as const) {
     for (const limit of ["1", "2"]) {
       test(`${route} ${name} assesses fetched fields in ${limit === "1" ? "partial" : "complete"} output`, async () => {
         const state = setupProfiles();
         try {
           const fixture = transport(() => json(200, { value: [row, { ...mUser, mail: "adele@contoso.com" }] }));
           const { overrides } = overridesFor("application", fixture);
-          const result = await executeArgv(["entra", "group", relationship, "list", "--group", g1.id,
-            ...(transitive ? ["--transitive"] : []), "--profile", "batch", "--select", select, "--fields", fields, "--limit", limit], overrides);
-          const hints = result.help.filter(hint => hint.includes("selected descriptive properties"));
+          const result = record(await executeArgv(["entra", "group", relationship, "list", "--group", g1.id,
+            ...(transitive ? ["--transitive"] : []), "--profile", "batch", "--select", select, "--fields", fields, "--limit", limit], overrides));
+          const hints = strings(result.help).filter(hint => hint.includes("selected descriptive properties"));
           assert.deepEqual(hints, expectedHint === undefined ? [] : [
             `${expectedHint.replace("1 of 1", `1 of ${limit}`)}; this may reflect limited read consent or unset properties`,
           ]);
@@ -460,10 +462,10 @@ test("direct and transitive cursors do not cross resume", async () => {
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", "soc", "--limit", "1"], overrides);
+    const first = record(await executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", "soc", "--limit", "1"], overrides));
     assert.equal(first.complete, false);
     await assert.rejects(executeArgv(["entra", "group", "member", "list", "--group", g1.id,
-      "--profile", "soc", "--cursor", first.cursor, "--transitive"], overrides), { code: "VALIDATION_ERROR" });
+      "--profile", "soc", "--cursor", text(first.cursor), "--transitive"], overrides), { code: "VALIDATION_ERROR" });
   } finally {
     teardownProfiles(state);
   }
@@ -472,14 +474,14 @@ test("direct and transitive cursors do not cross resume", async () => {
 test("group list $filter also carries ConsistencyLevel eventual", async () => {
   const state = setupProfiles();
   try {
-    const seen = [];
+    const seen: Record<string, string>[] = [];
     const fixture = transport(request => {
       seen.push(request.headers);
       return json(200, { value: [] });
     });
     const { overrides } = overridesFor("delegated", fixture);
     await executeArgv(["entra", "group", "list", "--profile", "soc", "--filter", "securityEnabled eq true"], overrides);
-    assert.equal(seen[0].ConsistencyLevel, "eventual");
+    assert.equal(seen[0]!.ConsistencyLevel, "eventual");
   } finally {
     teardownProfiles(state);
   }
@@ -490,14 +492,14 @@ test("application mode rejects delegated scopes before HTTP", async () => {
   try {
     const { requests, overrides } = overridesFor("application");
     await assert.rejects(
-      executeArgv(["entra", "group", "list", "--profile", "batch", "--scopes", groupScopes[0]], overrides),
+      executeArgv(["entra", "group", "list", "--profile", "batch", "--scopes", groupScopes[0]!], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Graph \.default audience/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Graph \.default audience/.test(text(record(error).message));
       },
     );
     await assert.rejects(
-      executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", "batch", "--scopes", groupScopes[0]], overrides),
+      executeArgv(["entra", "group", "member", "list", "--group", g1.id, "--profile", "batch", "--scopes", groupScopes[0]!], overrides),
       { code: "VALIDATION_ERROR" },
     );
     assert.equal(requests.length, 0);
@@ -536,8 +538,8 @@ test("group reads refuse unshipped beta operations", async () => {
     await assert.rejects(
       executeArgv(["entra", "group", "list", "--profile", "soc", "--api-version", "beta", "--limit", "1"], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Unknown catalogued/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Unknown catalogued/.test(text(record(error).message));
       },
     );
     await assert.rejects(

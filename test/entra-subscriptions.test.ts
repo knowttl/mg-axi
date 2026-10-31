@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -52,7 +54,7 @@ const sub2 = {
   totalLicenses: 10,
 };
 const sub3 = { id: "sub-bare-3" };
-const subscriptions = [sub1, sub2, sub3];
+const subscriptions: { id: string; commerceSubscriptionId?: string }[] = [sub1, sub2, sub3];
 
 function setupProfiles() {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-read-subscriptions-"));
@@ -64,12 +66,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: [string, ...CredentialArgs][]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push([mode, ...args]);
@@ -84,9 +86,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -94,7 +96,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -114,7 +116,7 @@ function subscriptionTransport() {
     }
     const single = /^\/v1\.0\/directory\/subscriptions\/([^/]+)$/.exec(path);
     if (single) {
-      const found = subscriptions.find(row => row.id === decodeURIComponent(single[1]));
+      const found = subscriptions.find(row => row.id === decodeURIComponent(single[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such subscription" } });
     }
     const commerce = /^\/v1\.0\/directory\/subscriptions\(commerceSubscriptionId=(.+)\)$/.exec(path);
@@ -126,7 +128,7 @@ function subscriptionTransport() {
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: [string, ...CredentialArgs][] = []) {
   const fixture = handler ?? subscriptionTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -134,13 +136,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runSubscriptionCli(args, state, mode, denied = false) {
+function runSubscriptionCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-subscriptions-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -154,13 +156,13 @@ function runSubscriptionCli(args, state, mode, denied = false) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists subscriptions with compact rows preserving null and missing`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "subscription", "list", "--profile", profile,
-        "--select", "id,skuPartNumber,status,totalLicenses"], overrides);
+      const result = record(await executeArgv(["entra", "subscription", "list", "--profile", profile,
+        "--select", "id,skuPartNumber,status,totalLicenses"], overrides));
       assert.deepEqual(result.subscriptions, [
         { id: sub1.id, skuPartNumber: "MyPartNumber", status: "Enabled", totalLicenses: 25 },
         { id: sub2.id, skuPartNumber: `${longSkuPartNumber.slice(0, 500)}... (truncated, ${longSkuPartNumber.length} chars total)`, status: "Suspended", totalLicenses: 10 },
@@ -169,10 +171,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 subscriptions");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra subscription show --id <subscription-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra subscription show --id <subscription-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/directory/subscriptions?"));
-      assert.ok(!new URL(requests[0].url).searchParams.has("$filter"));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/directory/subscriptions?"));
+      assert.ok(!new URL(requests[0]!.url).searchParams.has("$filter"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(subscriptionScopes)));
     } finally {
@@ -184,12 +186,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "subscription", "list", "--profile", profile,
-        "--filter", "status eq 'Enabled'"], overrides);
+      const result = record(await executeArgv(["entra", "subscription", "list", "--profile", profile,
+        "--filter", "status eq 'Enabled'"], overrides));
       assert.deepEqual(result.count, "3 subscriptions");
-      const sent = new URL(requests[0].url).searchParams;
+      const sent = new URL(requests[0]!.url).searchParams;
       assert.equal(sent.get("$filter"), "status eq 'Enabled'");
-      assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+      assert.equal(requests[0]!.headers.ConsistencyLevel, undefined);
     } finally {
       teardownProfiles(state);
     }
@@ -199,12 +201,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "subscription", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.subscriptions.map(row => row.id), [sub1.id]);
+      const first = record(await executeArgv(["entra", "subscription", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.subscriptions).map(row => row.id), [sub1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "subscription", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.subscriptions.map(row => row.id), [sub2.id, sub3.id]);
+      const second = record(await executeArgv(["entra", "subscription", "list", "--profile", profile, "--cursor", text(first.cursor)], overrides));
+      assert.deepEqual(records(second.subscriptions).map(row => row.id), [sub2.id, sub3.id]);
       assert.deepEqual(second.count, "2 subscriptions");
       assert.equal(second.total, null);
     } finally {
@@ -216,9 +218,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "subscription", "show", "--id", sub1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "subscription", "show", "--id", sub1.id, "--profile", profile], overrides));
       assert.deepEqual(result.subscription, sub1);
-      const missing = await executeArgv(["entra", "subscription", "show", "--id", sub3.id, "--profile", profile], overrides);
+      const missing = record(await executeArgv(["entra", "subscription", "show", "--id", sub3.id, "--profile", profile], overrides));
       assert.deepEqual(missing.subscription, { id: sub3.id });
     } finally {
       teardownProfiles(state);
@@ -246,9 +248,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "subscription", "show", "--commerce-subscription-id", sub1.commerceSubscriptionId, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "subscription", "show", "--commerce-subscription-id", sub1.commerceSubscriptionId, "--profile", profile], overrides));
       assert.deepEqual(result.subscription, sub1);
-      assert.equal(requests[0].url, `https://graph.microsoft.com/v1.0/directory/subscriptions(commerceSubscriptionId=%27${sub1.commerceSubscriptionId}%27)?%24select=${encodeURIComponent("id,commerceSubscriptionId,createdDateTime,isTrial,nextLifecycleDateTime,ownerId,ownerTenantId,ownerType,serviceStatus,skuId,skuPartNumber,status,totalLicenses")}`);
+      assert.equal(requests[0]!.url, `https://graph.microsoft.com/v1.0/directory/subscriptions(commerceSubscriptionId=%27${sub1.commerceSubscriptionId}%27)?%24select=${encodeURIComponent("id,commerceSubscriptionId,createdDateTime,isTrial,nextLifecycleDateTime,ownerId,ownerTenantId,ownerType,serviceStatus,skuId,skuPartNumber,status,totalLicenses")}`);
     } finally {
       teardownProfiles(state);
     }
@@ -260,11 +262,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, calls, overrides } = overridesFor(mode);
       await assert.rejects(
         executeArgv(["entra", "subscription", "show", "--profile", profile], overrides),
-        error => error.code === "VALIDATION_ERROR" && /exactly one of --id or --commerce-subscription-id/.test(error.message),
+        error => record(error).code === "VALIDATION_ERROR" && /exactly one of --id or --commerce-subscription-id/.test(text(record(error).message)),
       );
       await assert.rejects(
         executeArgv(["entra", "subscription", "show", "--id", sub1.id, "--commerce-subscription-id", sub1.commerceSubscriptionId, "--profile", profile], overrides),
-        error => error.code === "VALIDATION_ERROR" && /cannot be combined/.test(error.message),
+        error => record(error).code === "VALIDATION_ERROR" && /cannot be combined/.test(text(record(error).message)),
       );
       assert.equal(calls.length, 0);
       assert.equal(requests.length, 0);
@@ -295,9 +297,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { overrides } = overridesFor(mode);
       await assert.rejects(executeArgv(["entra", "subscription", "show", "--commerce-subscription-id", "00000000-0000-4000-8000-000000000000", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -308,10 +310,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "subscription", "count", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "subscription", "count", "--profile", profile], overrides));
       assert.deepEqual(result, { count: { returned: 3, complete: true } });
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/directory/subscriptions/$count");
+      assert.equal(requests[0]!.url, "https://graph.microsoft.com/v1.0/directory/subscriptions/$count");
     } finally {
       teardownProfiles(state);
     }
@@ -337,12 +339,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const listed = await executeArgv(["entra", "subscription", "list", "--profile", profile], overrides);
+      const listed = record(await executeArgv(["entra", "subscription", "list", "--profile", profile], overrides));
       assert.deepEqual(listed.subscriptions, []);
       assert.deepEqual(listed.count, "0 subscriptions");
       assert.equal(listed.total, null);
       assert.equal(listed.complete, true);
-      assert.ok(listed.help.some(hint => hint.includes("no commercial subscriptions")));
+      assert.ok(strings(listed.help).some(hint => hint.includes("no commercial subscriptions")));
     } finally {
       teardownProfiles(state);
     }
@@ -353,8 +355,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const listed = await executeArgv(["entra", "subscription", "list", "--profile", profile,
-        "--filter", "status eq 'Suspended'"], overrides);
+      const listed = record(await executeArgv(["entra", "subscription", "list", "--profile", profile,
+        "--filter", "status eq 'Suspended'"], overrides));
       assert.deepEqual(listed.help, ["0 subscriptions matched; the absence of results is the answer, not an error"]);
     } finally {
       teardownProfiles(state);
@@ -366,9 +368,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { overrides } = overridesFor(mode);
       await assert.rejects(executeArgv(["entra", "subscription", "show", "--id", "subscription-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -381,16 +383,16 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const { overrides } = overridesFor(mode, denied);
       await assert.rejects(executeArgv(["entra", "subscription", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("Organization.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Global Reader, Directory Readers")));
-        assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Organization.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Global Reader, Directory Readers")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "subscription", "count", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("Organization.Read.All")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Organization.Read.All")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -403,19 +405,19 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runSubscriptionCli(["entra", "subscription", "list", "--profile", profile], state, mode);
       assert.equal(listed.status, 0, listed.stdout);
       assert.equal(listed.stderr, "");
-      const listOut = decode(listed.stdout);
-      assert.deepEqual(listOut.subscriptions.map(row => row.id), [sub1.id, sub2.id]);
+      const listOut = record(decode(listed.stdout));
+      assert.deepEqual(records(listOut.subscriptions).map(row => row.id), [sub1.id, sub2.id]);
       assert.deepEqual(listOut.count, "2 subscriptions");
       assert.equal(listOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runSubscriptionCli(["entra", "subscription", "show", "--id", sub1.id, "--profile", profile], state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      assert.deepEqual(decode(shown.stdout).subscription, sub1);
+      assert.deepEqual(record(decode(shown.stdout)).subscription, sub1);
 
       const counted = runSubscriptionCli(["entra", "subscription", "count", "--profile", profile], state, mode);
       assert.equal(counted.status, 0, counted.stdout);
-      assert.deepEqual(decode(counted.stdout).count, { returned: 2, complete: true });
+      assert.deepEqual(record(decode(counted.stdout)).count, { returned: 2, complete: true });
       assert.ok(!counted.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -426,9 +428,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runSubscriptionCli(["entra", "subscription", "list", "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
+      assert.match(text(output.error), /grant, role, licence or policy/);
       assert.equal(output.subscriptions, undefined);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -438,7 +440,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["subscription", "list"], ["--limit", "1"]],
     [["subscription", "show"], ["--id", sub1.id]],
     [["subscription", "count"], []],
-  ]) {
+  ] as const) {
     for (const preview of [false, true]) {
       test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
         const state = setupProfiles();
@@ -466,15 +468,15 @@ test("truncated subscription text carries a --full hint without lifting caps", a
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const partial = await executeArgv(["entra", "subscription", "list", "--profile", "soc",
-      "--select", "id,skuPartNumber"], overrides);
-    const truncated = partial.subscriptions.find(row => row.id === sub2.id);
-    assert.match(truncated.skuPartNumber, /truncated, \d+ chars total/);
-    assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "subscription", "list", "--profile", "soc", "--full",
-      "--select", "id,skuPartNumber"], overrides);
-    assert.equal(full.subscriptions.find(row => row.id === sub2.id).skuPartNumber, longSkuPartNumber);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const partial = record(await executeArgv(["entra", "subscription", "list", "--profile", "soc",
+      "--select", "id,skuPartNumber"], overrides));
+    const truncated = records(partial.subscriptions).find(row => row.id === sub2.id);
+    assert.match(text(record(truncated).skuPartNumber), /truncated, \d+ chars total/);
+    assert.ok(strings(partial.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "subscription", "list", "--profile", "soc", "--full",
+      "--select", "id,skuPartNumber"], overrides));
+    assert.equal(record(records(full.subscriptions).find(row => row.id === sub2.id)).skuPartNumber, longSkuPartNumber);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }

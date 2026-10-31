@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -65,12 +67,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: [string, ...CredentialArgs][]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push([mode, ...args]);
@@ -85,9 +87,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -95,7 +97,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -125,19 +127,19 @@ function lifecycleTransport() {
     }
     const policy = /^\/v1\.0\/groupLifecyclePolicies\/([^/]+)$/.exec(path);
     if (policy) {
-      const found = policies.find(row => row.id === decodeURIComponent(policy[1]));
+      const found = policies.find(row => row.id === decodeURIComponent(policy[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such policy" } });
     }
     const template = /^\/v1\.0\/groupSettingTemplates\/([^/]+)$/.exec(path);
     if (template) {
-      const found = templates.find(row => row.id === decodeURIComponent(template[1]));
+      const found = templates.find(row => row.id === decodeURIComponent(template[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such template" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: [string, ...CredentialArgs][] = []) {
   const fixture = handler ?? lifecycleTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -145,13 +147,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runLifecycleCli(args, state, mode, denied = false) {
+function runLifecycleCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-group-lifecycle-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -165,13 +167,13 @@ function runLifecycleCli(args, state, mode, denied = false) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists lifecycle policies with compact rows preserving null and missing`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile,
-        "--select", "id,groupLifetimeInDays,managedGroupTypes,alternateNotificationEmails"], overrides);
+      const result = record(await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile,
+        "--select", "id,groupLifetimeInDays,managedGroupTypes,alternateNotificationEmails"], overrides));
       assert.deepEqual(result.groupLifecyclePolicies, [
         { id: policy1.id, groupLifetimeInDays: 180, managedGroupTypes: "Selected", alternateNotificationEmails: "admin@contoso.com" },
         { id: policy2.id, groupLifetimeInDays: 365, managedGroupTypes: "All", alternateNotificationEmails: longEmails.slice(0, 500) + `... (truncated, ${longEmails.length} chars total)` },
@@ -180,10 +182,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 lifecycle policies");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra group-lifecycle-policy show --id <policy-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra group-lifecycle-policy show --id <policy-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/groupLifecyclePolicies");
-      assert.ok(!new URL(requests[0].url).searchParams.has("$filter"));
+      assert.equal(requests[0]!.url, "https://graph.microsoft.com/v1.0/groupLifecyclePolicies");
+      assert.ok(!new URL(requests[0]!.url).searchParams.has("$filter"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(lifecycleScopes)));
     } finally {
@@ -195,12 +197,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile,
-        "--filter", "managedGroupTypes eq 'Selected'"], overrides);
-      assert.equal(result.groupLifecyclePolicies.length, 3);
-      const sent = new URL(requests[0].url).searchParams;
+      const result = record(await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile,
+        "--filter", "managedGroupTypes eq 'Selected'"], overrides));
+      assert.equal(records(result.groupLifecyclePolicies).length, 3);
+      const sent = new URL(requests[0]!.url).searchParams;
       assert.equal(sent.get("$filter"), "managedGroupTypes eq 'Selected'");
-      assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+      assert.equal(requests[0]!.headers.ConsistencyLevel, undefined);
     } finally {
       teardownProfiles(state);
     }
@@ -210,12 +212,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.groupLifecyclePolicies.map(row => row.id), [policy1.id]);
+      const first = record(await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.groupLifecyclePolicies).map(row => row.id), [policy1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.groupLifecyclePolicies.map(row => row.id), [policy2.id, policy3.id]);
+      const second = record(await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile, "--cursor", text(first.cursor)], overrides));
+      assert.deepEqual(records(second.groupLifecyclePolicies).map(row => row.id), [policy2.id, policy3.id]);
       assert.deepEqual(second.count, "2 lifecycle policies");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -228,11 +230,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group-lifecycle-policy", "show", "--id", policy1.id, "--profile", profile,
-        "--select", "id,alternateNotificationEmails,groupLifetimeInDays,managedGroupTypes"], overrides);
+      const result = record(await executeArgv(["entra", "group-lifecycle-policy", "show", "--id", policy1.id, "--profile", profile,
+        "--select", "id,alternateNotificationEmails,groupLifetimeInDays,managedGroupTypes"], overrides));
       assert.deepEqual(result.groupLifecyclePolicy, policy1);
       assert.equal(result.help, undefined);
-      const missing = await executeArgv(["entra", "group-lifecycle-policy", "show", "--id", policy3.id, "--profile", profile], overrides);
+      const missing = record(await executeArgv(["entra", "group-lifecycle-policy", "show", "--id", policy3.id, "--profile", profile], overrides));
       assert.deepEqual(missing.groupLifecyclePolicy, { id: policy3.id });
     } finally {
       teardownProfiles(state);
@@ -261,10 +263,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group-lifecycle-policy", "count", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "group-lifecycle-policy", "count", "--profile", profile], overrides));
       assert.deepEqual(result, { groupLifecyclePolicyCount: 3 });
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/groupLifecyclePolicies/$count");
+      assert.equal(requests[0]!.url, "https://graph.microsoft.com/v1.0/groupLifecyclePolicies/$count");
     } finally {
       teardownProfiles(state);
     }
@@ -274,8 +276,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group-setting-template", "list", "--profile", profile,
-        "--select", "id,displayName,description"], overrides);
+      const result = record(await executeArgv(["entra", "group-setting-template", "list", "--profile", profile,
+        "--select", "id,displayName,description"], overrides));
       assert.deepEqual(result.groupSettingTemplates, [
         { id: template1.id, displayName: "Group.Unified.Guest", description: "Settings for a specific Unified Group" },
         { id: template2.id, displayName: "Group.Unified", description: longDescription.slice(0, 500) + `... (truncated, ${longDescription.length} chars total)` },
@@ -284,10 +286,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 setting templates");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra group-setting-template show --id <template-id>")));
-      assert.ok(result.help.some(hint => hint.includes("--filter is unsupported") || hint.includes("offer no --filter")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra group-setting-template show --id <template-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("--filter is unsupported") || hint.includes("offer no --filter")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/groupSettingTemplates?"));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/groupSettingTemplates?"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(templateScopes)));
     } finally {
@@ -299,12 +301,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "group-setting-template", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.groupSettingTemplates.map(row => row.id), [template1.id]);
+      const first = record(await executeArgv(["entra", "group-setting-template", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.groupSettingTemplates).map(row => row.id), [template1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "group-setting-template", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.groupSettingTemplates.map(row => row.id), [template2.id, template3.id]);
+      const second = record(await executeArgv(["entra", "group-setting-template", "list", "--profile", profile, "--cursor", text(first.cursor)], overrides));
+      assert.deepEqual(records(second.groupSettingTemplates).map(row => row.id), [template2.id, template3.id]);
       assert.deepEqual(second.count, "2 setting templates");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -317,11 +319,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group-setting-template", "show", "--id", template1.id, "--profile", profile,
-        "--select", "id,deletedDateTime,displayName,description,values"], overrides);
+      const result = record(await executeArgv(["entra", "group-setting-template", "show", "--id", template1.id, "--profile", profile,
+        "--select", "id,deletedDateTime,displayName,description,values"], overrides));
       assert.deepEqual(result.groupSettingTemplate, template1);
       assert.equal(result.help, undefined);
-      const missing = await executeArgv(["entra", "group-setting-template", "show", "--id", template3.id, "--profile", profile], overrides);
+      const missing = record(await executeArgv(["entra", "group-setting-template", "show", "--id", template3.id, "--profile", profile], overrides));
       assert.deepEqual(missing.groupSettingTemplate, { id: template3.id });
     } finally {
       teardownProfiles(state);
@@ -350,10 +352,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "group-setting-template", "count", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "group-setting-template", "count", "--profile", profile], overrides));
       assert.deepEqual(result, { groupSettingTemplateCount: 3 });
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/groupSettingTemplates/$count");
+      assert.equal(requests[0]!.url, "https://graph.microsoft.com/v1.0/groupSettingTemplates/$count");
     } finally {
       teardownProfiles(state);
     }
@@ -364,18 +366,18 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const listed = await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile], overrides);
+      const listed = record(await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile], overrides));
       assert.deepEqual(listed.groupLifecyclePolicies, []);
       assert.deepEqual(listed.count, "0 lifecycle policies");
       assert.equal(listed.total, null);
       assert.equal(listed.complete, true);
-      assert.ok(listed.help.some(hint => hint.includes("0 lifecycle policies matched")));
-      const templated = await executeArgv(["entra", "group-setting-template", "list", "--profile", profile], overrides);
+      assert.ok(strings(listed.help).some(hint => hint.includes("0 lifecycle policies matched")));
+      const templated = record(await executeArgv(["entra", "group-setting-template", "list", "--profile", profile], overrides));
       assert.deepEqual(templated.groupSettingTemplates, []);
       assert.deepEqual(templated.count, "0 setting templates");
       assert.equal(templated.total, null);
       assert.equal(templated.complete, true);
-      assert.ok(templated.help.some(hint => hint.includes("0 setting templates matched")));
+      assert.ok(strings(templated.help).some(hint => hint.includes("0 setting templates matched")));
     } finally {
       teardownProfiles(state);
     }
@@ -386,13 +388,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { overrides } = overridesFor(mode);
       await assert.rejects(executeArgv(["entra", "group-lifecycle-policy", "show", "--id", "policy-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "group-setting-template", "show", "--id", "template-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -405,27 +407,27 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const { overrides } = overridesFor(mode, denied);
       await assert.rejects(executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("Directory.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("never diagnose role or licence solely from HTTP 403")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Directory.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose role or licence solely from HTTP 403")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "group-setting-template", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("GroupSettings.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Directory Readers or Global Reader are the least-privileged roles")));
-        assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("GroupSettings.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Directory Readers or Global Reader are the least-privileged roles")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "group-lifecycle-policy", "count", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("Directory.Read.All")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Directory.Read.All")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "group-setting-template", "count", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("GroupSettings.Read.All")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("GroupSettings.Read.All")));
+        return /grant, role, licence/.test(text(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -438,8 +440,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runLifecycleCli(["entra", "group-lifecycle-policy", "list", "--profile", profile], state, mode);
       assert.equal(listed.status, 0, listed.stdout);
       assert.equal(listed.stderr, "");
-      const listOut = decode(listed.stdout);
-      assert.deepEqual(listOut.groupLifecyclePolicies.map(row => row.id), [policy1.id, policy2.id]);
+      const listOut = record(decode(listed.stdout));
+      assert.deepEqual(records(listOut.groupLifecyclePolicies).map(row => row.id), [policy1.id, policy2.id]);
       assert.deepEqual(listOut.count, "2 lifecycle policies");
       assert.equal(listOut.total, null);
       assert.equal(listOut.complete, true);
@@ -447,28 +449,28 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 
       const shown = runLifecycleCli(["entra", "group-lifecycle-policy", "show", "--id", policy1.id, "--profile", profile], state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      assert.deepEqual(decode(shown.stdout).groupLifecyclePolicy, policy1);
+      assert.deepEqual(record(decode(shown.stdout)).groupLifecyclePolicy, policy1);
 
       const counted = runLifecycleCli(["entra", "group-lifecycle-policy", "count", "--profile", profile], state, mode);
       assert.equal(counted.status, 0, counted.stdout);
-      assert.deepEqual(decode(counted.stdout).groupLifecyclePolicyCount, 2);
+      assert.deepEqual(record(decode(counted.stdout)).groupLifecyclePolicyCount, 2);
       assert.ok(!counted.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const templated = runLifecycleCli(["entra", "group-setting-template", "list", "--profile", profile], state, mode);
       assert.equal(templated.status, 0, templated.stdout);
-      const templateOut = decode(templated.stdout);
-      assert.deepEqual(templateOut.groupSettingTemplates.map(row => row.id), [template1.id, template2.id]);
+      const templateOut = record(decode(templated.stdout));
+      assert.deepEqual(records(templateOut.groupSettingTemplates).map(row => row.id), [template1.id, template2.id]);
       assert.deepEqual(templateOut.count, "2 setting templates");
       assert.equal(templateOut.total, null);
       assert.equal(templateOut.complete, true);
 
       const templateShown = runLifecycleCli(["entra", "group-setting-template", "show", "--id", template1.id, "--profile", profile], state, mode);
       assert.equal(templateShown.status, 0, templateShown.stdout);
-      assert.deepEqual(decode(templateShown.stdout).groupSettingTemplate, template1);
+      assert.deepEqual(record(decode(templateShown.stdout)).groupSettingTemplate, template1);
 
       const templateCounted = runLifecycleCli(["entra", "group-setting-template", "count", "--profile", profile], state, mode);
       assert.equal(templateCounted.status, 0, templateCounted.stdout);
-      assert.deepEqual(decode(templateCounted.stdout).groupSettingTemplateCount, 2);
+      assert.deepEqual(record(decode(templateCounted.stdout)).groupSettingTemplateCount, 2);
     } finally { teardownProfiles(state); }
   });
 
@@ -478,9 +480,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runLifecycleCli(["entra", "group-lifecycle-policy", "list", "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
+      assert.match(text(output.error), /grant, role, licence or policy/);
       assert.equal(output.groupLifecyclePolicies, undefined);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -493,7 +495,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["group-setting-template", "list"], ["--limit", "1"]],
     [["group-setting-template", "show"], ["--id", template1.id]],
     [["group-setting-template", "count"], []],
-  ]) {
+  ] as const) {
     for (const preview of [false, true]) {
       test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
         const state = setupProfiles();
@@ -521,15 +523,15 @@ test("truncated lifecycle text carries a --full hint without lifting caps", asyn
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const partial = await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", "soc",
-      "--select", "id,alternateNotificationEmails"], overrides);
-    const truncated = partial.groupLifecyclePolicies.find(row => row.id === policy2.id);
-    assert.match(truncated.alternateNotificationEmails, /truncated, \d+ chars total/);
-    assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", "soc", "--full",
-      "--select", "id,alternateNotificationEmails"], overrides);
-    assert.equal(full.groupLifecyclePolicies.find(row => row.id === policy2.id).alternateNotificationEmails, longEmails);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const partial = record(await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", "soc",
+      "--select", "id,alternateNotificationEmails"], overrides));
+    const truncated = records(partial.groupLifecyclePolicies).find(row => row.id === policy2.id);
+    assert.match(text(record(truncated).alternateNotificationEmails), /truncated, \d+ chars total/);
+    assert.ok(strings(partial.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", "soc", "--full",
+      "--select", "id,alternateNotificationEmails"], overrides));
+    assert.equal(record(records(full.groupLifecyclePolicies).find(row => row.id === policy2.id)).alternateNotificationEmails, longEmails);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -540,14 +542,14 @@ test("application mode rejects delegated scopes before HTTP", async () => {
   try {
     const { requests, overrides } = overridesFor("application");
     await assert.rejects(
-      executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", "batch", "--scopes", lifecycleScopes[0]], overrides),
+      executeArgv(["entra", "group-lifecycle-policy", "list", "--profile", "batch", "--scopes", lifecycleScopes[0]!], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Graph \.default audience/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Graph \.default audience/.test(text(record(error).message));
       },
     );
     await assert.rejects(
-      executeArgv(["entra", "group-setting-template", "count", "--profile", "batch", "--scopes", templateScopes[0]], overrides),
+      executeArgv(["entra", "group-setting-template", "count", "--profile", "batch", "--scopes", templateScopes[0]!], overrides),
       { code: "VALIDATION_ERROR" },
     );
     assert.equal(requests.length, 0);
@@ -577,13 +579,13 @@ test("malformed group lifecycle count bodies fail as unknown, not zero", async (
       const malformed = transport(() => ({ status: 200, headers: {}, body }));
       const scoped = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "group-lifecycle-policy", "count", "--profile", "soc"], scoped.overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /malformed lifecycle-policy count|non-JSON success body/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /malformed lifecycle-policy count|non-JSON success body/.test(text(record(error).message));
       });
       const templated = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "group-setting-template", "count", "--profile", "soc"], templated.overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /malformed setting-template count|non-JSON success body/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /malformed setting-template count|non-JSON success body/.test(text(record(error).message));
       });
     }
   } finally {

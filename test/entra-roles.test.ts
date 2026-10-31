@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -130,12 +132,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -150,9 +152,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -160,7 +162,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -178,22 +180,22 @@ function roleTransport(denied = false) {
     }
     const single = /^\/v1\.0\/directoryRoles\/([^/]+)$/.exec(path);
     if (single) {
-      const found = roles.find(role => role.id === decodeURIComponent(single[1]));
+      const found = roles.find(role => role.id === decodeURIComponent(single[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such role" } });
     }
     if (path === "/v1.0/roleManagement/directory/roleAssignments") {
-      assert.ok(!url.searchParams.get("$select")?.split(",").includes("createdDateTime"));
+      assert.ok(!url.searchParams.get("$select")?.split(",")!.includes("createdDateTime"));
       return json(200, { value: assignments });
     }
     if (path === "/v1.0/roleManagement/directory/roleEligibilityScheduleInstances") {
-      assert.ok(!url.searchParams.get("$select")?.split(",").includes("assignmentType"));
+      assert.ok(!url.searchParams.get("$select")?.split(",")!.includes("assignmentType"));
       return json(200, { value: eligible });
     }
     if (path === "/v1.0/roleManagement/directory/roleAssignmentScheduleInstances") return json(200, { value: active });
     if (path === "/v1.0/directoryRoleTemplates") return json(200, { value: templates });
     const templateSingle = /^\/v1\.0\/directoryRoleTemplates\/([^/]+)$/.exec(path);
     if (templateSingle) {
-      const found = templates.find(template => template.id === decodeURIComponent(templateSingle[1]));
+      const found = templates.find(template => template.id === decodeURIComponent(templateSingle[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such template" } });
     }
     if (/^\/v1\.0\/directoryRoles\/[^/]+\/members$/.test(path)) {
@@ -203,20 +205,20 @@ function roleTransport(denied = false) {
     if (/^\/v1\.0\/directoryRoles\/[^/]+\/scopedMembers$/.test(path)) return json(200, { value: scoped });
     const scopedSingle = /^\/v1\.0\/directoryRoles\/[^/]+\/scopedMembers\/([^/]+)$/.exec(path);
     if (scopedSingle) {
-      const found = scoped.find(row => row.id === decodeURIComponent(scopedSingle[1]));
+      const found = scoped.find(row => row.id === decodeURIComponent(scopedSingle[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such scoped member" } });
     }
     if (path === "/v1.0/scopedRoleMemberships") return json(200, { value: memberships });
     const membershipSingle = /^\/v1\.0\/scopedRoleMemberships\/([^/]+)$/.exec(path);
     if (membershipSingle) {
-      const found = memberships.find(row => row.id === decodeURIComponent(membershipSingle[1]));
+      const found = memberships.find(row => row.id === decodeURIComponent(membershipSingle[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such membership" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: CredentialArgs[] = []) {
   const fixture = handler ?? roleTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -224,13 +226,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runRolesCli(args, state, mode, scopes) {
+function runRolesCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, scopes?: string) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-roles-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -244,12 +246,12 @@ function runRolesCli(args, state, mode, scopes) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists activated directory roles with compact rows preserving null and missing`, async () => {
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "directory-role", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "directory-role", "list", "--profile", profile], overrides));
       assert.deepEqual(result.directoryRoles, [
         { id: r1.id, displayName: "Global Administrator", description: r1.description, roleTemplateId: r1.roleTemplateId },
         { id: r2.id, displayName: "Helpdesk Administrator",
@@ -260,10 +262,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 directory roles");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("activated roles only")));
-      assert.ok(result.help.some(hint => hint.includes("entra directory-role show --id <role-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("activated roles only")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra directory-role show --id <role-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/directoryRoles?"));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/directoryRoles?"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
     } finally {
       teardownProfiles(state);
@@ -274,7 +276,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "directory-role", "show", "--id", r1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "directory-role", "show", "--id", r1.id, "--profile", profile], overrides));
       assert.deepEqual(result.directoryRole, r1);
       assert.equal(result.help, undefined);
     } finally {
@@ -292,7 +294,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         directoryScopeId: vActivated.directoryScopeId,
         appScopeId: vActivated.appScopeId,
       }] })));
-      const result = await executeArgv(["entra", "role-assignment", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "role-assignment", "list", "--profile", profile], overrides));
       assert.deepEqual(result.roleAssignments, [
         { id: a1.id, principalId: a1.principalId, roleDefinitionId: a1.roleDefinitionId, directoryScopeId: "/" },
         { id: vActivated.id, principalId: vActivated.principalId, roleDefinitionId: vActivated.roleDefinitionId, directoryScopeId: "/" },
@@ -300,9 +302,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "2 role assignments");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("pim active list for assignmentType Assigned versus Activated")));
-      assert.ok(result.help.some(hint => hint.includes("roleTemplateId")));
-      assert.ok(new URL(requests[0].url).pathname.endsWith("/roleManagement/directory/roleAssignments"));
+      assert.ok(strings(result.help).some(hint => hint.includes("pim active list for assignmentType Assigned versus Activated")));
+      assert.ok(strings(result.help).some(hint => hint.includes("roleTemplateId")));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith("/roleManagement/directory/roleAssignments"));
     } finally {
       teardownProfiles(state);
     }
@@ -312,15 +314,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "pim", "eligible", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "pim", "eligible", "list", "--profile", profile], overrides));
       assert.deepEqual(result.eligibleAssignments, [
         { id: e1.id, principalId: e1.principalId, roleDefinitionId: e1.roleDefinitionId, memberType: "Direct" },
       ]);
       assert.deepEqual(result.count, "1 eligible assignments");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(new URL(requests[0].url).pathname.endsWith("/roleManagement/directory/roleEligibilityScheduleInstances"));
-      assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,principalId,roleDefinitionId,memberType");
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith("/roleManagement/directory/roleEligibilityScheduleInstances"));
+      assert.equal(new URL(requests[0]!.url).searchParams.get("$select"), "id,principalId,roleDefinitionId,memberType");
     } finally {
       teardownProfiles(state);
     }
@@ -330,7 +332,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "pim", "active", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "pim", "active", "list", "--profile", profile], overrides));
       assert.deepEqual(result.activeAssignments, [
         { id: vAssigned.id, principalId: vAssigned.principalId, roleDefinitionId: vAssigned.roleDefinitionId, assignmentType: "Assigned", memberType: "Direct" },
         { id: vActivated.id, principalId: vActivated.principalId, roleDefinitionId: vActivated.roleDefinitionId, assignmentType: "Activated", memberType: "Direct" },
@@ -338,8 +340,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "2 active assignments");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("assignmentType Activated")));
-      assert.ok(new URL(requests[0].url).pathname.endsWith("/roleManagement/directory/roleAssignmentScheduleInstances"));
+      assert.ok(strings(result.help).some(hint => hint.includes("assignmentType Activated")));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith("/roleManagement/directory/roleAssignmentScheduleInstances"));
     } finally {
       teardownProfiles(state);
     }
@@ -349,14 +351,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "directory-role-template", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "directory-role-template", "list", "--profile", profile], overrides));
       assert.deepEqual(result.directoryRoleTemplates, [t1, t2]);
       assert.deepEqual(result.count, "2 directory-role templates");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("activation state lives on directoryRoles")));
-      assert.ok(result.help.some(hint => hint.includes("entra directory-role-template show --id <template-id>")));
-      assert.ok(new URL(requests[0].url).pathname.endsWith("/directoryRoleTemplates"));
+      assert.ok(strings(result.help).some(hint => hint.includes("activation state lives on directoryRoles")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra directory-role-template show --id <template-id>")));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith("/directoryRoleTemplates"));
     } finally {
       teardownProfiles(state);
     }
@@ -366,7 +368,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "directory-role-template", "show", "--id", t1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "directory-role-template", "show", "--id", t1.id, "--profile", profile], overrides));
       assert.deepEqual(result.directoryRoleTemplate, t1);
       assert.equal(result.help, undefined);
     } finally {
@@ -378,7 +380,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "directory-role", "member", "list", "--role", r1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "directory-role", "member", "list", "--role", r1.id, "--profile", profile], overrides));
       assert.deepEqual(result.roleMembers, [
         { "@odata.type": "#microsoft.graph.user", id: m1.id, displayName: "Adele Vance" },
         { "@odata.type": "#microsoft.graph.group", id: m2.id, displayName: "Ops Admins" },
@@ -386,8 +388,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "2 role members");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("@odata.type names each member kind")));
-      const url = new URL(requests[0].url);
+      assert.ok(strings(result.help).some(hint => hint.includes("@odata.type names each member kind")));
+      const url = new URL(requests[0]!.url);
       assert.equal(url.pathname, `/v1.0/directoryRoles/${r1.id}/members`);
       assert.equal(url.searchParams.get("$select"), "id,displayName");
     } finally {
@@ -399,14 +401,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "directory-role", "scoped-member", "list", "--role", r1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "directory-role", "scoped-member", "list", "--role", r1.id, "--profile", profile], overrides));
       assert.deepEqual(result.scopedMembers, [
         { id: s1.id, roleMemberInfo: s1.roleMemberInfo, roleId: s1.roleId, administrativeUnitId: s1.administrativeUnitId },
       ]);
       assert.deepEqual(result.count, "1 scoped members");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(new URL(requests[0].url).pathname.endsWith(`/directoryRoles/${r1.id}/scopedMembers`));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith(`/directoryRoles/${r1.id}/scopedMembers`));
     } finally {
       teardownProfiles(state);
     }
@@ -416,8 +418,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "directory-role", "scoped-member", "show",
-        "--role", r1.id, "--id", s1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "directory-role", "scoped-member", "show",
+        "--role", r1.id, "--id", s1.id, "--profile", profile], overrides));
       assert.deepEqual(result.scopedMember, s1);
       assert.equal(result.help, undefined);
     } finally {
@@ -453,8 +455,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       await assert.rejects(
         executeArgv(["entra", "directory-role", "member", "list", "--role", r1.id, "--profile", profile], overrides),
         error => {
-          assert.equal(error.code, "GRAPH_ERROR");
-          const text = [error.message, ...error.suggestions].join("\n");
+          assert.equal(record(error).code, "GRAPH_ERROR");
+          const text = [record(error).message, ...strings(record(error).suggestions)].join("\n");
           assert.match(text, /RoleManagement\.Read\.Directory/);
           assert.match(text, /Privileged Role Administrator/);
           return true;
@@ -474,7 +476,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.error, undefined);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.directoryRoleTemplates, [t1, t2]);
       assert.deepEqual(output.count, "2 directory-role templates");
       assert.equal(output.total, null);
@@ -492,8 +494,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.error, undefined);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
-      assert.equal(output.roleMembers.length, 2);
+      const output = record(decode(result.stdout));
+      assert.equal(records(output.roleMembers).length, 2);
       assert.deepEqual(output.count, "2 role members");
       assert.equal(output.total, null);
     } finally {
@@ -507,8 +509,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       await assert.rejects(
         executeArgv(["entra", "pim", "active", "list", "--profile", profile], overrides),
         error => {
-          assert.equal(error.code, "GRAPH_ERROR");
-          const text = [error.message, ...error.suggestions].join("\n");
+          assert.equal(record(error).code, "GRAPH_ERROR");
+          const text = [record(error).message, ...strings(record(error).suggestions)].join("\n");
           assert.match(text, /RoleAssignmentSchedule\.Read\.Directory/);
           assert.match(text, /Privileged Role Administrator/);
           assert.match(text, /P2 or ID Governance/);
@@ -529,8 +531,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.error, undefined);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
-      assert.equal(output.activeAssignments.length, 2);
+      const output = record(decode(result.stdout));
+      assert.equal(records(output.activeAssignments).length, 2);
       assert.deepEqual(output.count, "2 active assignments");
       assert.equal(output.total, null);
     } finally {
@@ -547,7 +549,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.error, undefined);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.eligibleAssignments, [
         { id: e1.id, principalId: e1.principalId, roleDefinitionId: e1.roleDefinitionId, memberType: "Direct" },
       ]);
@@ -563,7 +565,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["entra", "role-assignment", "list"], "createdDateTime"],
     [["entra", "directory-role-template", "list"], "owner"],
     [["entra", "scoped-role-membership", "list"], "owner"],
-  ]) {
+  ] as const) {
     for (const flag of ["select", "fields"]) {
       test(`${mode} ${command.join(" ")} rejects ${property} in --${flag} before credentials`, async () => {
         const state = setupProfiles();
@@ -572,8 +574,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           await assert.rejects(
             executeArgv([...command, "--profile", profile, `--${flag}`, `id,${property}`], overrides),
             error => {
-              assert.equal(error.code, "VALIDATION_ERROR");
-              assert.equal(error.message, `Unknown property ${property} in --${flag}`);
+              assert.equal(record(error).code, "VALIDATION_ERROR");
+              assert.equal(record(error).message, `Unknown property ${property} in --${flag}`);
               return true;
             },
           );
@@ -591,13 +593,13 @@ test("delegated role reads truncate long descriptions with a --full hint", async
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "directory-role", "list", "--profile", "soc"], overrides);
-    const helpdesk = result.directoryRoles.find(row => row.id === r2.id);
-    assert.match(helpdesk.description, /truncated, \d+ chars total/);
-    assert.ok(result.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "directory-role", "list", "--profile", "soc", "--full"], overrides);
-    assert.equal(full.directoryRoles.find(row => row.id === r2.id).description, r2.description);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const result = record(await executeArgv(["entra", "directory-role", "list", "--profile", "soc"], overrides));
+    const helpdesk = records(result.directoryRoles).find(row => row.id === r2.id);
+    assert.match(text(record(helpdesk).description), /truncated, \d+ chars total/);
+    assert.ok(strings(result.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "directory-role", "list", "--profile", "soc", "--full"], overrides));
+    assert.equal(record(records(full.directoryRoles).find(row => row.id === r2.id)).description, r2.description);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -607,13 +609,13 @@ test("delegated role filters pass through as plain $filter", async () => {
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "role-assignment", "list", "--profile", "soc",
-      "--filter", "principalId eq 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'"], overrides);
-    assert.equal(result.roleAssignments.length, 1);
-    const url = new URL(requests[0].url);
+    const result = record(await executeArgv(["entra", "role-assignment", "list", "--profile", "soc",
+      "--filter", "principalId eq 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'"], overrides));
+    assert.equal(records(result.roleAssignments).length, 1);
+    const url = new URL(requests[0]!.url);
     assert.equal(url.searchParams.get("$filter"), "principalId eq 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'");
     assert.equal(url.searchParams.has("$count"), false);
-    assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+    assert.equal(requests[0]!.headers.ConsistencyLevel, undefined);
   } finally {
     teardownProfiles(state);
   }
@@ -623,13 +625,13 @@ test("delegated role reads resume a capped list through its opaque cursor", asyn
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "directory-role", "list", "--profile", "soc", "--limit", "2"], overrides);
-    assert.equal(first.directoryRoles.length, 2);
+    const first = record(await executeArgv(["entra", "directory-role", "list", "--profile", "soc", "--limit", "2"], overrides));
+    assert.equal(records(first.directoryRoles).length, 2);
     assert.deepEqual(first.count, "2 directory roles shown, more available");
     assert.equal(first.total, null);
     assert.equal(first.complete, false);
     assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
-    const second = await executeArgv(["entra", "directory-role", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
+    const second = record(await executeArgv(["entra", "directory-role", "list", "--profile", "soc", "--cursor", first.cursor], overrides));
     assert.deepEqual(second.directoryRoles, [{ id: r3.id, displayName: "Directory Readers" }]);
     assert.deepEqual(second.count, "1 directory roles");
     assert.equal(second.total, null);
@@ -659,8 +661,8 @@ test("delegated role member lists reject a missing parent role before credential
     await assert.rejects(
       executeArgv(["entra", "directory-role", "member", "list", "--profile", "soc"], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        assert.match(error.message, /--role is required/);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        assert.match(text(record(error).message), /--role is required/);
         return true;
       },
     );

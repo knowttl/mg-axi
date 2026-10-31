@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -68,12 +70,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -88,9 +90,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -98,7 +100,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -116,7 +118,7 @@ function authTransport(denied = false) {
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: CredentialArgs[] = []) {
   const fixture = handler ?? authTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -124,13 +126,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runAuthCli(args, state, mode, scopes) {
+function runAuthCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, scopes?: string) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-auth-methods-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -144,12 +146,12 @@ function runAuthCli(args, state, mode, scopes) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists one user's methods with compact rows naming the method kind`, async () => {
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "user", "authentication-method", "list", "--user", userId, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "user", "authentication-method", "list", "--user", userId, "--profile", profile], overrides));
       assert.deepEqual(result.authenticationMethods, [
         { id: m1.id, displayName: "Mobile phone", createdDateTime: m1.createdDateTime, "@odata.type": m1["@odata.type"] },
         { id: m2.id, displayName: `${m2.displayName.slice(0, 500)}... (truncated, ${m2.displayName.length} chars total)`,
@@ -159,10 +161,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 authentication methods");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("never a scan across users")));
-      assert.ok(result.help.some(hint => hint.includes("entra registration list")));
+      assert.ok(strings(result.help).some(hint => hint.includes("never a scan across users")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra registration list")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      const url = new URL(requests[0].url);
+      const url = new URL(requests[0]!.url);
       assert.ok(url.pathname.endsWith(`/users/${userId}/authentication/methods`));
       assert.equal(url.searchParams.has("$select"), false);
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
@@ -175,19 +177,19 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "user", "authentication-method", "list",
-        "--user", userId, "--profile", profile, "--select", "id,displayName,phoneNumber,phoneType", "--limit", "2"], overrides);
-      assert.equal(first.authenticationMethods.length, 2);
-      assert.equal(first.authenticationMethods[0].phoneNumber, "***redacted***");
-      assert.equal(first.authenticationMethods[0].phoneType, "mobile");
+      const first = record(await executeArgv(["entra", "user", "authentication-method", "list",
+        "--user", userId, "--profile", profile, "--select", "id,displayName,phoneNumber,phoneType", "--limit", "2"], overrides));
+      assert.equal(records(first.authenticationMethods).length, 2);
+      assert.equal(record(records(first.authenticationMethods)[0]).phoneNumber, "***redacted***");
+      assert.equal(record(records(first.authenticationMethods)[0]).phoneType, "mobile");
       assert.deepEqual(first.count, "2 authentication methods shown, more available");
       assert.equal(first.total, null);
       assert.equal(first.complete, false);
       assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
       assert.ok(!JSON.stringify(first).includes("+1 5550100"));
-      assert.equal(new URL(requests[0].url).searchParams.has("$select"), false);
-      const second = await executeArgv(["entra", "user", "authentication-method", "list",
-        "--user", userId, "--profile", profile, "--cursor", first.cursor], overrides);
+      assert.equal(new URL(requests[0]!.url).searchParams.has("$select"), false);
+      const second = record(await executeArgv(["entra", "user", "authentication-method", "list",
+        "--user", userId, "--profile", profile, "--cursor", first.cursor], overrides));
       assert.ok(!JSON.stringify(second).includes("+1 5550100"));
       assert.deepEqual(second.count, "1 authentication methods");
       assert.equal(second.total, null);
@@ -210,10 +212,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           : json(200, { value: [m1], "@odata.nextLink": `${path}?$skiptoken=next&$select=id,emailAddress` });
       });
       const { requests, overrides } = overridesFor(mode, fixture);
-      const first = await executeArgv(["entra", "user", "authentication-method", "list",
-        "--user", userId, "--profile", profile, "--select", "id,emailAddress", "--limit", "1"], overrides);
-      const second = await executeArgv(["entra", "user", "authentication-method", "list",
-        "--user", userId, "--profile", profile, "--cursor", first.cursor], overrides);
+      const first = record(await executeArgv(["entra", "user", "authentication-method", "list",
+        "--user", userId, "--profile", profile, "--select", "id,emailAddress", "--limit", "1"], overrides));
+      const second = record(await executeArgv(["entra", "user", "authentication-method", "list",
+        "--user", userId, "--profile", profile, "--cursor", text(first.cursor)], overrides));
       assert.equal(requests.length, 2);
       assert.deepEqual(second.authenticationMethods, [{ id: m3.id, emailAddress: m3.emailAddress, "@odata.type": m3["@odata.type"] }]);
       assert.deepEqual(second.count, "1 authentication methods");
@@ -230,7 +232,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { requests, calls, overrides } = overridesFor(mode);
       await assert.rejects(executeArgv(["entra", "user", "authentication-method", "list",
         "--user", userId, "--profile", profile, "--filter", "phoneType eq 'mobile'"], overrides),
-      error => error.code === "VALIDATION_ERROR");
+      error => record(error).code === "VALIDATION_ERROR");
       assert.equal(calls.length, 0);
       assert.equal(requests.length, 0);
     } finally {
@@ -242,7 +244,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "registration", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "registration", "list", "--profile", profile], overrides));
       assert.deepEqual(result.registrationDetails, [
         { id: d1.id, userPrincipalName: d1.userPrincipalName, userDisplayName: d1.userDisplayName, isMfaRegistered: true },
         { id: d2.id, userPrincipalName: d2.userPrincipalName },
@@ -250,9 +252,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "2 registration rows");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("does not cover disabled users")));
-      assert.ok(result.help.some(hint => hint.includes("not proof of no MFA")));
-      const url = new URL(requests[0].url);
+      assert.ok(strings(result.help).some(hint => hint.includes("does not cover disabled users")));
+      assert.ok(strings(result.help).some(hint => hint.includes("not proof of no MFA")));
+      const url = new URL(requests[0]!.url);
       assert.equal(url.pathname, "/v1.0/reports/authenticationMethods/userRegistrationDetails");
       assert.equal(url.searchParams.get("$select"), "id,userPrincipalName,userDisplayName,isMfaRegistered");
     } finally {
@@ -267,8 +269,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       await assert.rejects(
         executeArgv(["entra", "user", "authentication-method", "list", "--user", userId, "--profile", profile], overrides),
         error => {
-          assert.equal(error.code, "GRAPH_ERROR");
-          const text = [error.message, ...error.suggestions].join("\n");
+          assert.equal(record(error).code, "GRAPH_ERROR");
+          const text = [record(error).message, ...strings(record(error).suggestions)].join("\n");
           assert.match(text, /UserAuthenticationMethod\.Read\.All/);
           assert.match(text, /Authentication Administrator/);
           return true;
@@ -286,8 +288,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       await assert.rejects(
         executeArgv(["entra", "registration", "list", "--profile", profile], overrides),
         error => {
-          assert.equal(error.code, "GRAPH_ERROR");
-          const text = [error.message, ...error.suggestions].join("\n");
+          assert.equal(record(error).code, "GRAPH_ERROR");
+          const text = [record(error).message, ...strings(record(error).suggestions)].join("\n");
           assert.match(text, /AuditLog\.Read\.All/);
           assert.match(text, /Reports Reader/);
           return true;
@@ -307,8 +309,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.error, undefined);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
-      assert.equal(output.authenticationMethods.length, 3);
+      const output = record(decode(result.stdout));
+      assert.equal(records(output.authenticationMethods).length, 3);
       assert.deepEqual(output.count, "3 authentication methods");
       assert.equal(output.total, null);
       assert.equal(output.complete, true);
@@ -327,7 +329,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.error, undefined);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.registrationDetails, [
         { id: d1.id, userPrincipalName: d1.userPrincipalName, userDisplayName: d1.userDisplayName, isMfaRegistered: true },
         { id: d2.id, userPrincipalName: d2.userPrincipalName },
@@ -344,7 +346,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
   for (const [command, property] of [
     [["entra", "user", "authentication-method", "list", "--user", userId], "aaGuid"],
     [["entra", "registration", "list"], "methodsRegistered"],
-  ]) {
+  ] as const) {
     for (const flag of ["select", "fields"]) {
       test(`${mode} ${command.join(" ")} rejects ${property} in --${flag} before credentials`, async () => {
         const state = setupProfiles();
@@ -353,8 +355,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           await assert.rejects(
             executeArgv([...command, "--profile", profile, `--${flag}`, `id,${property}`], overrides),
             error => {
-              assert.equal(error.code, "VALIDATION_ERROR");
-              assert.equal(error.message, `Unknown property ${property} in --${flag}`);
+              assert.equal(record(error).code, "VALIDATION_ERROR");
+              assert.equal(record(error).message, `Unknown property ${property} in --${flag}`);
               return true;
             },
           );
@@ -372,13 +374,13 @@ test("delegated method reads truncate long display names with a --full hint", as
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "user", "authentication-method", "list", "--user", userId, "--profile", "soc"], overrides);
-    const key = result.authenticationMethods.find(row => row.id === m2.id);
-    assert.match(key.displayName, /truncated, \d+ chars total/);
-    assert.ok(result.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "user", "authentication-method", "list", "--user", userId, "--profile", "soc", "--full"], overrides);
-    assert.equal(full.authenticationMethods.find(row => row.id === m2.id).displayName, m2.displayName);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const result = record(await executeArgv(["entra", "user", "authentication-method", "list", "--user", userId, "--profile", "soc"], overrides));
+    const key = records(result.authenticationMethods).find(row => row.id === m2.id);
+    assert.match(text(record(key).displayName), /truncated, \d+ chars total/);
+    assert.ok(strings(result.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "user", "authentication-method", "list", "--user", userId, "--profile", "soc", "--full"], overrides));
+    assert.equal(record(records(full.authenticationMethods).find(row => row.id === m2.id)).displayName, m2.displayName);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -388,13 +390,13 @@ test("delegated registration filters pass through as plain $filter", async () =>
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "registration", "list", "--profile", "soc",
-      "--filter", "isMfaRegistered eq false"], overrides);
-    assert.equal(result.registrationDetails.length, 2);
-    const url = new URL(requests[0].url);
+    const result = record(await executeArgv(["entra", "registration", "list", "--profile", "soc",
+      "--filter", "isMfaRegistered eq false"], overrides));
+    assert.equal(records(result.registrationDetails).length, 2);
+    const url = new URL(requests[0]!.url);
     assert.equal(url.searchParams.get("$filter"), "isMfaRegistered eq false");
     assert.equal(url.searchParams.has("$count"), false);
-    assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+    assert.equal(requests[0]!.headers.ConsistencyLevel, undefined);
   } finally {
     teardownProfiles(state);
   }
@@ -419,18 +421,18 @@ test("delegated registration reads resume a capped list through its opaque curso
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "registration", "list", "--profile", "soc", "--limit", "1"], overrides);
-    assert.equal(first.registrationDetails.length, 1);
+    const first = record(await executeArgv(["entra", "registration", "list", "--profile", "soc", "--limit", "1"], overrides));
+    assert.equal(records(first.registrationDetails).length, 1);
     assert.deepEqual(first.count, "1 registration rows shown, more available");
     assert.equal(first.total, null);
     assert.equal(first.complete, false);
     assert.ok(typeof first.cursor === "string" && first.cursor.length > 0);
-    const second = await executeArgv(["entra", "registration", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
+    const second = record(await executeArgv(["entra", "registration", "list", "--profile", "soc", "--cursor", first.cursor], overrides));
     assert.deepEqual(second.registrationDetails, [{ id: d2.id, userPrincipalName: d2.userPrincipalName }]);
     assert.deepEqual(second.count, "1 registration rows");
     assert.equal(second.total, null);
     assert.equal(second.complete, true);
-    assert.ok(second.help.some(hint => hint.includes("does not cover disabled users")));
+    assert.ok(strings(second.help).some(hint => hint.includes("does not cover disabled users")));
   } finally {
     teardownProfiles(state);
   }

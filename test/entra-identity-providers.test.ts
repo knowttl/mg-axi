@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, delegatedProvider, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler, type RawResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -42,12 +44,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -62,9 +64,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -72,11 +74,11 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function providerTransport({ denied = false, countBody = "3", countStatus = 200, typesBody = { value: ["Google", "Facebook"] } } = {}) {
+function providerTransport({ denied = false, countBody = "3", countStatus = 200, typesBody = { value: ["Google", "Facebook"] } }: { denied?: boolean; countBody?: string; countStatus?: number; typesBody?: unknown } = {}) {
   return transport(request => {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -94,32 +96,32 @@ function providerTransport({ denied = false, countBody = "3", countStatus = 200,
     }
     const single = /^\/v1\.0\/identity\/identityProviders\/([^/]+)$/.exec(path);
     if (single) {
-      const found = providers.find(row => row.id === decodeURIComponent(single[1]));
+      const found = providers.find(row => row.id === decodeURIComponent(single[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such provider" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, fixture, calls = []) {
+function overridesFor(mode: string, fixture?: TransportFixture, calls: CredentialArgs[] = []) {
   const credential = credentialService(mode, calls);
   return {
-    requests: fixture.requests,
+    requests: fixture!.requests,
     calls,
     overrides: {
-      transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      transport: fixture!.send,
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists providers with compact rows, kinds and a count aggregate`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode, providerTransport());
-      const result = await executeArgv(["entra", "identity-provider", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "identity-provider", "list", "--profile", profile], overrides));
       assert.deepEqual(result.identityProviders, [
         { id: google.id, displayName: "Google", "@odata.type": "#microsoft.graph.socialIdentityProvider" },
         { id: facebook.id, displayName: "Facebook", "@odata.type": "#microsoft.graph.socialIdentityProvider" },
@@ -128,13 +130,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 identity providers");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra identity-provider show --id <provider-id>")));
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra identity-provider show --id <provider-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
       assert.ok(!JSON.stringify(result).includes("must-never-surface"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identity/identityProviders?"));
-      if (mode === "delegated") assert.deepEqual(calls[0][1], providerScopes);
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/identity/identityProviders?"));
+      if (mode === "delegated") assert.deepEqual(calls[0]![1], providerScopes);
     } finally {
       teardownProfiles(state);
     }
@@ -144,15 +146,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode, providerTransport());
-      const result = await executeArgv(["entra", "identity-provider", "available-types", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "identity-provider", "available-types", "--profile", profile], overrides));
       assert.deepEqual(result.availableProviderTypes, ["Google", "Facebook"]);
       assert.deepEqual(result.count, { returned: 2, complete: true });
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/identity/identityProviders/availableProviderTypes()");
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
-      assert.ok(result.help.some(hint => hint.includes("licensing")));
+      assert.equal(requests[0]!.url, "https://graph.microsoft.com/v1.0/identity/identityProviders/availableProviderTypes()");
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
+      assert.ok(strings(result.help).some(hint => hint.includes("licensing")));
       assert.equal(calls.length, 1);
-      if (mode === "delegated") assert.deepEqual(calls[0][1], providerScopes);
+      if (mode === "delegated") assert.deepEqual(calls[0]![1], providerScopes);
     } finally {
       teardownProfiles(state);
     }
@@ -162,7 +164,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode, providerTransport({ typesBody: { value: [] } }));
-      const result = await executeArgv(["entra", "identity-provider", "available-types", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "identity-provider", "available-types", "--profile", profile], overrides));
       assert.deepEqual(result.availableProviderTypes, []);
       assert.deepEqual(result.count, { returned: 0, complete: true });
     } finally {
@@ -174,16 +176,16 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode, providerTransport());
-      const first = await executeArgv(["entra", "identity-provider", "list", "--profile", profile, "--limit", "2"], overrides);
-      assert.equal(first.identityProviders.length, 2);
+      const first = record(await executeArgv(["entra", "identity-provider", "list", "--profile", profile, "--limit", "2"], overrides));
+      assert.equal(records(first.identityProviders).length, 2);
       assert.deepEqual(first.count, "2 identity providers shown, more available");
       assert.equal(first.total, null);
       assert.equal(first.complete, false);
       assert.equal(first.reason, "row limit reached; buffered remainder is preserved in the cursor");
       assert.equal(typeof first.cursor, "string");
       const { overrides: resumeOverrides } = overridesFor(mode, providerTransport());
-      const second = await executeArgv(["entra", "identity-provider", "list", "--profile", profile, "--cursor", first.cursor], resumeOverrides);
-      assert.equal(second.identityProviders.length, 1);
+      const second = record(await executeArgv(["entra", "identity-provider", "list", "--profile", profile, "--cursor", text(first.cursor)], resumeOverrides));
+      assert.equal(records(second.identityProviders).length, 1);
       assert.deepEqual(second.count, "1 identity providers");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -196,15 +198,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode, providerTransport());
-      const result = await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", profile], overrides));
       assert.deepEqual(result.identityProvider, {
         id: google.id, displayName: "Google", identityProviderType: "Google", clientId: "google-client-id",
         "@odata.type": "#microsoft.graph.socialIdentityProvider",
       });
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
-      const social = await executeArgv(["entra", "identity-provider", "show", "--id", facebook.id, "--profile", profile], overrides);
-      assert.equal(social.identityProvider.clientId, null);
-      const builtIn = await executeArgv(["entra", "identity-provider", "show", "--id", builtin.id, "--profile", profile], overrides);
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
+      const social = record(await executeArgv(["entra", "identity-provider", "show", "--id", facebook.id, "--profile", profile], overrides));
+      assert.equal(record(social.identityProvider).clientId, null);
+      const builtIn = record(await executeArgv(["entra", "identity-provider", "show", "--id", builtin.id, "--profile", profile], overrides));
       assert.deepEqual(builtIn.identityProvider, { id: builtin.id });
     } finally {
       teardownProfiles(state);
@@ -215,15 +217,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode, providerTransport());
-      const result = await executeArgv(["entra", "identity-provider", "count", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "identity-provider", "count", "--profile", profile], overrides));
       assert.deepEqual(result.count, { returned: 3, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identity/identityProviders/$count"));
-      const filtered = await executeArgv(
-        ["entra", "identity-provider", "count", "--profile", profile, "--filter", "identityProviderType eq 'Google'"], overrides);
-      assert.equal(filtered.count.returned, 3);
-      assert.ok(new URL(requests[requests.length - 1].url).searchParams.has("$filter"));
-      assert.ok(filtered.help.some(hint => hint.includes("drop --filter for the tenant total")));
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/identity/identityProviders/$count"));
+      const filtered = record(await executeArgv(
+        ["entra", "identity-provider", "count", "--profile", profile, "--filter", "identityProviderType eq 'Google'"], overrides));
+      assert.equal(record(filtered.count).returned, 3);
+      assert.ok(new URL(requests[requests.length - 1]!.url).searchParams.has("$filter"));
+      assert.ok(strings(filtered.help).some(hint => hint.includes("drop --filter for the tenant total")));
     } finally {
       teardownProfiles(state);
     }
@@ -240,13 +242,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         ["entra", "identity-provider", "available-types", "--profile", profile],
       ]) {
         await assert.rejects(executeArgv(args, overrides), error => {
-          assert.equal(error.code, "GRAPH_ERROR");
-          assert.match(error.message, /\(403\)/);
-          assert.match(error.message, /grant, role, licence/);
-          assert.ok(error.suggestions.some(hint => hint.includes("IdentityProvider.Read.All")));
-          assert.ok(error.suggestions.some(hint => hint.includes("Global Reader")));
-          assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
-          assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+          assert.equal(record(error).code, "GRAPH_ERROR");
+          assert.match(text(record(error).message), /\(403\)/);
+          assert.match(text(record(error).message), /grant, role, licence/);
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("IdentityProvider.Read.All")));
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Global Reader")));
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Personal Microsoft accounts are not supported")));
+          assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
           return true;
         });
       }
@@ -263,7 +265,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const { overrides } = overridesFor(mode, providerTransport());
       await assert.rejects(
         executeArgv(["entra", "identity-provider", "show", "--id", "no-such-provider", "--profile", profile], overrides),
-        error => error.code === "GRAPH_ERROR" && /not found or inaccessible/.test(error.message),
+        error => record(error).code === "GRAPH_ERROR" && /not found or inaccessible/.test(text(record(error).message)),
       );
     } finally {
       teardownProfiles(state);
@@ -276,14 +278,14 @@ test("truncated provider text carries a --full hint without lifting redaction or
   try {
     const displayName = "x".repeat(600);
     const { overrides } = overridesFor("delegated", transport(() => json(200, { ...google, displayName })));
-    const result = await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", "soc"], overrides);
-    assert.match(result.identityProvider.displayName, /\.\.\. \(truncated, \d+ chars total\)/);
-    assert.ok(result.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", "soc", "--full"], overrides);
-    assert.equal(full.identityProvider.displayName, displayName);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
-    const social = await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", "soc", "--full"], overrides);
-    assert.ok(!("clientSecret" in social.identityProvider));
+    const result = record(await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", "soc"], overrides));
+    assert.match(text(record(result.identityProvider).displayName), /\.\.\. \(truncated, \d+ chars total\)/);
+    assert.ok(strings(result.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", "soc", "--full"], overrides));
+    assert.equal(record(full.identityProvider).displayName, displayName);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
+    const social = record(await executeArgv(["entra", "identity-provider", "show", "--id", google.id, "--profile", "soc", "--full"], overrides));
+    assert.ok(!("clientSecret" in record(social.identityProvider)));
   } finally {
     teardownProfiles(state);
   }
@@ -295,7 +297,7 @@ test("a non-numeric count body is malformed, never a count", async () => {
     const { overrides } = overridesFor("delegated", providerTransport({ countBody: JSON.stringify({ value: [] }) }));
     await assert.rejects(
       executeArgv(["entra", "identity-provider", "count", "--profile", "soc"], overrides),
-      error => error.code === "RESPONSE_INVALID" && /non-numeric success body/.test(error.message),
+      error => record(error).code === "RESPONSE_INVALID" && /non-numeric success body/.test(text(record(error).message)),
     );
   } finally {
     teardownProfiles(state);
@@ -349,7 +351,7 @@ for (const field of unsupportedProviderFields) {
         const { calls, requests, overrides } = overridesFor("delegated", providerTransport());
         await assert.rejects(
           executeArgv(["entra", "identity-provider", ...args, field, "--profile", "soc"], overrides),
-          error => error.code === "VALIDATION_ERROR" && error.message.includes(`Unknown provider property ${field}`),
+          error => record(error).code === "VALIDATION_ERROR" && text(record(error).message).includes(`Unknown provider property ${field}`),
         );
         assert.equal(calls.length, 0);
         assert.equal(requests.length, 0);
@@ -392,7 +394,7 @@ for (const id of ["$count", "$value", "$ref"]) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   for (const args of [
     ["entra", "identity-provider", "list", "--profile", profile],
     ["entra", "identity-provider", "show", "--id", google.id, "--profile", profile],
@@ -421,7 +423,7 @@ test("application mode rejects delegated scopes before HTTP", async () => {
   try {
     const { calls, requests, overrides } = overridesFor("application", providerTransport());
     await assert.rejects(
-      executeArgv(["entra", "identity-provider", "list", "--profile", "batch", "--scopes", providerScopes[0]], overrides),
+      executeArgv(["entra", "identity-provider", "list", "--profile", "batch", "--scopes", providerScopes[0]!], overrides),
       { code: "VALIDATION_ERROR", message: "Application profiles use the configured Graph .default audience; delegated scopes are unavailable" },
     );
     assert.equal(calls.length, 0);
@@ -436,7 +438,7 @@ test("available provider types application mode rejects delegated scopes before 
   try {
     const { calls, requests, overrides } = overridesFor("application", providerTransport());
     await assert.rejects(
-      executeArgv(["entra", "identity-provider", "available-types", "--profile", "batch", "--scopes", providerScopes[0]], overrides),
+      executeArgv(["entra", "identity-provider", "available-types", "--profile", "batch", "--scopes", providerScopes[0]!], overrides),
       { code: "VALIDATION_ERROR", message: "Application profiles use the configured Graph .default audience; delegated scopes are unavailable" },
     );
     assert.equal(calls.length, 0);
@@ -446,20 +448,20 @@ test("available provider types application mode rejects delegated scopes before 
   }
 });
 
-function rawFixture(handler) {
-  const credentialCalls = [];
-  const requests = [];
-  const credential = account => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
-  const delegated = new DelegatedAuth({
+function rawFixture(handler: RawResponseHandler) {
+  const credentialCalls: unknown[][] = [];
+  const requests: TransportRequest[] = [];
+  const credential = <T extends object>(account: T) => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
+  const delegated = new DelegatedAuth(delegatedProvider({
     storage: "session-only",
     login: async () => credential({ accountId: "synthetic-account" }),
     silent: async (...args) => { credentialCalls.push(["silent", ...args]); return credential({ accountId: "synthetic-account" }); },
-  });
+  }));
   const application = new ApplicationAuth({
     storage: "session-only",
     acquire: async (...args) => { credentialCalls.push(["acquire", ...args]); return credential({}); },
   });
-  const transport = async request => {
+  const transport: GraphTransport = async request => {
     requests.push(request);
     const response = typeof handler === "function" ? await handler(request, requests.length) : handler;
     return { headers: {}, body: "", ...response };
@@ -467,9 +469,9 @@ function rawFixture(handler) {
   return { credentialCalls, requests, deps: { delegated, application, transport } };
 }
 
-const delegatedRawProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
+const delegatedRawProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
 
-function rawBody(request) {
+function rawBody(request: TransportRequest): TransportResponse {
   const url = new URL(request.url);
   if (url.pathname === "/v1.0/identity/identityProviders") return { status: 200, headers: {}, body: JSON.stringify({ value: providers }) };
   if (url.pathname === "/v1.0/identity/identityProviders/Google-OAUTH") return { status: 200, headers: {}, body: JSON.stringify(google) };
@@ -478,12 +480,12 @@ function rawBody(request) {
 
 test("raw api serves reviewed provider list and show without secret fields", async () => {
   const f = rawFixture(rawBody);
-  const list = await runApiGet({ path: "/identity/identityProviders", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0] }, f.deps);
+  const list = await runApiGet({ path: "/identity/identityProviders", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]! }, f.deps);
   assert.equal(list.returned, 3);
   assert.equal(list.complete, true);
   assert.ok(!JSON.stringify(list.value).includes("must-never-surface"));
-  assert.ok(list.value[0].clientId === "google-client-id");
-  const show = await runApiGet({ path: "/identity/identityProviders/Google-OAUTH", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0] }, f.deps);
+  assert.ok(record(records(list.value)[0]).clientId === "google-client-id");
+  const show = await runApiGet({ path: "/identity/identityProviders/Google-OAUTH", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]! }, f.deps);
   assert.equal(show.displayName, "Google");
   assert.ok(!("clientSecret" in show));
 });
@@ -491,7 +493,7 @@ test("raw api serves reviewed provider list and show without secret fields", asy
 test("raw api refuses the provider $count scalar before credentials", async () => {
   const f = rawFixture(rawBody);
   await assert.rejects(
-    runApiGet({ path: "/identity/identityProviders/$count", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0] }, f.deps),
+    runApiGet({ path: "/identity/identityProviders/$count", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]! }, f.deps),
     { code: "VALIDATION_ERROR" },
   );
   assert.equal(f.credentialCalls.length, 0);
@@ -501,8 +503,8 @@ test("raw api refuses the provider $count scalar before credentials", async () =
 test("raw api refuses unreviewed provider $select fields before credentials", async () => {
   const f = rawFixture(rawBody);
   await assert.rejects(
-    runApiGet({ path: "/identity/identityProviders", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0], odata: "$select=id,clientSecret" }, f.deps),
-    error => error.code === "VALIDATION_ERROR" && /Unreviewed \$select field clientSecret/.test(error.message),
+    runApiGet({ path: "/identity/identityProviders", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]!, odata: "$select=id,clientSecret" }, f.deps),
+    error => record(error).code === "VALIDATION_ERROR" && /Unreviewed \$select field clientSecret/.test(text(record(error).message)),
   );
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
@@ -513,8 +515,8 @@ for (const field of unsupportedProviderFields) {
     test(`raw provider ${path} refuses ${field} before credentials`, async () => {
       const f = rawFixture(rawBody);
       await assert.rejects(
-        runApiGet({ path, apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0], odata: `$select=id,${field}` }, f.deps),
-        error => error.code === "VALIDATION_ERROR" && error.message.includes(`Unreviewed $select field ${field}`),
+        runApiGet({ path, apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]!, odata: `$select=id,${field}` }, f.deps),
+        error => record(error).code === "VALIDATION_ERROR" && text(record(error).message).includes(`Unreviewed $select field ${field}`),
       );
       assert.equal(f.credentialCalls.length, 0);
       assert.equal(f.requests.length, 0);

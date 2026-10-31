@@ -12,6 +12,7 @@ export type CredentialArgs = Parameters<CredentialStub["credential"]>;
 export type TransportFixture = { requests: TransportRequest[]; send: GraphTransport };
 type FixtureResponse = Pick<TransportResponse, "status"> & Partial<Omit<TransportResponse, "status">>;
 export type ResponseHandler = (request: TransportRequest) => FixtureResponse | Promise<FixtureResponse>;
+export type RawResponseHandler = FixtureResponse | ((request: TransportRequest, count: number) => FixtureResponse | Promise<FixtureResponse>);
 export type ProfileConfig = { profiles: Record<string, {
   enabledPacks: readonly string[];
   writes: { allowWrites: boolean; operations: readonly string[] };

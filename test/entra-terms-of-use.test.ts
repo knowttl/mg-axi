@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, delegatedProvider, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -84,12 +86,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: [string, ...CredentialArgs][]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push([mode, ...args]);
@@ -104,9 +106,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -114,7 +116,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -132,28 +134,28 @@ function termsOfUseTransport() {
     if (path === "/v1.0/agreementAcceptances") return json(200, { value: acceptances });
     const nestedList = /^\/v1\.0\/agreements\/([^/]+)\/acceptances$/.exec(path);
     if (nestedList) {
-      return json(200, { value: acceptances.filter(row => row.agreementId === decodeURIComponent(nestedList[1])) });
+      return json(200, { value: acceptances.filter(row => row.agreementId === decodeURIComponent(nestedList[1]!)) });
     }
     const nestedShow = /^\/v1\.0\/agreements\/([^/]+)\/acceptances\/([^/]+)$/.exec(path);
     if (nestedShow) {
-      const found = acceptances.find(row => row.agreementId === decodeURIComponent(nestedShow[1]) && row.id === decodeURIComponent(nestedShow[2]));
+      const found = acceptances.find(row => row.agreementId === decodeURIComponent(nestedShow[1]!) && row.id === decodeURIComponent(nestedShow[2]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such acceptance" } });
     }
     const agreement = /^\/v1\.0\/agreements\/([^/]+)$/.exec(path);
     if (agreement) {
-      const found = agreements.find(row => row.id === decodeURIComponent(agreement[1]));
+      const found = agreements.find(row => row.id === decodeURIComponent(agreement[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such agreement" } });
     }
     const acceptance = /^\/v1\.0\/agreementAcceptances\/([^/]+)$/.exec(path);
     if (acceptance) {
-      const found = acceptances.find(row => row.id === decodeURIComponent(acceptance[1]));
+      const found = acceptances.find(row => row.id === decodeURIComponent(acceptance[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such acceptance" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: [string, ...CredentialArgs][] = []) {
   const fixture = handler ?? termsOfUseTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -161,13 +163,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runTermsCli(args, state, mode, denied = false) {
+function runTermsCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-terms-of-use-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -185,7 +187,7 @@ test("delegated lists agreements with compact rows preserving null and missing",
   const state = setupProfiles();
   try {
     const { requests, calls, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "agreement", "list", "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "agreement", "list", "--profile", "soc"], overrides));
     assert.deepEqual(result.agreements, [
       { id: agreement1.id, displayName: agreement1.displayName },
       { id: agreement2.id, displayName: agreement2.displayName },
@@ -194,10 +196,10 @@ test("delegated lists agreements with compact rows preserving null and missing",
     assert.deepEqual(result.count, "3 agreements");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
-    assert.ok(result.help.some(hint => hint.includes("entra agreement show --id <agreement-id>")));
+    assert.ok(strings(result.help).some(hint => hint.includes("entra agreement show --id <agreement-id>")));
     assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-delegated-token"));
-    assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/agreements?"));
-    const sent = new URL(requests[0].url).searchParams;
+    assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/agreements?"));
+    const sent = new URL(requests[0]!.url).searchParams;
     assert.equal(sent.get("$select"), "id,displayName");
     assert.ok(!sent.has("$filter"));
     assert.ok(!JSON.stringify(result).includes("opaque-fixture-delegated-token"));
@@ -211,11 +213,11 @@ test("delegated agreement list passes --filter through as plain $filter", async 
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "agreement", "list", "--profile", "soc", "--filter", "displayName eq 'All users terms of use'"], overrides);
+    const result = record(await executeArgv(["entra", "agreement", "list", "--profile", "soc", "--filter", "displayName eq 'All users terms of use'"], overrides));
     assert.deepEqual(result.count, "3 agreements");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
-    assert.equal(new URL(requests[0].url).searchParams.get("$filter"), "displayName eq 'All users terms of use'");
+    assert.equal(new URL(requests[0]!.url).searchParams.get("$filter"), "displayName eq 'All users terms of use'");
   } finally {
     teardownProfiles(state);
   }
@@ -225,12 +227,12 @@ test("delegated resumes a capped agreement list through its opaque cursor", asyn
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "agreement", "list", "--profile", "soc", "--limit", "1"], overrides);
-    assert.deepEqual(first.agreements.map(row => row.id), [agreement1.id]);
+    const first = record(await executeArgv(["entra", "agreement", "list", "--profile", "soc", "--limit", "1"], overrides));
+    assert.deepEqual(records(first.agreements).map(row => row.id), [agreement1.id]);
     assert.equal(first.complete, false);
     assert.equal(typeof first.cursor, "string");
-    const second = await executeArgv(["entra", "agreement", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
-    assert.deepEqual(second.agreements.map(row => row.id), [agreement2.id, agreement3.id]);
+    const second = record(await executeArgv(["entra", "agreement", "list", "--profile", "soc", "--cursor", text(first.cursor)], overrides));
+    assert.deepEqual(records(second.agreements).map(row => row.id), [agreement2.id, agreement3.id]);
     assert.deepEqual(second.count, "2 agreements");
     assert.equal(second.total, null);
     assert.equal(second.complete, true);
@@ -243,10 +245,10 @@ test("delegated shows one agreement with the full reviewed metadata set", async 
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "agreement", "show", "--id", agreement1.id, "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "agreement", "show", "--id", agreement1.id, "--profile", "soc"], overrides));
     assert.deepEqual(result.agreement, agreement1);
-    assert.ok(result.help.some(hint => hint.includes(`entra agreement acceptance list --agreement ${agreement1.id}`)));
-    const missing = await executeArgv(["entra", "agreement", "show", "--id", agreement3.id, "--profile", "soc"], overrides);
+    assert.ok(strings(result.help).some(hint => hint.includes(`entra agreement acceptance list --agreement ${agreement1.id}`)));
+    const missing = record(await executeArgv(["entra", "agreement", "show", "--id", agreement3.id, "--profile", "soc"], overrides));
     assert.deepEqual(missing.agreement, { id: agreement3.id });
   } finally {
     teardownProfiles(state);
@@ -260,8 +262,8 @@ test("delegated agreement show has no --filter flag to misuse", async () => {
     await assert.rejects(
       executeArgv(["entra", "agreement", "show", "--id", agreement1.id, "--profile", "soc", "--filter", "id eq 'x'"], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /unknown flag --filter/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /unknown flag --filter/.test(text(record(error).message));
       },
     );
     assert.equal(calls.length, 0);
@@ -275,15 +277,15 @@ test("delegated lists one agreement's acceptances with minimal personal-data row
   const state = setupProfiles();
   try {
     const { requests, calls, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "agreement", "acceptance", "list", "--agreement", agreement1.id, "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "agreement", "acceptance", "list", "--agreement", agreement1.id, "--profile", "soc"], overrides));
     assert.deepEqual(result.agreementAcceptances, [minimalAcceptance1]);
     assert.deepEqual(result.count, "1 agreement acceptances");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
     assert.ok(!JSON.stringify(result).includes("MeganB@contoso.example"));
-    assert.ok(result.help.some(hint => hint.includes("entra agreement acceptance show")));
-    assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/agreements/${agreement1.id}/acceptances?`));
-    const sent = new URL(requests[0].url).searchParams;
+    assert.ok(strings(result.help).some(hint => hint.includes("entra agreement acceptance show")));
+    assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com/v1.0/agreements/${agreement1.id}/acceptances?`));
+    const sent = new URL(requests[0]!.url).searchParams;
     assert.equal(sent.get("$select"), "id,agreementId,state,recordedDateTime");
     assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(acceptanceScopes)));
   } finally {
@@ -295,13 +297,13 @@ test("delegated lists tenant-wide acceptances with minimal personal-data rows", 
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "agreement-acceptance", "list", "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "agreement-acceptance", "list", "--profile", "soc"], overrides));
     assert.deepEqual(result.agreementAcceptances, [minimalAcceptance1, minimalAcceptance2]);
     assert.deepEqual(result.count, "2 agreement acceptances");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
     assert.ok(!JSON.stringify(result).includes("MeganB@contoso.example"));
-    assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/agreementAcceptances?"));
+    assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/agreementAcceptances?"));
   } finally {
     teardownProfiles(state);
   }
@@ -311,13 +313,13 @@ test("delegated shows one acceptance with minimal rows unless identifying fields
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const nested = await executeArgv(["entra", "agreement", "acceptance", "show",
-      "--agreement", agreement1.id, "--id", acceptance1.id, "--profile", "soc"], overrides);
+    const nested = record(await executeArgv(["entra", "agreement", "acceptance", "show",
+      "--agreement", agreement1.id, "--id", acceptance1.id, "--profile", "soc"], overrides));
     assert.deepEqual(nested.agreementAcceptance, minimalAcceptance1);
-    const root = await executeArgv(["entra", "agreement-acceptance", "show", "--id", acceptance1.id, "--profile", "soc"], overrides);
+    const root = record(await executeArgv(["entra", "agreement-acceptance", "show", "--id", acceptance1.id, "--profile", "soc"], overrides));
     assert.deepEqual(root.agreementAcceptance, minimalAcceptance1);
-    const identified = await executeArgv(["entra", "agreement-acceptance", "show", "--id", acceptance1.id, "--profile", "soc",
-      "--select", "id,userEmail,userPrincipalName"], overrides);
+    const identified = record(await executeArgv(["entra", "agreement-acceptance", "show", "--id", acceptance1.id, "--profile", "soc",
+      "--select", "id,userEmail,userPrincipalName"], overrides));
     assert.deepEqual(identified.agreementAcceptance, {
       id: acceptance1.id,
       userEmail: acceptance1.userEmail,
@@ -347,8 +349,8 @@ test("delegated show projects --fields locally from the fetched --select set", a
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "agreement", "show", "--id", agreement1.id, "--profile", "soc",
-      "--select", "id,displayName", "--fields", "displayName"], overrides);
+    const result = record(await executeArgv(["entra", "agreement", "show", "--id", agreement1.id, "--profile", "soc",
+      "--select", "id,displayName", "--fields", "displayName"], overrides));
     assert.deepEqual(result.agreement, { displayName: agreement1.displayName });
     await assert.rejects(
       executeArgv(["entra", "agreement", "show", "--id", agreement1.id, "--profile", "soc",
@@ -392,8 +394,8 @@ for (const command of [
       await assert.rejects(
         executeArgv(["entra", ...command, "--profile", "batch"], overrides),
         error => {
-          assert.equal(error.code, "VALIDATION_ERROR");
-          return /need a delegated profile; Graph documents no supported application permission/.test(error.message);
+          assert.equal(record(error).code, "VALIDATION_ERROR");
+          return /need a delegated profile; Graph documents no supported application permission/.test(text(record(error).message));
         },
       );
       assert.equal(calls.length, 0);
@@ -409,15 +411,15 @@ test("delegated empty agreement lists stay definitive", async () => {
   try {
     const empty = transport(() => json(200, { value: [] }));
     const { overrides } = overridesFor("delegated", empty);
-    const listed = await executeArgv(["entra", "agreement", "list", "--profile", "soc"], overrides);
+    const listed = record(await executeArgv(["entra", "agreement", "list", "--profile", "soc"], overrides));
     assert.deepEqual(listed.agreements, []);
     assert.deepEqual(listed.count, "0 agreements");
     assert.equal(listed.total, null);
     assert.equal(listed.complete, true);
-    assert.ok(listed.help.some(hint => hint.includes("no terms-of-use agreements are configured")));
-    const accepted = await executeArgv(["entra", "agreement-acceptance", "list", "--profile", "soc"], overrides);
+    assert.ok(strings(listed.help).some(hint => hint.includes("no terms-of-use agreements are configured")));
+    const accepted = record(await executeArgv(["entra", "agreement-acceptance", "list", "--profile", "soc"], overrides));
     assert.deepEqual(accepted.agreementAcceptances, []);
-    assert.ok(accepted.help.some(hint => hint.includes("0 agreement acceptances matched")));
+    assert.ok(strings(accepted.help).some(hint => hint.includes("0 agreement acceptances matched")));
   } finally {
     teardownProfiles(state);
   }
@@ -428,13 +430,13 @@ test("delegated unknown agreement and acceptance ids report absence, not emptine
   try {
     const { overrides } = overridesFor("delegated");
     await assert.rejects(executeArgv(["entra", "agreement", "show", "--id", "agreement-missing", "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-      return /not found or inaccessible \(404\)/.test(error.message);
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+      return /not found or inaccessible \(404\)/.test(text(record(error).message));
     });
     await assert.rejects(executeArgv(["entra", "agreement-acceptance", "show", "--id", "acceptance-missing", "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      return /not found or inaccessible \(404\)/.test(error.message);
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      return /not found or inaccessible \(404\)/.test(text(record(error).message));
     });
   } finally {
     teardownProfiles(state);
@@ -447,17 +449,17 @@ test("delegated denied agreement reads surface scope, role and P1 licensing", as
     const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
     const { overrides } = overridesFor("delegated", denied);
     await assert.rejects(executeArgv(["entra", "agreement", "list", "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.ok(error.suggestions.some(hint => hint.includes("Agreement.Read.All")));
-      assert.ok(error.suggestions.some(hint => hint.includes("Security Reader")));
-      assert.ok(error.suggestions.some(hint => hint.includes("Microsoft Entra ID P1")));
-      assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
-      return /grant, role, licence/.test(error.message);
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Agreement.Read.All")));
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Security Reader")));
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Microsoft Entra ID P1")));
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+      return /grant, role, licence/.test(text(record(error).message));
     });
     await assert.rejects(executeArgv(["entra", "agreement", "show", "--id", agreement1.id, "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.ok(error.suggestions.some(hint => hint.includes("Agreement.Read.All")));
-      return /grant, role, licence/.test(error.message);
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Agreement.Read.All")));
+      return /grant, role, licence/.test(text(record(error).message));
     });
   } finally {
     teardownProfiles(state);
@@ -470,17 +472,17 @@ test("delegated denied acceptance reads surface scope, role and P1 licensing", a
     const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
     const { overrides } = overridesFor("delegated", denied);
     await assert.rejects(executeArgv(["entra", "agreement", "acceptance", "list", "--agreement", agreement1.id, "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.ok(error.suggestions.some(hint => hint.includes("AgreementAcceptance.Read")));
-      assert.ok(error.suggestions.some(hint => hint.includes("AgreementAcceptance.Read.All")));
-      assert.ok(error.suggestions.some(hint => hint.includes("Security Reader")));
-      assert.ok(error.suggestions.some(hint => hint.includes("Microsoft Entra ID P1")));
-      return /grant, role, licence/.test(error.message);
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("AgreementAcceptance.Read")));
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("AgreementAcceptance.Read.All")));
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Security Reader")));
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Microsoft Entra ID P1")));
+      return /grant, role, licence/.test(text(record(error).message));
     });
     await assert.rejects(executeArgv(["entra", "agreement-acceptance", "show", "--id", acceptance1.id, "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.ok(error.suggestions.some(hint => hint.includes("AgreementAcceptance.Read")));
-      return /grant, role, licence/.test(error.message);
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("AgreementAcceptance.Read")));
+      return /grant, role, licence/.test(text(record(error).message));
     });
   } finally {
     teardownProfiles(state);
@@ -493,8 +495,8 @@ test("delegated executable lists and shows agreement reads", () => {
     const listed = runTermsCli(["entra", "agreement", "list", "--profile", "soc"], state, "delegated");
     assert.equal(listed.status, 0, listed.stdout);
     assert.equal(listed.stderr, "");
-    const listOut = decode(listed.stdout);
-    assert.deepEqual(listOut.agreements.map(row => row.id), [agreement1.id, agreement2.id]);
+    const listOut = record(decode(listed.stdout));
+    assert.deepEqual(records(listOut.agreements).map(row => row.id), [agreement1.id, agreement2.id]);
     assert.deepEqual(listOut.count, "2 agreements");
     assert.equal(listOut.total, null);
     assert.equal(listOut.complete, true);
@@ -502,7 +504,7 @@ test("delegated executable lists and shows agreement reads", () => {
 
     const shown = runTermsCli(["entra", "agreement", "show", "--id", agreement1.id, "--profile", "soc"], state, "delegated");
     assert.equal(shown.status, 0, shown.stdout);
-    assert.deepEqual(decode(shown.stdout).agreement, {
+    assert.deepEqual(record(decode(shown.stdout)).agreement, {
       id: agreement1.id,
       displayName: agreement1.displayName,
       isPerDeviceAcceptanceRequired: false,
@@ -514,11 +516,11 @@ test("delegated executable lists and shows agreement reads", () => {
 
     const nested = runTermsCli(["entra", "agreement", "acceptance", "list", "--agreement", agreement1.id, "--profile", "soc"], state, "delegated");
     assert.equal(nested.status, 0, nested.stdout);
-    assert.deepEqual(decode(nested.stdout).agreementAcceptances, [minimalAcceptance1]);
+    assert.deepEqual(record(decode(nested.stdout)).agreementAcceptances, [minimalAcceptance1]);
 
     const rooted = runTermsCli(["entra", "agreement-acceptance", "list", "--profile", "soc"], state, "delegated");
     assert.equal(rooted.status, 0, rooted.stdout);
-    assert.equal(decode(rooted.stdout).agreementAcceptances.length, 2);
+    assert.equal(records(record(decode(rooted.stdout)).agreementAcceptances).length, 2);
   } finally { teardownProfiles(state); }
 });
 
@@ -528,9 +530,9 @@ test("delegated executable denied agreement reads fail operationally on stdout",
     const result = runTermsCli(["entra", "agreement", "list", "--profile", "soc"], state, "delegated", true);
     assert.equal(result.status, 1, result.stdout);
     assert.equal(result.stderr, "");
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.code, "GRAPH_ERROR");
-    assert.match(output.error, /grant, role, licence or policy/);
+    assert.match(text(output.error), /grant, role, licence or policy/);
     assert.equal(output.agreements, undefined);
     assert.ok(!result.stdout.includes("opaque-fixture-delegated-token"));
   } finally { teardownProfiles(state); }
@@ -543,7 +545,7 @@ for (const [command, args] of [
   [["agreement", "acceptance", "show"], ["--agreement", agreement1.id, "--id", acceptance1.id]],
   [["agreement-acceptance", "list"], []],
   [["agreement-acceptance", "show"], ["--id", acceptance1.id]],
-]) {
+] as const) {
   for (const preview of [false, true]) {
     test(`delegated ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
       const state = setupProfiles();
@@ -571,13 +573,13 @@ test("truncated agreement text carries a --full hint without lifting caps", asyn
   try {
     const longRow = transport(() => json(200, { value: [{ id: "agreement-long", displayName: longName }] }));
     const { overrides } = overridesFor("delegated", longRow);
-    const partial = await executeArgv(["entra", "agreement", "list", "--profile", "soc"], overrides);
-    const truncated = partial.agreements.find(row => row.displayName.startsWith("terms-"));
-    assert.match(truncated.displayName, /truncated, \d+ chars total/);
-    assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "agreement", "list", "--profile", "soc", "--full"], overrides);
-    assert.equal(full.agreements.find(row => row.displayName.startsWith("terms-")).displayName, longName);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const partial = record(await executeArgv(["entra", "agreement", "list", "--profile", "soc"], overrides));
+    const truncated = records(partial.agreements).find(row => text(row.displayName).startsWith("terms-"));
+    assert.match(text(record(truncated).displayName), /truncated, \d+ chars total/);
+    assert.ok(strings(partial.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "agreement", "list", "--profile", "soc", "--full"], overrides));
+    assert.equal(record(records(full.agreements).find(row => text(row.displayName).startsWith("terms-"))).displayName, longName);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -587,24 +589,24 @@ test("raw agreement reads serve delegated callers and refuse application profile
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const { ApplicationAuth } = await import("../dist/app-auth.js");
-  const credentialCalls = [];
-  const requests = [];
+  const credentialCalls: unknown[][] = [];
+  const requests: TransportRequest[] = [];
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
   const deps = {
-    delegated: new DelegatedAuth({ storage: "session-only", login: async () => credential, silent: async (...args) => { credentialCalls.push(args); return credential; } }),
+    delegated: new DelegatedAuth(delegatedProvider({ storage: "session-only", login: async () => credential, silent: async (...args) => { credentialCalls.push(args); return credential; } })),
     application: new ApplicationAuth({ storage: "session-only", acquire: async (...args) => { credentialCalls.push(args); return credential; } }),
-    transport: async request => { requests.push(request); return { headers: {}, body: JSON.stringify({ value: [agreement1] }) }; },
+    transport: async (request: TransportRequest) => { requests.push(request); return { status: 200, headers: {}, body: JSON.stringify({ value: [agreement1] }) }; },
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
-  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } };
-  const listed = await runApiGet({ path: "/agreements", apiVersion: "v1.0", profile: delegatedProfile, scopes: agreementScopes[0] }, deps);
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
+  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } } as const;
+  const listed = await runApiGet({ path: "/agreements", apiVersion: "v1.0", profile: delegatedProfile, scopes: agreementScopes[0]! }, deps);
   assert.equal(listed.returned, 1);
   for (const path of ["/agreements", `/agreements/${agreement1.id}`, `/agreements/${agreement1.id}/acceptances`, `/agreements/${agreement1.id}/acceptances/${acceptance1.id}`, "/agreementAcceptances", `/agreementAcceptances/${acceptance1.id}`]) {
     await assert.rejects(
       runApiGet({ path, apiVersion: "v1.0", profile: appProfile }, deps),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /needs a delegated profile/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /needs a delegated profile/.test(text(record(error).message));
       },
     );
   }
@@ -618,11 +620,11 @@ test("raw acceptance reads project only reviewed fields with minimal defaults", 
   const { ApplicationAuth } = await import("../dist/app-auth.js");
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
   const deps = {
-    delegated: new DelegatedAuth({ storage: "session-only", login: async () => credential, silent: async () => credential }),
+    delegated: new DelegatedAuth(delegatedProvider({ storage: "session-only", login: async () => credential, silent: async () => credential })),
     application: new ApplicationAuth({ storage: "session-only", acquire: async () => credential }),
     transport: async () => ({ status: 200, headers: {}, body: JSON.stringify({ ...acceptance1, fileData: "QUJD", unknownField: true }) }),
   };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
-  const shown = await runApiGet({ path: `/agreementAcceptances/${acceptance1.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: acceptanceScopes[0] }, deps);
+  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
+  const shown = await runApiGet({ path: `/agreementAcceptances/${acceptance1.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: acceptanceScopes[0]! }, deps);
   assert.deepEqual(shown, minimalAcceptance1);
 });

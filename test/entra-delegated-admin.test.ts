@@ -1,3 +1,5 @@
+import { record, records, text as outputText, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -106,12 +108,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: [string, ...CredentialArgs][]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push([mode, ...args]);
@@ -126,9 +128,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -136,7 +138,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -173,26 +175,26 @@ function delegatedAdminTransport() {
     }
     const customer = /^\/v1\.0\/tenantRelationships\/delegatedAdminCustomers\/([^/]+)$/.exec(path);
     if (customer) {
-      const found = customers.find(row => row.id === decodeURIComponent(customer[1]));
+      const found = customers.find(row => row.id === decodeURIComponent(customer[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such customer" } });
     }
     const relationship = /^\/v1\.0\/tenantRelationships\/delegatedAdminRelationships\/([^/]+)$/.exec(path);
     if (relationship) {
-      const found = relationships.find(row => row.id === decodeURIComponent(relationship[1]));
+      const found = relationships.find(row => row.id === decodeURIComponent(relationship[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such relationship" } });
     }
     const navigation = /^\/v1\.0\/tenantRelationships\/delegatedAdminRelationships\/([^/]+)\/(accessAssignments|operations|requests)(\/([^/]+))?$/.exec(path);
     if (navigation) {
       const rows = navigation[2] === "accessAssignments" ? assignmentRows : navigation[2] === "operations" ? operationRows : requestRows;
       if (navigation[4] !== undefined) {
-        const found = rows.find(row => row.id === decodeURIComponent(navigation[4]));
+        const found = rows.find(row => row.id === decodeURIComponent(navigation[4]!));
         return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such navigation row" } });
       }
       if (navigation[2] === "accessAssignments") {
         if (url.searchParams.has("$skiptoken")) return json(200, { value: [aa3] });
         return json(200, {
           value: [aa1, aa2],
-          "@odata.nextLink": `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(navigation[1])}/accessAssignments?%24skiptoken=page2`,
+          "@odata.nextLink": `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(navigation[1]!)}/accessAssignments?%24skiptoken=page2`,
         });
       }
       return json(200, { value: rows });
@@ -200,20 +202,20 @@ function delegatedAdminTransport() {
     const serviceDetails = /^\/v1\.0\/tenantRelationships\/delegatedAdminCustomers\/([^/]+)\/serviceManagementDetails(\/([^/]+))?$/.exec(path);
     if (serviceDetails) {
       if (serviceDetails[3] !== undefined) {
-        const found = detailRows.find(row => row.id === decodeURIComponent(serviceDetails[3]));
+        const found = detailRows.find(row => row.id === decodeURIComponent(serviceDetails[3]!));
         return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such service-management detail" } });
       }
       if (url.searchParams.has("$skiptoken")) return json(200, { value: [smd3] });
       return json(200, {
         value: [smd1, smd2],
-        "@odata.nextLink": `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminCustomers/${encodeURIComponent(serviceDetails[1])}/serviceManagementDetails?%24skiptoken=page2`,
+        "@odata.nextLink": `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminCustomers/${encodeURIComponent(serviceDetails[1]!)}/serviceManagementDetails?%24skiptoken=page2`,
       });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: [string, ...CredentialArgs][] = []) {
   const fixture = handler ?? delegatedAdminTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -221,13 +223,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runDelegatedAdminCli(args, state, mode, denied = false) {
+function runDelegatedAdminCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-delegated-admin-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -242,13 +244,13 @@ function runDelegatedAdminCli(args, state, mode, denied = false) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists delegated-admin customers with compact rows preserving null and missing`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile,
-        "--select", "id,displayName,tenantId"], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile,
+        "--select", "id,displayName,tenantId"], overrides));
       assert.deepEqual(result.delegatedAdminCustomers, [
         { id: cu1.id, displayName: "Contoso Inc", tenantId: cu1.tenantId },
         { id: cu2.id, displayName: longName.slice(0, 500) + `... (truncated, ${longName.length} chars total)`, tenantId: cu2.tenantId },
@@ -257,11 +259,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 customers");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-customer show --id <customer-id>")));
-      assert.ok(result.help.some(hint => hint.includes("partner tenant")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra delegated-admin-customer show --id <customer-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("partner tenant")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminCustomers?"));
-      assert.ok(!new URL(requests[0].url).searchParams.has("$filter"));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminCustomers?"));
+      assert.ok(!new URL(requests[0]!.url).searchParams.has("$filter"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(delegatedAdminScopes)));
     } finally {
@@ -273,8 +275,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-relationship", "list", "--profile", profile,
-        "--select", "id,displayName,status,customer,endDateTime"], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-relationship", "list", "--profile", profile,
+        "--select", "id,displayName,status,customer,endDateTime"], overrides));
       assert.deepEqual(result.delegatedAdminRelationships, [
         { id: rel1.id, displayName: "Contoso admin relationship", status: "active", customer: rel1.customer, endDateTime: rel1.endDateTime },
         { id: rel2.id, displayName: longName.slice(0, 500) + `... (truncated, ${longName.length} chars total)`, status: "approvalPending" },
@@ -283,9 +285,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 relationships");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-relationship show --id <relationship-id>")));
-      assert.ok(result.help.some(hint => hint.includes("partner tenant")));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships?"));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra delegated-admin-relationship show --id <relationship-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("partner tenant")));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships?"));
     } finally {
       teardownProfiles(state);
     }
@@ -295,12 +297,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile,
-        "--filter", "displayName eq 'Contoso Inc'"], overrides);
-      assert.equal(result.delegatedAdminCustomers.length, 3);
-      const sent = new URL(requests[0].url).searchParams;
+      const result = record(await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile,
+        "--filter", "displayName eq 'Contoso Inc'"], overrides));
+      assert.equal(records(result.delegatedAdminCustomers).length, 3);
+      const sent = new URL(requests[0]!.url).searchParams;
       assert.equal(sent.get("$filter"), "displayName eq 'Contoso Inc'");
-      assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+      assert.equal(requests[0]!.headers.ConsistencyLevel, undefined);
     } finally {
       teardownProfiles(state);
     }
@@ -310,12 +312,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.delegatedAdminCustomers.map(row => row.id), [cu1.id]);
+      const first = record(await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.delegatedAdminCustomers).map(row => row.id), [cu1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.delegatedAdminCustomers.map(row => row.id), [cu2.id, cu3.id]);
+      const second = record(await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
+      assert.deepEqual(records(second.delegatedAdminCustomers).map(row => row.id), [cu2.id, cu3.id]);
       assert.deepEqual(second.count, "2 customers");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -328,11 +330,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "delegated-admin-relationship", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.delegatedAdminRelationships.map(row => row.id), [rel1.id]);
+      const first = record(await executeArgv(["entra", "delegated-admin-relationship", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.delegatedAdminRelationships).map(row => row.id), [rel1.id]);
       assert.equal(first.complete, false);
-      const second = await executeArgv(["entra", "delegated-admin-relationship", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.delegatedAdminRelationships.map(row => row.id), [rel2.id, rel3.id]);
+      const second = record(await executeArgv(["entra", "delegated-admin-relationship", "list", "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
+      assert.deepEqual(records(second.delegatedAdminRelationships).map(row => row.id), [rel2.id, rel3.id]);
       assert.deepEqual(second.count, "2 relationships");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -345,8 +347,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile,
-        "--select", "id,status,accessContainer,accessDetails"], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile,
+        "--select", "id,status,accessContainer,accessDetails"], overrides));
       assert.deepEqual(result.delegatedAdminAccessAssignments, [
         { id: aa1.id, status: "active", accessContainer: aa1.accessContainer, accessDetails: aa1.accessDetails },
         { id: aa2.id, status: "pending", accessContainer: aa2.accessContainer },
@@ -355,10 +357,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 access assignments");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-relationship show-access-assignment --id <relationship-id> --assignment-id <assignment-id>")));
-      assert.ok(result.help.some(hint => hint.includes("partner tenant")));
-      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/accessAssignments?`));
-      assert.ok(!new URL(requests[0].url).searchParams.has("$filter"));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra delegated-admin-relationship show-access-assignment --id <relationship-id> --assignment-id <assignment-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("partner tenant")));
+      assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/accessAssignments?`));
+      assert.ok(!new URL(requests[0]!.url).searchParams.has("$filter"));
     } finally {
       teardownProfiles(state);
     }
@@ -368,19 +370,19 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-relationship", "list-operations", "--id", rel1.id, "--profile", profile,
-        "--select", "id,operationType,status,lastModifiedDateTime,data"], overrides);
-      assert.deepEqual(result.delegatedAdminRelationshipOperations.map(row => row.id), [op1.id, op2.id, op3.id]);
-      assert.equal(result.delegatedAdminRelationshipOperations[0].data, op1.data);
-      assert.match(result.delegatedAdminRelationshipOperations[1].data, /truncated, \d+ chars total/);
+      const result = record(await executeArgv(["entra", "delegated-admin-relationship", "list-operations", "--id", rel1.id, "--profile", profile,
+        "--select", "id,operationType,status,lastModifiedDateTime,data"], overrides));
+      assert.deepEqual(records(result.delegatedAdminRelationshipOperations).map(row => row.id), [op1.id, op2.id, op3.id]);
+      assert.equal(records(result.delegatedAdminRelationshipOperations)[0]!.data, op1.data);
+      assert.match(outputText(records(result.delegatedAdminRelationshipOperations)[1]!.data), /truncated, \d+ chars total/);
       assert.deepEqual(result.count, "3 relationship operations");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-relationship show-operation")));
-      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/operations?`));
-      const full = await executeArgv(["entra", "delegated-admin-relationship", "list-operations", "--id", rel1.id, "--profile", profile, "--full",
-        "--select", "id,data"], overrides);
-      assert.equal(full.delegatedAdminRelationshipOperations[1].data, longData);
+      assert.ok(strings(result.help).some(hint => hint.includes("entra delegated-admin-relationship show-operation")));
+      assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/operations?`));
+      const full = record(await executeArgv(["entra", "delegated-admin-relationship", "list-operations", "--id", rel1.id, "--profile", profile, "--full",
+        "--select", "id,data"], overrides));
+      assert.equal(records(full.delegatedAdminRelationshipOperations)[1]!.data, longData);
     } finally {
       teardownProfiles(state);
     }
@@ -390,8 +392,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-relationship", "list-requests", "--id", rel1.id, "--profile", profile,
-        "--select", "id,action,status,lastModifiedDateTime"], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-relationship", "list-requests", "--id", rel1.id, "--profile", profile,
+        "--select", "id,action,status,lastModifiedDateTime"], overrides));
       assert.deepEqual(result.delegatedAdminRelationshipRequests, [
         { id: rq1.id, action: "lockForApproval", status: "succeeded", lastModifiedDateTime: rq1.lastModifiedDateTime },
         { id: rq2.id, action: "terminate", status: "running" },
@@ -400,8 +402,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 relationship requests");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-relationship show-request")));
-      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/requests?`));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra delegated-admin-relationship show-request")));
+      assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${rel1.id}/requests?`));
     } finally {
       teardownProfiles(state);
     }
@@ -411,7 +413,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile], overrides));
       assert.deepEqual(result.delegatedAdminServiceManagementDetails, [
         smd1,
         { ...smd2, serviceManagementUrl: smd2.serviceManagementUrl.slice(0, 500) + `... (truncated, ${smd2.serviceManagementUrl.length} chars total)` },
@@ -420,8 +422,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 service-management details");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra delegated-admin-customer show-service-management-detail --id <customer-id> --detail-id <detail-id>")));
-      const sent = new URL(requests[0].url);
+      assert.ok(strings(result.help).some(hint => hint.includes("entra delegated-admin-customer show-service-management-detail --id <customer-id> --detail-id <detail-id>")));
+      const sent = new URL(requests[0]!.url);
       assert.equal(sent.pathname, `/v1.0/tenantRelationships/delegatedAdminCustomers/${cu1.id}/serviceManagementDetails`);
       assert.equal(sent.search, "");
     } finally {
@@ -433,12 +435,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile,
-        "--filter", "status eq 'active'"], overrides);
-      assert.equal(result.delegatedAdminAccessAssignments.length, 3);
-      const sent = new URL(requests[0].url).searchParams;
+      const result = record(await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile,
+        "--filter", "status eq 'active'"], overrides));
+      assert.equal(records(result.delegatedAdminAccessAssignments).length, 3);
+      const sent = new URL(requests[0]!.url).searchParams;
       assert.equal(sent.get("$filter"), "status eq 'active'");
-      assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+      assert.equal(requests[0]!.headers.ConsistencyLevel, undefined);
     } finally {
       teardownProfiles(state);
     }
@@ -448,12 +450,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.delegatedAdminAccessAssignments.map(row => row.id), [aa1.id]);
+      const first = record(await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.delegatedAdminAccessAssignments).map(row => row.id), [aa1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.delegatedAdminAccessAssignments.map(row => row.id), [aa2.id, aa3.id]);
+      const second = record(await executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
+      assert.deepEqual(records(second.delegatedAdminAccessAssignments).map(row => row.id), [aa2.id, aa3.id]);
       assert.deepEqual(second.count, "2 access assignments");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -466,11 +468,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.delegatedAdminServiceManagementDetails.map(row => row.id), [smd1.id]);
+      const first = record(await executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.delegatedAdminServiceManagementDetails).map(row => row.id), [smd1.id]);
       assert.equal(first.complete, false);
-      const second = await executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.delegatedAdminServiceManagementDetails.map(row => row.id), [smd2.id, smd3.id]);
+      const second = record(await executeArgv(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
+      assert.deepEqual(records(second.delegatedAdminServiceManagementDetails).map(row => row.id), [smd2.id, smd3.id]);
       assert.deepEqual(second.count, "2 service-management details");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -489,8 +491,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-relationship", "show-access-assignment", "--id", rel1.id, "--assignment-id", aa1.id, "--profile", profile,
-        "--select", "accessContainer,accessDetails,createdDateTime,id,lastModifiedDateTime,status"], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-relationship", "show-access-assignment", "--id", rel1.id, "--assignment-id", aa1.id, "--profile", profile,
+        "--select", "accessContainer,accessDetails,createdDateTime,id,lastModifiedDateTime,status"], overrides));
       assert.deepEqual(result.delegatedAdminAccessAssignment, aa1);
       assert.equal(result.help, undefined);
     } finally {
@@ -502,8 +504,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-relationship", "show-operation", "--id", rel1.id, "--operation-id", op1.id, "--profile", profile,
-        "--select", "createdDateTime,data,id,lastModifiedDateTime,operationType,status"], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-relationship", "show-operation", "--id", rel1.id, "--operation-id", op1.id, "--profile", profile,
+        "--select", "createdDateTime,data,id,lastModifiedDateTime,operationType,status"], overrides));
       assert.deepEqual(result.delegatedAdminRelationshipOperation, op1);
       assert.equal(result.help, undefined);
     } finally {
@@ -515,8 +517,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-relationship", "show-request", "--id", rel1.id, "--request-id", rq1.id, "--profile", profile,
-        "--select", "action,createdDateTime,id,lastModifiedDateTime,status"], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-relationship", "show-request", "--id", rel1.id, "--request-id", rq1.id, "--profile", profile,
+        "--select", "action,createdDateTime,id,lastModifiedDateTime,status"], overrides));
       assert.deepEqual(result.delegatedAdminRelationshipRequest, rq1);
       assert.equal(result.help, undefined);
     } finally {
@@ -528,12 +530,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", profile], overrides));
       assert.deepEqual(result.delegatedAdminServiceManagementDetail, smd1);
       assert.equal(result.help, undefined);
-      assert.equal(new URL(requests[0].url).search, "");
-      const projected = await executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", profile,
-        "--fields", "serviceName"], overrides);
+      assert.equal(new URL(requests[0]!.url).search, "");
+      const projected = record(await executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", profile,
+        "--fields", "serviceName"], overrides));
       assert.deepEqual(projected.delegatedAdminServiceManagementDetail, { serviceName: smd1.serviceName });
     } finally {
       teardownProfiles(state);
@@ -545,12 +547,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { overrides } = overridesFor(mode);
       await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "show-access-assignment", "--id", rel1.id, "--assignment-id", "aa-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", "smd-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(outputText(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -563,15 +565,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const { overrides } = overridesFor(mode, denied);
       await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("DelegatedAdminRelationship.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("partner tenant")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("DelegatedAdminRelationship.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("partner tenant")));
+        return /grant, role, licence/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("partner tenant")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("partner tenant")));
+        return /grant, role, licence/.test(outputText(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -584,19 +586,19 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "list-access-assignments", "--id", rel1.id, "--profile", profile], state, mode);
       assert.equal(listed.status, 0, listed.stdout);
       assert.equal(listed.stderr, "");
-      assert.deepEqual(decode(listed.stdout).delegatedAdminAccessAssignments.map(row => row.id), [aa1.id, aa2.id]);
+      assert.deepEqual(records(record(decode(listed.stdout)).delegatedAdminAccessAssignments).map(row => row.id), [aa1.id, aa2.id]);
 
       const shown = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "show-operation", "--id", rel1.id, "--operation-id", op1.id, "--profile", profile], state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      assert.deepEqual(decode(shown.stdout).delegatedAdminRelationshipOperation, op1);
+      assert.deepEqual(record(decode(shown.stdout)).delegatedAdminRelationshipOperation, op1);
 
       const listedDetails = runDelegatedAdminCli(["entra", "delegated-admin-customer", "list-service-management-details", "--id", cu1.id, "--profile", profile], state, mode);
       assert.equal(listedDetails.status, 0, listedDetails.stdout);
-      assert.deepEqual(decode(listedDetails.stdout).delegatedAdminServiceManagementDetails.map(row => row.id), [smd1.id, smd2.id]);
+      assert.deepEqual(records(record(decode(listedDetails.stdout)).delegatedAdminServiceManagementDetails).map(row => row.id), [smd1.id, smd2.id]);
 
       const shownDetail = runDelegatedAdminCli(["entra", "delegated-admin-customer", "show-service-management-detail", "--id", cu1.id, "--detail-id", smd1.id, "--profile", profile], state, mode);
       assert.equal(shownDetail.status, 0, shownDetail.stdout);
-      assert.deepEqual(decode(shownDetail.stdout).delegatedAdminServiceManagementDetail, smd1);
+      assert.deepEqual(record(decode(shownDetail.stdout)).delegatedAdminServiceManagementDetail, smd1);
       assert.ok(!shownDetail.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -605,11 +607,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-customer", "show", "--id", cu1.id, "--profile", profile,
-        "--select", "displayName,id,tenantId"], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-customer", "show", "--id", cu1.id, "--profile", profile,
+        "--select", "displayName,id,tenantId"], overrides));
       assert.deepEqual(result.delegatedAdminCustomer, cu1);
       assert.equal(result.help, undefined);
-      const missing = await executeArgv(["entra", "delegated-admin-customer", "show", "--id", cu3.id, "--profile", profile], overrides);
+      const missing = record(await executeArgv(["entra", "delegated-admin-customer", "show", "--id", cu3.id, "--profile", profile], overrides));
       assert.deepEqual(missing.delegatedAdminCustomer, { id: cu3.id });
     } finally {
       teardownProfiles(state);
@@ -620,11 +622,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "delegated-admin-relationship", "show", "--id", rel1.id, "--profile", profile,
-        "--select", "accessDetails,activatedDateTime,autoExtendDuration,createdDateTime,customer,displayName,duration,endDateTime,id,lastModifiedDateTime,status"], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-relationship", "show", "--id", rel1.id, "--profile", profile,
+        "--select", "accessDetails,activatedDateTime,autoExtendDuration,createdDateTime,customer,displayName,duration,endDateTime,id,lastModifiedDateTime,status"], overrides));
       assert.deepEqual(result.delegatedAdminRelationship, rel1);
       assert.equal(result.help, undefined);
-      const missing = await executeArgv(["entra", "delegated-admin-relationship", "show", "--id", rel3.id, "--profile", profile], overrides);
+      const missing = record(await executeArgv(["entra", "delegated-admin-relationship", "show", "--id", rel3.id, "--profile", profile], overrides));
       assert.deepEqual(missing.delegatedAdminRelationship, { id: rel3.id });
     } finally {
       teardownProfiles(state);
@@ -636,13 +638,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const result = await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile], overrides));
       assert.deepEqual(result.delegatedAdminCustomers, []);
       assert.deepEqual(result.count, "0 customers");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("0 customers matched")));
-      assert.ok(result.help.some(hint => hint.includes("partner tenant")));
+      assert.ok(strings(result.help).some(hint => hint.includes("0 customers matched")));
+      assert.ok(strings(result.help).some(hint => hint.includes("partner tenant")));
     } finally {
       teardownProfiles(state);
     }
@@ -653,13 +655,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { overrides } = overridesFor(mode);
       await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "show", "--id", "cu-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "show", "--id", "rel-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(outputText(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -672,17 +674,17 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const { overrides } = overridesFor(mode, denied);
       await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("DelegatedAdminRelationship.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("partner tenant")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
-        assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("DelegatedAdminRelationship.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("partner tenant")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Personal Microsoft accounts are not supported")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+        return /grant, role, licence/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "show", "--id", rel1.id, "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("partner tenant")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("partner tenant")));
+        return /grant, role, licence/.test(outputText(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -693,12 +695,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const customers = await executeArgv(["entra", "delegated-admin-customer", "count", "--profile", profile], overrides);
+      const customers = record(await executeArgv(["entra", "delegated-admin-customer", "count", "--profile", profile], overrides));
       assert.deepEqual(customers, { delegatedAdminCustomerCount: 3 });
-      assert.equal(requests[0].url, "https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminCustomers/$count");
-      const relationships = await executeArgv(["entra", "delegated-admin-relationship", "count", "--profile", profile], overrides);
+      assert.equal(requests[0]!.url, "https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminCustomers/$count");
+      const relationships = record(await executeArgv(["entra", "delegated-admin-relationship", "count", "--profile", profile], overrides));
       assert.deepEqual(relationships, { delegatedAdminRelationshipCount: 3 });
-      assert.equal(requests[1].url, "https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/$count");
+      assert.equal(requests[1]!.url, "https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/$count");
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(delegatedAdminScopes)));
     } finally {
@@ -710,18 +712,18 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const details = await executeArgv(["entra", "delegated-admin-customer", "count-service-management-details", "--id", cu1.id, "--profile", profile], overrides);
+      const details = record(await executeArgv(["entra", "delegated-admin-customer", "count-service-management-details", "--id", cu1.id, "--profile", profile], overrides));
       assert.deepEqual(details, { delegatedAdminServiceManagementDetailCount: 3 });
-      assert.equal(requests[0].url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminCustomers/${cu1.id}/serviceManagementDetails/$count`);
-      const assignments = await executeArgv(["entra", "delegated-admin-relationship", "count-access-assignments", "--id", rel1.id, "--profile", profile], overrides);
+      assert.equal(requests[0]!.url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminCustomers/${cu1.id}/serviceManagementDetails/$count`);
+      const assignments = record(await executeArgv(["entra", "delegated-admin-relationship", "count-access-assignments", "--id", rel1.id, "--profile", profile], overrides));
       assert.deepEqual(assignments, { delegatedAdminAccessAssignmentCount: 3 });
-      assert.equal(requests[1].url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(rel1.id)}/accessAssignments/$count`);
-      const operations = await executeArgv(["entra", "delegated-admin-relationship", "count-operations", "--id", rel1.id, "--profile", profile], overrides);
+      assert.equal(requests[1]!.url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(rel1.id)}/accessAssignments/$count`);
+      const operations = record(await executeArgv(["entra", "delegated-admin-relationship", "count-operations", "--id", rel1.id, "--profile", profile], overrides));
       assert.deepEqual(operations, { delegatedAdminRelationshipOperationCount: 3 });
-      assert.equal(requests[2].url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(rel1.id)}/operations/$count`);
-      const relationshipRequests = await executeArgv(["entra", "delegated-admin-relationship", "count-requests", "--id", rel1.id, "--profile", profile], overrides);
+      assert.equal(requests[2]!.url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(rel1.id)}/operations/$count`);
+      const relationshipRequests = record(await executeArgv(["entra", "delegated-admin-relationship", "count-requests", "--id", rel1.id, "--profile", profile], overrides));
       assert.deepEqual(relationshipRequests, { delegatedAdminRelationshipRequestCount: 3 });
-      assert.equal(requests[3].url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(rel1.id)}/requests/$count`);
+      assert.equal(requests[3]!.url, `https://graph.microsoft.com/v1.0/tenantRelationships/delegatedAdminRelationships/${encodeURIComponent(rel1.id)}/requests/$count`);
     } finally {
       teardownProfiles(state);
     }
@@ -733,15 +735,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const { overrides } = overridesFor(mode, denied);
       await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "count", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("DelegatedAdminRelationship.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("partner tenant")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("DelegatedAdminRelationship.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("partner tenant")));
+        return /grant, role, licence/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "count-access-assignments", "--id", rel1.id, "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("partner tenant")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("partner tenant")));
+        return /grant, role, licence/.test(outputText(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -753,22 +755,22 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const customerCount = runDelegatedAdminCli(["entra", "delegated-admin-customer", "count", "--profile", profile], state, mode);
       assert.equal(customerCount.status, 0, customerCount.stdout);
-      assert.deepEqual(decode(customerCount.stdout).delegatedAdminCustomerCount, 2);
+      assert.deepEqual(record(decode(customerCount.stdout)).delegatedAdminCustomerCount, 2);
       const detailsCount = runDelegatedAdminCli(["entra", "delegated-admin-customer", "count-service-management-details", "--id", cu1.id, "--profile", profile], state, mode);
       assert.equal(detailsCount.status, 0, detailsCount.stdout);
-      assert.deepEqual(decode(detailsCount.stdout).delegatedAdminServiceManagementDetailCount, 2);
+      assert.deepEqual(record(decode(detailsCount.stdout)).delegatedAdminServiceManagementDetailCount, 2);
       const relationshipCount = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "count", "--profile", profile], state, mode);
       assert.equal(relationshipCount.status, 0, relationshipCount.stdout);
-      assert.deepEqual(decode(relationshipCount.stdout).delegatedAdminRelationshipCount, 2);
+      assert.deepEqual(record(decode(relationshipCount.stdout)).delegatedAdminRelationshipCount, 2);
       const assignmentsCount = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "count-access-assignments", "--id", rel1.id, "--profile", profile], state, mode);
       assert.equal(assignmentsCount.status, 0, assignmentsCount.stdout);
-      assert.deepEqual(decode(assignmentsCount.stdout).delegatedAdminAccessAssignmentCount, 2);
+      assert.deepEqual(record(decode(assignmentsCount.stdout)).delegatedAdminAccessAssignmentCount, 2);
       const operationsCount = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "count-operations", "--id", rel1.id, "--profile", profile], state, mode);
       assert.equal(operationsCount.status, 0, operationsCount.stdout);
-      assert.deepEqual(decode(operationsCount.stdout).delegatedAdminRelationshipOperationCount, 2);
+      assert.deepEqual(record(decode(operationsCount.stdout)).delegatedAdminRelationshipOperationCount, 2);
       const requestsCount = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "count-requests", "--id", rel1.id, "--profile", profile], state, mode);
       assert.equal(requestsCount.status, 0, requestsCount.stdout);
-      assert.deepEqual(decode(requestsCount.stdout).delegatedAdminRelationshipRequestCount, 2);
+      assert.deepEqual(record(decode(requestsCount.stdout)).delegatedAdminRelationshipRequestCount, 2);
       assert.ok(!requestsCount.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -779,8 +781,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runDelegatedAdminCli(["entra", "delegated-admin-customer", "list", "--profile", profile], state, mode);
       assert.equal(listed.status, 0, listed.stdout);
       assert.equal(listed.stderr, "");
-      const listOut = decode(listed.stdout);
-      assert.deepEqual(listOut.delegatedAdminCustomers.map(row => row.id), [cu1.id, cu2.id]);
+      const listOut = record(decode(listed.stdout));
+      assert.deepEqual(records(listOut.delegatedAdminCustomers).map(row => row.id), [cu1.id, cu2.id]);
       assert.deepEqual(listOut.count, "2 customers");
       assert.equal(listOut.total, null);
       assert.equal(listOut.complete, true);
@@ -788,15 +790,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 
       const shown = runDelegatedAdminCli(["entra", "delegated-admin-customer", "show", "--id", cu1.id, "--profile", profile], state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      assert.deepEqual(decode(shown.stdout).delegatedAdminCustomer, cu1);
+      assert.deepEqual(record(decode(shown.stdout)).delegatedAdminCustomer, cu1);
 
       const listedRel = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "list", "--profile", profile], state, mode);
       assert.equal(listedRel.status, 0, listedRel.stdout);
-      assert.deepEqual(decode(listedRel.stdout).delegatedAdminRelationships.map(row => row.id), [rel1.id, rel2.id]);
+      assert.deepEqual(records(record(decode(listedRel.stdout)).delegatedAdminRelationships).map(row => row.id), [rel1.id, rel2.id]);
 
       const shownRel = runDelegatedAdminCli(["entra", "delegated-admin-relationship", "show", "--id", rel1.id, "--profile", profile], state, mode);
       assert.equal(shownRel.status, 0, shownRel.stdout);
-      assert.deepEqual(decode(shownRel.stdout).delegatedAdminRelationship, rel1);
+      assert.deepEqual(record(decode(shownRel.stdout)).delegatedAdminRelationship, rel1);
       assert.ok(!shownRel.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -807,11 +809,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runDelegatedAdminCli(["entra", "delegated-admin-customer", "list", "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
+      assert.match(outputText(output.error), /grant, role, licence or policy/);
       assert.equal(output.delegatedAdminCustomers, undefined);
-      assert.ok(output.help.some(hint => hint.includes("partner tenant")));
+      assert.ok(strings(output.help).some(hint => hint.includes("partner tenant")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -835,7 +837,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["delegated-admin-relationship", "count-access-assignments"], ["--id", rel1.id]],
     [["delegated-admin-relationship", "count-operations"], ["--id", rel1.id]],
     [["delegated-admin-relationship", "count-requests"], ["--id", rel1.id]],
-  ]) {
+  ] as const) {
     for (const preview of [false, true]) {
       test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
         const state = setupProfiles();
@@ -863,15 +865,15 @@ test("truncated delegated-admin text carries a --full hint without lifting caps"
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const partial = await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", "soc",
-      "--select", "id,displayName"], overrides);
-    const truncated = partial.delegatedAdminCustomers.find(row => row.id === cu2.id);
-    assert.match(truncated.displayName, /truncated, \d+ chars total/);
-    assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", "soc", "--full",
-      "--select", "id,displayName"], overrides);
-    assert.equal(full.delegatedAdminCustomers.find(row => row.id === cu2.id).displayName, longName);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const partial = record(await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", "soc",
+      "--select", "id,displayName"], overrides));
+    const truncated = records(partial.delegatedAdminCustomers).find(row => row.id === cu2.id);
+    assert.match(outputText(truncated!.displayName), /truncated, \d+ chars total/);
+    assert.ok(strings(partial.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "delegated-admin-customer", "list", "--profile", "soc", "--full",
+      "--select", "id,displayName"], overrides));
+    assert.equal(records(full.delegatedAdminCustomers).find(row => row.id === cu2.id)!.displayName, longName);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -882,14 +884,14 @@ test("application mode rejects delegated scopes before HTTP", async () => {
   try {
     const { requests, overrides } = overridesFor("application");
     await assert.rejects(
-      executeArgv(["entra", "delegated-admin-customer", "list", "--profile", "batch", "--scopes", delegatedAdminScopes[0]], overrides),
+      executeArgv(["entra", "delegated-admin-customer", "list", "--profile", "batch", "--scopes", delegatedAdminScopes[0]!], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Graph \.default audience/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Graph \.default audience/.test(outputText(record(error).message));
       },
     );
     await assert.rejects(
-      executeArgv(["entra", "delegated-admin-relationship", "show", "--id", rel1.id, "--profile", "batch", "--scopes", delegatedAdminScopes[0]], overrides),
+      executeArgv(["entra", "delegated-admin-relationship", "show", "--id", rel1.id, "--profile", "batch", "--scopes", delegatedAdminScopes[0]!], overrides),
       { code: "VALIDATION_ERROR" },
     );
     assert.equal(requests.length, 0);
@@ -948,12 +950,12 @@ test("malformed delegated-admin count bodies fail as unknown, not zero", async (
       const malformed = transport(() => ({ status: 200, headers: {}, body }));
       const scoped = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "delegated-admin-customer", "count", "--profile", "soc"], scoped.overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /malformed delegated-admin customer count|non-JSON success body/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /malformed delegated-admin customer count|non-JSON success body/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "delegated-admin-relationship", "count-access-assignments", "--id", rel1.id, "--profile", "soc"], scoped.overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /malformed delegated-admin access assignment count|non-JSON success body/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /malformed delegated-admin access assignment count|non-JSON success body/.test(outputText(record(error).message));
       });
     }
   } finally {

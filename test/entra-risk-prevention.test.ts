@@ -1,3 +1,5 @@
+import { record, records, text as outputText, strings, authFakes, delegatedProvider, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler, type RawResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -78,12 +80,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -98,9 +100,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -108,7 +110,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -149,7 +151,7 @@ function riskTransport() {
     }
     const provider = new RegExp(`^${base}/webApplicationFirewallVerifications/([^/]+)/provider$`).exec(path);
     if (provider) {
-      if (decodeURIComponent(provider[1]) === verification1.id) return json(200, cloudflare);
+      if (decodeURIComponent(provider[1]!) === verification1.id) return json(200, cloudflare);
       return json(404, { error: { code: "Request_ResourceNotFound", message: "no such verification" } });
     }
     const single = new RegExp(`^${base}/([^/]+)/([^/]+)$`).exec(path);
@@ -157,14 +159,14 @@ function riskTransport() {
       const rows = single[1] === "fraudProtectionProviders" ? fraudProviders
         : single[1] === "webApplicationFirewallProviders" ? wafProviders
         : single[1] === "webApplicationFirewallVerifications" ? verifications : [];
-      const found = rows.find(row => row.id === decodeURIComponent(single[2]));
+      const found = rows.find(row => row.id === decodeURIComponent(single[2]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such resource" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, fixture, calls = []) {
+function overridesFor(mode: string, fixture?: TransportFixture, calls: CredentialArgs[] = []) {
   const transportFixture = fixture ?? riskTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -172,8 +174,8 @@ function overridesFor(mode, fixture, calls = []) {
     calls,
     overrides: {
       transport: transportFixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
@@ -192,7 +194,7 @@ test("delegated lists fraud providers with compact rows and scrubbed key materia
   const state = setupProfiles();
   try {
     const { requests, calls, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "fraud-protection-provider", "list", "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "fraud-protection-provider", "list", "--profile", "soc"], overrides));
     assert.deepEqual(result.fraudProtectionProviders, [
       { id: arkose.id, displayName: "Arkose Sign-Up Protection", "@odata.type": "#microsoft.graph.arkoseFraudProtectionProvider" },
       { id: human.id, displayName: "HUMAN Sign-Up Protection", "@odata.type": "#microsoft.graph.humanSecurityFraudProtectionProvider" },
@@ -201,16 +203,16 @@ test("delegated lists fraud providers with compact rows and scrubbed key materia
     assert.deepEqual(result.count, "3 fraud protection providers");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
-    assert.ok(result.help.some(hint => hint.includes("entra fraud-protection-provider show --id <fraud-protection-provider-id>")));
-    assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
+    assert.ok(strings(result.help).some(hint => hint.includes("entra fraud-protection-provider show --id <fraud-protection-provider-id>")));
+    assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
     for (const secret of SECRET_VALUES) assert.ok(!JSON.stringify(result).includes(secret), `leaked ${secret}`);
     assert.ok(!JSON.stringify(result).includes("opaque-fixture-delegated-token"));
     assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-delegated-token"));
-    assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identity/riskPrevention/fraudProtectionProviders?"));
-    const sent = new URL(requests[0].url).searchParams;
+    assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/identity/riskPrevention/fraudProtectionProviders?"));
+    const sent = new URL(requests[0]!.url).searchParams;
     assert.equal(sent.get("$select"), "id,displayName");
     assert.ok(!sent.has("$filter"));
-    assert.deepEqual(calls[0][1], riskScopes);
+    assert.deepEqual(calls[0]![1], riskScopes);
   } finally {
     teardownProfiles(state);
   }
@@ -220,7 +222,7 @@ test("delegated shows one fraud provider with the full set and scrubbed secrets"
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "fraud-protection-provider", "show", "--id", arkose.id, "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "fraud-protection-provider", "show", "--id", arkose.id, "--profile", "soc"], overrides));
     assert.deepEqual(result.fraudProtectionProvider, {
       id: arkose.id,
       displayName: "Arkose Sign-Up Protection",
@@ -228,16 +230,16 @@ test("delegated shows one fraud provider with the full set and scrubbed secrets"
       verifySubDomain: "verify-api",
       "@odata.type": "#microsoft.graph.arkoseFraudProtectionProvider",
     });
-    assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
+    assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
     for (const secret of SECRET_VALUES) assert.ok(!JSON.stringify(result).includes(secret), `leaked ${secret}`);
-    const app = await executeArgv(["entra", "fraud-protection-provider", "show", "--id", human.id, "--profile", "soc"], overrides);
+    const app = record(await executeArgv(["entra", "fraud-protection-provider", "show", "--id", human.id, "--profile", "soc"], overrides));
     assert.deepEqual(app.fraudProtectionProvider, {
       id: human.id,
       displayName: "HUMAN Sign-Up Protection",
       appId: "PXfixtureapp",
       "@odata.type": "#microsoft.graph.humanSecurityFraudProtectionProvider",
     });
-    const bare = await executeArgv(["entra", "fraud-protection-provider", "show", "--id", fraudBare.id, "--profile", "soc"], overrides);
+    const bare = record(await executeArgv(["entra", "fraud-protection-provider", "show", "--id", fraudBare.id, "--profile", "soc"], overrides));
     assert.deepEqual(bare.fraudProtectionProvider, { id: fraudBare.id });
   } finally {
     teardownProfiles(state);
@@ -248,7 +250,7 @@ test("delegated lists WAF providers with compact rows, filter support and scrubb
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "web-application-firewall-provider", "list", "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "web-application-firewall-provider", "list", "--profile", "soc"], overrides));
     assert.deepEqual(result.webApplicationFirewallProviders, [
       { id: cloudflare.id, displayName: "Cloudflare Provider Example", "@odata.type": "#microsoft.graph.cloudFlareWebApplicationFirewallProvider" },
       { id: akamai.id, displayName: "Akamai Provider Example", "@odata.type": "#microsoft.graph.akamaiWebApplicationFirewallProvider" },
@@ -257,15 +259,15 @@ test("delegated lists WAF providers with compact rows, filter support and scrubb
     assert.deepEqual(result.count, "3 web application firewall providers");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
-    assert.ok(result.help.some(hint => hint.includes("entra web-application-firewall-provider show --id <web-application-firewall-provider-id>")));
+    assert.ok(strings(result.help).some(hint => hint.includes("entra web-application-firewall-provider show --id <web-application-firewall-provider-id>")));
     for (const secret of SECRET_VALUES) assert.ok(!JSON.stringify(result).includes(secret), `leaked ${secret}`);
     const seen = requests.length;
-    const filtered = await executeArgv(
-      ["entra", "web-application-firewall-provider", "list", "--profile", "soc", "--filter", "displayName eq 'Akamai Provider Example'"], overrides);
-    const sent = new URL(requests[seen].url).searchParams;
+    const filtered = record(await executeArgv(
+      ["entra", "web-application-firewall-provider", "list", "--profile", "soc", "--filter", "displayName eq 'Akamai Provider Example'"], overrides));
+    const sent = new URL(requests[seen]!.url).searchParams;
     assert.equal(sent.get("$filter"), "displayName eq 'Akamai Provider Example'");
     assert.equal(sent.get("$select"), "id,displayName");
-    assert.deepEqual(filtered.webApplicationFirewallProviders.map(row => row.id), [cloudflare.id, akamai.id, wafBare.id]);
+    assert.deepEqual(records(filtered.webApplicationFirewallProviders).map(row => row.id), [cloudflare.id, akamai.id, wafBare.id]);
   } finally {
     teardownProfiles(state);
   }
@@ -275,7 +277,7 @@ test("delegated shows one WAF provider with the full set and scrubbed credential
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "web-application-firewall-provider", "show", "--id", akamai.id, "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "web-application-firewall-provider", "show", "--id", akamai.id, "--profile", "soc"], overrides));
     assert.deepEqual(result.webApplicationFirewallProvider, {
       id: akamai.id,
       displayName: "Akamai Provider Example",
@@ -283,7 +285,7 @@ test("delegated shows one WAF provider with the full set and scrubbed credential
       "@odata.type": "#microsoft.graph.akamaiWebApplicationFirewallProvider",
     });
     for (const secret of SECRET_VALUES) assert.ok(!JSON.stringify(result).includes(secret), `leaked ${secret}`);
-    const zone = await executeArgv(["entra", "web-application-firewall-provider", "show", "--id", cloudflare.id, "--profile", "soc"], overrides);
+    const zone = record(await executeArgv(["entra", "web-application-firewall-provider", "show", "--id", cloudflare.id, "--profile", "soc"], overrides));
     assert.deepEqual(zone.webApplicationFirewallProvider, {
       id: cloudflare.id,
       displayName: "Cloudflare Provider Example",
@@ -299,7 +301,7 @@ test("delegated lists verifications with compact rows and whole complex detail o
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "web-application-firewall-verification", "list", "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "web-application-firewall-verification", "list", "--profile", "soc"], overrides));
     assert.deepEqual(result.webApplicationFirewallVerifications, [
       { id: verification1.id, verifiedHost: "www.contoso.com", providerType: "cloudflare" },
       { id: verificationBare.id },
@@ -307,11 +309,11 @@ test("delegated lists verifications with compact rows and whole complex detail o
     assert.deepEqual(result.count, "2 web application firewall verifications");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
-    assert.ok(result.help.some(hint => hint.includes("entra web-application-firewall-verification show --id <web-application-firewall-verification-id>")));
-    assert.ok(!("provider" in result.webApplicationFirewallVerifications[0]));
-    const sent = new URL(requests[0].url).searchParams;
+    assert.ok(strings(result.help).some(hint => hint.includes("entra web-application-firewall-verification show --id <web-application-firewall-verification-id>")));
+    assert.ok(!("provider" in record(result.webApplicationFirewallVerifications[0])));
+    const sent = new URL(requests[0]!.url).searchParams;
     assert.equal(sent.get("$select"), "id,verifiedHost,providerType");
-    const shown = await executeArgv(["entra", "web-application-firewall-verification", "show", "--id", verification1.id, "--profile", "soc"], overrides);
+    const shown = record(await executeArgv(["entra", "web-application-firewall-verification", "show", "--id", verification1.id, "--profile", "soc"], overrides));
     assert.deepEqual(shown.webApplicationFirewallVerification, verification1);
     assert.ok(!("provider" in shown.webApplicationFirewallVerification));
   } finally {
@@ -323,16 +325,16 @@ test("delegated shows a verification provider with the reviewed provider set and
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "web-application-firewall-verification", "provider", "show", "--id", verification1.id, "--profile", "soc"], overrides);
+    const result = record(await executeArgv(["entra", "web-application-firewall-verification", "provider", "show", "--id", verification1.id, "--profile", "soc"], overrides));
     assert.deepEqual(result.webApplicationFirewallProvider, {
       id: cloudflare.id,
       displayName: "Cloudflare Provider Example",
       zoneId: "11111111111111111111111111111111",
       "@odata.type": "#microsoft.graph.cloudFlareWebApplicationFirewallProvider",
     });
-    assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
+    assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
     for (const secret of SECRET_VALUES) assert.ok(!JSON.stringify(result).includes(secret), `leaked ${secret}`);
-    assert.equal(requests[0].url.split("?")[0],
+    assert.equal(requests[0]!.url.split("?")[0],
       `https://graph.microsoft.com/v1.0/identity/riskPrevention/webApplicationFirewallVerifications/${verification1.id}/provider`);
   } finally {
     teardownProfiles(state);
@@ -343,12 +345,12 @@ test("delegated resumes a capped fraud list through its opaque cursor", async ()
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "fraud-protection-provider", "list", "--profile", "soc", "--limit", "1"], overrides);
-    assert.deepEqual(first.fraudProtectionProviders.map(row => row.id), [arkose.id]);
+    const first = record(await executeArgv(["entra", "fraud-protection-provider", "list", "--profile", "soc", "--limit", "1"], overrides));
+    assert.deepEqual(records(first.fraudProtectionProviders).map(row => row.id), [arkose.id]);
     assert.equal(first.complete, false);
     assert.equal(typeof first.cursor, "string");
-    const second = await executeArgv(["entra", "fraud-protection-provider", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
-    assert.deepEqual(second.fraudProtectionProviders.map(row => row.id), [human.id, fraudBare.id]);
+    const second = record(await executeArgv(["entra", "fraud-protection-provider", "list", "--profile", "soc", "--cursor", outputText(first.cursor)], overrides));
+    assert.deepEqual(records(second.fraudProtectionProviders).map(row => row.id), [human.id, fraudBare.id]);
     assert.deepEqual(second.count, "2 fraud protection providers");
     assert.equal(second.total, null);
     assert.equal(second.complete, true);
@@ -361,16 +363,16 @@ for (const [command, expected, route] of [
   [["fraud-protection-provider", "count"], 3, "fraudProtectionProviders/$count"],
   [["web-application-firewall-provider", "count"], 3, "webApplicationFirewallProviders/$count"],
   [["web-application-firewall-verification", "count"], 2, "webApplicationFirewallVerifications/$count"],
-]) {
+] as const) {
   test(`delegated ${command.join(" ")} counts as one scalar without a collection query`, async () => {
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor("delegated");
-      const result = await executeArgv(["entra", ...command, "--profile", "soc"], overrides);
+      const result = record(await executeArgv(["entra", ...command, "--profile", "soc"], overrides));
       assert.deepEqual(result.count, { returned: expected, complete: true });
-      assert.ok(result.help.some(hint => hint.includes("Workforce tenant context only")));
+      assert.ok(strings(result.help).some(hint => hint.includes("Workforce tenant context only")));
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, `https://graph.microsoft.com/v1.0/identity/riskPrevention/${route}`);
+      assert.equal(requests[0]!.url, `https://graph.microsoft.com/v1.0/identity/riskPrevention/${route}`);
     } finally {
       teardownProfiles(state);
     }
@@ -395,13 +397,13 @@ test("delegated denied risk-prevention reads surface scope, role and licence gui
       ["entra", "web-application-firewall-verification", "provider", "show", "--id", verification1.id, "--profile", "soc"],
     ]) {
       await assert.rejects(executeArgv(args, overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.match(error.message, /\(403\)/);
-        assert.match(error.message, /grant, role, licence/);
-        assert.ok(error.suggestions.some(hint => hint.includes("RiskPreventionProviders.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Security Reader")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
-        assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.match(outputText(record(error).message), /\(403\)/);
+        assert.match(outputText(record(error).message), /grant, role, licence/);
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("RiskPreventionProviders.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Security Reader")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Personal Microsoft accounts are not supported")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
         return true;
       });
     }
@@ -422,7 +424,7 @@ test("delegated unknown ids report absence, not emptiness", async () => {
     ]) {
       await assert.rejects(
         executeArgv(args, overrides),
-        error => error.code === "GRAPH_ERROR" && /not found or inaccessible/.test(error.message),
+        error => record(error).code === "GRAPH_ERROR" && /not found or inaccessible/.test(outputText(record(error).message)),
       );
     }
   } finally {
@@ -441,7 +443,7 @@ for (const [command, args] of [
   [["web-application-firewall-verification", "show"], ["--id", verification1.id]],
   [["web-application-firewall-verification", "count"], []],
   [["web-application-firewall-verification", "provider", "show"], ["--id", verification1.id]],
-]) {
+] as const) {
   for (const preview of [false, true]) {
     test(`delegated ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
       const state = setupProfiles();
@@ -469,13 +471,13 @@ test("truncated verification text carries a --full hint without lifting redactio
   try {
     const longRow = transport(() => json(200, { value: [{ ...verification1, id: "verif-long-9", verifiedHost: longHost }] }));
     const { overrides } = overridesFor("delegated", longRow);
-    const partial = await executeArgv(["entra", "web-application-firewall-verification", "list", "--profile", "soc"], overrides);
-    const truncated = partial.webApplicationFirewallVerifications.find(row => row.id === "verif-long-9");
-    assert.match(truncated.verifiedHost, /truncated, \d+ chars total/);
-    assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "web-application-firewall-verification", "list", "--profile", "soc", "--full"], overrides);
-    assert.equal(full.webApplicationFirewallVerifications.find(row => row.id === "verif-long-9").verifiedHost, longHost);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const partial = record(await executeArgv(["entra", "web-application-firewall-verification", "list", "--profile", "soc"], overrides));
+    const truncated = records(partial.webApplicationFirewallVerifications).find(row => row.id === "verif-long-9");
+    assert.match(outputText(truncated!.verifiedHost), /truncated, \d+ chars total/);
+    assert.ok(strings(partial.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "web-application-firewall-verification", "list", "--profile", "soc", "--full"], overrides));
+    assert.equal(records(full.webApplicationFirewallVerifications).find(row => row.id === "verif-long-9")!.verifiedHost, longHost);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -544,8 +546,8 @@ for (const command of [
       await assert.rejects(
         executeArgv(["entra", ...command, "--profile", "batch"], overrides),
         error => {
-          assert.equal(error.code, "VALIDATION_ERROR");
-          return /need a delegated profile; Graph documents no supported application permission/.test(error.message);
+          assert.equal(record(error).code, "VALIDATION_ERROR");
+          return /need a delegated profile; Graph documents no supported application permission/.test(outputText(record(error).message));
         },
       );
       assert.equal(calls.length, 0);
@@ -563,8 +565,8 @@ test("malformed risk-prevention count bodies fail as unknown, not zero", async (
       const malformed = transport(() => ({ status: 200, headers: {}, body }));
       const scoped = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "fraud-protection-provider", "count", "--profile", "soc"], scoped.overrides), error => {
-        assert.equal(error.code, "RESPONSE_INVALID");
-        return /non-numeric success body/.test(error.message);
+        assert.equal(record(error).code, "RESPONSE_INVALID");
+        return /non-numeric success body/.test(outputText(record(error).message));
       });
     }
   } finally {
@@ -586,7 +588,7 @@ test("malformed single risk-prevention bodies fail as unknown, not empty", async
       ]) {
         await assert.rejects(
           executeArgv(args, scoped.overrides),
-          error => error.code === "GRAPH_ERROR" && /Graph returned a malformed web-application-firewall-(provider|verification) body|Graph returned a malformed fraud-protection-provider body/.test(error.message),
+          error => record(error).code === "GRAPH_ERROR" && /Graph returned a malformed web-application-firewall-(provider|verification) body|Graph returned a malformed fraud-protection-provider body/.test(outputText(record(error).message)),
         );
       }
     }
@@ -600,7 +602,7 @@ for (const [command, id] of [
   [["web-application-firewall-provider", "show"], "$value"],
   [["web-application-firewall-verification", "show"], "$ref"],
   [["web-application-firewall-verification", "provider", "show"], "$count"],
-]) {
+] as const) {
   test(`${command.join(" ")} rejects reserved resource binding ${id} before credentials`, async () => {
     const state = setupProfiles();
     try {
@@ -617,20 +619,20 @@ for (const [command, id] of [
   });
 }
 
-function rawFixture(handler) {
-  const credentialCalls = [];
-  const requests = [];
-  const credential = account => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
-  const delegated = new DelegatedAuth({
+function rawFixture(handler: RawResponseHandler) {
+  const credentialCalls: unknown[][] = [];
+  const requests: TransportRequest[] = [];
+  const credential = <T extends object>(account: T) => ({ token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, ...account });
+  const delegated = new DelegatedAuth(delegatedProvider({
     storage: "session-only",
     login: async () => credential({ accountId: "synthetic-account" }),
     silent: async (...args) => { credentialCalls.push(["silent", ...args]); return credential({ accountId: "synthetic-account" }); },
-  });
+  }));
   const application = new ApplicationAuth({
     storage: "session-only",
     acquire: async (...args) => { credentialCalls.push(args); return credential({}); },
   });
-  const transport = async request => {
+  const transport: GraphTransport = async request => {
     requests.push(request);
     const response = typeof handler === "function" ? await handler(request, requests.length) : handler;
     return { headers: {}, body: "", ...response };
@@ -638,12 +640,12 @@ function rawFixture(handler) {
   return { credentialCalls, requests, deps: { delegated, application, transport } };
 }
 
-const delegatedRawProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } };
-const appRawProfile = { ...delegatedRawProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } };
+const delegatedRawProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
+const appRawProfile = { ...delegatedRawProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } } as const;
 const rawScopes = riskScopes.join(",");
 const riskBase = "/v1.0/identity/riskPrevention";
 
-function rawBody(request) {
+function rawBody(request: TransportRequest): TransportResponse {
   const url = new URL(request.url);
   if (url.pathname === `${riskBase}/fraudProtectionProviders`) return { status: 200, headers: {}, body: JSON.stringify({ value: fraudProviders }) };
   if (url.pathname === `${riskBase}/fraudProtectionProviders/${arkose.id}`) return { status: 200, headers: {}, body: JSON.stringify(arkose) };
@@ -697,11 +699,11 @@ test("raw api refuses unreviewed risk-prevention $select fields before credentia
   const f = rawFixture(rawBody);
   await assert.rejects(
     runApiGet({ path: "/identity/riskPrevention/fraudProtectionProviders", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: rawScopes, odata: "$select=id,serverToken" }, f.deps),
-    error => error.code === "VALIDATION_ERROR" && /Unreviewed \$select field serverToken/.test(error.message),
+    error => record(error).code === "VALIDATION_ERROR" && /Unreviewed \$select field serverToken/.test(outputText(record(error).message)),
   );
   await assert.rejects(
     runApiGet({ path: "/identity/riskPrevention/webApplicationFirewallProviders", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: rawScopes, odata: "$select=id,apiToken" }, f.deps),
-    error => error.code === "VALIDATION_ERROR" && /Unreviewed \$select field apiToken/.test(error.message),
+    error => record(error).code === "VALIDATION_ERROR" && /Unreviewed \$select field apiToken/.test(outputText(record(error).message)),
   );
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
@@ -720,7 +722,7 @@ test("raw risk-prevention reads refuse application profiles before credentials",
   ]) {
     await assert.rejects(
       runApiGet({ path, apiVersion: "v1.0", profile: appRawProfile }, f.deps),
-      error => error.code === "VALIDATION_ERROR" && /needs a delegated profile/.test(error.message),
+      error => record(error).code === "VALIDATION_ERROR" && /needs a delegated profile/.test(outputText(record(error).message)),
     );
   }
   assert.equal(f.credentialCalls.length, 0);

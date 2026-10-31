@@ -90,7 +90,8 @@ The licence matrix above distinguishes risky-user API access from risk-detection
 Workload-identity reads follow the same pattern one level up: the risky-service-principal and service-principal-detection APIs require Workload Identities Premium, and hidden riskDetail/riskLevel values report that licence boundary rather than no risk.
 Use `entra risky-user`, `entra risk-detection`, `entra risky-service-principal` and `entra service-principal-risk-detection` group help to discover implemented risk reads.
 Hidden risk values indicate limited visibility, never an absence of risk.
-Detection `show` output supplies sign-in correlation guidance where available; a null correlationId means no sign-in is associated.
+Detection `show` output supplies sign-in correlation guidance; `entra risk-detection correlate` uses existing IdentityRiskEvent.Read.All and AuditLog.Read.All access, with the delegated role and licence prerequisites for both reads.
+It uses existing credentials without adding consent or write authority; see the [correlation evidence contract](output-and-paging.md#risk-detection-correlation).
 See the [command reference](commands.md) for executable leaves.
 
 The licensing overview makes base sign-in/audit logs available on Free, while [Graph access guidance](https://learn.microsoft.com/en-us/entra/identity/monitoring-health/howto-access-activity-logs) describes P1/P2 tenants.

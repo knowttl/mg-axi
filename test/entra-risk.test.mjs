@@ -227,7 +227,7 @@ function hintArgv(hint) {
   return argv;
 }
 
-function runReadCli(args, state, mode, denied = false, input) {
+function runReadCli(args, state, mode, denied = false, input, correlation) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-risk-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -236,10 +236,87 @@ function runReadCli(args, state, mode, denied = false, input) {
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
-      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, riskyUsers, riskDetections, denied }),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, riskyUsers, riskDetections, denied, correlation }),
     },
   });
 }
+
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+  test(`${mode} executable correlates a detection using both identifiers and its bounded user window`, () => {
+    const state = setupProfiles();
+    try {
+      const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", profile, "--id", d1.id], state, mode, false, undefined, "exact");
+      assert.equal(result.status, 0, result.stdout);
+      const output = decode(result.stdout);
+      assert.equal(output.status, "exact");
+      assert.equal(output.complete, true);
+      assert.deepEqual(output.window, { userId: d1.userId, since: "2026-09-10T07:55:00.000Z", until: "2026-09-10T08:05:00.000Z" });
+      assert.deepEqual(output.signIns, [{ id: d1.requestId, createdDateTime: d1.activityDateTime, userId: d1.userId, correlationId: d1.correlationId, correlationIdMatches: true, requestIdMatches: true, match: "exact" }]);
+    } finally { teardownProfiles(state); }
+  });
+}
+
+test("correlation reports reused correlation identifiers as ambiguous candidates", () => {
+  const state = setupProfiles();
+  try {
+    const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", "soc", "--id", d1.id], state, "delegated", false, undefined, "ambiguous");
+    assert.equal(result.status, 0, result.stdout);
+    const output = decode(result.stdout);
+    assert.equal(output.status, "ambiguous");
+    assert.equal(output.complete, true);
+    assert.deepEqual(output.signIns.map(row => [row.id, row.match, row.correlationIdMatches, row.requestIdMatches]), [["candidate-one", "candidate", true, false], ["candidate-two", "candidate", true, false]]);
+  } finally { teardownProfiles(state); }
+});
+
+test("one user/time candidate never proves exact correlation", () => {
+  const state = setupProfiles();
+  try {
+    const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", "soc", "--id", d1.id], state, "delegated", false, undefined, "candidate");
+    assert.equal(result.status, 0, result.stdout);
+    const output = decode(result.stdout);
+    assert.equal(output.status, "candidates");
+    assert.deepEqual(output.signIns.map(row => [row.match, row.correlationIdMatches, row.requestIdMatches]), [["candidate", false, false]]);
+  } finally { teardownProfiles(state); }
+});
+
+test("correlation shares the twenty request ceiling across detection and sign-in reads", () => {
+  const state = setupProfiles();
+  try {
+    const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", "soc", "--id", d1.id], state, "delegated", false, undefined, "budget");
+    assert.equal(result.status, 0, result.stdout);
+    const output = decode(result.stdout);
+    assert.equal(output.status, "incomplete");
+    assert.equal(output.complete, false);
+    assert.equal(output.reason, "request budget exhausted after 19 requests");
+    assert.equal(output.signIns.length, 19);
+    assert.equal(output.signIns.at(-1).id, "candidate-18");
+  } finally { teardownProfiles(state); }
+});
+
+test("correlation retains detection and earlier sign-ins when a later page is denied", () => {
+  const state = setupProfiles();
+  try {
+    const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", "soc", "--id", d1.id], state, "delegated", false, undefined, "failure");
+    assert.equal(result.status, 0, result.stdout);
+    const output = decode(result.stdout);
+    assert.equal(output.status, "incomplete");
+    assert.equal(output.complete, false);
+    assert.match(output.reason, /403/);
+    assert.equal(output.riskDetection.id, d1.id);
+    assert.deepEqual(output.signIns.map(row => row.id), ["candidate-0"]);
+    assert.ok(output.help.some(hint => hint.includes("AuditLog.Read.All")));
+  } finally { teardownProfiles(state); }
+});
+
+test("correlation skips sign-in reads for a null association", () => {
+  const state = setupProfiles();
+  try {
+    const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", "soc", "--id", d3.id], state, "delegated");
+    assert.equal(result.status, 0, result.stdout);
+    assert.deepEqual(decode(result.stdout).signIns, []);
+    assert.equal(decode(result.stdout).status, "not-associated");
+  } finally { teardownProfiles(state); }
+});
 
 for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
   test(`${mode} executable lists risky users with compact rows`, () => {

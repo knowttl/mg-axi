@@ -1,5 +1,7 @@
 import { AxiError } from "axi-sdk-js";
 import type { CollectArgs, GraphSession, SessionOperation } from "./graph-session.js";
+import { DEFAULT_MAX_REQUESTS, DEFAULT_MAX_BYTES, DEFAULT_DEADLINE_MS, resolveSessionOperation } from "./graph-session.js";
+import { DEFAULT_DELEGATED_SCOPES } from "./entra-audit-logs.js";
 import { listTotals } from "./list-totals.js";
 import type { AnyProfile } from "./profiles.js";
 
@@ -580,6 +582,7 @@ const RISK_DETECTION_SHOW: SingleShape = {
   defaultScopes: DEFAULT_RISK_DETECTION_SCOPES,
   denialHints: RISK_DETECTION_DENIAL_HINTS,
   correlationHelp: profileName => [
+    `Read bounded sign-in correlation evidence with mg-axi entra risk-detection correlate --id <risk-detection-id> ${profileHint(profileName)}`,
     `Correlate this detection to its sign-in with mg-axi entra sign-in list --since <activity-window-start> --filter "userPrincipalName eq '<user-principal-name>'" ${profileHint(profileName)}; there is no riskySignIns endpoint`,
     "Limited views stay limited: riskEventType generic can hide a premium detection without P2 detail, and hidden risk levels report the licence boundary instead of the level - never read them as none",
   ],
@@ -710,6 +713,76 @@ export async function showRiskDetection(
   profileName: string,
 ): Promise<Record<string, unknown>> {
   return showRisk(RISK_DETECTION_SHOW, session, flags, profile, operation, help, profileName);
+}
+
+// Reviewed v1.0 evidence contracts:
+// https://learn.microsoft.com/en-us/graph/api/resources/riskdetection?view=graph-rest-1.0
+// https://learn.microsoft.com/en-us/graph/api/resources/signin?view=graph-rest-1.0
+// correlationId is client supplied, so correlation alone never selects one
+// sign-in. Require requestId as well and retain every candidate in the window.
+export async function correlateRiskDetection(
+  session: GraphSession,
+  flags: RiskFlags,
+  profile: AnyProfile,
+  operation: SessionOperation,
+  help: string,
+  profileName: string,
+): Promise<Record<string, unknown>> {
+  const limit = flags.limit === undefined ? 100 : Number(flags.limit);
+  if (!Number.isSafeInteger(limit) || limit <= 0) throw new AxiError("--limit needs a positive integer", "VALIDATION_ERROR", [help]);
+  const started = Date.now();
+  const usage = { requests: 0, bytes: 0 };
+  const detectionFields = ["id", "userId", "activityDateTime", "requestId", "correlationId"];
+  const raw = await withGuidance(RISK_DETECTION_DENIAL_HINTS, () => session.execute({
+    profile, operation, params: { "riskDetection-id": String(flags.id) },
+    query: { $select: detectionFields.join(",") },
+    scopes: profile.mode === "delegated" ? DEFAULT_RISK_DETECTION_SCOPES : undefined,
+    usage,
+  }));
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) throw new AxiError("Graph returned a malformed risk body", "GRAPH_ERROR");
+  const detection = raw as Record<string, unknown>;
+  const base = { riskDetection: project(detection, detectionFields, false).row };
+  if (detection.correlationId === null) return { ...base, status: "not-associated", complete: true, signIns: [], help: [RISK_DETECTION_SHOW.noSignInNote!] };
+  const activityTime = typeof detection.activityDateTime === "string" ? Date.parse(detection.activityDateTime) : NaN;
+  if (typeof detection.userId !== "string" || !detection.userId.trim() || !Number.isFinite(activityTime)) {
+    return { ...base, status: "unavailable", complete: false, signIns: [], reason: "Detection lacks a userId or valid activityDateTime; no unbounded sign-in query was sent" };
+  }
+  const since = new Date(activityTime - 300_000).toISOString();
+  const until = new Date(activityTime + 300_000).toISOString();
+  const window = { userId: detection.userId, since, until };
+  const hints = [
+    "Sign-in reads require AuditLog.Read.All, a supported delegated directory role and Entra ID P1/P2; this read never adds consent",
+    "Exact evidence requires detection.requestId = signIn.id and matching non-empty correlationId; user/time matches alone are candidates",
+    "Multiple candidates are ambiguous; incomplete reads cannot establish a unique match or absence. Retention and licence restrictions still apply",
+    `Inspect or widen the window with mg-axi entra sign-in list --since ${since} --until ${until} --filter ${shellValue(`userId eq '${detection.userId.replaceAll("'", "''")}'`)} --select id,createdDateTime,userId,correlationId --profile ${shellValue(profileName)}`,
+  ];
+  const partial = (reason: string, extraHelp: string[] = []) => ({ ...base, window, status: "incomplete", complete: false, signIns: [], reason, help: [...extraHelp, ...hints] });
+  const remaining = { maxRequests: DEFAULT_MAX_REQUESTS - usage.requests, maxBytes: DEFAULT_MAX_BYTES - usage.bytes, deadlineMs: DEFAULT_DEADLINE_MS - (Date.now() - started) };
+  if (Object.values(remaining).some(value => value <= 0)) return partial("Combined request, byte or deadline budget exhausted after detection read");
+  const signInFields = ["id", "createdDateTime", "userId", "correlationId"];
+  try {
+    const result = await session.collect({
+      profile, operation: resolveSessionOperation(operation.version, "GET", "/auditLogs/signIns"),
+      query: { $select: signInFields.join(","), $filter: `createdDateTime ge ${since} and createdDateTime le ${until} and userId eq '${detection.userId.replaceAll("'", "''")}'` },
+      scopes: profile.mode === "delegated" ? DEFAULT_DELEGATED_SCOPES : undefined,
+      limit, budget: remaining, partialOnError: true,
+    });
+    const signIns = result.value.map(value => {
+      const row = project(value, signInFields, false).row;
+      const correlationIdMatches = typeof detection.correlationId === "string" && detection.correlationId.length > 0 && row.correlationId === detection.correlationId;
+      const requestIdMatches = typeof detection.requestId === "string" && detection.requestId.length > 0 && row.id === detection.requestId;
+      return { ...row, correlationIdMatches, requestIdMatches, match: correlationIdMatches && requestIdMatches ? "exact" : "candidate" };
+    });
+    const exact = signIns.filter(row => row.match === "exact");
+    const status = !result.complete ? "incomplete" : exact.length === 1 ? "exact" : signIns.length > 1 ? "ambiguous" : signIns.length === 1 ? "candidates" : "no-match";
+    return { ...base, window, status, signIns, complete: result.complete,
+      ...(result.complete ? {} : { reason: result.reason }),
+      help: result.complete ? hints : [...hints, "Rerun with a larger --limit or use the bounded sign-in list to continue the investigation"],
+    };
+  } catch (error) {
+    if (!(error instanceof AxiError)) throw error;
+    return partial(error.message, error.suggestions);
+  }
 }
 
 export async function listRiskyServicePrincipals(

@@ -15,7 +15,7 @@ Contents: [Counts](#counts) • [Commands](#commands) • [Scope decisions](#ext
 
 ## Counts
 
-- implemented read leaves: 278 (275 named Graph reads plus reviewed raw api get, configured home and doctor health check)
+- implemented read leaves: 279 (276 named Graph reads plus reviewed raw api get, configured home and doctor health check)
 - implemented write leaves: 17 (named gated mutations below)
 - local leaves: 10 (profile, config, auth, login alias and setup views)
 
@@ -204,6 +204,7 @@ The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS
 | `mg-axi entra risky-user list` | `GET:/identityProtection/riskyUsers` | named-command | READ-06 |
 | `mg-axi entra risky-user show` | `GET:/identityProtection/riskyUsers/{riskyUser-id}` | named-command | READ-06 |
 | `mg-axi entra risk-detection list` | `GET:/identityProtection/riskDetections` | named-command | READ-06 |
+| `mg-axi entra risk-detection correlate` | `GET:/identityProtection/riskDetections/{riskDetection-id}` | named-command | READ-06 |
 | `mg-axi entra risk-detection show` | `GET:/identityProtection/riskDetections/{riskDetection-id}` | named-command | READ-06 |
 | `mg-axi entra risky-service-principal list` | `GET:/identityProtection/riskyServicePrincipals` | named-command | READ-06 |
 | `mg-axi entra risky-service-principal show` | `GET:/identityProtection/riskyServicePrincipals/{riskyServicePrincipal-id}` | named-command | READ-06 |

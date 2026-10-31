@@ -1,3 +1,5 @@
+import { record, records, text as outputText, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -164,12 +166,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -184,9 +186,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -194,7 +196,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -230,7 +232,7 @@ function workloadTransport() {
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: CredentialArgs[] = []) {
   const fixture = handler ?? workloadTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -238,13 +240,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runReadCli(args, state, mode, denied = false, input) {
+function runReadCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false, input?: string) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-workload-risk-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -258,14 +260,14 @@ function runReadCli(args, state, mode, denied = false, input) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} executable lists risky service principals with compact rows`, () => {
     const state = setupProfiles();
     try {
       const result = runReadCli(["entra", "risky-service-principal", "list", "--profile", profile, "--limit", "10"], state, mode);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.riskyServicePrincipals, [
         { id: s1.id, displayName: s1.displayName, riskLevel: s1.riskLevel, riskState: s1.riskState },
         { id: s2.id, displayName: s2.displayName, riskLevel: s2.riskLevel, riskState: s2.riskState },
@@ -274,7 +276,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(output.count, "3 risky service principals");
       assert.equal(output.total, null);
       assert.equal(output.complete, true);
-      assert.ok(output.help.some(hint => hint.includes("entra risky-service-principal show --id <risky-service-principal-id>")));
+      assert.ok(strings(output.help).some(hint => hint.includes("entra risky-service-principal show --id <risky-service-principal-id>")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -285,7 +287,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runReadCli(["entra", "service-principal-risk-detection", "list", "--profile", profile, "--since", SINCE], state, mode);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.servicePrincipalRiskDetections, [
         { id: sd1.id, detectedDateTime: sd1.detectedDateTime, servicePrincipalDisplayName: sd1.servicePrincipalDisplayName, riskLevel: sd1.riskLevel },
         { id: sd2.id, detectedDateTime: sd2.detectedDateTime, servicePrincipalDisplayName: sd2.servicePrincipalDisplayName, riskLevel: sd2.riskLevel },
@@ -294,7 +296,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(output.count, "3 service principal risk detections");
       assert.equal(output.total, null);
       assert.equal(output.complete, true);
-      assert.ok(output.help.some(hint => hint.includes("entra service-principal-risk-detection show --id <service-principal-risk-detection-id>")));
+      assert.ok(strings(output.help).some(hint => hint.includes("entra service-principal-risk-detection show --id <service-principal-risk-detection-id>")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -306,12 +308,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
         "--service-principal", s1.id, "--profile", profile], state, mode);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
-      assert.deepEqual(output.riskyServicePrincipalHistory.map(row => row.id), [h1.id, h2.id]);
+      const output = record(decode(result.stdout));
+      assert.deepEqual(records(output.riskyServicePrincipalHistory).map(row => row.id), [h1.id, h2.id]);
       assert.deepEqual(output.count, "2 history items");
       assert.equal(output.total, null);
       assert.equal(output.complete, true);
-      assert.ok(output.help.some(hint => hint.includes("entra risky-service-principal history show --service-principal <risky-service-principal-id> --id <history-item-id>")));
+      assert.ok(strings(output.help).some(hint => hint.includes("entra risky-service-principal history show --service-principal <risky-service-principal-id> --id <history-item-id>")));
     } finally { teardownProfiles(state); }
   });
 }
@@ -321,11 +323,11 @@ test("delegated executable shows one risky service principal with detection and 
   try {
     const result = runReadCli(["entra", "risky-service-principal", "show", "--profile", "soc", "--id", s1.id], state, "delegated");
     assert.equal(result.status, 0, result.stdout);
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.deepEqual(output.riskyServicePrincipal, s1);
-    assert.ok(output.help.some(hint => hint.includes("entra service-principal-risk-detection list")));
-    assert.ok(output.help.some(hint => hint.includes("entra risky-service-principal history list")));
-    assert.ok(output.help.some(hint => hint.includes("never confirms, dismisses or remediates")));
+    assert.ok(strings(output.help).some(hint => hint.includes("entra service-principal-risk-detection list")));
+    assert.ok(strings(output.help).some(hint => hint.includes("entra risky-service-principal history list")));
+    assert.ok(strings(output.help).some(hint => hint.includes("never confirms, dismisses or remediates")));
   } finally { teardownProfiles(state); }
 });
 
@@ -333,12 +335,12 @@ test("delegated executable shows one history item with detection correlation", a
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const shown = await executeArgv(["entra", "risky-service-principal", "history", "show",
-      "--profile", "soc", "--service-principal", s1.id, "--id", h1.id], overrides);
+    const shown = record(await executeArgv(["entra", "risky-service-principal", "history", "show",
+      "--profile", "soc", "--service-principal", s1.id, "--id", h1.id], overrides));
     const { owner, ...expected } = h1;
     assert.deepEqual(shown.riskyServicePrincipalHistoryItem, expected);
-    assert.ok(new URL(requests[0].url).pathname.includes(`/riskyServicePrincipals/${s1.id}/history/${h1.id}`));
-    assert.ok(shown.help.some(hint => hint.includes("entra service-principal-risk-detection list")));
+    assert.ok(new URL(requests[0]!.url).pathname.includes(`/riskyServicePrincipals/${s1.id}/history/${h1.id}`));
+    assert.ok(strings(shown.help).some(hint => hint.includes("entra service-principal-risk-detection list")));
   } finally { teardownProfiles(state); }
 });
 
@@ -347,11 +349,11 @@ test("delegated executable shows one service-principal detection with key identi
   try {
     const result = runReadCli(["entra", "service-principal-risk-detection", "show", "--profile", "soc", "--id", sd1.id], state, "delegated");
     assert.equal(result.status, 0, result.stdout);
-    const output = decode(result.stdout);
-    assert.equal(output.servicePrincipalRiskDetection.id, sd1.id);
-    assert.deepEqual(output.servicePrincipalRiskDetection.keyIds, sd1.keyIds);
-    assert.ok(!Object.hasOwn(output.servicePrincipalRiskDetection, "tokenIssuerType"));
-    assert.ok(output.help.some(hint => hint.includes("hidden")));
+    const output = record(decode(result.stdout));
+    assert.equal(record(output.servicePrincipalRiskDetection).id, sd1.id);
+    assert.deepEqual(record(output.servicePrincipalRiskDetection).keyIds, sd1.keyIds);
+    assert.ok(!Object.hasOwn(record(output.servicePrincipalRiskDetection), "tokenIssuerType"));
+    assert.ok(strings(output.help).some(hint => hint.includes("hidden")));
   } finally { teardownProfiles(state); }
 });
 
@@ -359,10 +361,10 @@ test("detection show without an associated sign-in says correlation does not app
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const shown = await executeArgv(["entra", "service-principal-risk-detection", "show",
-      "--profile", "soc", "--id", sd1.id], overrides);
-    assert.equal(shown.servicePrincipalRiskDetection.correlationId, null);
-    assert.ok(shown.help.some(hint => hint.includes("no associated sign-in")));
+    const shown = record(await executeArgv(["entra", "service-principal-risk-detection", "show",
+      "--profile", "soc", "--id", sd1.id], overrides));
+    assert.equal(record(shown.servicePrincipalRiskDetection).correlationId, null);
+    assert.ok(strings(shown.help).some(hint => hint.includes("no associated sign-in")));
   } finally { teardownProfiles(state); }
 });
 
@@ -370,10 +372,10 @@ test("hidden licence-bound values pass through instead of an invented level", as
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "service-principal-risk-detection", "list",
-      "--profile", "soc", "--since", SINCE, "--select", "id,riskLevel,riskDetail"], overrides);
-    assert.deepEqual(result.servicePrincipalRiskDetections.map(row => row.riskLevel), ["high", "hidden", "low"]);
-    assert.ok(result.help.some(hint => hint.includes("hidden")));
+    const result = record(await executeArgv(["entra", "service-principal-risk-detection", "list",
+      "--profile", "soc", "--since", SINCE, "--select", "id,riskLevel,riskDetail"], overrides));
+    assert.deepEqual(records(result.servicePrincipalRiskDetections).map(row => row.riskLevel), ["high", "hidden", "low"]);
+    assert.ok(strings(result.help).some(hint => hint.includes("hidden")));
   } finally { teardownProfiles(state); }
 });
 
@@ -387,11 +389,11 @@ for (const noun of ["risky-service-principal", "service-principal-risk-detection
       const result = runReadCli(args, state, "delegated", true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /\(403\)/);
-      assert.ok(output.help.some(hint => hint.includes("Global Reader")));
-      assert.ok(output.help.some(hint => hint.includes("Workload Identities Premium")));
+      assert.match(outputText(output.error), /\(403\)/);
+      assert.ok(strings(output.help).some(hint => hint.includes("Global Reader")));
+      assert.ok(strings(output.help).some(hint => hint.includes("Workload Identities Premium")));
     } finally { teardownProfiles(state); }
   });
 }
@@ -433,9 +435,9 @@ test("service-principal detection list composes since and filter into one bounde
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "service-principal-risk-detection", "list", "--profile", "soc",
-      "--since", SINCE, "--filter", "riskState eq 'atRisk'", "--all"], overrides);
-    assert.equal(new URL(requests[0].url).searchParams.get("$filter"),
+    const result = record(await executeArgv(["entra", "service-principal-risk-detection", "list", "--profile", "soc",
+      "--since", SINCE, "--filter", "riskState eq 'atRisk'", "--all"], overrides));
+    assert.equal(new URL(requests[0]!.url).searchParams.get("$filter"),
       "detectedDateTime ge 2026-09-01T00:00:00.000Z and (riskState eq 'atRisk')");
     assert.deepEqual(result.count, "3 service principal risk detections");
     assert.equal(result.total, null);
@@ -448,11 +450,11 @@ test("a capped risky-service-principal list resumes losslessly through its opaqu
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "risky-service-principal", "list", "--profile", "soc", "--limit", "2"], overrides);
-    assert.deepEqual(first.riskyServicePrincipals.map(row => row.id), [s1.id, s2.id]);
+    const first = record(await executeArgv(["entra", "risky-service-principal", "list", "--profile", "soc", "--limit", "2"], overrides));
+    assert.deepEqual(records(first.riskyServicePrincipals).map(row => row.id), [s1.id, s2.id]);
     assert.equal(first.complete, false);
-    const resumed = await executeArgv(["entra", "risky-service-principal", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
-    assert.deepEqual(resumed.riskyServicePrincipals.map(row => row.id), [s3.id]);
+    const resumed = record(await executeArgv(["entra", "risky-service-principal", "list", "--profile", "soc", "--cursor", outputText(first.cursor)], overrides));
+    assert.deepEqual(records(resumed.riskyServicePrincipals).map(row => row.id), [s3.id]);
     assert.deepEqual(resumed.count, "1 risky service principals");
     assert.equal(resumed.total, null);
     assert.equal(resumed.complete, true);
@@ -465,8 +467,8 @@ test("application mode rejects delegated scopes before HTTP", async () => {
     const { requests, overrides } = overridesFor("application");
     await assert.rejects(executeArgv(["entra", "risky-service-principal", "list", "--profile", "batch",
       "--scopes", "https://graph.microsoft.com/IdentityRiskyServicePrincipal.Read.All"], overrides), error => {
-      assert.equal(error.code, "VALIDATION_ERROR");
-      return /Graph \.default audience/.test(error.message);
+      assert.equal(record(error).code, "VALIDATION_ERROR");
+      return /Graph \.default audience/.test(outputText(record(error).message));
     });
     await assert.rejects(executeArgv(["entra", "service-principal-risk-detection", "list", "--profile", "batch", "--since", SINCE,
       "--scopes", "https://graph.microsoft.com/IdentityRiskEvent.Read.All"], overrides), { code: "VALIDATION_ERROR" });
@@ -483,8 +485,8 @@ test("unknown workload properties and unfetched fields fail before HTTP", async 
     await assert.rejects(executeArgv(["entra", "risky-service-principal", "list", "--profile", "soc", "--select", "id,aboutMe"], overrides), { code: "VALIDATION_ERROR" });
     await assert.rejects(executeArgv(["entra", "service-principal-risk-detection", "list", "--profile", "soc", "--since", SINCE, "--fields", "riskState"], overrides), { code: "VALIDATION_ERROR" });
     await assert.rejects(executeArgv(["entra", "service-principal-risk-detection", "show", "--profile", "soc", "--id", sd1.id, "--select", "id,tokenIssuerType"], overrides), error => {
-      assert.equal(error.code, "VALIDATION_ERROR");
-      assert.match(error.message, /Unknown property tokenIssuerType/);
+      assert.equal(record(error).code, "VALIDATION_ERROR");
+      assert.match(outputText(record(error).message), /Unknown property tokenIssuerType/);
       return true;
     });
     await assert.rejects(executeArgv(["entra", "risky-service-principal", "history", "list",
@@ -499,20 +501,20 @@ test("richer selects dispatch the same mapping while unshipped beta stays blocke
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const richer = await executeArgv(
+    const richer = record(await executeArgv(
       ["entra", "risky-service-principal", "list", "--profile", "soc", "--select", "id,riskState", "--all"],
       overrides,
-    );
-    assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,riskState");
-    assert.deepEqual(richer.riskyServicePrincipals[0], { id: s1.id, riskState: "atRisk" });
+    ));
+    assert.equal(new URL(requests[0]!.url).searchParams.get("$select"), "id,riskState");
+    assert.deepEqual(records(richer.riskyServicePrincipals)[0], { id: s1.id, riskState: "atRisk" });
     for (const argv of [
       ["entra", "risky-service-principal", "list", "--profile", "soc", "--api-version", "beta", "--limit", "1"],
       ["entra", "service-principal-risk-detection", "list", "--profile", "soc", "--since", SINCE, "--api-version", "beta", "--limit", "1"],
       ["entra", "risky-service-principal", "history", "list", "--service-principal", s1.id, "--profile", "soc", "--api-version", "beta"],
     ]) {
       await assert.rejects(executeArgv(argv, overrides), error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Unknown catalogued/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Unknown catalogued/.test(outputText(record(error).message));
       });
     }
   } finally {

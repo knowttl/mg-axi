@@ -1,3 +1,5 @@
+import { record, records, text as outputText, strings, authFakes, type CredentialStub } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -42,12 +44,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService() {
+function credentialService(): CredentialStub {
   return {
     credential: async () => ({
       token: "opaque-fixture-delegated-token",
@@ -59,21 +61,21 @@ function credentialService() {
   };
 }
 
-function transport(handler) {
-  const send = async request => handler(request);
+function transport(handler: (request: TransportRequest) => TransportResponse | Promise<TransportResponse>) {
+  const send: GraphTransport = async request => handler(request);
   return { send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function overridesFor(handler) {
+function overridesFor(handler: Parameters<typeof transport>[0]) {
   const credential = credentialService();
   return {
     transport: transport(handler).send,
-    delegated: credential,
-    application: credentialService(),
+    delegated: authFakes(credential).delegated,
+    application: authFakes(credentialService()).application,
   };
 }
 
@@ -1148,19 +1150,19 @@ for (const entry of wired) {
     try {
       const rows = entry.rows();
       // Complete read, pages carry no usable total: names its rows.
-      const complete = await executeArgv(entry.argv, overridesFor(() => json(200, { value: rows })));
-      assert.equal(complete[entry.key].length, 2);
+      const complete = record(await executeArgv(entry.argv, overridesFor(() => json(200, { value: rows }))));
+      assert.equal(records(complete[entry.key]).length, 2);
       assert.deepEqual(complete.count, `2 ${entry.noun}`);
       assert.equal(complete.total, null);
       assert.equal(complete.complete, true);
       // Complete read, pages carry the server total: names rows of total.
-      const counted = await executeArgv(entry.argv, overridesFor(() => json(200, { value: rows, "@odata.count": 9 })));
+      const counted = record(await executeArgv(entry.argv, overridesFor(() => json(200, { value: rows, "@odata.count": 9 }))));
       assert.deepEqual(counted.count, `2 of 9 ${entry.noun}`);
       assert.equal(counted.total, 9);
       assert.equal(counted.complete, true);
       // Partial read, total unknown: says more is available, never invents one.
-      const partial = await executeArgv([...entry.argv, "--limit", "1"], overridesFor(() => json(200, { value: rows })));
-      assert.equal(partial[entry.key].length, 1);
+      const partial = record(await executeArgv([...entry.argv, "--limit", "1"], overridesFor(() => json(200, { value: rows }))));
+      assert.equal(records(partial[entry.key]).length, 1);
       assert.deepEqual(partial.count, `1 ${entry.noun} shown, more available`);
       assert.equal(partial.total, null);
       assert.equal(partial.complete, false);
@@ -1192,12 +1194,12 @@ for (const entry of unsupportedTotals) {
       let credentialed = false;
       const overrides = {
         transport: async () => { requested = true; return json(200, { value: [] }); },
-        delegated: { credential: async () => { credentialed = true; return { token: "opaque-fixture-delegated-token", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" }; } },
-        application: { credential: async () => { credentialed = true; return { token: "opaque-fixture-delegated-token", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" }; } },
+        delegated: authFakes({ credential: async () => { credentialed = true; return { token: "opaque-fixture-delegated-token", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" }; } }).delegated,
+        application: authFakes({ credential: async () => { credentialed = true; return { token: "opaque-fixture-delegated-token", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" }; } }).application,
       };
       await assert.rejects(executeArgv(entry.argv, overrides), error => {
-        assert.match(error.message, /not supported/);
-        assert.ok(error.suggestions.some(hint => entry.hint.test(hint)));
+        assert.match(outputText(record(error).message), /not supported/);
+        assert.ok(strings(record(error).suggestions).some(hint => entry.hint.test(hint)));
         return true;
       });
       assert.equal(requested, false);
@@ -1216,7 +1218,7 @@ test("catalogue list leaves are all wired or explicitly pending", () => {
     return entry.argv.slice(0, flagAt === -1 ? entry.argv.length : flagAt).join(" ");
   }));
   const listPaths = LEAVES.map(leaf => leaf.path)
-    .filter(path => path.startsWith("entra ") && path.split(" ").at(-1).startsWith("list"));
+    .filter(path => path.startsWith("entra ") && path.split(" ").at(-1)!.startsWith("list"));
   const covered = new Set([...wiredPaths, ...pendingTotals, ...unsupportedTotals.map(entry => entry.path)]);
   const missing = listPaths.filter(path => !covered.has(path));
   const extra = [...covered].filter(path => !listPaths.includes(path));

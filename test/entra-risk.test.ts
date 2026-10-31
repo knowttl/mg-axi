@@ -1,3 +1,5 @@
+import { record, records, text as outputText, strings, authFakes, delegatedProvider, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -129,12 +131,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -149,9 +151,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -159,7 +161,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -189,7 +191,7 @@ function riskTransport() {
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: CredentialArgs[] = []) {
   const fixture = handler ?? riskTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -197,16 +199,16 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function hintArgv(hint) {
-  const argv = [];
+function hintArgv(hint: string): string[] {
+  const argv: string[] = [];
   let word = "";
-  let quote = null;
+  let quote: string | null = null;
   let escaped = false;
   let started = false;
   const push = () => { if (started) { argv.push(word); word = ""; started = false; } };
@@ -227,7 +229,7 @@ function hintArgv(hint) {
   return argv;
 }
 
-function runReadCli(args, state, mode, denied = false, input, correlation) {
+function runReadCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false, input?: string, correlation?: string) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-risk-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -241,13 +243,13 @@ function runReadCli(args, state, mode, denied = false, input, correlation) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} executable correlates a detection using both identifiers and its bounded user window`, () => {
     const state = setupProfiles();
     try {
       const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", profile, "--id", d1.id], state, mode, false, undefined, "exact");
       assert.equal(result.status, 0, result.stdout);
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.status, "exact");
       assert.equal(output.complete, true);
       assert.deepEqual(output.window, { userId: d1.userId, since: "2026-09-10T07:55:00.000Z", until: "2026-09-10T08:05:00.000Z" });
@@ -261,10 +263,10 @@ test("correlation reports reused correlation identifiers as ambiguous candidates
   try {
     const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", "soc", "--id", d1.id], state, "delegated", false, undefined, "ambiguous");
     assert.equal(result.status, 0, result.stdout);
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.status, "ambiguous");
     assert.equal(output.complete, true);
-    assert.deepEqual(output.signIns.map(row => [row.id, row.match, row.correlationIdMatches, row.requestIdMatches]), [["candidate-one", "candidate", true, false], ["candidate-two", "candidate", true, false]]);
+    assert.deepEqual(records(output.signIns).map(row => [row.id, row.match, row.correlationIdMatches, row.requestIdMatches]), [["candidate-one", "candidate", true, false], ["candidate-two", "candidate", true, false]]);
   } finally { teardownProfiles(state); }
 });
 
@@ -273,9 +275,9 @@ test("one user/time candidate never proves exact correlation", () => {
   try {
     const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", "soc", "--id", d1.id], state, "delegated", false, undefined, "candidate");
     assert.equal(result.status, 0, result.stdout);
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.status, "candidates");
-    assert.deepEqual(output.signIns.map(row => [row.match, row.correlationIdMatches, row.requestIdMatches]), [["candidate", false, false]]);
+    assert.deepEqual(records(output.signIns).map(row => [row.match, row.correlationIdMatches, row.requestIdMatches]), [["candidate", false, false]]);
   } finally { teardownProfiles(state); }
 });
 
@@ -284,12 +286,12 @@ test("correlation shares the twenty request ceiling across detection and sign-in
   try {
     const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", "soc", "--id", d1.id], state, "delegated", false, undefined, "budget");
     assert.equal(result.status, 0, result.stdout);
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.status, "incomplete");
     assert.equal(output.complete, false);
     assert.equal(output.reason, "request budget exhausted after 19 requests");
-    assert.equal(output.signIns.length, 19);
-    assert.equal(output.signIns.at(-1).id, "candidate-18");
+    assert.equal(records(output.signIns).length, 19);
+    assert.equal(records(output.signIns).at(-1)!.id, "candidate-18");
   } finally { teardownProfiles(state); }
 });
 
@@ -298,13 +300,13 @@ test("correlation retains detection and earlier sign-ins when a later page is de
   try {
     const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", "soc", "--id", d1.id], state, "delegated", false, undefined, "failure");
     assert.equal(result.status, 0, result.stdout);
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.status, "incomplete");
     assert.equal(output.complete, false);
-    assert.match(output.reason, /403/);
-    assert.equal(output.riskDetection.id, d1.id);
-    assert.deepEqual(output.signIns.map(row => row.id), ["candidate-0"]);
-    assert.ok(output.help.some(hint => hint.includes("AuditLog.Read.All")));
+    assert.match(outputText(output.reason), /403/);
+    assert.equal(record(output.riskDetection).id, d1.id);
+    assert.deepEqual(records(output.signIns).map(row => row.id), ["candidate-0"]);
+    assert.ok(strings(output.help).some(hint => hint.includes("AuditLog.Read.All")));
   } finally { teardownProfiles(state); }
 });
 
@@ -313,19 +315,19 @@ test("correlation skips sign-in reads for a null association", () => {
   try {
     const result = runReadCli(["entra", "risk-detection", "correlate", "--profile", "soc", "--id", d3.id], state, "delegated");
     assert.equal(result.status, 0, result.stdout);
-    assert.deepEqual(decode(result.stdout).signIns, []);
-    assert.equal(decode(result.stdout).status, "not-associated");
+    assert.deepEqual(record(decode(result.stdout)).signIns, []);
+    assert.equal(record(decode(result.stdout)).status, "not-associated");
   } finally { teardownProfiles(state); }
 });
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} executable lists risky users with compact rows`, () => {
     const state = setupProfiles();
     try {
       const result = runReadCli(["entra", "risky-user", "list", "--profile", profile, "--limit", "10"], state, mode);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.riskyUsers, [
         { id: u1.id, userPrincipalName: u1.userPrincipalName, riskLevel: u1.riskLevel, riskState: u1.riskState },
         { id: u2.id, userPrincipalName: u2.userPrincipalName, riskLevel: u2.riskLevel, riskState: u2.riskState },
@@ -334,7 +336,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(output.count, "3 risky users");
       assert.equal(output.total, null);
       assert.equal(output.complete, true);
-      assert.ok(output.help.some(hint => hint.includes("entra risky-user show --id <risky-user-id>")));
+      assert.ok(strings(output.help).some(hint => hint.includes("entra risky-user show --id <risky-user-id>")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -345,7 +347,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runReadCli(["entra", "risk-detection", "list", "--profile", profile, "--since", SINCE], state, mode);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.riskDetections, [
         { id: d1.id, detectedDateTime: d1.detectedDateTime, userPrincipalName: d1.userPrincipalName, riskLevel: d1.riskLevel },
         { id: d2.id, detectedDateTime: d2.detectedDateTime, userPrincipalName: d2.userPrincipalName, riskLevel: d2.riskLevel },
@@ -354,9 +356,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(output.count, "3 risk detections");
       assert.equal(output.total, null);
       assert.equal(output.complete, true);
-      assert.ok(output.help.some(hint => hint.includes("entra risk-detection show --id <risk-detection-id>")));
-      assert.ok(output.help.some(hint => hint.includes("entra sign-in list")));
-      assert.ok(output.help.some(hint => hint.includes("riskySignIns")));
+      assert.ok(strings(output.help).some(hint => hint.includes("entra risk-detection show --id <risk-detection-id>")));
+      assert.ok(strings(output.help).some(hint => hint.includes("entra sign-in list")));
+      assert.ok(strings(output.help).some(hint => hint.includes("riskySignIns")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -367,11 +369,11 @@ test("delegated executable shows one risky user with detection and sign-in corre
   try {
     const result = runReadCli(["entra", "risky-user", "show", "--profile", "soc", "--id", u1.id], state, "delegated");
     assert.equal(result.status, 0, result.stdout);
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.deepEqual(output.riskyUser, u1);
-    assert.ok(output.help.some(hint => hint.includes("entra risk-detection list")));
-    assert.ok(output.help.some(hint => hint.includes("entra sign-in list")));
-    assert.ok(output.help.some(hint => hint.includes("never confirms, dismisses or remediates")));
+    assert.ok(strings(output.help).some(hint => hint.includes("entra risk-detection list")));
+    assert.ok(strings(output.help).some(hint => hint.includes("entra sign-in list")));
+    assert.ok(strings(output.help).some(hint => hint.includes("never confirms, dismisses or remediates")));
   } finally { teardownProfiles(state); }
 });
 
@@ -380,14 +382,14 @@ test("delegated executable shows one risk detection with sign-in correlation and
   try {
     const result = runReadCli(["entra", "risk-detection", "show", "--profile", "soc", "--id", d1.id], state, "delegated");
     assert.equal(result.status, 0, result.stdout);
-    const output = decode(result.stdout);
-    assert.equal(output.riskDetection.id, d1.id);
-    assert.equal(output.riskDetection.correlationId, d1.correlationId);
-    assert.ok(!Object.hasOwn(output.riskDetection, "tokenIssuerType"));
-    assert.match(output.riskDetection.additionalInfo, /truncated/);
-    assert.ok(output.help[0].includes("--full"));
-    assert.ok(output.help.some(hint => hint.includes("entra sign-in list")));
-    assert.ok(output.help.some(hint => hint.includes("generic")));
+    const output = record(decode(result.stdout));
+    assert.equal(record(output.riskDetection).id, d1.id);
+    assert.equal(record(output.riskDetection).correlationId, d1.correlationId);
+    assert.ok(!Object.hasOwn(record(output.riskDetection), "tokenIssuerType"));
+    assert.match(outputText(record(output.riskDetection).additionalInfo), /truncated/);
+    assert.ok(strings(output.help)[0]!.includes("--full"));
+    assert.ok(strings(output.help).some(hint => hint.includes("entra sign-in list")));
+    assert.ok(strings(output.help).some(hint => hint.includes("generic")));
   } finally { teardownProfiles(state); }
 });
 
@@ -396,9 +398,9 @@ test("detection show without an associated sign-in says correlation does not app
   try {
     const result = runReadCli(["entra", "risk-detection", "show", "--profile", "soc", "--id", d3.id], state, "delegated");
     assert.equal(result.status, 0, result.stdout);
-    const output = decode(result.stdout);
-    assert.equal(output.riskDetection.correlationId, null);
-    assert.ok(output.help.some(hint => hint.includes("no associated sign-in")));
+    const output = record(decode(result.stdout));
+    assert.equal(record(output.riskDetection).correlationId, null);
+    assert.ok(strings(output.help).some(hint => hint.includes("no associated sign-in")));
   } finally { teardownProfiles(state); }
 });
 
@@ -412,10 +414,10 @@ for (const noun of ["risky-user", "risk-detection"]) {
       const result = runReadCli(args, state, "delegated", true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /\(403\)/);
-      assert.ok(output.help.some(hint => hint.includes("Global Reader")));
+      assert.match(outputText(output.error), /\(403\)/);
+      assert.ok(strings(output.help).some(hint => hint.includes("Global Reader")));
     } finally { teardownProfiles(state); }
   });
 }
@@ -424,16 +426,16 @@ test("delegated executable resumes a capped detection list through a stdin curso
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "risk-detection", "list", "--profile", "soc",
-      "--since", SINCE, "--limit", "2"], overrides);
-    assert.deepEqual(first.riskDetections.map(row => row.id), [d1.id, d2.id]);
+    const first = record(await executeArgv(["entra", "risk-detection", "list", "--profile", "soc",
+      "--since", SINCE, "--limit", "2"], overrides));
+    assert.deepEqual(records(first.riskDetections).map(row => row.id), [d1.id, d2.id]);
     assert.equal(first.complete, false);
     const resumed = runReadCli(["entra", "risk-detection", "list", "--profile", "soc", "--cursor", "-"],
-      state, "delegated", false, first.cursor);
+      state, "delegated", false, outputText(first.cursor));
     assert.equal(resumed.status, 0, resumed.stdout);
     assert.equal(resumed.stderr, "");
-    const output = decode(resumed.stdout);
-    assert.deepEqual(output.riskDetections.map(row => row.id), [d3.id]);
+    const output = record(decode(resumed.stdout));
+    assert.deepEqual(records(output.riskDetections).map(row => row.id), [d3.id]);
     assert.deepEqual(output.count, "1 risk detections");
     assert.equal(output.total, null);
     assert.equal(output.complete, true);
@@ -444,14 +446,14 @@ test("delegated executable resumes a capped risky-user list through a stdin curs
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "risky-user", "list", "--profile", "soc", "--limit", "1"], overrides);
-    assert.deepEqual(first.riskyUsers.map(row => row.id), [u1.id]);
+    const first = record(await executeArgv(["entra", "risky-user", "list", "--profile", "soc", "--limit", "1"], overrides));
+    assert.deepEqual(records(first.riskyUsers).map(row => row.id), [u1.id]);
     assert.equal(first.complete, false);
     const resumed = runReadCli(["entra", "risky-user", "list", "--profile", "soc", "--cursor", "-"],
-      state, "delegated", false, first.cursor);
+      state, "delegated", false, outputText(first.cursor));
     assert.equal(resumed.status, 0, resumed.stdout);
-    const output = decode(resumed.stdout);
-    assert.deepEqual(output.riskyUsers.map(row => row.id), [u2.id, u3.id]);
+    const output = record(decode(resumed.stdout));
+    assert.deepEqual(records(output.riskyUsers).map(row => row.id), [u2.id, u3.id]);
     assert.deepEqual(output.count, "2 risky users");
     assert.equal(output.total, null);
     assert.equal(output.complete, true);
@@ -462,7 +464,7 @@ for (const [input, expectedError] of [
   ["", /needs the opaque cursor/],
   ["invalid", /Invalid collection cursor/],
   ["a".repeat(MAX_CURSOR_BYTES + 1), /cursor exceeds 16000000 bytes/],
-]) {
+] as const) {
   test(`risk-detection executable rejects ${input.length > MAX_CURSOR_BYTES ? "oversized" : input || "empty"} stdin cursors`, () => {
     const state = setupProfiles();
     try {
@@ -470,9 +472,9 @@ for (const [input, expectedError] of [
         state, "delegated", true, input);
       assert.equal(result.status, 2, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "VALIDATION_ERROR");
-      assert.match(output.error, expectedError);
+      assert.match(outputText(output.error), expectedError);
     } finally { teardownProfiles(state); }
   });
 }
@@ -481,11 +483,11 @@ test("risk stdin cursor rejects another collection's binding", async () => {
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE, "--limit", "1"], overrides);
+    const first = record(await executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE, "--limit", "1"], overrides));
     const result = runReadCli(["entra", "risky-user", "list", "--profile", "soc", "--cursor", "-"],
-      state, "delegated", true, first.cursor);
+      state, "delegated", true, outputText(first.cursor));
     assert.equal(result.status, 2, result.stdout);
-    assert.equal(decode(result.stdout).code, "VALIDATION_ERROR");
+    assert.equal(record(decode(result.stdout)).code, "VALIDATION_ERROR");
   } finally { teardownProfiles(state); }
 });
 
@@ -493,9 +495,9 @@ test("delegated detection list composes since, until and filter into one bounded
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "risk-detection", "list", "--profile", "soc",
-      "--since", SINCE, "--until", UNTIL, "--filter", "riskState eq 'atRisk'", "--all"], overrides);
-    assert.equal(new URL(requests[0].url).searchParams.get("$filter"),
+    const result = record(await executeArgv(["entra", "risk-detection", "list", "--profile", "soc",
+      "--since", SINCE, "--until", UNTIL, "--filter", "riskState eq 'atRisk'", "--all"], overrides));
+    assert.equal(new URL(requests[0]!.url).searchParams.get("$filter"),
       "detectedDateTime ge 2026-09-01T00:00:00.000Z and detectedDateTime le 2026-09-08T00:00:00.000Z and (riskState eq 'atRisk')");
     assert.deepEqual(result.count, "3 risk detections");
     assert.equal(result.total, null);
@@ -508,9 +510,9 @@ test("delegated risky-user list passes a plain filter with no time bound", async
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "risky-user", "list", "--profile", "soc",
-      "--filter", "riskState eq 'atRisk'"], overrides);
-    assert.equal(new URL(requests[0].url).searchParams.get("$filter"), "riskState eq 'atRisk'");
+    const result = record(await executeArgv(["entra", "risky-user", "list", "--profile", "soc",
+      "--filter", "riskState eq 'atRisk'"], overrides));
+    assert.equal(new URL(requests[0]!.url).searchParams.get("$filter"), "riskState eq 'atRisk'");
     assert.deepEqual(result.count, "3 risky users");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
@@ -555,13 +557,13 @@ for (const filter of [undefined, "riskState eq 'atRisk'", `detectedDateTime le 2
       assert.equal(raw.complete, false);
       const requestCount = requests.length;
       const credentialCount = calls.length;
-      await assert.rejects(executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--cursor", raw.cursor], overrides), error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        assert.match(error.message, /bounded in time/);
-        assert.ok(error.suggestions.some(hint => hint.includes("Start a new query with --since")));
+      await assert.rejects(executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--cursor", outputText(raw.cursor)], overrides), error => {
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        assert.match(outputText(record(error).message), /bounded in time/);
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Start a new query with --since")));
         return true;
       });
-      await assert.rejects(executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--cursor", raw.cursor,
+      await assert.rejects(executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--cursor", outputText(raw.cursor),
         "--since", SINCE], overrides), { code: "VALIDATION_ERROR" });
       assert.equal(requests.length, requestCount);
       assert.equal(calls.length, credentialCount);
@@ -573,13 +575,13 @@ test("detection resume repeats identical time bounds but rejects a conflicting -
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "risk-detection", "list", "--profile", "soc",
-      "--since", SINCE, "--until", UNTIL, "--filter", "riskState eq 'atRisk'", "--limit", "1"], overrides);
-    const resumed = await executeArgv(["entra", "risk-detection", "list", "--profile", "soc",
-      "--since", SINCE, "--until", UNTIL, "--filter", "riskState eq 'atRisk'", "--cursor", first.cursor], overrides);
-    assert.deepEqual(resumed.riskDetections.map(row => row.id), [d2.id, d3.id]);
+    const first = record(await executeArgv(["entra", "risk-detection", "list", "--profile", "soc",
+      "--since", SINCE, "--until", UNTIL, "--filter", "riskState eq 'atRisk'", "--limit", "1"], overrides));
+    const resumed = record(await executeArgv(["entra", "risk-detection", "list", "--profile", "soc",
+      "--since", SINCE, "--until", UNTIL, "--filter", "riskState eq 'atRisk'", "--cursor", outputText(first.cursor)], overrides));
+    assert.deepEqual(records(resumed.riskDetections).map(row => row.id), [d2.id, d3.id]);
     await assert.rejects(executeArgv(["entra", "risk-detection", "list", "--profile", "soc",
-      "--since", UNTIL, "--cursor", first.cursor], overrides), { code: "VALIDATION_ERROR" });
+      "--since", UNTIL, "--cursor", outputText(first.cursor)], overrides), { code: "VALIDATION_ERROR" });
   } finally { teardownProfiles(state); }
 });
 
@@ -587,11 +589,11 @@ test("a capped risky-user list resumes losslessly through its opaque cursor", as
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "risky-user", "list", "--profile", "soc", "--limit", "2"], overrides);
-    assert.deepEqual(first.riskyUsers.map(row => row.id), [u1.id, u2.id]);
+    const first = record(await executeArgv(["entra", "risky-user", "list", "--profile", "soc", "--limit", "2"], overrides));
+    assert.deepEqual(records(first.riskyUsers).map(row => row.id), [u1.id, u2.id]);
     assert.equal(first.complete, false);
-    const resumed = await executeArgv(["entra", "risky-user", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
-    assert.deepEqual(resumed.riskyUsers.map(row => row.id), [u3.id]);
+    const resumed = record(await executeArgv(["entra", "risky-user", "list", "--profile", "soc", "--cursor", outputText(first.cursor)], overrides));
+    assert.deepEqual(records(resumed.riskyUsers).map(row => row.id), [u3.id]);
     assert.deepEqual(resumed.count, "1 risky users");
     assert.equal(resumed.total, null);
     assert.equal(resumed.complete, true);
@@ -602,8 +604,8 @@ test("risky-user list rejects a detection collection cursor binding", async () =
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE, "--limit", "1"], overrides);
-    await assert.rejects(executeArgv(["entra", "risky-user", "list", "--profile", "soc", "--cursor", first.cursor], overrides),
+    const first = record(await executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE, "--limit", "1"], overrides));
+    await assert.rejects(executeArgv(["entra", "risky-user", "list", "--profile", "soc", "--cursor", outputText(first.cursor)], overrides),
       { code: "VALIDATION_ERROR" });
   } finally { teardownProfiles(state); }
 });
@@ -613,18 +615,18 @@ test("an empty risk list is a definitive zero with honest guidance", async () =>
   try {
     const empty = transport(() => json(200, { value: [] }));
     const { overrides } = overridesFor("delegated", empty);
-    const users = await executeArgv(["entra", "risky-user", "list", "--profile", "soc"], overrides);
+    const users = record(await executeArgv(["entra", "risky-user", "list", "--profile", "soc"], overrides));
     assert.deepEqual(users.riskyUsers, []);
     assert.deepEqual(users.count, "0 risky users");
     assert.equal(users.total, null);
     assert.equal(users.complete, true);
-    assert.ok(users.help.some(hint => hint.includes("0 risky users matched")));
-    assert.ok(users.help.some(hint => hint.includes("Limited results stay limited")));
-    const detections = await executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE], overrides);
+    assert.ok(strings(users.help).some(hint => hint.includes("0 risky users matched")));
+    assert.ok(strings(users.help).some(hint => hint.includes("Limited results stay limited")));
+    const detections = record(await executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE], overrides));
     assert.deepEqual(detections.count, "0 risk detections");
     assert.equal(detections.total, null);
     assert.equal(detections.complete, true);
-    assert.ok(detections.help.some(hint => hint.includes("0 risk detections matched")));
+    assert.ok(strings(detections.help).some(hint => hint.includes("0 risk detections matched")));
   } finally { teardownProfiles(state); }
 });
 
@@ -634,9 +636,9 @@ test("denied risky-user reads name roles and the P2 requirement", async () => {
     const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants (403)" } }));
     const { overrides } = overridesFor("delegated", denied);
     await assert.rejects(executeArgv(["entra", "risky-user", "list", "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.ok(error.suggestions.some(hint => hint.includes("Security Administrator")));
-      assert.ok(error.suggestions.some(hint => hint.includes("requires a Microsoft Entra ID P2 licence")));
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Security Administrator")));
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("requires a Microsoft Entra ID P2 licence")));
       return true;
     });
   } finally { teardownProfiles(state); }
@@ -648,9 +650,9 @@ test("denied detection reads name roles and the P1-or-P2 boundary", async () => 
     const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants (403)" } }));
     const { overrides } = overridesFor("delegated", denied);
     await assert.rejects(executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.ok(error.suggestions.some(hint => hint.includes("Security Administrator")));
-      assert.ok(error.suggestions.some(hint => hint.includes("P1 or P2")));
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Security Administrator")));
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("P1 or P2")));
       return true;
     });
   } finally { teardownProfiles(state); }
@@ -660,10 +662,10 @@ test("premium detections keep the server's generic type instead of an invented o
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE,
-      "--select", "id,riskEventType"], overrides);
-    assert.deepEqual(result.riskDetections.map(row => row.riskEventType), ["leakedCredentials", "generic", "unfamiliarFeatures"]);
-    assert.ok(result.help.some(hint => hint.includes("generic")));
+    const result = record(await executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE,
+      "--select", "id,riskEventType"], overrides));
+    assert.deepEqual(records(result.riskDetections).map(row => row.riskEventType), ["leakedCredentials", "generic", "unfamiliarFeatures"]);
+    assert.ok(strings(result.help).some(hint => hint.includes("generic")));
   } finally { teardownProfiles(state); }
 });
 
@@ -672,8 +674,8 @@ test("explicit nulls stay null and missing risk properties stay absent", async (
   try {
     const partial = transport(() => json(200, { id: d3.id, requestId: null, correlationId: null, ipAddress: null }));
     const { overrides } = overridesFor("delegated", partial);
-    const shown = await executeArgv(["entra", "risk-detection", "show", "--profile", "soc", "--id", d3.id,
-      "--select", "id,requestId,correlationId,ipAddress,source"], overrides);
+    const shown = record(await executeArgv(["entra", "risk-detection", "show", "--profile", "soc", "--id", d3.id,
+      "--select", "id,requestId,correlationId,ipAddress,source"], overrides));
     assert.deepEqual(shown.riskDetection, { id: d3.id, requestId: null, correlationId: null, ipAddress: null });
     assert.ok(!Object.hasOwn(shown.riskDetection, "source"));
   } finally { teardownProfiles(state); }
@@ -683,14 +685,14 @@ test("detection show truncates long text unless --full is passed", async () => {
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const shown = await executeArgv(["entra", "risk-detection", "show", "--profile", "soc", "--id", d1.id,
-      "--fields", "id,additionalInfo"], overrides);
-    assert.match(shown.riskDetection.additionalInfo, /\.\.\. \(truncated, \d+ chars total\)/);
-    assert.ok(shown.help[0].includes("--full"));
-    const full = await executeArgv(["entra", "risk-detection", "show", "--profile", "soc", "--id", d1.id,
-      "--fields", "id,additionalInfo", "--full"], overrides);
-    assert.equal(full.riskDetection.additionalInfo, LONG_INFO);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const shown = record(await executeArgv(["entra", "risk-detection", "show", "--profile", "soc", "--id", d1.id,
+      "--fields", "id,additionalInfo"], overrides));
+    assert.match(outputText(record(shown.riskDetection).additionalInfo), /\.\.\. \(truncated, \d+ chars total\)/);
+    assert.ok(strings(shown.help)[0]!.includes("--full"));
+    const full = record(await executeArgv(["entra", "risk-detection", "show", "--profile", "soc", "--id", d1.id,
+      "--fields", "id,additionalInfo", "--full"], overrides));
+    assert.equal(record(full.riskDetection).additionalInfo, LONG_INFO);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally { teardownProfiles(state); }
 });
 
@@ -701,11 +703,11 @@ test("detection list truncation recovery replays time bounds with --full", async
     const rows = [{ id: "e1", detectedDateTime: "2026-09-10T08:11:27Z", userPrincipalName: "AdeleV@contoso.com", riskLevel: "high", additionalInfo: "y".repeat(600) }];
     const wide = transport(() => json(200, { value: rows }));
     const { overrides: wideOverrides } = overridesFor("delegated", wide);
-    const first = await executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE,
-      "--select", "id,additionalInfo"], wideOverrides);
-    assert.match(first.riskDetections[0].additionalInfo, /truncated/);
-    const replayed = await executeArgv(hintArgv(first.help[0]), wideOverrides);
-    assert.equal(replayed.riskDetections[0].additionalInfo, "y".repeat(600));
+    const first = record(await executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE,
+      "--select", "id,additionalInfo"], wideOverrides));
+    assert.match(outputText(records(first.riskDetections)[0]!.additionalInfo), /truncated/);
+    const replayed = record(await executeArgv(hintArgv(outputText(strings(first.help)[0])), wideOverrides));
+    assert.equal(records(replayed.riskDetections)[0]!.additionalInfo, "y".repeat(600));
   } finally { teardownProfiles(state); }
 });
 
@@ -713,10 +715,10 @@ test("application mode lists and shows risk without delegated scopes", async () 
   const state = setupProfiles();
   try {
     const { calls, overrides } = overridesFor("application");
-    const users = await executeArgv(["entra", "risky-user", "list", "--profile", "batch"], overrides);
-    assert.equal(users.riskyUsers.length, 3);
-    const shown = await executeArgv(["entra", "risk-detection", "show", "--profile", "batch", "--id", d2.id,
-      "--fields", "id,riskEventType"], overrides);
+    const users = record(await executeArgv(["entra", "risky-user", "list", "--profile", "batch"], overrides));
+    assert.equal(records(users.riskyUsers).length, 3);
+    const shown = record(await executeArgv(["entra", "risk-detection", "show", "--profile", "batch", "--id", d2.id,
+      "--fields", "id,riskEventType"], overrides));
     assert.deepEqual(shown.riskDetection, { id: d2.id, riskEventType: "generic" });
     assert.ok(calls.length > 0);
   } finally { teardownProfiles(state); }
@@ -728,8 +730,8 @@ test("application mode rejects delegated scopes before HTTP", async () => {
     const { requests, overrides } = overridesFor("application");
     await assert.rejects(executeArgv(["entra", "risky-user", "list", "--profile", "batch",
       "--scopes", "https://graph.microsoft.com/IdentityRiskyUser.Read.All"], overrides), error => {
-      assert.equal(error.code, "VALIDATION_ERROR");
-      return /Graph \.default audience/.test(error.message);
+      assert.equal(record(error).code, "VALIDATION_ERROR");
+      return /Graph \.default audience/.test(outputText(record(error).message));
     });
     await assert.rejects(executeArgv(["entra", "risk-detection", "list", "--profile", "batch", "--since", SINCE,
       "--scopes", "https://graph.microsoft.com/IdentityRiskEvent.Read.All"], overrides), { code: "VALIDATION_ERROR" });
@@ -747,8 +749,8 @@ test("unknown risk properties and unfetched fields fail before HTTP", async () =
     await assert.rejects(executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE, "--fields", "riskState"], overrides), { code: "VALIDATION_ERROR" });
     await assert.rejects(executeArgv(["entra", "risky-user", "show", "--profile", "soc", "--id", u1.id, "--select", "id,aboutMe"], overrides), { code: "VALIDATION_ERROR" });
     await assert.rejects(executeArgv(["entra", "risk-detection", "show", "--profile", "soc", "--id", d1.id, "--select", "id,tokenIssuerType"], overrides), error => {
-      assert.equal(error.code, "VALIDATION_ERROR");
-      assert.match(error.message, /Unknown property tokenIssuerType/);
+      assert.equal(record(error).code, "VALIDATION_ERROR");
+      assert.match(outputText(record(error).message), /Unknown property tokenIssuerType/);
       return true;
     });
     await assert.rejects(executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE, "--cursor", "not-a-cursor"], overrides), { code: "VALIDATION_ERROR" });
@@ -762,13 +764,13 @@ for (const scopes of [",", "https://example.invalid/IdentityRiskEvent.Read.All",
   test(`risk-detection list rejects delegated scopes ${scopes} before provider acquisition`, async () => {
     const state = setupProfiles();
     try {
-      const calls = [];
+      const calls: Parameters<typeof credentialService>[1] = [];
       const { overrides, requests } = overridesFor("delegated");
-      overrides.delegated = new DelegatedAuth({
+      overrides.delegated = new DelegatedAuth(delegatedProvider({
         storage: "session-only",
         login: async () => { throw new Error("Unexpected interactive login"); },
         silent: async (...args) => { calls.push(args); throw new Error("Unexpected credential acquisition"); },
-      });
+      }));
       await assert.rejects(executeArgv(["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE, "--scopes", scopes], overrides), { code: "VALIDATION_ERROR" });
       assert.deepEqual(calls, []);
       assert.deepEqual(requests, []);
@@ -780,19 +782,19 @@ test("richer selects dispatch the same mapping while unshipped beta stays blocke
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const richer = await executeArgv(
+    const richer = record(await executeArgv(
       ["entra", "risky-user", "list", "--profile", "soc", "--select", "id,riskState", "--all"],
       overrides,
-    );
-    assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,riskState");
-    assert.deepEqual(richer.riskyUsers[0], { id: u1.id, riskState: "atRisk" });
+    ));
+    assert.equal(new URL(requests[0]!.url).searchParams.get("$select"), "id,riskState");
+    assert.deepEqual(records(richer.riskyUsers)[0], { id: u1.id, riskState: "atRisk" });
     for (const argv of [
       ["entra", "risky-user", "list", "--profile", "soc", "--api-version", "beta", "--limit", "1"],
       ["entra", "risk-detection", "list", "--profile", "soc", "--since", SINCE, "--api-version", "beta", "--limit", "1"],
     ]) {
       await assert.rejects(executeArgv(argv, overrides), error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Unknown catalogued/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Unknown catalogued/.test(outputText(record(error).message));
       });
     }
   } finally {

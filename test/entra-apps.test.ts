@@ -1,3 +1,6 @@
+import type { AnyProfile } from "../dist/profiles.js";
+import { record, records, text as outputText, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler, type OutputRecord } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -176,12 +179,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -196,9 +199,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -206,7 +209,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -231,34 +234,34 @@ function appTransport() {
     if (/^\/v1\.0\/applications\/[^/]+\/federatedIdentityCredentials$/.test(path)) return json(200, { value: appFedcreds });
     const appFedSingle = /^\/v1\.0\/applications\/[^/]+\/federatedIdentityCredentials\/([^/]+)$/.exec(path);
     if (appFedSingle) {
-      const found = appFedcreds.find(row => row.id === decodeURIComponent(appFedSingle[1]));
+      const found = appFedcreds.find(row => row.id === decodeURIComponent(appFedSingle[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such credential" } });
     }
     if (/^\/v1\.0\/servicePrincipals\/[^/]+\/federatedIdentityCredentials$/.test(path)) return json(200, { value: spFedcreds });
     const spFedSingle = /^\/v1\.0\/servicePrincipals\/[^/]+\/federatedIdentityCredentials\/([^/]+)$/.exec(path);
     if (spFedSingle) {
-      const found = spFedcreds.find(row => row.id === decodeURIComponent(spFedSingle[1]));
+      const found = spFedcreds.find(row => row.id === decodeURIComponent(spFedSingle[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such credential" } });
     }
     if (/^\/v1\.0\/servicePrincipals\/[^/]+\/appRoleAssignedTo$/.test(path)) return json(200, { value: assignedTo });
     const assignedSingle = /^\/v1\.0\/servicePrincipals\/[^/]+\/appRoleAssignedTo\/([^/]+)$/.exec(path);
     if (assignedSingle) {
-      const found = assignedTo.find(row => row.id === decodeURIComponent(assignedSingle[1]));
+      const found = assignedTo.find(row => row.id === decodeURIComponent(assignedSingle[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such assignment" } });
     }
     const grantSingle = /^\/v1\.0\/servicePrincipals\/[^/]+\/appRoleAssignments\/([^/]+)$/.exec(path);
     if (grantSingle) {
-      const found = spAssignments.find(row => row.id === decodeURIComponent(grantSingle[1]));
+      const found = spAssignments.find(row => row.id === decodeURIComponent(grantSingle[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such assignment" } });
     }
     const appSingle = /^\/v1\.0\/applications\/([^/]+)$/.exec(path);
     if (appSingle) {
-      const found = applications.find(row => row.id === decodeURIComponent(appSingle[1]));
+      const found = applications.find(row => row.id === decodeURIComponent(appSingle[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such application" } });
     }
     const spSingle = /^\/v1\.0\/servicePrincipals\/([^/]+)$/.exec(path);
     if (spSingle) {
-      const found = servicePrincipals.find(row => row.id === decodeURIComponent(spSingle[1]));
+      const found = servicePrincipals.find(row => row.id === decodeURIComponent(spSingle[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such service principal" } });
     }
     if (/^\/v1\.0\/applications\/[^/]+\/owners$/.test(path)) return json(200, { value: appOwners });
@@ -267,7 +270,7 @@ function appTransport() {
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: CredentialArgs[] = []) {
   const fixture = handler ?? appTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -275,13 +278,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runAppCli(args, state, mode, denied = false) {
+function runAppCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -290,17 +293,17 @@ function runAppCli(args, state, mode, denied = false) {
     env: {
       HOME: state.dir, USERPROFILE: state.dir, PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
       MG_AXI_CONFIG: join(state.dir, "config.json"),
-      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, directory: [], denied, scopes: appScopes[0], applications, servicePrincipals, appOwners, spOwners }),
+      MG_AXI_READ_FIXTURE: JSON.stringify({ mode, directory: [], denied, scopes: appScopes[0]!, applications, servicePrincipals, appOwners, spOwners }),
     },
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists applications keeping appId distinct from the object id`, async () => {
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "application", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "application", "list", "--profile", profile], overrides));
       assert.deepEqual(result.applications, [
         { id: a1.id, appId: a1.appId, displayName: "Contoso Web" },
         { id: a2.id, appId: a2.appId, displayName: "Daemon Batch" },
@@ -309,9 +312,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 applications");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra application show --id <application-object-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra application show --id <application-object-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/applications?"));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/applications?"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
     } finally {
       teardownProfiles(state);
@@ -322,7 +325,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "application", "show", "--id", a1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "application", "show", "--id", a1.id, "--profile", profile], overrides));
       assert.deepEqual(result.application, {
         id: a1.id,
         appId: a1.appId,
@@ -351,7 +354,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "service-principal", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "service-principal", "list", "--profile", profile], overrides));
       assert.deepEqual(result.servicePrincipals, [
         { id: s1.id, appId: s1.appId, displayName: "Contoso Web" },
         { id: s2.id, appId: s2.appId, displayName: "Daemon Batch" },
@@ -360,7 +363,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 service principals");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/servicePrincipals?"));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/servicePrincipals?"));
     } finally {
       teardownProfiles(state);
     }
@@ -370,11 +373,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "service-principal", "show", "--id", s1.id, "--profile", profile], overrides);
-      assert.equal(result.servicePrincipal.id, s1.id);
-      assert.equal(result.servicePrincipal.appId, a1.appId);
-      assert.equal(result.servicePrincipal.servicePrincipalType, "Application");
-      assert.equal(result.servicePrincipal.accountEnabled, true);
+      const result = record(await executeArgv(["entra", "service-principal", "show", "--id", s1.id, "--profile", profile], overrides));
+      assert.equal(record(result.servicePrincipal).id, s1.id);
+      assert.equal(record(result.servicePrincipal).appId, a1.appId);
+      assert.equal(record(result.servicePrincipal).servicePrincipalType, "Application");
+      assert.equal(record(result.servicePrincipal).accountEnabled, true);
     } finally {
       teardownProfiles(state);
     }
@@ -384,11 +387,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "application", "owner", "list", "--application", a1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "application", "owner", "list", "--application", a1.id, "--profile", profile], overrides));
       assert.deepEqual(result.owners, appOwners);
       assert.deepEqual(result.count, "2 owners");
       assert.equal(result.total, null);
-      assert.ok(new URL(requests[0].url).pathname.endsWith(`/applications/${a1.id}/owners`));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith(`/applications/${a1.id}/owners`));
     } finally {
       teardownProfiles(state);
     }
@@ -398,11 +401,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "service-principal", "owner", "list", "--service-principal", s1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "service-principal", "owner", "list", "--service-principal", s1.id, "--profile", profile], overrides));
       assert.deepEqual(result.owners, spOwners);
       assert.deepEqual(result.count, "1 owners");
       assert.equal(result.total, null);
-      assert.ok(new URL(requests[0].url).pathname.endsWith(`/servicePrincipals/${s1.id}/owners`));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith(`/servicePrincipals/${s1.id}/owners`));
     } finally {
       teardownProfiles(state);
     }
@@ -412,15 +415,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "application", "federated-credential", "list", "--application", a1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "application", "federated-credential", "list", "--application", a1.id, "--profile", profile], overrides));
       assert.deepEqual(result.federatedCredentials, [
-        { id: appFedcreds[0].id, name: "github-actions", issuer: "https://token.actions.githubusercontent.com", subject: "repo:contoso/web:ref:refs/heads/main" },
-        { id: appFedcreds[1].id, name: "terraform-cloud", issuer: "https://app.terraform.io", subject: "organization:contoso:project:web:workspace:prod" },
+        { id: appFedcreds[0]!.id, name: "github-actions", issuer: "https://token.actions.githubusercontent.com", subject: "repo:contoso/web:ref:refs/heads/main" },
+        { id: appFedcreds[1]!.id, name: "terraform-cloud", issuer: "https://app.terraform.io", subject: "organization:contoso:project:web:workspace:prod" },
       ]);
       assert.deepEqual(result.count, "2 federated credentials");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(new URL(requests[0].url).pathname.endsWith(`/applications/${a1.id}/federatedIdentityCredentials`));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith(`/applications/${a1.id}/federatedIdentityCredentials`));
       assert.ok(!JSON.stringify(result).includes("poison-must-never-surface"));
     } finally {
       teardownProfiles(state);
@@ -431,9 +434,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "application", "federated-credential", "show", "--application", a1.id, "--id", appFedcreds[0].id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "application", "federated-credential", "show", "--application", a1.id, "--id", appFedcreds[0]!.id, "--profile", profile], overrides));
       assert.deepEqual(result.federatedCredential, {
-        id: appFedcreds[0].id,
+        id: appFedcreds[0]!.id,
         name: "github-actions",
         issuer: "https://token.actions.githubusercontent.com",
         subject: "repo:contoso/web:ref:refs/heads/main",
@@ -450,12 +453,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "service-principal", "federated-credential", "list", "--service-principal", s1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "service-principal", "federated-credential", "list", "--service-principal", s1.id, "--profile", profile], overrides));
       assert.deepEqual(result.federatedCredentials, [
-        { id: spFedcreds[0].id, name: "workload-github", issuer: "https://token.actions.githubusercontent.com", subject: "repo:contoso/api:environment:prod" },
+        { id: spFedcreds[0]!.id, name: "workload-github", issuer: "https://token.actions.githubusercontent.com", subject: "repo:contoso/api:environment:prod" },
       ]);
       assert.deepEqual(result.count, "1 federated credentials");
-      assert.ok(new URL(requests[0].url).pathname.endsWith(`/servicePrincipals/${s1.id}/federatedIdentityCredentials`));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith(`/servicePrincipals/${s1.id}/federatedIdentityCredentials`));
     } finally {
       teardownProfiles(state);
     }
@@ -465,9 +468,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "service-principal", "federated-credential", "show", "--service-principal", s1.id, "--id", spFedcreds[0].id, "--profile", profile], overrides);
-      assert.equal(result.federatedCredential.name, "workload-github");
-      assert.deepEqual(result.federatedCredential.audiences, ["api://AzureADTokenExchange"]);
+      const result = record(await executeArgv(["entra", "service-principal", "federated-credential", "show", "--service-principal", s1.id, "--id", spFedcreds[0]!.id, "--profile", profile], overrides));
+      assert.equal(record(result.federatedCredential).name, "workload-github");
+      assert.deepEqual(record(result.federatedCredential).audiences, ["api://AzureADTokenExchange"]);
     } finally {
       teardownProfiles(state);
     }
@@ -477,13 +480,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "service-principal", "app-role-assigned-to", "list", "--service-principal", s1.id, "--profile", profile], overrides);
-      assert.equal(result.appRoleAssignedTo.length, 2);
-      assert.equal(result.appRoleAssignedTo[0].principalDisplayName, "Adele Vance");
-      assert.equal(result.appRoleAssignedTo[1].principalType, "ServicePrincipal");
+      const result = record(await executeArgv(["entra", "service-principal", "app-role-assigned-to", "list", "--service-principal", s1.id, "--profile", profile], overrides));
+      assert.equal(records(result.appRoleAssignedTo).length, 2);
+      assert.equal(records(result.appRoleAssignedTo)[0]!.principalDisplayName, "Adele Vance");
+      assert.equal(records(result.appRoleAssignedTo)[1]!.principalType, "ServicePrincipal");
       assert.deepEqual(result.count, "2 app role assignments");
       assert.equal(result.total, null);
-      assert.ok(new URL(requests[0].url).pathname.endsWith(`/servicePrincipals/${s1.id}/appRoleAssignedTo`));
+      assert.ok(new URL(requests[0]!.url).pathname.endsWith(`/servicePrincipals/${s1.id}/appRoleAssignedTo`));
     } finally {
       teardownProfiles(state);
     }
@@ -493,7 +496,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "service-principal", "app-role-assigned-to", "show", "--service-principal", s1.id, "--id", assignedTo[0].id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "service-principal", "app-role-assigned-to", "show", "--service-principal", s1.id, "--id", assignedTo[0]!.id, "--profile", profile], overrides));
       assert.deepEqual(result.appRoleAssignedTo, assignedTo[0]);
     } finally {
       teardownProfiles(state);
@@ -504,7 +507,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "service-principal", "app-role-assignment", "show", "--service-principal", s1.id, "--id", spAssignments[0].id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "service-principal", "app-role-assignment", "show", "--service-principal", s1.id, "--id", spAssignments[0]!.id, "--profile", profile], overrides));
       assert.deepEqual(result.appRoleAssignment, spAssignments[0]);
     } finally {
       teardownProfiles(state);
@@ -515,12 +518,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "application", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.applications.map(row => row.id), [a1.id]);
+      const first = record(await executeArgv(["entra", "application", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.applications).map(row => row.id), [a1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "application", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.applications.map(row => row.id), [a2.id, a3.id]);
+      const second = record(await executeArgv(["entra", "application", "list", "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
+      assert.deepEqual(records(second.applications).map(row => row.id), [a2.id, a3.id]);
       assert.deepEqual(second.count, "2 applications");
       assert.equal(second.total, null);
     } finally {
@@ -528,7 +531,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     }
   });
 
-  for (const [resource, key] of [["application", "applications"], ["service-principal", "servicePrincipals"]]) {
+  for (const [resource, key] of [["application", "applications"], ["service-principal", "servicePrincipals"]] as const) {
     for (const field of ["passwordCredentials", "keyCredentials"]) {
       test(`${mode} capped ${resource} ${field} retain only expiry metadata through resume`, async () => {
         const state = setupProfiles();
@@ -536,21 +539,21 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
           const metadata = field === "passwordCredentials"
             ? { keyId: "secret-1", displayName: "Client secret", startDateTime: "2024-06-01T00:00:00Z", endDateTime: "2025-06-01T00:00:00Z" }
             : { keyId: "key-1", displayName: "Signing key", startDateTime: "2024-01-01T00:00:00Z", endDateTime: "2026-01-01T00:00:00Z" };
-          const rows = [a1.id, a2.id, a3.id].map(id => ({ id, [field]: a1[field] }));
+          const rows = [a1.id, a2.id, a3.id].map(id => ({ id, [field]: (a1 as OutputRecord)[field] }));
           const fixture = transport(() => json(200, { value: rows }));
           const { overrides } = overridesFor(mode, fixture);
           const args = ["entra", resource, "list", "--profile", profile];
-          const first = await executeArgv([...args, "--select", `id,${field}`, "--limit", "1"], overrides);
+          const first = record(await executeArgv([...args, "--select", `id,${field}`, "--limit", "1"], overrides));
           assert.deepEqual(first[key], [{ id: a1.id, [field]: [metadata] }]);
-          const cursor = JSON.parse(Buffer.from(first.cursor, "base64url").toString("utf8"));
+          const cursor = JSON.parse(Buffer.from(outputText(first.cursor), "base64url").toString("utf8"));
           assert.deepEqual(cursor.buffered, rows.slice(1).map(row => ({ id: row.id, [field]: [metadata] })));
           cursor.buffered = rows.slice(1);
           const legacyCursor = Buffer.from(JSON.stringify(cursor)).toString("base64url");
-          const second = await executeArgv([...args, "--cursor", legacyCursor, "--limit", "1"], overrides);
+          const second = record(await executeArgv([...args, "--cursor", legacyCursor, "--limit", "1"], overrides));
           assert.deepEqual(second[key], [{ id: a2.id, [field]: [metadata] }]);
-          assert.deepEqual(JSON.parse(Buffer.from(second.cursor, "base64url").toString("utf8")).buffered,
+          assert.deepEqual(JSON.parse(Buffer.from(outputText(second.cursor), "base64url").toString("utf8")).buffered,
             [{ id: a3.id, [field]: [metadata] }]);
-          const third = await executeArgv([...args, "--cursor", second.cursor], overrides);
+          const third = record(await executeArgv([...args, "--cursor", outputText(second.cursor)], overrides));
           assert.deepEqual(third[key], [{ id: a3.id, [field]: [metadata] }]);
           assert.deepEqual(third.count, key === "applications" ? "1 applications" : "1 service principals");
           assert.equal(third.total, null);
@@ -569,17 +572,17 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const missing = transport(() => json(404, { error: { code: "Request_ResourceNotFound", message: "gone" } }));
       const overrides = {
         transport: denied.send,
-        delegated: credentialService("delegated", []),
-        application: credentialService("application", []),
+        delegated: authFakes(credentialService("delegated", [])).delegated,
+        application: authFakes(credentialService("application", [])).application,
       };
       await assert.rejects(executeArgv(["entra", "application", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /grant, role, licence/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "application", "show", "--id", a1.id, "--profile", profile],
         { ...overrides, transport: missing.send }), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /not found or inaccessible/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /not found or inaccessible/.test(outputText(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -592,34 +595,34 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runAppCli(["entra", "application", "list", "--profile", profile], state, mode);
       assert.equal(listed.status, 0, listed.stdout);
       assert.equal(listed.stderr, "");
-      const listedOut = decode(listed.stdout);
-      assert.deepEqual(listedOut.applications.map(row => row.id), [a1.id, a2.id, a3.id]);
+      const listedOut = record(decode(listed.stdout));
+      assert.deepEqual(records(listedOut.applications).map(row => row.id), [a1.id, a2.id, a3.id]);
       assert.deepEqual(listedOut.count, "3 applications");
       assert.equal(listedOut.total, null);
       assert.ok(!listed.stdout.includes(`opaque-fixture-${mode}-token`));
 
       const shown = runAppCli(["entra", "application", "show", "--id", a1.id, "--profile", profile], state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      const shownOut = decode(shown.stdout);
-      assert.equal(shownOut.application.appId, a1.appId);
-      assert.equal(shownOut.application.passwordCredentials[0].keyId, "secret-1");
+      const shownOut = record(decode(shown.stdout));
+      assert.equal(record(shownOut.application).appId, a1.appId);
+      assert.equal(records(record(shownOut.application).passwordCredentials)[0]!.keyId, "secret-1");
       assert.ok(!shown.stdout.includes("super-secret-value"));
 
       const owners = runAppCli(["entra", "application", "owner", "list", "--application", a1.id, "--profile", profile], state, mode);
       assert.equal(owners.status, 0, owners.stdout);
-      assert.deepEqual(decode(owners.stdout).owners, appOwners);
+      assert.deepEqual(record(decode(owners.stdout)).owners, appOwners);
 
       const sps = runAppCli(["entra", "service-principal", "list", "--profile", profile], state, mode);
       assert.equal(sps.status, 0, sps.stdout);
-      assert.deepEqual(decode(sps.stdout).servicePrincipals.map(row => row.id), [s1.id, s2.id, s3.id]);
+      assert.deepEqual(records(record(decode(sps.stdout)).servicePrincipals).map(row => row.id), [s1.id, s2.id, s3.id]);
 
       const spShown = runAppCli(["entra", "service-principal", "show", "--id", s1.id, "--profile", profile], state, mode);
       assert.equal(spShown.status, 0, spShown.stdout);
-      assert.equal(decode(spShown.stdout).servicePrincipal.servicePrincipalType, "Application");
+      assert.equal(record(record(decode(spShown.stdout)).servicePrincipal).servicePrincipalType, "Application");
 
       const spOwnersOut = runAppCli(["entra", "service-principal", "owner", "list", "--service-principal", s1.id, "--profile", profile], state, mode);
       assert.equal(spOwnersOut.status, 0, spOwnersOut.stdout);
-      assert.deepEqual(decode(spOwnersOut.stdout).owners, spOwners);
+      assert.deepEqual(record(decode(spOwnersOut.stdout)).owners, spOwners);
     } finally { teardownProfiles(state); }
   });
 
@@ -629,9 +632,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runAppCli(["entra", "application", "list", "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
+      assert.match(outputText(output.error), /grant, role, licence or policy/);
       assert.equal(output.applications, undefined);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -641,7 +644,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 test("application list $filter carries count and consistency through resume", async () => {
   const state = setupProfiles();
   try {
-    const seen = [];
+    const seen: { url: string; headers: Record<string, string> }[] = [];
     const fixture = transport(request => {
       seen.push({ url: request.url, headers: request.headers });
       assert.equal(new URL(request.url).searchParams.get("$count"), "true");
@@ -654,16 +657,16 @@ test("application list $filter carries count and consistency through resume", as
       });
     });
     const { overrides } = overridesFor("delegated", fixture);
-    const filtered = await executeArgv(["entra", "application", "list",
-      "--profile", "soc", "--filter", "startswith(displayName,'C')", "--limit", "1"], overrides);
-    assert.equal(seen[0].headers.ConsistencyLevel, "eventual");
+    const filtered = record(await executeArgv(["entra", "application", "list",
+      "--profile", "soc", "--filter", "startswith(displayName,'C')", "--limit", "1"], overrides));
+    assert.equal(seen[0]!.headers.ConsistencyLevel, "eventual");
     assert.equal(filtered.complete, false);
-    const resumed = await executeArgv(["entra", "application", "list",
-      "--profile", "soc", "--cursor", filtered.cursor], overrides);
-    assert.equal(seen[1].headers.ConsistencyLevel, "eventual");
+    const resumed = record(await executeArgv(["entra", "application", "list",
+      "--profile", "soc", "--cursor", outputText(filtered.cursor)], overrides));
+    assert.equal(seen[1]!.headers.ConsistencyLevel, "eventual");
     assert.deepEqual(resumed.complete, true);
     await assert.rejects(executeArgv(["entra", "application", "list",
-      "--profile", "soc", "--cursor", filtered.cursor, "--filter", "startswith(displayName,'D')"], overrides),
+      "--profile", "soc", "--cursor", outputText(filtered.cursor), "--filter", "startswith(displayName,'D')"], overrides),
     { code: "VALIDATION_ERROR" });
   } finally {
     teardownProfiles(state);
@@ -673,13 +676,13 @@ test("application list $filter carries count and consistency through resume", as
 test("secret-minting routes are refused before credentials", async () => {
   const state = setupProfiles();
   try {
-    const calls = [];
+    const calls: Parameters<typeof credentialService>[1] = [];
     const { requests, overrides } = overridesFor("delegated", undefined, calls);
     const { showApplication } = await import("../dist/entra-apps.js");
     const { operationFor, leafHelp, LEAVES } = await import("../dist/catalogue.js");
     const leaf = LEAVES.find(item => item.path === "entra application show");
     const secretOperation = {
-      ...operationFor(leaf, "v1.0"),
+      ...operationFor(leaf!, "v1.0")!,
       id: "v1.0:POST:/applications/{application-id}/addPassword",
       method: "POST",
       path: "/applications/{application-id}/addPassword",
@@ -687,10 +690,10 @@ test("secret-minting routes are refused before credentials", async () => {
     const { GraphSession } = await import("../dist/graph-session.js");
     const session = new GraphSession(overrides);
     await assert.rejects(
-      showApplication(session, { id: a1.id }, { mode: "delegated", tenantId: tenant, clientId: client }, secretOperation, leafHelp(leaf), "soc"),
+      showApplication(session, { id: a1.id }, { mode: "delegated", tenantId: tenant, clientId: client } as unknown as AnyProfile, secretOperation, leafHelp(leaf!), "soc"),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /thirteen catalogued application/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /thirteen catalogued application/.test(outputText(record(error).message));
       },
     );
     assert.equal(requests.length, 0);
@@ -705,14 +708,14 @@ test("application mode rejects delegated scopes before HTTP", async () => {
   try {
     const { requests, overrides } = overridesFor("application");
     await assert.rejects(
-      executeArgv(["entra", "application", "list", "--profile", "batch", "--scopes", appScopes[0]], overrides),
+      executeArgv(["entra", "application", "list", "--profile", "batch", "--scopes", appScopes[0]!], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Graph \.default audience/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Graph \.default audience/.test(outputText(record(error).message));
       },
     );
     await assert.rejects(
-      executeArgv(["entra", "service-principal", "owner", "list", "--service-principal", s1.id, "--profile", "batch", "--scopes", appScopes[0]], overrides),
+      executeArgv(["entra", "service-principal", "owner", "list", "--service-principal", s1.id, "--profile", "batch", "--scopes", appScopes[0]!], overrides),
       { code: "VALIDATION_ERROR" },
     );
     assert.equal(requests.length, 0);
@@ -753,8 +756,8 @@ test("application reads refuse unshipped beta operations", async () => {
     await assert.rejects(
       executeArgv(["entra", "application", "list", "--profile", "soc", "--api-version", "beta", "--limit", "1"], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Unknown catalogued/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Unknown catalogued/.test(outputText(record(error).message));
       },
     );
     await assert.rejects(

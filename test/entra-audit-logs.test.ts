@@ -1,3 +1,5 @@
+import { record, records, text as outputText, strings, authFakes, delegatedProvider, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -119,12 +121,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -139,9 +141,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -149,7 +151,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -179,7 +181,7 @@ function auditTransport() {
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: CredentialArgs[] = []) {
   const fixture = handler ?? auditTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -187,16 +189,16 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function hintArgv(hint) {
-  const argv = [];
+function hintArgv(hint: string): string[] {
+  const argv: string[] = [];
   let word = "";
-  let quote = null;
+  let quote: string | null = null;
   let escaped = false;
   let started = false;
   const push = () => { if (started) { argv.push(word); word = ""; started = false; } };
@@ -216,11 +218,11 @@ function hintArgv(hint) {
   push();
   if (argv[0] === "mg-axi") return argv.slice(1);
   assert.equal(argv[0], process.execPath);
-  assert.equal(resolve(argv[1]), resolve("dist/bin/mg-axi.js"));
+  assert.equal(resolve(argv[1]!), resolve("dist/bin/mg-axi.js"));
   return argv.slice(2);
 }
 
-function runReadCli(args, state, mode, denied = false, input) {
+function runReadCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false, input?: string) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-audit-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -237,38 +239,38 @@ function runReadCli(args, state, mode, denied = false, input) {
 for (const [noun, key, field, plural] of [
   ["sign-in", "signIns", "userPrincipalName", "sign-ins"],
   ["directory-audit", "directoryAudits", "activityDisplayName", "directory audits"],
-]) {
-  for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+] as const) {
+  for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
     test(`${mode} executable resumes large ${noun} cursors and recovers full text through stdin`, async () => {
       const state = setupProfiles();
       try {
         const rows = Array.from({ length: 1000 }, (_, i) => ({ id: String(i), [field]: "x".repeat(600) }));
         const fixture = transport(() => json(200, { value: rows }));
         const { overrides } = overridesFor(mode, fixture);
-        const first = await executeArgv(["entra", noun, "list", "--profile", profile,
-          "--since", SINCE, "--select", `id,${field}`], overrides);
-        assert.equal(first[key].length, 100);
+        const first = record(await executeArgv(["entra", noun, "list", "--profile", profile,
+          "--since", SINCE, "--select", `id,${field}`], overrides));
+        assert.equal(records(first[key]).length, 100);
         assert.equal(first.complete, false);
-        assert.ok(Buffer.byteLength(first.cursor) > 128 * 1024);
-        assert.match(first.help.join("\n"), /--cursor -.*stdin/);
+        assert.ok(Buffer.byteLength(outputText(first.cursor)) > 128 * 1024);
+        assert.match(strings(first.help).join("\n"), /--cursor -.*stdin/);
         const second = runReadCli(["entra", noun, "list", "--profile", profile, "--cursor", "-"],
           state, mode, true, `${first.cursor}\n`);
         assert.equal(second.error, undefined);
         assert.equal(second.status, 0, second.stdout);
         assert.equal(second.stderr, "");
-        const partial = decode(second.stdout);
-        assert.deepEqual(partial[key].map(row => row.id), rows.slice(100, 200).map(row => row.id));
-        assert.match(partial[key][0][field], /truncated/);
-        assert.ok(!partial.help[0].includes(first.cursor));
-        assert.ok(partial.help[0].includes("--cursor -"));
-        assert.ok(partial.help.some(hint => hint.includes("original input cursor on stdin")));
-        const recovered = runReadCli(hintArgv(partial.help[0]), state, mode, true, first.cursor);
+        const partial = record(decode(second.stdout));
+        assert.deepEqual(records(partial[key]).map(row => row.id), rows.slice(100, 200).map(row => row.id));
+        assert.match(outputText(records(partial[key])[0]![field]), /truncated/);
+        assert.ok(!strings(partial.help)[0]!.includes(outputText(first.cursor)));
+        assert.ok(strings(partial.help)[0]!.includes("--cursor -"));
+        assert.ok(strings(partial.help).some(hint => hint.includes("original input cursor on stdin")));
+        const recovered = runReadCli(hintArgv(outputText(strings(partial.help)[0])), state, mode, true, outputText(first.cursor));
         assert.equal(recovered.status, 0, recovered.stdout);
-        assert.deepEqual(decode(recovered.stdout)[key], rows.slice(100, 200));
+        assert.deepEqual(record(decode(recovered.stdout))[key], rows.slice(100, 200));
         const last = runReadCli(["entra", noun, "list", "--profile", profile, "--cursor", "-", "--all", "--full"],
-          state, mode, true, partial.cursor);
+          state, mode, true, outputText(partial.cursor));
         assert.equal(last.status, 0, last.stdout);
-        const complete = decode(last.stdout);
+        const complete = record(decode(last.stdout));
         assert.deepEqual(complete[key], rows.slice(200));
         assert.deepEqual(complete.count, `800 ${plural}`);
         assert.equal(complete.total, null);
@@ -281,7 +283,7 @@ for (const [noun, key, field, plural] of [
     ["", /needs the opaque cursor/],
     ["invalid", /Invalid collection cursor/],
     ["a".repeat(MAX_CURSOR_BYTES + 1), /cursor exceeds 16000000 bytes/],
-  ]) {
+  ] as const) {
     test(`${noun} executable rejects ${input.length > MAX_CURSOR_BYTES ? "oversized" : input || "empty"} stdin cursors`, () => {
       const state = setupProfiles();
       try {
@@ -289,9 +291,9 @@ for (const [noun, key, field, plural] of [
           state, "delegated", true, input);
         assert.equal(result.status, 2, result.stdout);
         assert.equal(result.stderr, "");
-        const output = decode(result.stdout);
+        const output = record(decode(result.stdout));
         assert.equal(output.code, "VALIDATION_ERROR");
-        assert.match(output.error, expectedError);
+        assert.match(outputText(output.error), expectedError);
       } finally { teardownProfiles(state); }
     });
   }
@@ -301,11 +303,11 @@ for (const [noun, key, field, plural] of [
     try {
       const { overrides } = overridesFor("delegated");
       const otherNoun = noun === "sign-in" ? "directory-audit" : "sign-in";
-      const first = await executeArgv(["entra", otherNoun, "list", "--profile", "soc", "--since", SINCE, "--limit", "1"], overrides);
+      const first = record(await executeArgv(["entra", otherNoun, "list", "--profile", "soc", "--since", SINCE, "--limit", "1"], overrides));
       const result = runReadCli(["entra", noun, "list", "--profile", "soc", "--cursor", "-"],
-        state, "delegated", true, first.cursor);
+        state, "delegated", true, outputText(first.cursor));
       assert.equal(result.status, 2, result.stdout);
-      assert.equal(decode(result.stdout).code, "VALIDATION_ERROR");
+      assert.equal(record(decode(result.stdout)).code, "VALIDATION_ERROR");
     } finally { teardownProfiles(state); }
   });
 }
@@ -313,8 +315,8 @@ for (const [noun, key, field, plural] of [
 for (const [noun, path, dateField, key, filterField] of [
   ["sign-in", "/auditLogs/signIns", "createdDateTime", "signIns", "userDisplayName"],
   ["directory-audit", "/auditLogs/directoryAudits", "activityDateTime", "directoryAudits", "activityDisplayName"],
-]) {
-  for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+] as const) {
+  for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
     for (const filter of [undefined, "id eq 'example'", `${dateField} le 2026-09-08T00:00:00.000Z`,
       `${dateField} ge 2026-09-01T00:00:00.000Z or id eq 'example'`]) {
       test(`${mode} ${noun} rejects raw cursors without a mandatory lower time bound: ${filter ?? "no filter"}`, async () => {
@@ -322,27 +324,27 @@ for (const [noun, path, dateField, key, filterField] of [
         try {
           const { requests, calls, overrides } = overridesFor(mode);
           const raw = await runApiGet({ path, apiVersion: "v1.0", profile: new Profiles().resolve(profile).profile,
-            scopes: mode === "delegated" ? auditScopes[0] : undefined, limit: 1,
+            scopes: mode === "delegated" ? auditScopes[0]! : undefined, limit: 1,
             odata: `$select=id${filter === undefined ? "" : `&$filter=${filter}`}` }, overrides);
           assert.equal(raw.complete, false);
           const requestCount = requests.length;
           const credentialCount = calls.length;
-          await assert.rejects(executeArgv(["entra", noun, "list", "--profile", profile, "--cursor", raw.cursor], overrides), error => {
-            assert.equal(error.code, "VALIDATION_ERROR");
-            assert.match(error.message, /bounded in time/);
-            assert.ok(error.suggestions.some(hint => hint.includes("Start a new query with --since")));
+          await assert.rejects(executeArgv(["entra", noun, "list", "--profile", profile, "--cursor", outputText(raw.cursor)], overrides), error => {
+            assert.equal(record(error).code, "VALIDATION_ERROR");
+            assert.match(outputText(record(error).message), /bounded in time/);
+            assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Start a new query with --since")));
             return true;
           });
-          await assert.rejects(executeArgv(["entra", noun, "list", "--profile", profile, "--cursor", raw.cursor,
+          await assert.rejects(executeArgv(["entra", noun, "list", "--profile", profile, "--cursor", outputText(raw.cursor),
             "--since", SINCE], overrides), { code: "VALIDATION_ERROR" });
           assert.equal(requests.length, requestCount);
           assert.equal(calls.length, credentialCount);
           const executable = runReadCli(["entra", noun, "list", "--profile", profile, "--cursor", "-"],
-            state, mode, true, raw.cursor);
+            state, mode, true, outputText(raw.cursor));
           assert.equal(executable.status, 2, executable.stdout);
-          const output = decode(executable.stdout);
+          const output = record(decode(executable.stdout));
           assert.equal(output.code, "VALIDATION_ERROR");
-          assert.ok(output.help.some(hint => hint.includes("Start a new query with --since")));
+          assert.ok(strings(output.help).some(hint => hint.includes("Start a new query with --since")));
         } finally { teardownProfiles(state); }
       });
     }
@@ -352,12 +354,12 @@ for (const [noun, path, dateField, key, filterField] of [
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor("delegated");
-      const first = await executeArgv(["entra", noun, "list", "--profile", "soc", "--limit", "1",
+      const first = record(await executeArgv(["entra", noun, "list", "--profile", "soc", "--limit", "1",
         "--since", "2026-09-10T21:20:02.7215373Z", "--until", "2026-09-10T21:20:02.7215374Z",
-        "--filter", `(${filterField} eq 'O''Brien (west)' or ${filterField} eq 'other')`], overrides);
-      const resumed = await executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", first.cursor], overrides);
+        "--filter", `(${filterField} eq 'O''Brien (west)' or ${filterField} eq 'other')`], overrides));
+      const resumed = record(await executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", outputText(first.cursor)], overrides));
       const expected = noun === "sign-in" ? signIns : audits;
-      assert.deepEqual(resumed[key].map(row => row.id), expected.slice(1).map(row => row.id));
+      assert.deepEqual(records(resumed[key]).map(row => row.id), expected.slice(1).map(row => row.id));
       assert.equal(resumed.complete, true);
     } finally { teardownProfiles(state); }
   });
@@ -376,14 +378,14 @@ for (const [noun, path, dateField, key, filterField] of [
   }
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} executable lists bounded sign-ins with compact rows`, () => {
     const state = setupProfiles();
     try {
       const result = runReadCli(["entra", "sign-in", "list", "--profile", profile, "--since", SINCE], state, mode);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.signIns, [
         { id: s1.id, createdDateTime: s1.createdDateTime, userPrincipalName: s1.userPrincipalName, appDisplayName: s1.appDisplayName },
         { id: s2.id, createdDateTime: s2.createdDateTime, userPrincipalName: s2.userPrincipalName, appDisplayName: s2.appDisplayName },
@@ -392,7 +394,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(output.count, "3 sign-ins");
       assert.equal(output.total, null);
       assert.equal(output.complete, true);
-      assert.ok(output.help.some(hint => hint.includes("entra sign-in show --id <sign-in-id>")));
+      assert.ok(strings(output.help).some(hint => hint.includes("entra sign-in show --id <sign-in-id>")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -403,11 +405,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runReadCli(["entra", "sign-in", "show", "--id", s1.id, "--profile", profile], state, mode);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
-      assert.equal(output.signIn.id, s1.id);
-      assert.equal(output.signIn.conditionalAccessStatus, "notApplied");
-      assert.match(output.signIn.appliedConditionalAccessPolicies, /^unavailable: /);
-      assert.match(output.signIn.appliedConditionalAccessPolicies, /Conditional Access Administrator/);
+      const output = record(decode(result.stdout));
+      assert.equal(record(output.signIn).id, s1.id);
+      assert.equal(record(output.signIn).conditionalAccessStatus, "notApplied");
+      assert.match(outputText(record(output.signIn).appliedConditionalAccessPolicies), /^unavailable: /);
+      assert.match(outputText(record(output.signIn).appliedConditionalAccessPolicies), /Conditional Access Administrator/);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -418,7 +420,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runReadCli(["entra", "directory-audit", "list", "--profile", profile, "--since", SINCE], state, mode);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.directoryAudits, [
         { id: a1.id, activityDateTime: a1.activityDateTime, activityDisplayName: a1.activityDisplayName, result: a1.result },
         { id: a2.id, activityDateTime: a2.activityDateTime, activityDisplayName: a2.activityDisplayName, result: a2.result },
@@ -436,10 +438,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runReadCli(["entra", "sign-in", "list", "--profile", profile, "--since", SINCE], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
-      assert.ok(output.help.some(hint => hint.includes("AuditLog.Read.All")));
+      assert.match(outputText(output.error), /grant, role, licence or policy/);
+      assert.ok(strings(output.help).some(hint => hint.includes("AuditLog.Read.All")));
       assert.equal(output.signIns, undefined);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -450,14 +452,14 @@ test("delegated sign-in list composes since, until and filter into one bounded $
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "sign-in", "list", "--profile", "soc",
-      "--since", SINCE, "--until", UNTIL, "--filter", "status/errorCode ne 0", "--all"], overrides);
+    const result = record(await executeArgv(["entra", "sign-in", "list", "--profile", "soc",
+      "--since", SINCE, "--until", UNTIL, "--filter", "status/errorCode ne 0", "--all"], overrides));
     assert.equal(requests.length, 2);
-    const params = new URL(requests[0].url).searchParams;
+    const params = new URL(requests[0]!.url).searchParams;
     assert.equal(params.get("$filter"),
       "createdDateTime ge 2026-09-01T00:00:00.000Z and createdDateTime le 2026-09-08T00:00:00.000Z and (status/errorCode ne 0)");
     assert.equal(params.get("$select"), "id,createdDateTime,userPrincipalName,appDisplayName");
-    assert.deepEqual(result.signIns.map(row => row.id), [s1.id, s2.id, s3.id]);
+    assert.deepEqual(records(result.signIns).map(row => row.id), [s1.id, s2.id, s3.id]);
     assert.deepEqual(result.count, "3 sign-ins");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
@@ -471,8 +473,8 @@ test("directory-audit list bounds activityDateTime and returns compact rows", as
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "directory-audit", "list", "--profile", "soc", "--since", SINCE, "--all"], overrides);
-    const params = new URL(requests[0].url).searchParams;
+    const result = record(await executeArgv(["entra", "directory-audit", "list", "--profile", "soc", "--since", SINCE, "--all"], overrides));
+    const params = new URL(requests[0]!.url).searchParams;
     assert.equal(params.get("$filter"), "activityDateTime ge 2026-09-01T00:00:00.000Z");
     assert.deepEqual(result.directoryAudits, [
       { id: a1.id, activityDateTime: a1.activityDateTime, activityDisplayName: a1.activityDisplayName, result: a1.result },
@@ -481,23 +483,23 @@ test("directory-audit list bounds activityDateTime and returns compact rows", as
     assert.deepEqual(result.count, "2 directory audits");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
-    assert.ok(result.help.some(hint => hint.includes("entra directory-audit show --id <directory-audit-id>")));
+    assert.ok(strings(result.help).some(hint => hint.includes("entra directory-audit show --id <directory-audit-id>")));
   } finally {
     teardownProfiles(state);
   }
 });
 
-for (const [noun, dateField] of [["sign-in", "createdDateTime"], ["directory-audit", "activityDateTime"]]) {
+for (const [noun, dateField] of [["sign-in", "createdDateTime"], ["directory-audit", "activityDateTime"]] as const) {
   test(`${noun} resumes precise bounds canonically and rejects a changed fractional bound`, async () => {
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor("delegated");
-      const first = await executeArgv(["entra", noun, "list", "--profile", "soc",
-        "--since", "2026-09-10T21:20:02.7215374Z", "--limit", "1"], overrides);
-      const resumed = await executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", first.cursor,
-        "--since", "2026-09-10T23:20:02.721537400+02:00"], overrides);
+      const first = record(await executeArgv(["entra", noun, "list", "--profile", "soc",
+        "--since", "2026-09-10T21:20:02.7215374Z", "--limit", "1"], overrides));
+      const resumed = record(await executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", outputText(first.cursor),
+        "--since", "2026-09-10T23:20:02.721537400+02:00"], overrides));
       assert.equal(resumed.complete, true);
-      await assert.rejects(executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", first.cursor,
+      await assert.rejects(executeArgv(["entra", noun, "list", "--profile", "soc", "--cursor", outputText(first.cursor),
         "--since", "2026-09-10T21:20:02.7215375Z"], overrides), { code: "VALIDATION_ERROR" });
     } finally { teardownProfiles(state); }
   });
@@ -509,14 +511,14 @@ for (const [noun, dateField] of [["sign-in", "createdDateTime"], ["directory-aud
       "2026-09-10T21:20:02.721Z", "2026-09-10T21:20:02.7215374Z"],
     ["2024-02-29T00:00:00Z", "2024-03-01T00:00:00Z",
       "2024-02-29T00:00:00.000Z", "2024-03-01T00:00:00.000Z"],
-  ]) {
+  ] as const) {
     test(`${noun} retains exact time bounds: ${since} to ${until}`, async () => {
       const state = setupProfiles();
       try {
         const fixture = transport(() => json(200, { value: [] }));
         const { requests, overrides } = overridesFor("delegated", fixture);
         await executeArgv(["entra", noun, "list", "--profile", "soc", "--since", since, "--until", until], overrides);
-        assert.equal(new URL(requests[0].url).searchParams.get("$filter"),
+        assert.equal(new URL(requests[0]!.url).searchParams.get("$filter"),
           `${dateField} ge ${expectedSince} and ${dateField} le ${expectedUntil}`);
       } finally { teardownProfiles(state); }
     });
@@ -563,8 +565,8 @@ for (const args of [
     try {
       const { requests, overrides } = overridesFor("delegated");
       await assert.rejects(executeArgv(args, overrides), error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /bounded in time/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /bounded in time/.test(outputText(record(error).message));
       });
       assert.equal(requests.length, 0);
     } finally {
@@ -596,9 +598,9 @@ test("show passes CA policy detail through when the caller can see it", async ()
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "sign-in", "show", "--id", s2.id, "--profile", "soc"], overrides);
-    assert.deepEqual(result.signIn.appliedConditionalAccessPolicies, s2.appliedConditionalAccessPolicies);
-    assert.equal(result.signIn.status.errorCode, 50126);
+    const result = record(await executeArgv(["entra", "sign-in", "show", "--id", s2.id, "--profile", "soc"], overrides));
+    assert.deepEqual(record(result.signIn).appliedConditionalAccessPolicies, s2.appliedConditionalAccessPolicies);
+    assert.equal(record(record(result.signIn).status).errorCode, 50126);
     assert.equal(result.help, undefined);
   } finally {
     teardownProfiles(state);
@@ -609,17 +611,17 @@ test("show reports omitted CA policy detail as unavailable rather than empty", a
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "sign-in", "show", "--id", s1.id, "--profile", "soc",
-      "--select", "id,conditionalAccessStatus,appliedConditionalAccessPolicies"], overrides);
+    const result = record(await executeArgv(["entra", "sign-in", "show", "--id", s1.id, "--profile", "soc",
+      "--select", "id,conditionalAccessStatus,appliedConditionalAccessPolicies"], overrides));
     assert.deepEqual(result.signIn, {
       id: s1.id,
       conditionalAccessStatus: "notApplied",
-      appliedConditionalAccessPolicies: result.signIn.appliedConditionalAccessPolicies,
+      appliedConditionalAccessPolicies: record(result.signIn).appliedConditionalAccessPolicies,
     });
-    assert.match(result.signIn.appliedConditionalAccessPolicies, /^unavailable: Graph omits CA policy detail/);
-    assert.match(result.signIn.appliedConditionalAccessPolicies, /both modes need Policy.Read.All/);
-    assert.match(result.signIn.appliedConditionalAccessPolicies, /delegated also needs Conditional Access Administrator, Global Reader/);
-    assert.match(result.signIn.appliedConditionalAccessPolicies,
+    assert.match(outputText(result.signIn.appliedConditionalAccessPolicies), /^unavailable: Graph omits CA policy detail/);
+    assert.match(outputText(result.signIn.appliedConditionalAccessPolicies), /both modes need Policy.Read.All/);
+    assert.match(outputText(result.signIn.appliedConditionalAccessPolicies), /delegated also needs Conditional Access Administrator, Global Reader/);
+    assert.match(outputText(result.signIn.appliedConditionalAccessPolicies),
       /log in and repeat this read with --scopes https:\/\/graph.microsoft.com\/AuditLog.Read.All,https:\/\/graph.microsoft.com\/Policy.Read.All/);
     assert.equal(result.help, undefined);
   } finally {
@@ -641,7 +643,7 @@ for (const [noun, key, id, field, value, expected] of [
   ["directory-audit", "directoryAudit", a1.id, "targetResources",
     [{ modifiedProperties: [{ oldValue: null, newValue: longNestedText }], displayName: "short" }],
     [{ modifiedProperties: [{ oldValue: null, newValue: compactNestedText }], displayName: "short" }]],
-]) {
+] as const) {
   for (const action of ["list", "show"]) {
     test(`${noun} ${action} truncates nested ${field} and recovers with --full`, async () => {
       const state = setupProfiles();
@@ -651,13 +653,13 @@ for (const [noun, key, id, field, value, expected] of [
         const { overrides } = overridesFor("delegated", fixture);
         const binding = action === "list" ? ["--since", SINCE] : ["--id", id];
         const argv = ["entra", noun, action, "--profile", "soc", ...binding, "--select", `id,${field}`];
-        const compact = await executeArgv(argv, overrides);
-        const compactRow = action === "list" ? compact[`${key}s`][0] : compact[key];
+        const compact = record(await executeArgv(argv, overrides));
+        const compactRow = action === "list" ? records(compact[`${key}s`])[0] : compact[key];
         assert.deepEqual(compactRow, { id, [field]: expected });
-        const full = await executeArgv(hintArgv(compact.help[0]), overrides);
-        const fullRow = action === "list" ? full[`${key}s`][0] : full[key];
+        const full = record(await executeArgv(hintArgv(outputText(strings(compact.help)[0])), overrides));
+        const fullRow = action === "list" ? records(full[`${key}s`])[0] : full[key];
         assert.deepEqual(fullRow, row);
-        assert.ok(!(full.help ?? []).some(hint => hint.includes("--full")));
+        assert.ok(!strings((full.help ?? [])).some(hint => hint.includes("--full")));
       } finally { teardownProfiles(state); }
     });
   }
@@ -667,8 +669,8 @@ test("explicit nulls stay null and missing base properties stay absent", async (
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "sign-in", "show", "--id", s3.id, "--profile", "soc",
-      "--select", "id,ipAddress,location,conditionalAccessStatus"], overrides);
+    const result = record(await executeArgv(["entra", "sign-in", "show", "--id", s3.id, "--profile", "soc",
+      "--select", "id,ipAddress,location,conditionalAccessStatus"], overrides));
     assert.deepEqual(result.signIn, { id: s3.id, ipAddress: null, location: null, conditionalAccessStatus: null });
   } finally {
     teardownProfiles(state);
@@ -681,16 +683,16 @@ test("show truncates long text unless --full is passed", async () => {
     const long = "x".repeat(600);
     const fixture = transport(() => json(200, { ...s1, userPrincipalName: long }));
     const credential = credentialService("delegated", []);
-    const overrides = { transport: fixture.send, delegated: credential, application: credentialService("application", []) };
+    const overrides = { transport: fixture.send, delegated: authFakes(credential).delegated, application: authFakes(credentialService("application", [])).application };
     const argv = ["entra", "sign-in", "show", "--id", s1.id, "--profile", "soc",
-      "--select", "id,userPrincipalName", "--scopes", auditScopes[0]];
-    const compact = await executeArgv(argv, overrides);
-    assert.match(compact.signIn.userPrincipalName, /\.\.\. \(truncated, 600 chars total\)$/);
-    assert.ok(compact.help.some(hint => hint.includes("--full")));
-    const recovery = hintArgv(compact.help[0]);
+      "--select", "id,userPrincipalName", "--scopes", auditScopes[0]!];
+    const compact = record(await executeArgv(argv, overrides));
+    assert.match(outputText(record(compact.signIn).userPrincipalName), /\.\.\. \(truncated, 600 chars total\)$/);
+    assert.ok(strings(compact.help).some(hint => hint.includes("--full")));
+    const recovery = hintArgv(outputText(strings(compact.help)[0]));
     assert.deepEqual(recovery, [...argv, "--full"]);
-    const full = await executeArgv(recovery, overrides);
-    assert.equal(full.signIn.userPrincipalName, long);
+    const full = record(await executeArgv(recovery, overrides));
+    assert.equal(record(full.signIn).userPrincipalName, long);
     assert.equal(full.help, undefined);
   } finally {
     teardownProfiles(state);
@@ -704,13 +706,13 @@ test("list truncation recovery replays time bounds with --full", async () => {
     const fixture = transport(() => json(200, { value: [{ ...s1, userPrincipalName: long }] }));
     const { overrides } = overridesFor("delegated", fixture);
     const argv = ["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE,
-      "--filter", "status/errorCode ne 0", "--select", "id,userPrincipalName", "--scopes", auditScopes[0]];
-    const compact = await executeArgv(argv, overrides);
-    assert.match(compact.signIns[0].userPrincipalName, /truncated/);
-    const recovery = hintArgv(compact.help[0]);
+      "--filter", "status/errorCode ne 0", "--select", "id,userPrincipalName", "--scopes", auditScopes[0]!];
+    const compact = record(await executeArgv(argv, overrides));
+    assert.match(outputText(records(compact.signIns)[0]!.userPrincipalName), /truncated/);
+    const recovery = hintArgv(outputText(strings(compact.help)[0]));
     assert.deepEqual(recovery, [...argv, "--full"]);
-    const full = await executeArgv(recovery, overrides);
-    assert.equal(full.signIns[0].userPrincipalName, long);
+    const full = record(await executeArgv(recovery, overrides));
+    assert.equal(records(full.signIns)[0]!.userPrincipalName, long);
     assert.deepEqual(full.count, "1 sign-ins");
     assert.equal(full.total, null);
     assert.equal(full.complete, true);
@@ -724,17 +726,17 @@ test("denied sign-in reads name sign-in roles and licensing", async () => {
   try {
     const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
     const credential = credentialService("delegated", []);
-    const overrides = { transport: denied.send, delegated: credential, application: credentialService("application", []) };
+    const overrides = { transport: denied.send, delegated: authFakes(credential).delegated, application: authFakes(credentialService("application", [])).application };
     await assert.rejects(executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.match(error.message, /grant, role, licence or policy/);
-      assert.ok(error.suggestions.some(hint => hint.includes("Security Operator")));
-      assert.ok(error.suggestions.some(hint => hint.includes("P1/P2")));
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.match(outputText(record(error).message), /grant, role, licence or policy/);
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Security Operator")));
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("P1/P2")));
       return true;
     });
     await assert.rejects(executeArgv(["entra", "sign-in", "show", "--id", s1.id, "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      return error.suggestions.some(hint => hint.includes("Global Reader"));
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      return strings(record(error).suggestions).some(hint => hint.includes("Global Reader"));
     });
   } finally {
     teardownProfiles(state);
@@ -746,17 +748,17 @@ test("denied directory-audit reads name audit roles, not sign-in roles", async (
   try {
     const denied = transport(() => json(404, { error: { code: "Unknown", message: "gone" } }));
     const credential = credentialService("delegated", []);
-    const notFound = { transport: denied.send, delegated: credential, application: credentialService("application", []) };
+    const notFound = { transport: denied.send, delegated: authFakes(credential).delegated, application: authFakes(credentialService("application", [])).application };
     await assert.rejects(executeArgv(["entra", "directory-audit", "show", "--id", a1.id, "--profile", "soc"], notFound), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      return /not found or inaccessible/.test(error.message);
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      return /not found or inaccessible/.test(outputText(record(error).message));
     });
     const forbidden = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
-    const forbiddenOverrides = { transport: forbidden.send, delegated: credential, application: credentialService("application", []) };
+    const forbiddenOverrides = { transport: forbidden.send, delegated: authFakes(credential).delegated, application: authFakes(credentialService("application", [])).application };
     await assert.rejects(executeArgv(["entra", "directory-audit", "list", "--profile", "soc", "--since", SINCE], forbiddenOverrides), error => {
-      assert.equal(error.code, "GRAPH_ERROR");
-      assert.ok(error.suggestions.some(hint => hint.includes("Reports Reader")));
-      assert.ok(!error.suggestions.some(hint => hint.includes("Security Operator")));
+      assert.equal(record(error).code, "GRAPH_ERROR");
+      assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Reports Reader")));
+      assert.ok(!strings(record(error).suggestions).some(hint => hint.includes("Security Operator")));
       return true;
     });
   } finally {
@@ -768,14 +770,14 @@ test("a capped sign-in list resumes losslessly through its opaque cursor", async
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE, "--limit", "2"], overrides);
-    assert.deepEqual(first.signIns.map(row => row.id), [s1.id, s2.id]);
+    const first = record(await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE, "--limit", "2"], overrides));
+    assert.deepEqual(records(first.signIns).map(row => row.id), [s1.id, s2.id]);
     assert.equal(first.complete, false);
-    assert.match(first.reason, /row limit/);
+    assert.match(outputText(first.reason), /row limit/);
     assert.equal(typeof first.cursor, "string");
-    assert.ok(!first.cursor.includes(s1.id));
-    const second = await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--cursor", first.cursor], overrides);
-    assert.deepEqual(second.signIns.map(row => row.id), [s3.id]);
+    assert.ok(!outputText(first.cursor).includes(s1.id));
+    const second = record(await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--cursor", outputText(first.cursor)], overrides));
+    assert.deepEqual(records(second.signIns).map(row => row.id), [s3.id]);
     assert.deepEqual(second.count, "1 sign-ins");
     assert.equal(second.total, null);
     assert.equal(second.complete, true);
@@ -790,12 +792,12 @@ test("resume repeats identical time bounds but rejects a conflicting --since", a
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const first = await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE, "--limit", "1"], overrides);
+    const first = record(await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE, "--limit", "1"], overrides));
     assert.equal(first.complete, false);
-    const resumed = await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--cursor", first.cursor, "--since", SINCE], overrides);
-    assert.deepEqual(resumed.signIns.map(row => row.id), [s2.id, s3.id]);
+    const resumed = record(await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--cursor", outputText(first.cursor), "--since", SINCE], overrides));
+    assert.deepEqual(records(resumed.signIns).map(row => row.id), [s2.id, s3.id]);
     await assert.rejects(
-      executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--cursor", first.cursor, "--since", UNTIL], overrides),
+      executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--cursor", outputText(first.cursor), "--since", UNTIL], overrides),
       { code: "VALIDATION_ERROR" },
     );
   } finally {
@@ -808,13 +810,13 @@ test("an empty log list is a definitive zero with widening guidance", async () =
   try {
     const fixture = transport(() => json(200, { value: [] }));
     const credential = credentialService("delegated", []);
-    const overrides = { transport: fixture.send, delegated: credential, application: credentialService("application", []) };
-    const result = await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE], overrides);
+    const overrides = { transport: fixture.send, delegated: authFakes(credential).delegated, application: authFakes(credentialService("application", [])).application };
+    const result = record(await executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE], overrides));
     assert.deepEqual(result.signIns, []);
     assert.deepEqual(result.count, "0 sign-ins");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
-    assert.ok(result.help.some(hint => hint.includes("0 sign-ins matched in this window")));
+    assert.ok(strings(result.help).some(hint => hint.includes("0 sign-ins matched in this window")));
   } finally {
     teardownProfiles(state);
   }
@@ -824,13 +826,13 @@ test("application mode lists and shows without delegated scopes", async () => {
   const state = setupProfiles();
   try {
     const { requests, calls, overrides } = overridesFor("application");
-    const listed = await executeArgv(["entra", "sign-in", "list", "--profile", "batch", "--since", SINCE, "--all"], overrides);
-    assert.deepEqual(listed.signIns.map(row => row.id), [s1.id, s2.id, s3.id]);
+    const listed = record(await executeArgv(["entra", "sign-in", "list", "--profile", "batch", "--since", SINCE, "--all"], overrides));
+    assert.deepEqual(records(listed.signIns).map(row => row.id), [s1.id, s2.id, s3.id]);
     assert.equal(calls.length, 1);
     assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-application-token"));
-    const shown = await executeArgv(["entra", "directory-audit", "show", "--id", a1.id, "--profile", "batch"], overrides);
-    assert.equal(shown.directoryAudit.activityDisplayName, "Add member to group");
-    assert.deepEqual(shown.directoryAudit.targetResources, a1.targetResources);
+    const shown = record(await executeArgv(["entra", "directory-audit", "show", "--id", a1.id, "--profile", "batch"], overrides));
+    assert.equal(record(shown.directoryAudit).activityDisplayName, "Add member to group");
+    assert.deepEqual(record(shown.directoryAudit).targetResources, a1.targetResources);
   } finally {
     teardownProfiles(state);
   }
@@ -841,10 +843,10 @@ test("application mode rejects delegated scopes before HTTP", async () => {
   try {
     const { requests, overrides } = overridesFor("application");
     await assert.rejects(
-      executeArgv(["entra", "sign-in", "list", "--profile", "batch", "--since", SINCE, "--scopes", auditScopes[0]], overrides),
+      executeArgv(["entra", "sign-in", "list", "--profile", "batch", "--since", SINCE, "--scopes", auditScopes[0]!], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Graph \.default audience/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Graph \.default audience/.test(outputText(record(error).message));
       },
     );
     assert.equal(requests.length, 0);
@@ -871,13 +873,13 @@ for (const scopes of [",", "https://example.invalid/AuditLog.Read.All", "https:/
   test(`sign-in list rejects delegated scopes ${scopes} before provider acquisition`, async () => {
     const state = setupProfiles();
     try {
-      const calls = [];
+      const calls: Parameters<typeof credentialService>[1] = [];
       const { overrides, requests } = overridesFor("delegated");
-      overrides.delegated = new DelegatedAuth({
+      overrides.delegated = new DelegatedAuth(delegatedProvider({
         storage: "session-only",
         login: async () => { throw new Error("Unexpected interactive login"); },
         silent: async (...args) => { calls.push(args); throw new Error("Unexpected credential acquisition"); },
-      });
+      }));
       await assert.rejects(executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE, "--scopes", scopes], overrides), { code: "VALIDATION_ERROR" });
       assert.deepEqual(calls, []);
       assert.deepEqual(requests, []);
@@ -889,16 +891,16 @@ test("richer selects dispatch the same mapping while unshipped beta stays blocke
   const state = setupProfiles();
   try {
     const { requests, overrides } = overridesFor("delegated");
-    const richer = await executeArgv(
+    const richer = record(await executeArgv(
       ["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE, "--select", "id,riskState", "--all"],
       overrides,
-    );
-    assert.equal(new URL(requests[0].url).searchParams.get("$select"), "id,riskState");
-    assert.deepEqual(richer.signIns[0], { id: s1.id, riskState: "none" });
+    ));
+    assert.equal(new URL(requests[0]!.url).searchParams.get("$select"), "id,riskState");
+    assert.deepEqual(records(richer.signIns)[0], { id: s1.id, riskState: "none" });
     const beta = executeArgv(["entra", "sign-in", "list", "--profile", "soc", "--since", SINCE, "--api-version", "beta", "--limit", "1"], overrides);
     await assert.rejects(beta, error => {
-      assert.equal(error.code, "VALIDATION_ERROR");
-      return /Unknown catalogued/.test(error.message);
+      assert.equal(record(error).code, "VALIDATION_ERROR");
+      return /Unknown catalogued/.test(outputText(record(error).message));
     });
   } finally {
     teardownProfiles(state);

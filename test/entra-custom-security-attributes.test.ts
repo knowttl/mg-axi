@@ -1,3 +1,5 @@
+import { record, records, text as outputText, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler, type OutputRecord } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -61,12 +63,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: [string, ...CredentialArgs][]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push([mode, ...args]);
@@ -81,9 +83,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -91,15 +93,15 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
-function text(value) {
+function text(value: unknown) {
   return { status: 200, headers: { "Content-Type": "text/plain" }, body: String(value) };
 }
 
-function paged(first, route) {
+function paged(first: readonly OutputRecord[], route: string) {
   return json(200, {
     value: first,
     "@odata.nextLink": `https://graph.microsoft.com${route}?%24skiptoken=page2`,
@@ -128,24 +130,24 @@ function customSecurityTransport() {
     }
     const valueSingle = new RegExp(`^${base}/customSecurityAttributeDefinitions/([^/]+)/allowedValues/([^/]+)$`).exec(path);
     if (valueSingle) {
-      const found = allowedValues.find(row => row.id === decodeURIComponent(valueSingle[2]));
+      const found = allowedValues.find(row => row.id === decodeURIComponent(valueSingle[2]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such value" } });
     }
     const setSingle = new RegExp(`^${base}/attributeSets/([^/]+)$`).exec(path);
     if (setSingle) {
-      const found = attributeSets.find(row => row.id === decodeURIComponent(setSingle[1]));
+      const found = attributeSets.find(row => row.id === decodeURIComponent(setSingle[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such set" } });
     }
     const defSingle = new RegExp(`^${base}/customSecurityAttributeDefinitions/([^/]+)$`).exec(path);
     if (defSingle) {
-      const found = definitions.find(row => row.id === decodeURIComponent(defSingle[1]));
+      const found = definitions.find(row => row.id === decodeURIComponent(defSingle[1]!));
       return found ? json(200, found) : json(404, { error: { code: "Request_ResourceNotFound", message: "no such definition" } });
     }
     return json(404, { error: { code: "Unknown", message: "unexpected route" } });
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: [string, ...CredentialArgs][] = []) {
   const fixture = handler ?? customSecurityTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -153,13 +155,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runCustomSecurityCli(args, state, mode, denied = false) {
+function runCustomSecurityCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-custom-security-attributes-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -173,13 +175,13 @@ function runCustomSecurityCli(args, state, mode, denied = false) {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists attribute sets with compact rows preserving null and missing`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "attribute-set", "list", "--profile", profile,
-        "--select", "id,description,maxAttributesPerSet"], overrides);
+      const result = record(await executeArgv(["entra", "attribute-set", "list", "--profile", profile,
+        "--select", "id,description,maxAttributesPerSet"], overrides));
       assert.deepEqual(result.attributeSets, [
         set1,
         { id: set2.id, description: `${longSetDescription.slice(0, 500)}... (truncated, ${longSetDescription.length} chars total)`, maxAttributesPerSet: 10 },
@@ -188,10 +190,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 attribute sets");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra attribute-set show --id <set-id>")));
-      assert.ok(result.help.some(hint => hint.includes("offer no --filter")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra attribute-set show --id <set-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("offer no --filter")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com${base}/attributeSets?`));
+      assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com${base}/attributeSets?`));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(customSecurityScopes)));
     } finally {
@@ -203,12 +205,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "attribute-set", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.attributeSets.map(row => row.id), [set1.id]);
+      const first = record(await executeArgv(["entra", "attribute-set", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.attributeSets).map(row => row.id), [set1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "attribute-set", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.attributeSets.map(row => row.id), [set2.id, set3.id]);
+      const second = record(await executeArgv(["entra", "attribute-set", "list", "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
+      assert.deepEqual(records(second.attributeSets).map(row => row.id), [set2.id, set3.id]);
       assert.deepEqual(second.count, "2 attribute sets");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -221,11 +223,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "attribute-set", "show", "--id", set1.id, "--profile", profile,
-        "--select", "id,description,maxAttributesPerSet"], overrides);
+      const result = record(await executeArgv(["entra", "attribute-set", "show", "--id", set1.id, "--profile", profile,
+        "--select", "id,description,maxAttributesPerSet"], overrides));
       assert.deepEqual(result.attributeSet, set1);
       assert.equal(result.help, undefined);
-      const missing = await executeArgv(["entra", "attribute-set", "show", "--id", set3.id, "--profile", profile], overrides);
+      const missing = record(await executeArgv(["entra", "attribute-set", "show", "--id", set3.id, "--profile", profile], overrides));
       assert.deepEqual(missing.attributeSet, { id: set3.id });
     } finally {
       teardownProfiles(state);
@@ -236,10 +238,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "attribute-set", "count", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "attribute-set", "count", "--profile", profile], overrides));
       assert.deepEqual(result, { count: { returned: 3, complete: true } });
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, `https://graph.microsoft.com${base}/attributeSets/$count`);
+      assert.equal(requests[0]!.url, `https://graph.microsoft.com${base}/attributeSets/$count`);
     } finally {
       teardownProfiles(state);
     }
@@ -249,8 +251,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile,
-        "--select", "id,attributeSet,name,status,type,description"], overrides);
+      const result = record(await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile,
+        "--select", "id,attributeSet,name,status,type,description"], overrides));
       assert.deepEqual(result.customSecurityAttributeDefinitions, [
         { id: def1.id, attributeSet: "Engineering", name: "Project", status: "Available", type: "String", description: "Active projects for user" },
         { id: def2.id, attributeSet: "Engineering", name: "ProjectDate", status: "Available", type: "String",
@@ -260,9 +262,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 custom security attribute definitions");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("entra custom-security-attribute-definition show --id <definition-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("entra custom-security-attribute-definition show --id <definition-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com${base}/customSecurityAttributeDefinitions?`));
+      assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com${base}/customSecurityAttributeDefinitions?`));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(customSecurityScopes)));
     } finally {
@@ -274,12 +276,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile,
-        "--filter", "status eq 'Available'"], overrides);
-      assert.equal(result.customSecurityAttributeDefinitions.length, 3);
-      const sent = new URL(requests[0].url).searchParams;
+      const result = record(await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile,
+        "--filter", "status eq 'Available'"], overrides));
+      assert.equal(records(result.customSecurityAttributeDefinitions).length, 3);
+      const sent = new URL(requests[0]!.url).searchParams;
       assert.equal(sent.get("$filter"), "status eq 'Available'");
-      assert.equal(requests[0].headers.ConsistencyLevel, undefined);
+      assert.equal(requests[0]!.headers.ConsistencyLevel, undefined);
     } finally {
       teardownProfiles(state);
     }
@@ -289,12 +291,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.customSecurityAttributeDefinitions.map(row => row.id), [def1.id]);
+      const first = record(await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.customSecurityAttributeDefinitions).map(row => row.id), [def1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.customSecurityAttributeDefinitions.map(row => row.id), [def2.id, def3.id]);
+      const second = record(await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
+      assert.deepEqual(records(second.customSecurityAttributeDefinitions).map(row => row.id), [def2.id, def3.id]);
       assert.deepEqual(second.count, "2 custom security attribute definitions");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -307,12 +309,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "custom-security-attribute-definition", "show", "--id", def1.id, "--profile", profile,
-        "--select", "attributeSet,description,id,isCollection,isSearchable,name,status,type,usePreDefinedValuesOnly"], overrides);
+      const result = record(await executeArgv(["entra", "custom-security-attribute-definition", "show", "--id", def1.id, "--profile", profile,
+        "--select", "attributeSet,description,id,isCollection,isSearchable,name,status,type,usePreDefinedValuesOnly"], overrides));
       assert.deepEqual(result.customSecurityAttributeDefinition, def1);
       assert.ok(!("allowedValues" in result.customSecurityAttributeDefinition));
-      assert.ok(result.help.some(hint => hint.includes(`entra allowed-value list --definition ${def1.id}`)));
-      const missing = await executeArgv(["entra", "custom-security-attribute-definition", "show", "--id", def3.id, "--profile", profile], overrides);
+      assert.ok(strings(result.help).some(hint => hint.includes(`entra allowed-value list --definition ${def1.id}`)));
+      const missing = record(await executeArgv(["entra", "custom-security-attribute-definition", "show", "--id", def3.id, "--profile", profile], overrides));
       assert.deepEqual(missing.customSecurityAttributeDefinition, { id: def3.id });
     } finally {
       teardownProfiles(state);
@@ -323,15 +325,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "custom-security-attribute-definition", "count", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "custom-security-attribute-definition", "count", "--profile", profile], overrides));
       assert.deepEqual(result.count, { returned: 3, complete: true });
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, `https://graph.microsoft.com${base}/customSecurityAttributeDefinitions/$count`);
-      const filtered = await executeArgv(["entra", "custom-security-attribute-definition", "count", "--profile", profile,
-        "--filter", "status eq 'Available'"], overrides);
+      assert.equal(requests[0]!.url, `https://graph.microsoft.com${base}/customSecurityAttributeDefinitions/$count`);
+      const filtered = record(await executeArgv(["entra", "custom-security-attribute-definition", "count", "--profile", profile,
+        "--filter", "status eq 'Available'"], overrides));
       assert.deepEqual(filtered.count, { returned: 3, complete: true });
-      assert.ok(filtered.help.some(hint => hint.includes("--filter")));
-      assert.equal(new URL(requests[1].url).searchParams.get("$filter"), "status eq 'Available'");
+      assert.ok(strings(filtered.help).some(hint => hint.includes("--filter")));
+      assert.equal(new URL(requests[1]!.url).searchParams.get("$filter"), "status eq 'Available'");
     } finally {
       teardownProfiles(state);
     }
@@ -341,14 +343,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile], overrides));
       assert.deepEqual(result.allowedValues, [val1, val2, { id: val3.id }]);
       assert.deepEqual(result.count, "3 allowed values");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes(`entra allowed-value show --definition ${def1.id} --id <value-id>`)));
-      assert.ok(result.help.some(hint => hint.includes("offer no --filter")));
-      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com${base}/customSecurityAttributeDefinitions/${def1.id}/allowedValues?`));
+      assert.ok(strings(result.help).some(hint => hint.includes(`entra allowed-value show --definition ${def1.id} --id <value-id>`)));
+      assert.ok(strings(result.help).some(hint => hint.includes("offer no --filter")));
+      assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com${base}/customSecurityAttributeDefinitions/${def1.id}/allowedValues?`));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
       if (mode === "delegated") assert.ok(calls.some(([, , scopes]) => JSON.stringify(scopes) === JSON.stringify(customSecurityScopes)));
     } finally {
@@ -360,12 +362,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.allowedValues.map(row => row.id), [val1.id]);
+      const first = record(await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.allowedValues).map(row => row.id), [val1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.allowedValues.map(row => row.id), [val2.id, val3.id]);
+      const second = record(await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
+      assert.deepEqual(records(second.allowedValues).map(row => row.id), [val2.id, val3.id]);
       assert.deepEqual(second.count, "2 allowed values");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -378,12 +380,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "allowed-value", "show",
-        "--definition", def1.id, "--id", val1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "allowed-value", "show",
+        "--definition", def1.id, "--id", val1.id, "--profile", profile], overrides));
       assert.deepEqual(result.allowedValue, val1);
       assert.equal(result.help, undefined);
-      const missing = await executeArgv(["entra", "allowed-value", "show",
-        "--definition", def1.id, "--id", val3.id, "--profile", profile], overrides);
+      const missing = record(await executeArgv(["entra", "allowed-value", "show",
+        "--definition", def1.id, "--id", val3.id, "--profile", profile], overrides));
       assert.deepEqual(missing.allowedValue, { id: val3.id });
     } finally {
       teardownProfiles(state);
@@ -394,10 +396,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "allowed-value", "count", "--definition", def1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "allowed-value", "count", "--definition", def1.id, "--profile", profile], overrides));
       assert.deepEqual(result.count, { returned: 3, complete: true });
       assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, `https://graph.microsoft.com${base}/customSecurityAttributeDefinitions/${def1.id}/allowedValues/$count`);
+      assert.equal(requests[0]!.url, `https://graph.microsoft.com${base}/customSecurityAttributeDefinitions/${def1.id}/allowedValues/$count`);
     } finally {
       teardownProfiles(state);
     }
@@ -408,24 +410,24 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const listed = await executeArgv(["entra", "attribute-set", "list", "--profile", profile], overrides);
+      const listed = record(await executeArgv(["entra", "attribute-set", "list", "--profile", profile], overrides));
       assert.deepEqual(listed.attributeSets, []);
       assert.deepEqual(listed.count, "0 attribute sets");
       assert.equal(listed.total, null);
       assert.equal(listed.complete, true);
-      assert.ok(listed.help.some(hint => hint.includes("0 attribute sets matched")));
-      const defined = await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile], overrides);
+      assert.ok(strings(listed.help).some(hint => hint.includes("0 attribute sets matched")));
+      const defined = record(await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile], overrides));
       assert.deepEqual(defined.customSecurityAttributeDefinitions, []);
       assert.deepEqual(defined.count, "0 custom security attribute definitions");
       assert.equal(defined.total, null);
       assert.equal(defined.complete, true);
-      assert.ok(defined.help.some(hint => hint.includes("0 custom security attribute definitions matched")));
-      const valued = await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile], overrides);
+      assert.ok(strings(defined.help).some(hint => hint.includes("0 custom security attribute definitions matched")));
+      const valued = record(await executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile], overrides));
       assert.deepEqual(valued.allowedValues, []);
       assert.deepEqual(valued.count, "0 allowed values");
       assert.equal(valued.total, null);
       assert.equal(valued.complete, true);
-      assert.ok(valued.help.some(hint => hint.includes("0 allowed values matched")));
+      assert.ok(strings(valued.help).some(hint => hint.includes("0 allowed values matched")));
     } finally {
       teardownProfiles(state);
     }
@@ -436,17 +438,17 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { overrides } = overridesFor(mode);
       await assert.rejects(executeArgv(["entra", "attribute-set", "show", "--id", "set-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.deepEqual(error.suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.deepEqual(record(error).suggestions, ["Verify the bound identifier; absence is not proof of nonexistence"]);
+        return /not found or inaccessible \(404\)/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "custom-security-attribute-definition", "show", "--id", "definition-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "allowed-value", "show", "--definition", def1.id, "--id", "value-missing", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /not found or inaccessible \(404\)/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /not found or inaccessible \(404\)/.test(outputText(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -459,29 +461,29 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const { overrides } = overridesFor(mode, denied);
       await assert.rejects(executeArgv(["entra", "attribute-set", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("CustomSecAttributeDefinition.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Attribute Definition Reader")));
-        assert.ok(error.suggestions.some(hint => hint.includes("even for Global Administrators")));
-        assert.ok(error.suggestions.some(hint => hint.includes("Personal Microsoft accounts are not supported")));
-        assert.ok(error.suggestions.some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("CustomSecAttributeDefinition.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Attribute Definition Reader")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("even for Global Administrators")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("Personal Microsoft accounts are not supported")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("never diagnose licence solely from HTTP 403")));
+        return /grant, role, licence/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("CustomSecAttributeDefinition.Read.All")));
-        assert.ok(error.suggestions.some(hint => hint.includes("even for Global Administrators")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("CustomSecAttributeDefinition.Read.All")));
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("even for Global Administrators")));
+        return /grant, role, licence/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("CustomSecAttributeDefinition.Read.All")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("CustomSecAttributeDefinition.Read.All")));
+        return /grant, role, licence/.test(outputText(record(error).message));
       });
       await assert.rejects(executeArgv(["entra", "allowed-value", "count", "--definition", def1.id, "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.ok(error.suggestions.some(hint => hint.includes("CustomSecAttributeDefinition.Read.All")));
-        return /grant, role, licence/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.ok(strings(record(error).suggestions).some(hint => hint.includes("CustomSecAttributeDefinition.Read.All")));
+        return /grant, role, licence/.test(outputText(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -494,8 +496,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runCustomSecurityCli(["entra", "attribute-set", "list", "--profile", profile], state, mode);
       assert.equal(listed.status, 0, listed.stdout);
       assert.equal(listed.stderr, "");
-      const listOut = decode(listed.stdout);
-      assert.deepEqual(listOut.attributeSets.map(row => row.id), [set1.id, set2.id]);
+      const listOut = record(decode(listed.stdout));
+      assert.deepEqual(records(listOut.attributeSets).map(row => row.id), [set1.id, set2.id]);
       assert.deepEqual(listOut.count, "2 attribute sets");
       assert.equal(listOut.total, null);
       assert.equal(listOut.complete, true);
@@ -503,40 +505,40 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 
       const shown = runCustomSecurityCli(["entra", "attribute-set", "show", "--id", set1.id, "--profile", profile], state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      assert.deepEqual(decode(shown.stdout).attributeSet, set1);
+      assert.deepEqual(record(decode(shown.stdout)).attributeSet, set1);
 
       const counted = runCustomSecurityCli(["entra", "attribute-set", "count", "--profile", profile], state, mode);
       assert.equal(counted.status, 0, counted.stdout);
-      assert.deepEqual(decode(counted.stdout).count, { returned: 2, complete: true });
+      assert.deepEqual(record(decode(counted.stdout)).count, { returned: 2, complete: true });
 
       const defined = runCustomSecurityCli(["entra", "custom-security-attribute-definition", "list", "--profile", profile], state, mode);
       assert.equal(defined.status, 0, defined.stdout);
-      const definedOut = decode(defined.stdout);
-      assert.deepEqual(definedOut.customSecurityAttributeDefinitions.map(row => row.id), [def1.id, def2.id]);
+      const definedOut = record(decode(defined.stdout));
+      assert.deepEqual(records(definedOut.customSecurityAttributeDefinitions).map(row => row.id), [def1.id, def2.id]);
       assert.deepEqual(definedOut.count, "2 custom security attribute definitions");
       assert.equal(definedOut.total, null);
       assert.equal(definedOut.complete, true);
 
       const definitionShown = runCustomSecurityCli(["entra", "custom-security-attribute-definition", "show", "--id", def1.id, "--profile", profile], state, mode);
       assert.equal(definitionShown.status, 0, definitionShown.stdout);
-      assert.deepEqual(decode(definitionShown.stdout).customSecurityAttributeDefinition, def1);
+      assert.deepEqual(record(decode(definitionShown.stdout)).customSecurityAttributeDefinition, def1);
 
       const definitionCounted = runCustomSecurityCli(["entra", "custom-security-attribute-definition", "count", "--profile", profile], state, mode);
       assert.equal(definitionCounted.status, 0, definitionCounted.stdout);
-      assert.deepEqual(decode(definitionCounted.stdout).count, { returned: 2, complete: true });
+      assert.deepEqual(record(decode(definitionCounted.stdout)).count, { returned: 2, complete: true });
 
       const valued = runCustomSecurityCli(["entra", "allowed-value", "list", "--definition", def1.id, "--profile", profile], state, mode);
       assert.equal(valued.status, 0, valued.stdout);
-      const valuedOut = decode(valued.stdout);
-      assert.deepEqual(valuedOut.allowedValues.map(row => row.id), [val1.id, val2.id]);
+      const valuedOut = record(decode(valued.stdout));
+      assert.deepEqual(records(valuedOut.allowedValues).map(row => row.id), [val1.id, val2.id]);
 
       const valueShown = runCustomSecurityCli(["entra", "allowed-value", "show", "--definition", def1.id, "--id", val1.id, "--profile", profile], state, mode);
       assert.equal(valueShown.status, 0, valueShown.stdout);
-      assert.deepEqual(decode(valueShown.stdout).allowedValue, val1);
+      assert.deepEqual(record(decode(valueShown.stdout)).allowedValue, val1);
 
       const valueCounted = runCustomSecurityCli(["entra", "allowed-value", "count", "--definition", def1.id, "--profile", profile], state, mode);
       assert.equal(valueCounted.status, 0, valueCounted.stdout);
-      assert.deepEqual(decode(valueCounted.stdout).count, { returned: 2, complete: true });
+      assert.deepEqual(record(decode(valueCounted.stdout)).count, { returned: 2, complete: true });
     } finally { teardownProfiles(state); }
   });
 
@@ -546,9 +548,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runCustomSecurityCli(["entra", "attribute-set", "list", "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
+      assert.match(outputText(output.error), /grant, role, licence or policy/);
       assert.equal(output.attributeSets, undefined);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -564,7 +566,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     [["allowed-value", "list"], ["--definition", def1.id]],
     [["allowed-value", "show"], ["--definition", def1.id, "--id", val1.id]],
     [["allowed-value", "count"], ["--definition", def1.id]],
-  ]) {
+  ] as const) {
     for (const preview of [false, true]) {
       test(`${mode} ${command.join(" ")} refuses beta before credentials with preview=${preview}`, async () => {
         const state = setupProfiles();
@@ -634,15 +636,15 @@ test("truncated definition text carries a --full hint without lifting caps", asy
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const partial = await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", "soc",
-      "--select", "id,description"], overrides);
-    const truncated = partial.customSecurityAttributeDefinitions.find(row => row.id === def2.id);
-    assert.match(truncated.description, /truncated, \d+ chars total/);
-    assert.ok(partial.help.some(hint => hint.includes("--full")));
-    const full = await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", "soc", "--full",
-      "--select", "id,description"], overrides);
-    assert.equal(full.customSecurityAttributeDefinitions.find(row => row.id === def2.id).description, longDefinitionDescription);
-    assert.ok(!full.help.some(hint => hint.includes("--full")));
+    const partial = record(await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", "soc",
+      "--select", "id,description"], overrides));
+    const truncated = records(partial.customSecurityAttributeDefinitions).find(row => row.id === def2.id);
+    assert.match(outputText(truncated!.description), /truncated, \d+ chars total/);
+    assert.ok(strings(partial.help).some(hint => hint.includes("--full")));
+    const full = record(await executeArgv(["entra", "custom-security-attribute-definition", "list", "--profile", "soc", "--full",
+      "--select", "id,description"], overrides));
+    assert.equal(records(full.customSecurityAttributeDefinitions).find(row => row.id === def2.id)!.description, longDefinitionDescription);
+    assert.ok(!strings(full.help).some(hint => hint.includes("--full")));
   } finally {
     teardownProfiles(state);
   }
@@ -653,14 +655,14 @@ test("application mode rejects delegated scopes before HTTP", async () => {
   try {
     const { requests, overrides } = overridesFor("application");
     await assert.rejects(
-      executeArgv(["entra", "attribute-set", "list", "--profile", "batch", "--scopes", customSecurityScopes[0]], overrides),
+      executeArgv(["entra", "attribute-set", "list", "--profile", "batch", "--scopes", customSecurityScopes[0]!], overrides),
       error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        return /Graph \.default audience/.test(error.message);
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        return /Graph \.default audience/.test(outputText(record(error).message));
       },
     );
     await assert.rejects(
-      executeArgv(["entra", "allowed-value", "count", "--definition", def1.id, "--profile", "batch", "--scopes", customSecurityScopes[0]], overrides),
+      executeArgv(["entra", "allowed-value", "count", "--definition", def1.id, "--profile", "batch", "--scopes", customSecurityScopes[0]!], overrides),
       { code: "VALIDATION_ERROR" },
     );
     assert.equal(requests.length, 0);
@@ -690,18 +692,18 @@ test("malformed custom-security count bodies fail as unknown, not zero", async (
       const malformed = transport(() => ({ status: 200, headers: {}, body }));
       const scoped = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "attribute-set", "count", "--profile", "soc"], scoped.overrides), error => {
-        assert.equal(error.code, "RESPONSE_INVALID");
-        return /non-numeric success body/.test(error.message);
+        assert.equal(record(error).code, "RESPONSE_INVALID");
+        return /non-numeric success body/.test(outputText(record(error).message));
       });
       const defined = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "custom-security-attribute-definition", "count", "--profile", "soc"], defined.overrides), error => {
-        assert.equal(error.code, "RESPONSE_INVALID");
-        return /non-numeric success body/.test(error.message);
+        assert.equal(record(error).code, "RESPONSE_INVALID");
+        return /non-numeric success body/.test(outputText(record(error).message));
       });
       const valued = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "allowed-value", "count", "--definition", def1.id, "--profile", "soc"], valued.overrides), error => {
-        assert.equal(error.code, "RESPONSE_INVALID");
-        return /non-numeric success body/.test(error.message);
+        assert.equal(record(error).code, "RESPONSE_INVALID");
+        return /non-numeric success body/.test(outputText(record(error).message));
       });
     }
   } finally {

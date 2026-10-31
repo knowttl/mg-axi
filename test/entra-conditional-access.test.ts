@@ -1,3 +1,5 @@
+import { record, records, text as outputText, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -112,12 +114,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -132,9 +134,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -142,7 +144,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -172,7 +174,7 @@ function caTransport() {
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: CredentialArgs[] = []) {
   const fixture = handler ?? caTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -180,13 +182,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runCaCli(args, state, mode, denied = false, input = "") {
+function runCaCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false, input = "") {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-ca-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -200,39 +202,39 @@ function runCaCli(args, state, mode, denied = false, input = "") {
   });
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   for (const [family, key, field, detail, plural] of [
     ["policy", "policies", "conditions", { applications: { applicationFilter: { mode: "include", rule: "x".repeat(4096) } } }, "policies"],
     ["named-location", "namedLocations", "ipRanges", [{ cidrAddress: "x".repeat(4096) }], "named locations"],
-  ]) {
+  ] as const) {
     test(`${mode} executable resumes large ${family} cursors through stdin`, async () => {
       const state = setupProfiles();
       try {
         const rows = Array.from({ length: 40 }, (_, index) => ({ id: `row-${index}`, [field]: detail }));
         const { overrides } = overridesFor(mode, transport(() => json(200, { value: rows })));
         const command = ["entra", "conditional-access", family, "list", "--profile", profile];
-        const first = await executeArgv([...command, "--limit", "1", "--select", `id,${field}`], overrides);
-        assert.ok(Buffer.byteLength(first.cursor) > 128 * 1024);
-        assert.ok(first.help.some(hint => hint.includes("--cursor -") && hint.includes("stdin")));
+        const first = record(await executeArgv([...command, "--limit", "1", "--select", `id,${field}`], overrides));
+        assert.ok(Buffer.byteLength(outputText(first.cursor)) > 128 * 1024);
+        assert.ok(strings(first.help).some(hint => hint.includes("--cursor -") && hint.includes("stdin")));
 
-        const resumed = runCaCli([...command, "--cursor", "-", "--all", "--full"], state, mode, false, first.cursor);
+        const resumed = runCaCli([...command, "--cursor", "-", "--all", "--full"], state, mode, false, outputText(first.cursor));
         assert.equal(resumed.status, 0, resumed.stdout);
         assert.equal(resumed.stderr, "");
-        const output = decode(resumed.stdout);
+        const output = record(decode(resumed.stdout));
         assert.deepEqual(output[key], rows.slice(1));
         assert.deepEqual(output.count, `39 ${plural}`);
         assert.equal(output.total, null);
         assert.equal(output.complete, true);
 
-        const truncated = runCaCli([...command, "--cursor", "-", "--limit", "1"], state, mode, false, first.cursor);
+        const truncated = runCaCli([...command, "--cursor", "-", "--limit", "1"], state, mode, false, outputText(first.cursor));
         assert.equal(truncated.status, 0, truncated.stdout);
-        const hints = decode(truncated.stdout).help;
-        assert.ok(hints.some(hint => hint.includes("--full") && hint.includes("--cursor -")));
-        assert.ok(hints.some(hint => hint.includes("original input cursor on stdin")));
-        assert.ok(hints.every(hint => !hint.includes(first.cursor)));
-        const replayed = runCaCli([...command, "--cursor", "-", "--limit", "1", "--full"], state, mode, false, first.cursor);
+        const hints = record(decode(truncated.stdout)).help;
+        assert.ok(strings(hints).some(hint => hint.includes("--full") && hint.includes("--cursor -")));
+        assert.ok(strings(hints).some(hint => hint.includes("original input cursor on stdin")));
+        assert.ok(strings(hints).every(hint => !hint.includes(outputText(first.cursor))));
+        const replayed = runCaCli([...command, "--cursor", "-", "--limit", "1", "--full"], state, mode, false, outputText(first.cursor));
         assert.equal(replayed.status, 0, replayed.stdout);
-        assert.deepEqual(decode(replayed.stdout)[key], [rows[1]]);
+        assert.deepEqual(record(decode(replayed.stdout))[key], [rows[1]]);
       } finally { teardownProfiles(state); }
     });
   }
@@ -241,7 +243,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile], overrides));
       assert.deepEqual(result.policies, [
         { id: p1.id, displayName: p1.displayName, state: "enabled" },
         { id: p2.id, displayName: p2.displayName, state: "enabledForReportingButNotEnforced" },
@@ -250,9 +252,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "3 policies");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("conditional-access policy show --id <policy-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("conditional-access policy show --id <policy-id>")));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies?"));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/identity/conditionalAccess/policies?"));
       assert.ok(!JSON.stringify(result).includes(`opaque-fixture-${mode}-token`));
     } finally {
       teardownProfiles(state);
@@ -263,7 +265,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "conditional-access", "policy", "show", "--id", p1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "policy", "show", "--id", p1.id, "--profile", profile], overrides));
       assert.deepEqual(result.policy, p1);
       assert.equal(result.help, undefined);
     } finally {
@@ -275,12 +277,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const truncated = await executeArgv(["entra", "conditional-access", "policy", "show", "--id", p2.id, "--profile", profile], overrides);
-      const rule = truncated.policy.conditions.applications.applicationFilter.rule;
+      const truncated = record(await executeArgv(["entra", "conditional-access", "policy", "show", "--id", p2.id, "--profile", profile], overrides));
+      const rule = outputText(record(record(record(record(truncated.policy).conditions).applications).applicationFilter).rule);
       assert.match(rule, /\.\.\. \(truncated, \d+ chars total\)/);
-      assert.ok(truncated.help.some(hint => hint.includes("--full")));
-      assert.ok(truncated.help.every(hint => !hint.includes(longRule)));
-      const full = await executeArgv(["entra", "conditional-access", "policy", "show", "--id", p2.id, "--profile", profile, "--full"], overrides);
+      assert.ok(strings(truncated.help).some(hint => hint.includes("--full")));
+      assert.ok(strings(truncated.help).every(hint => !hint.includes(longRule)));
+      const full = record(await executeArgv(["entra", "conditional-access", "policy", "show", "--id", p2.id, "--profile", profile, "--full"], overrides));
       assert.deepEqual(full.policy, p2);
       assert.equal(full.help, undefined);
     } finally {
@@ -292,7 +294,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = overridesFor(mode);
-      const result = await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile], overrides));
       assert.deepEqual(result.namedLocations, [
         { id: l1.id, displayName: "Corporate HQ", "@odata.type": "#microsoft.graph.ipNamedLocation" },
         { id: l2.id, displayName: "Blocked countries", "@odata.type": "#microsoft.graph.countryNamedLocation" },
@@ -300,8 +302,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.deepEqual(result.count, "2 named locations");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("conditional-access named-location show --id <named-location-id>")));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identity/conditionalAccess/namedLocations?"));
+      assert.ok(strings(result.help).some(hint => hint.includes("conditional-access named-location show --id <named-location-id>")));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/identity/conditionalAccess/namedLocations?"));
     } finally {
       teardownProfiles(state);
     }
@@ -311,9 +313,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const ip = await executeArgv(["entra", "conditional-access", "named-location", "show", "--id", l1.id, "--profile", profile], overrides);
+      const ip = record(await executeArgv(["entra", "conditional-access", "named-location", "show", "--id", l1.id, "--profile", profile], overrides));
       assert.deepEqual(ip.namedLocation, l1);
-      const country = await executeArgv(["entra", "conditional-access", "named-location", "show", "--id", l2.id, "--profile", profile], overrides);
+      const country = record(await executeArgv(["entra", "conditional-access", "named-location", "show", "--id", l2.id, "--profile", profile], overrides));
       assert.deepEqual(country.namedLocation, l2);
       assert.ok(!Object.hasOwn(country.namedLocation, "isTrusted"));
       assert.ok(!Object.hasOwn(country.namedLocation, "ipRanges"));
@@ -327,12 +329,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.policies.map(row => row.id), [p1.id]);
+      const first = record(await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.policies).map(row => row.id), [p1.id]);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.policies.map(row => row.id), [p2.id, p3.id]);
+      const second = record(await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
+      assert.deepEqual(records(second.policies).map(row => row.id), [p2.id, p3.id]);
       assert.deepEqual(second.count, "2 policies");
       assert.equal(second.total, null);
       assert.equal(second.complete, true);
@@ -345,14 +347,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = overridesFor(mode);
-      const first = await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile, "--limit", "1"], overrides);
+      const first = record(await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile, "--limit", "1"], overrides));
       assert.deepEqual(first.namedLocations, [
         { id: l1.id, displayName: l1.displayName, "@odata.type": l1["@odata.type"] },
       ]);
       assert.equal(first.namedLocations.length, 1);
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile, "--cursor", first.cursor], overrides);
+      const second = record(await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
       assert.deepEqual(second.namedLocations, [
         { id: l2.id, displayName: l2.displayName, "@odata.type": l2["@odata.type"] },
       ]);
@@ -371,29 +373,29 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const missing = transport(() => json(404, { error: { code: "Request_ResourceNotFound", message: "gone" } }));
       const overrides = {
         transport: denied.send,
-        delegated: credentialService("delegated", []),
-        application: credentialService("application", []),
+        delegated: authFakes(credentialService("delegated", [])).delegated,
+        application: authFakes(credentialService("application", [])).application,
       };
       await assert.rejects(executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        assert.match(error.message, /grant, role, licence or policy/);
-        const guidance = error.suggestions.join("\n");
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        assert.match(outputText(record(error).message), /grant, role, licence or policy/);
+        const guidance = strings(record(error).suggestions).join("\n");
         assert.match(guidance, /Conditional Access Administrator/);
         assert.match(guidance, /P1/);
         return true;
       });
       await assert.rejects(executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile],
         { ...overrides, transport: denied.send }), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        const guidance = error.suggestions.join("\n");
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        const guidance = strings(record(error).suggestions).join("\n");
         assert.match(guidance, /Policy\.Read\.All/);
         assert.match(guidance, /P1/);
         return true;
       });
       await assert.rejects(executeArgv(["entra", "conditional-access", "policy", "show", "--id", p1.id, "--profile", profile],
         { ...overrides, transport: missing.send }), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        return /not found or inaccessible/.test(error.message);
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        return /not found or inaccessible/.test(outputText(record(error).message));
       });
     } finally {
       teardownProfiles(state);
@@ -405,12 +407,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const result = await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", profile], overrides));
       assert.deepEqual(result.policies, []);
       assert.deepEqual(result.count, "0 policies");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("0 conditional-access policies matched")));
+      assert.ok(strings(result.help).some(hint => hint.includes("0 conditional-access policies matched")));
     } finally {
       teardownProfiles(state);
     }
@@ -421,12 +423,12 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const result = await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "named-location", "list", "--profile", profile], overrides));
       assert.deepEqual(result.namedLocations, []);
       assert.deepEqual(result.count, "0 named locations");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("0 named locations matched")));
+      assert.ok(strings(result.help).some(hint => hint.includes("0 named locations matched")));
     } finally {
       teardownProfiles(state);
     }
@@ -438,8 +440,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const listed = runCaCli(["entra", "conditional-access", "policy", "list", "--profile", profile], state, mode);
       assert.equal(listed.status, 0, listed.stdout);
       assert.equal(listed.stderr, "");
-      const policiesOut = decode(listed.stdout);
-      assert.deepEqual(policiesOut.policies.map(policy => policy.id), [p1.id, p2.id, p3.id]);
+      const policiesOut = record(decode(listed.stdout));
+      assert.deepEqual(records(policiesOut.policies).map(policy => policy.id), [p1.id, p2.id, p3.id]);
       assert.deepEqual(policiesOut.count, "3 policies");
       assert.equal(policiesOut.total, null);
       assert.equal(policiesOut.complete, true);
@@ -447,16 +449,16 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 
       const shown = runCaCli(["entra", "conditional-access", "policy", "show", "--id", p1.id, "--profile", profile], state, mode);
       assert.equal(shown.status, 0, shown.stdout);
-      assert.deepEqual(decode(shown.stdout).policy, p1);
+      assert.deepEqual(record(decode(shown.stdout)).policy, p1);
 
       const locationsOut = runCaCli(["entra", "conditional-access", "named-location", "list", "--profile", profile], state, mode);
       assert.equal(locationsOut.status, 0, locationsOut.stdout);
-      const locationsDecoded = decode(locationsOut.stdout);
-      assert.deepEqual(locationsDecoded.namedLocations.map(location => location.id), [l1.id, l2.id]);
+      const locationsDecoded = record(decode(locationsOut.stdout));
+      assert.deepEqual(records(locationsDecoded.namedLocations).map(location => location.id), [l1.id, l2.id]);
 
       const locationShown = runCaCli(["entra", "conditional-access", "named-location", "show", "--id", l1.id, "--profile", profile], state, mode);
       assert.equal(locationShown.status, 0, locationShown.stdout);
-      assert.deepEqual(decode(locationShown.stdout).namedLocation, l1);
+      assert.deepEqual(record(decode(locationShown.stdout)).namedLocation, l1);
       assert.ok(!locationShown.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -467,9 +469,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runCaCli(["entra", "conditional-access", "policy", "list", "--profile", profile], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
+      assert.match(outputText(output.error), /grant, role, licence or policy/);
       assert.equal(output.policies, undefined);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -479,10 +481,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 test("delegated policy reads default to Policy.Read.All without extra scopes", async () => {
   const state = setupProfiles();
   try {
-    const calls = [];
+    const calls: Parameters<typeof credentialService>[1] = [];
     const { overrides } = overridesFor("delegated", undefined, calls);
     await executeArgv(["entra", "conditional-access", "policy", "list", "--profile", "soc"], overrides);
-    assert.deepEqual(calls[0][1], caScopes);
+    assert.deepEqual(calls[0]![1], caScopes);
   } finally {
     teardownProfiles(state);
   }
@@ -493,9 +495,9 @@ test("application profiles reject delegated scopes on conditional-access reads",
   try {
     const { requests, calls, overrides } = overridesFor("application");
     await assert.rejects(executeArgv(["entra", "conditional-access", "policy", "list", "--profile", "batch",
-      "--scopes", caScopes[0]], overrides), { code: "VALIDATION_ERROR" });
+      "--scopes", caScopes[0]!], overrides), { code: "VALIDATION_ERROR" });
     await assert.rejects(executeArgv(["entra", "conditional-access", "named-location", "show", "--id", l1.id,
-      "--profile", "batch", "--scopes", caScopes[0]], overrides), { code: "VALIDATION_ERROR" });
+      "--profile", "batch", "--scopes", caScopes[0]!], overrides), { code: "VALIDATION_ERROR" });
     assert.equal(requests.length, 0);
     assert.equal(calls.length, 0);
   } finally {
@@ -506,7 +508,7 @@ test("application profiles reject delegated scopes on conditional-access reads",
 for (const [family, noun, known] of [
   ["policy", "policy", "id,displayName,state,createdDateTime,modifiedDateTime,conditions,grantControls,sessionControls"],
   ["named-location", "named-location", "id,displayName,createdDateTime,modifiedDateTime,isTrusted,ipRanges,countriesAndRegions,includeUnknownCountriesAndRegions"],
-]) {
+] as const) {
   test(`unknown ${noun} properties fail before credentials`, async () => {
     const state = setupProfiles();
     try {
@@ -514,9 +516,9 @@ for (const [family, noun, known] of [
       const showId = family === "policy" ? p1.id : l1.id;
       await assert.rejects(executeArgv(["entra", "conditional-access", family, "list", "--profile", "soc",
         "--select", "id,templateId"], overrides), error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        assert.match(error.message, /Unknown policy property|Unknown named-location property/);
-        assert.ok(error.suggestions.join("\n").includes(known.split(",")[0]));
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        assert.match(outputText(record(error).message), /Unknown policy property|Unknown named-location property/);
+        assert.ok(strings(record(error).suggestions).join("\n").includes(outputText(known.split(",")[0])));
         return true;
       });
       await assert.rejects(executeArgv(["entra", "conditional-access", family, "show", "--id", showId,
@@ -621,16 +623,16 @@ function caLeftoverTransport() {
   });
 }
 
-function leftoverOverrides(mode) {
+function leftoverOverrides(mode: string) {
   return overridesFor(mode, caLeftoverTransport());
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists auth-strength policies with compact rows and totals`, async () => {
     const state = setupProfiles();
     try {
       const { requests, overrides } = leftoverOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", profile, "--all"], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", profile, "--all"], overrides));
       assert.deepEqual(result.authStrengthPolicies, [
         { id: s1.id, displayName: s1.displayName, policyType: "builtIn" },
         { id: s2.id, displayName: s2.displayName, policyType: "custom" },
@@ -638,8 +640,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.total, null);
       assert.equal(result.count, "2 auth-strength policies");
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("conditional-access auth-strength-policy show --id <auth-strength-policy-id>")));
-      assert.ok(requests[0].url.includes("%24select=id%2CdisplayName%2CpolicyType"));
+      assert.ok(strings(result.help).some(hint => hint.includes("conditional-access auth-strength-policy show --id <auth-strength-policy-id>")));
+      assert.ok(requests[0]!.url.includes("%24select=id%2CdisplayName%2CpolicyType"));
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
     } finally {
       teardownProfiles(state);
@@ -650,7 +652,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = leftoverOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "auth-strength-policy", "show", "--id", s1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "auth-strength-policy", "show", "--id", s1.id, "--profile", profile], overrides));
       assert.deepEqual(result.authStrengthPolicy, s1);
       assert.equal(result.help, undefined);
     } finally {
@@ -662,15 +664,15 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = leftoverOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "combination-configuration", "list",
-        "--policy", s1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "combination-configuration", "list",
+        "--policy", s1.id, "--profile", profile], overrides));
       assert.deepEqual(result.combinationConfigurations, [
         { id: c1.id, "@odata.type": "#microsoft.graph.fido2CombinationConfiguration" },
         { id: c2.id, "@odata.type": "#microsoft.graph.x509CertificateCombinationConfiguration" },
       ]);
       assert.equal(result.count, "2 combination configurations");
       assert.equal(result.complete, true);
-      assert.ok(requests[0].url.startsWith(`https://graph.microsoft.com/v1.0/identity/conditionalAccess/authenticationStrength/policies/${s1.id}/combinationConfigurations?`));
+      assert.ok(requests[0]!.url.startsWith(`https://graph.microsoft.com/v1.0/identity/conditionalAccess/authenticationStrength/policies/${s1.id}/combinationConfigurations?`));
     } finally {
       teardownProfiles(state);
     }
@@ -681,10 +683,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const { requests, calls, overrides } = leftoverOverrides(mode);
       await assert.rejects(executeArgv(["entra", "conditional-access", "combination-configuration", "list", "--profile", profile], overrides),
-        error => error.code === "VALIDATION_ERROR" && /--policy is required/.test(error.message));
+        error => record(error).code === "VALIDATION_ERROR" && /--policy is required/.test(outputText(record(error).message)));
       await assert.rejects(executeArgv(["entra", "conditional-access", "combination-configuration", "show",
         "--id", c1.id, "--profile", profile], overrides),
-        error => error.code === "VALIDATION_ERROR" && /--policy is required/.test(error.message));
+        error => record(error).code === "VALIDATION_ERROR" && /--policy is required/.test(outputText(record(error).message)));
       assert.equal(requests.length, 0);
       assert.equal(calls.length, 0);
     } finally {
@@ -696,8 +698,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = leftoverOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "combination-configuration", "show",
-        "--policy", s1.id, "--id", c2.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "combination-configuration", "show",
+        "--policy", s1.id, "--id", c2.id, "--profile", profile], overrides));
       assert.deepEqual(result.combinationConfiguration, c2);
       assert.equal(result.help, undefined);
     } finally {
@@ -709,14 +711,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = leftoverOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "auth-method-mode", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "auth-method-mode", "list", "--profile", profile], overrides));
       assert.deepEqual(result.authMethodModes, [
         { id: m1.id, displayName: m1.displayName },
         { id: m2.id, displayName: m2.displayName },
       ]);
       assert.equal(result.count, "2 auth-method modes");
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("conditional-access auth-method-mode show --id <auth-method-mode-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("conditional-access auth-method-mode show --id <auth-method-mode-id>")));
     } finally {
       teardownProfiles(state);
     }
@@ -726,7 +728,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = leftoverOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "auth-method-mode", "show", "--id", m1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "auth-method-mode", "show", "--id", m1.id, "--profile", profile], overrides));
       assert.deepEqual(result.authMethodMode, m1);
       assert.equal(result.help, undefined);
     } finally {
@@ -738,14 +740,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = leftoverOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "template", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "template", "list", "--profile", profile], overrides));
       assert.deepEqual(result.templates, [
         { id: t1.id, name: t1.name },
         { id: t2.id, name: t2.name },
       ]);
       assert.equal(result.count, "2 templates");
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("conditional-access template show --id <template-id>")));
+      assert.ok(strings(result.help).some(hint => hint.includes("conditional-access template show --id <template-id>")));
     } finally {
       teardownProfiles(state);
     }
@@ -755,11 +757,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = leftoverOverrides(mode);
-      const truncated = await executeArgv(["entra", "conditional-access", "template", "show", "--id", t2.id, "--profile", profile], overrides);
-      assert.match(truncated.template.description, /\.\.\. \(truncated, \d+ chars total\)/);
-      assert.ok(truncated.help.some(hint => hint.includes("--full")));
-      assert.ok(truncated.help.every(hint => !hint.includes(longTemplateDescription)));
-      const full = await executeArgv(["entra", "conditional-access", "template", "show", "--id", t2.id, "--profile", profile, "--full"], overrides);
+      const truncated = record(await executeArgv(["entra", "conditional-access", "template", "show", "--id", t2.id, "--profile", profile], overrides));
+      assert.match(outputText(record(truncated.template).description), /\.\.\. \(truncated, \d+ chars total\)/);
+      assert.ok(strings(truncated.help).some(hint => hint.includes("--full")));
+      assert.ok(strings(truncated.help).every(hint => !hint.includes(longTemplateDescription)));
+      const full = record(await executeArgv(["entra", "conditional-access", "template", "show", "--id", t2.id, "--profile", profile, "--full"], overrides));
       assert.deepEqual(full.template, t2);
       assert.equal(full.help, undefined);
     } finally {
@@ -771,14 +773,14 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = leftoverOverrides(mode);
-      const first = await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", profile, "--limit", "1"], overrides);
-      assert.deepEqual(first.authStrengthPolicies.map(row => row.id), [s1.id]);
+      const first = record(await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", profile, "--limit", "1"], overrides));
+      assert.deepEqual(records(first.authStrengthPolicies).map(row => row.id), [s1.id]);
       assert.equal(first.count, "1 auth-strength policies shown, more available");
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list",
-        "--profile", profile, "--cursor", first.cursor], overrides);
-      assert.deepEqual(second.authStrengthPolicies.map(row => row.id), [s2.id]);
+      const second = record(await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list",
+        "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
+      assert.deepEqual(records(second.authStrengthPolicies).map(row => row.id), [s2.id]);
       assert.equal(second.count, "1 auth-strength policies");
       assert.equal(second.complete, true);
     } finally {
@@ -792,20 +794,20 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const overrides = {
         transport: denied.send,
-        delegated: credentialService("delegated", []),
-        application: credentialService("application", []),
+        delegated: authFakes(credentialService("delegated", [])).delegated,
+        application: authFakes(credentialService("application", [])).application,
       };
       await assert.rejects(executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        const guidance = error.suggestions.join("\n");
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        const guidance = strings(record(error).suggestions).join("\n");
         assert.match(guidance, /Policy\.Read\.AuthenticationMethod/);
         assert.match(guidance, /Conditional Access Administrator/);
         assert.match(guidance, /P1/);
         return true;
       });
       await assert.rejects(executeArgv(["entra", "conditional-access", "template", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        const guidance = error.suggestions.join("\n");
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        const guidance = strings(record(error).suggestions).join("\n");
         assert.match(guidance, /Policy\.Read\.All/);
         assert.match(guidance, /P1/);
         return true;
@@ -820,10 +822,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const result = await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", profile], overrides));
       assert.deepEqual(result.authStrengthPolicies, []);
       assert.equal(result.count, "0 auth-strength policies");
-      assert.ok(result.help.some(hint => hint.includes("0 authentication-strength policies matched")));
+      assert.ok(strings(result.help).some(hint => hint.includes("0 authentication-strength policies matched")));
     } finally {
       teardownProfiles(state);
     }
@@ -833,10 +835,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 test("delegated strength reads default to Policy.Read.AuthenticationMethod without extra scopes", async () => {
   const state = setupProfiles();
   try {
-    const calls = [];
+    const calls: Parameters<typeof credentialService>[1] = [];
     const { overrides } = overridesFor("delegated", caLeftoverTransport(), calls);
     await executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", "soc"], overrides);
-    assert.deepEqual(calls[0][1], strengthScopes);
+    assert.deepEqual(calls[0]![1], strengthScopes);
   } finally {
     teardownProfiles(state);
   }
@@ -847,9 +849,9 @@ test("application profiles reject delegated scopes on leftover conditional-acces
   try {
     const { requests, calls, overrides } = leftoverOverrides("application");
     await assert.rejects(executeArgv(["entra", "conditional-access", "auth-strength-policy", "list", "--profile", "batch",
-      "--scopes", strengthScopes[0]], overrides), { code: "VALIDATION_ERROR" });
+      "--scopes", strengthScopes[0]!], overrides), { code: "VALIDATION_ERROR" });
     await assert.rejects(executeArgv(["entra", "conditional-access", "template", "show", "--id", t1.id,
-      "--profile", "batch", "--scopes", caScopes[0]], overrides), { code: "VALIDATION_ERROR" });
+      "--profile", "batch", "--scopes", caScopes[0]!], overrides), { code: "VALIDATION_ERROR" });
     assert.equal(requests.length, 0);
     assert.equal(calls.length, 0);
   } finally {
@@ -862,7 +864,7 @@ for (const [family, noun, known, showId] of [
   ["combination-configuration", "combination-configuration", "id,appliesToCombinations", c1.id],
   ["auth-method-mode", "auth-method-mode", "id,displayName,authenticationMethod", m1.id],
   ["template", "template", "id,name,description,scenarios,details", t1.id],
-]) {
+] as const) {
   test(`unknown ${noun} properties fail before credentials`, async () => {
     const state = setupProfiles();
     try {
@@ -870,9 +872,9 @@ for (const [family, noun, known, showId] of [
       const extra = family === "combination-configuration" ? ["--policy", s1.id] : [];
       await assert.rejects(executeArgv(["entra", "conditional-access", family, "list", "--profile", "soc",
         "--select", "id,templateId", ...extra], overrides), error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        assert.match(error.message, new RegExp(`Unknown ${noun} property`));
-        assert.ok(error.suggestions.join("\n").includes(known.split(",")[0]));
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        assert.match(outputText(record(error).message), new RegExp(`Unknown ${noun} property`));
+        assert.ok(strings(record(error).suggestions).join("\n").includes(outputText(known.split(",")[0])));
         return true;
       });
       await assert.rejects(executeArgv(["entra", "conditional-access", family, "show", "--id", showId,
@@ -973,16 +975,16 @@ function caRemainingTransport() {
   });
 }
 
-function remainingOverrides(mode) {
+function remainingOverrides(mode: string) {
   return overridesFor(mode, caRemainingTransport());
 }
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} lists auth contexts with compact rows and totals`, async () => {
     const state = setupProfiles();
     try {
       const { requests, overrides } = remainingOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "auth-context", "list", "--profile", profile, "--all"], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "auth-context", "list", "--profile", profile, "--all"], overrides));
       assert.deepEqual(result.authContexts, [
         { id: a1.id, displayName: a1.displayName },
         { id: a2.id, displayName: a2.displayName },
@@ -990,8 +992,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.total, null);
       assert.equal(result.count, "2 auth contexts");
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("conditional-access auth-context show --id <auth-context-id>")));
-      assert.equal(new URL(requests[0].url).searchParams.has("$select"), false);
+      assert.ok(strings(result.help).some(hint => hint.includes("conditional-access auth-context show --id <auth-context-id>")));
+      assert.equal(new URL(requests[0]!.url).searchParams.has("$select"), false);
       assert.ok(requests.every(request => request.headers.Authorization === `Bearer opaque-fixture-${mode}-token`));
     } finally {
       teardownProfiles(state);
@@ -1002,7 +1004,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = remainingOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "auth-context", "show", "--id", a1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "auth-context", "show", "--id", a1.id, "--profile", profile], overrides));
       assert.deepEqual(result.authContext, a1);
       assert.equal(result.help, undefined);
     } finally {
@@ -1014,11 +1016,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = remainingOverrides(mode);
-      const truncated = await executeArgv(["entra", "conditional-access", "auth-context", "show", "--id", a2.id, "--profile", profile], overrides);
-      assert.match(truncated.authContext.description, /\.\.\. \(truncated, \d+ chars total\)/);
-      assert.ok(truncated.help.some(hint => hint.includes("--full")));
-      assert.ok(truncated.help.every(hint => !hint.includes(longAuthContextDescription)));
-      const full = await executeArgv(["entra", "conditional-access", "auth-context", "show", "--id", a2.id, "--profile", profile, "--full"], overrides);
+      const truncated = record(await executeArgv(["entra", "conditional-access", "auth-context", "show", "--id", a2.id, "--profile", profile], overrides));
+      assert.match(outputText(record(truncated.authContext).description), /\.\.\. \(truncated, \d+ chars total\)/);
+      assert.ok(strings(truncated.help).some(hint => hint.includes("--full")));
+      assert.ok(strings(truncated.help).every(hint => !hint.includes(longAuthContextDescription)));
+      const full = record(await executeArgv(["entra", "conditional-access", "auth-context", "show", "--id", a2.id, "--profile", profile, "--full"], overrides));
       assert.deepEqual(full.authContext, a2);
       assert.equal(full.help, undefined);
     } finally {
@@ -1030,7 +1032,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = remainingOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "deleted-policy", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "deleted-policy", "list", "--profile", profile], overrides));
       assert.deepEqual(result.deletedPolicies, [
         { id: dp1.id, displayName: dp1.displayName, state: "enabled", deletedDateTime: dp1.deletedDateTime },
         { id: dp2.id, displayName: dp2.displayName, state: "disabled", deletedDateTime: dp2.deletedDateTime },
@@ -1038,8 +1040,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.count, "2 deleted policies");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("conditional-access deleted-policy show --id <deleted-policy-id>")));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identity/conditionalAccess/deletedItems/policies?"));
+      assert.ok(strings(result.help).some(hint => hint.includes("conditional-access deleted-policy show --id <deleted-policy-id>")));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/identity/conditionalAccess/deletedItems/policies?"));
     } finally {
       teardownProfiles(state);
     }
@@ -1049,9 +1051,9 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = remainingOverrides(mode);
-      const full = await executeArgv(["entra", "conditional-access", "deleted-policy", "show", "--id", dp1.id, "--profile", profile], overrides);
+      const full = record(await executeArgv(["entra", "conditional-access", "deleted-policy", "show", "--id", dp1.id, "--profile", profile], overrides));
       assert.deepEqual(full.deletedPolicy, dp1);
-      const sparse = await executeArgv(["entra", "conditional-access", "deleted-policy", "show", "--id", dp2.id, "--profile", profile], overrides);
+      const sparse = record(await executeArgv(["entra", "conditional-access", "deleted-policy", "show", "--id", dp2.id, "--profile", profile], overrides));
       assert.deepEqual(sparse.deletedPolicy, dp2);
       assert.ok(!Object.hasOwn(sparse.deletedPolicy, "conditions"));
       assert.ok(!Object.hasOwn(sparse.deletedPolicy, "grantControls"));
@@ -1064,7 +1066,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { requests, overrides } = remainingOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "deleted-named-location", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "deleted-named-location", "list", "--profile", profile], overrides));
       assert.deepEqual(result.deletedNamedLocations, [
         { id: dl1.id, displayName: dl1.displayName, deletedDateTime: dl1.deletedDateTime, "@odata.type": "#microsoft.graph.ipNamedLocation" },
         { id: dl2.id, displayName: dl2.displayName, deletedDateTime: dl2.deletedDateTime, "@odata.type": "#microsoft.graph.countryNamedLocation" },
@@ -1072,8 +1074,8 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       assert.equal(result.count, "2 deleted named locations");
       assert.equal(result.total, null);
       assert.equal(result.complete, true);
-      assert.ok(result.help.some(hint => hint.includes("conditional-access deleted-named-location show --id <deleted-named-location-id>")));
-      assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/identity/conditionalAccess/deletedItems/namedLocations?"));
+      assert.ok(strings(result.help).some(hint => hint.includes("conditional-access deleted-named-location show --id <deleted-named-location-id>")));
+      assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/identity/conditionalAccess/deletedItems/namedLocations?"));
     } finally {
       teardownProfiles(state);
     }
@@ -1083,7 +1085,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = remainingOverrides(mode);
-      const result = await executeArgv(["entra", "conditional-access", "deleted-named-location", "show", "--id", dl1.id, "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "deleted-named-location", "show", "--id", dl1.id, "--profile", profile], overrides));
       assert.deepEqual(result.deletedNamedLocation, dl1);
       assert.equal(result.deletedNamedLocation["@odata.type"], "#microsoft.graph.ipNamedLocation");
     } finally {
@@ -1095,13 +1097,13 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     const state = setupProfiles();
     try {
       const { overrides } = remainingOverrides(mode);
-      const first = await executeArgv(["entra", "conditional-access", "auth-context", "list", "--profile", profile, "--limit", "1"], overrides);
+      const first = record(await executeArgv(["entra", "conditional-access", "auth-context", "list", "--profile", profile, "--limit", "1"], overrides));
       assert.deepEqual(first.authContexts, [{ id: a1.id, displayName: a1.displayName }]);
       assert.equal(first.count, "1 auth contexts shown, more available");
       assert.equal(first.complete, false);
       assert.equal(typeof first.cursor, "string");
-      const second = await executeArgv(["entra", "conditional-access", "auth-context", "list",
-        "--profile", profile, "--cursor", first.cursor], overrides);
+      const second = record(await executeArgv(["entra", "conditional-access", "auth-context", "list",
+        "--profile", profile, "--cursor", outputText(first.cursor)], overrides));
       assert.deepEqual(second.authContexts, [{ id: a2.id, displayName: a2.displayName }]);
       assert.equal(second.count, "1 auth contexts");
       assert.equal(second.complete, true);
@@ -1116,28 +1118,28 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const denied = transport(() => json(403, { error: { code: "Authorization_RequestDenied", message: "insufficient grants" } }));
       const overrides = {
         transport: denied.send,
-        delegated: credentialService("delegated", []),
-        application: credentialService("application", []),
+        delegated: authFakes(credentialService("delegated", [])).delegated,
+        application: authFakes(credentialService("application", [])).application,
       };
       await assert.rejects(executeArgv(["entra", "conditional-access", "auth-context", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        const guidance = error.suggestions.join("\n");
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        const guidance = strings(record(error).suggestions).join("\n");
         assert.match(guidance, /AuthenticationContext\.Read\.All/);
         assert.match(guidance, /Conditional Access Administrator/);
         assert.match(guidance, /P1/);
         return true;
       });
       await assert.rejects(executeArgv(["entra", "conditional-access", "deleted-policy", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        const guidance = error.suggestions.join("\n");
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        const guidance = strings(record(error).suggestions).join("\n");
         assert.match(guidance, /Policy\.Read\.All/);
         assert.match(guidance, /30 days/);
         assert.match(guidance, /P1/);
         return true;
       });
       await assert.rejects(executeArgv(["entra", "conditional-access", "deleted-named-location", "list", "--profile", profile], overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
-        const guidance = error.suggestions.join("\n");
+        assert.equal(record(error).code, "GRAPH_ERROR");
+        const guidance = strings(record(error).suggestions).join("\n");
         assert.match(guidance, /Policy\.Read\.All/);
         assert.match(guidance, /P1/);
         return true;
@@ -1152,10 +1154,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const result = await executeArgv(["entra", "conditional-access", "auth-context", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "auth-context", "list", "--profile", profile], overrides));
       assert.deepEqual(result.authContexts, []);
       assert.equal(result.count, "0 auth contexts");
-      assert.ok(result.help.some(hint => hint.includes("0 authentication context class references matched")));
+      assert.ok(strings(result.help).some(hint => hint.includes("0 authentication context class references matched")));
     } finally {
       teardownProfiles(state);
     }
@@ -1166,10 +1168,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const result = await executeArgv(["entra", "conditional-access", "deleted-policy", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "deleted-policy", "list", "--profile", profile], overrides));
       assert.deepEqual(result.deletedPolicies, []);
       assert.equal(result.count, "0 deleted policies");
-      assert.ok(result.help.some(hint => hint.includes("0 deleted policies matched")));
+      assert.ok(strings(result.help).some(hint => hint.includes("0 deleted policies matched")));
     } finally {
       teardownProfiles(state);
     }
@@ -1180,10 +1182,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
     try {
       const empty = transport(() => json(200, { value: [] }));
       const { overrides } = overridesFor(mode, empty);
-      const result = await executeArgv(["entra", "conditional-access", "deleted-named-location", "list", "--profile", profile], overrides);
+      const result = record(await executeArgv(["entra", "conditional-access", "deleted-named-location", "list", "--profile", profile], overrides));
       assert.deepEqual(result.deletedNamedLocations, []);
       assert.equal(result.count, "0 deleted named locations");
-      assert.ok(result.help.some(hint => hint.includes("0 deleted named locations matched")));
+      assert.ok(strings(result.help).some(hint => hint.includes("0 deleted named locations matched")));
     } finally {
       teardownProfiles(state);
     }
@@ -1193,10 +1195,10 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
 test("delegated auth-context reads default to AuthenticationContext.Read.All without extra scopes", async () => {
   const state = setupProfiles();
   try {
-    const calls = [];
+    const calls: Parameters<typeof credentialService>[1] = [];
     const { overrides } = overridesFor("delegated", caRemainingTransport(), calls);
     await executeArgv(["entra", "conditional-access", "auth-context", "list", "--profile", "soc"], overrides);
-    assert.deepEqual(calls[0][1], authContextScopes);
+    assert.deepEqual(calls[0]![1], authContextScopes);
   } finally {
     teardownProfiles(state);
   }
@@ -1205,12 +1207,12 @@ test("delegated auth-context reads default to AuthenticationContext.Read.All wit
 test("delegated deleted reads default to Policy.Read.All without extra scopes", async () => {
   const state = setupProfiles();
   try {
-    const calls = [];
+    const calls: Parameters<typeof credentialService>[1] = [];
     const { overrides } = overridesFor("delegated", caRemainingTransport(), calls);
     await executeArgv(["entra", "conditional-access", "deleted-policy", "list", "--profile", "soc"], overrides);
-    assert.deepEqual(calls[0][1], caScopes);
+    assert.deepEqual(calls[0]![1], caScopes);
     await executeArgv(["entra", "conditional-access", "deleted-named-location", "list", "--profile", "soc"], overrides);
-    assert.deepEqual(calls[1][1], caScopes);
+    assert.deepEqual(calls[1]![1], caScopes);
   } finally {
     teardownProfiles(state);
   }
@@ -1221,11 +1223,11 @@ test("application profiles reject delegated scopes on remaining conditional-acce
   try {
     const { requests, calls, overrides } = remainingOverrides("application");
     await assert.rejects(executeArgv(["entra", "conditional-access", "auth-context", "list", "--profile", "batch",
-      "--scopes", authContextScopes[0]], overrides), { code: "VALIDATION_ERROR" });
+      "--scopes", authContextScopes[0]!], overrides), { code: "VALIDATION_ERROR" });
     await assert.rejects(executeArgv(["entra", "conditional-access", "deleted-policy", "show", "--id", dp1.id,
-      "--profile", "batch", "--scopes", caScopes[0]], overrides), { code: "VALIDATION_ERROR" });
+      "--profile", "batch", "--scopes", caScopes[0]!], overrides), { code: "VALIDATION_ERROR" });
     await assert.rejects(executeArgv(["entra", "conditional-access", "deleted-named-location", "show", "--id", dl1.id,
-      "--profile", "batch", "--scopes", caScopes[0]], overrides), { code: "VALIDATION_ERROR" });
+      "--profile", "batch", "--scopes", caScopes[0]!], overrides), { code: "VALIDATION_ERROR" });
     assert.equal(requests.length, 0);
     assert.equal(calls.length, 0);
   } finally {
@@ -1237,16 +1239,16 @@ for (const [family, noun, known, showId] of [
   ["auth-context", "auth-context", "id,displayName,description,isAvailable", a1.id],
   ["deleted-policy", "deleted-policy", "id,displayName,state,createdDateTime,modifiedDateTime,conditions,grantControls,sessionControls,deletedDateTime", dp1.id],
   ["deleted-named-location", "deleted-named-location", "id,displayName,createdDateTime,modifiedDateTime,isTrusted,ipRanges,countriesAndRegions,includeUnknownCountriesAndRegions,deletedDateTime", dl1.id],
-]) {
+] as const) {
   test(`unknown ${noun} properties fail before credentials`, async () => {
     const state = setupProfiles();
     try {
       const { requests, calls, overrides } = remainingOverrides("delegated");
       await assert.rejects(executeArgv(["entra", "conditional-access", family, "list", "--profile", "soc",
         "--select", "id,templateId"], overrides), error => {
-        assert.equal(error.code, "VALIDATION_ERROR");
-        assert.match(error.message, new RegExp(`Unknown ${noun} property`));
-        assert.ok(error.suggestions.join("\n").includes(known.split(",")[0]));
+        assert.equal(record(error).code, "VALIDATION_ERROR");
+        assert.match(outputText(record(error).message), new RegExp(`Unknown ${noun} property`));
+        assert.ok(strings(record(error).suggestions).join("\n").includes(outputText(known.split(",")[0])));
         return true;
       });
       await assert.rejects(executeArgv(["entra", "conditional-access", family, "show", "--id", showId,

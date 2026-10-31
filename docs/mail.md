@@ -22,6 +22,8 @@ All command paths in this table start with `mail`.
 Delegated mutations also need their preview/fresh-read scope: `Mail.Read` for messages, `Mail.ReadBasic` for folders and `MailboxSettings.Read` for rules/categories.
 Use full `https://graph.microsoft.com/` scope names when explicitly signing in.
 The CLI requests each read command's specific scope; sign in for each scope you intend to use.
+For delegated `mail folder list/show`, `--scopes https://graph.microsoft.com/Mail.Read` reuses existing `Mail.Read` consent instead of requesting the default `Mail.ReadBasic` scope.
+Application folder reads use `.default`; `--scopes` cannot narrow application authorization.
 
 ```sh
 mg-axi auth login --profile soc --scopes https://graph.microsoft.com/Mail.ReadBasic

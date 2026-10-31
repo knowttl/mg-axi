@@ -132,7 +132,9 @@ See the [doctor reference](https://github.com/knowttl/mg-axi/blob/main/docs/outp
 
 The exact current leaf registry is `src/catalogue.ts`.
 Its capability label is `native` (implemented by an mg-axi handler).
-Its effect is `read` for Graph read leaves and the doctor health check, `write` for the gated named writes, or `local` for home, profile, auth, config path, login-alias and setup views.
+Its effect is `read` for Graph read leaves, configured home and the doctor health check, `write` for the gated named writes, or `local` for profile, auth, config path, login-alias and setup views.
+Configured home samples at most five users and five root mail folders, with one GET and a five-second deadline per supported enabled pack; it never follows pages or retries. Use `home --offline` for local configuration without credentials or Graph.
+Home uses existing silent User.Read.All or Mail.Read access for delegated profiles and the existing .default audience for application profiles; unavailable consent or credentials stay unavailable without interactive sign-in. Security needs an explicit hunting query and application mail needs an explicit mailbox. Home never adds permissions or infers token claims.
 Doctor acquires credentials silently and contacts Graph; only its help view stays offline.
 The list below records current executable leaves; it makes no coverage claim for other Graph operations.
 Graph v1.0 does not support the legacy `entra scoped-role-membership list/show`, `entra domain-dns-record list` or `entra directory-object list` routes; those commands fail locally with supported alternatives and their root routes are not available through `api get`.
@@ -142,7 +144,7 @@ See [coverage](https://github.com/knowttl/mg-axi/blob/main/docs/coverage.md) for
 <!-- command-registry:start -->
 | Command | Capability | Effect |
 |---|---|---|
-| `mg-axi home` | native | local |
+| `mg-axi home` | native | read |
 | `mg-axi profile create` | native | local |
 | `mg-axi profile list` | native | local |
 | `mg-axi profile show` | native | local |

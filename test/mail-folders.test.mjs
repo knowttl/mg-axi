@@ -97,11 +97,18 @@ test("empty folder list is definitive", async t => {
   assert.match(result.help.join(" "), /0 folders returned/);
 });
 
-for (const args of [["--limit", "0"], ["--limit", "1001"], ["--limit", "1.5"], ["--fields", "messages"], ["--fields", ""], ["--api-version", "beta"], ["--search", "secret"], ["--scopes", "https://graph.microsoft.com/Mail.Read"], ["--all"]]) test(`invalid folder flags refuse before credentials: ${args.join(" ")}`, async t => {
+for (const args of [["--limit", "0"], ["--limit", "1001"], ["--limit", "1.5"], ["--fields", "messages"], ["--fields", ""], ["--api-version", "beta"], ["--search", "secret"], ["--scopes", "https://graph.microsoft.com/Mail.ReadWrite"], ["--all"]]) test(`invalid folder flags refuse before credentials: ${args.join(" ")}`, async t => {
   const f = fixture(t);
   await assert.rejects(f.run(args), { code: "VALIDATION_ERROR" });
   assert.equal(f.credentials.length, 0);
   assert.equal(f.requests.length, 0);
+});
+
+for (const action of ["list", "show"]) test(`folder ${action} reuses explicit Mail.Read consent`, async t => {
+  const f = fixture(t, { response: () => ({ status: 200, headers: {}, body: JSON.stringify(action === "list" ? { value: [folder] } : folder) }) });
+  const result = await f.run(["--scopes", "https://graph.microsoft.com/Mail.Read", ...(action === "show" ? ["--id", "inbox"] : [])], "soc", action);
+  assert.equal(action === "list" ? result.folders[0].displayName : result.folder.displayName, "Inbox");
+  assert.deepEqual(f.credentials[0].args[1], ["https://graph.microsoft.com/Mail.Read"]);
 });
 
 test("mail pack stays opt-in and Entra remains the profile default", async t => {

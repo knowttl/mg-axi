@@ -15,9 +15,9 @@ Contents: [Counts](#counts) • [Commands](#commands) • [Scope decisions](#ext
 
 ## Counts
 
-- implemented read leaves: 277 (275 named Graph reads plus reviewed raw api get and doctor health check)
+- implemented read leaves: 278 (275 named Graph reads plus reviewed raw api get, configured home and doctor health check)
 - implemented write leaves: 17 (named gated mutations below)
-- local leaves: 11 (home, profile, config, auth, login alias and setup views)
+- local leaves: 10 (profile, config, auth, login alias and setup views)
 
 Mail ships 9 read commands, 2 guarded downloads and 12 gated mutations (23 mail leaves).
 Guarded downloads count as Graph read leaves in the registry, but require write-policy opt-in, execution and exact resource confirmation because they persist sensitive content locally.
@@ -336,6 +336,7 @@ The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS
 | `mg-axi mail folder show` | `GET:/users/{user-id}/mailFolders/{mailFolder-id}` | named-command | MAIL-01 |
 | `mg-axi api get` | reviewed raw reads (see src/api.ts) | reviewed-raw-read catalogue | API-01 |
 | `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |
+| `mg-axi home` | bounded user and delegated mail-folder samples; `--offline` skips Graph | uses reviewed collection reads | home |
 
 Graph v1.0 does not support the legacy `entra scoped-role-membership list/show`, `entra domain-dns-record list` or `entra directory-object list` routes; those commands fail locally with supported alternatives and their root routes are not available through `api get`.
 

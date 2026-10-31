@@ -503,7 +503,9 @@ const lifecycleRunSubjectRead = {
   scopes: lifecycleSubjectRead.scopes,
 } as const;
 export const LEAVES: Leaf[] = [
-  { path: "home", description: "Show local profile status without authenticating", flags: { profile: common.profile }, examples: ["mg-axi", "mg-axi home --profile soc"] },
+  { path: "home", description: "Show bounded live Graph samples using existing access; silent authentication only", flags: { profile: common.profile,
+    offline: { description: "Show local profile configuration without credentials or Graph calls" },
+  }, examples: ["mg-axi", "mg-axi home --profile soc", "mg-axi home --offline"] },
   { path: "profile create", description: "Create a dedicated-app profile without signing in", flags: {
     name: { value: "name", required: true, description: "New profile name; existing identities cannot be overwritten" },
     tenant: { value: "tenant-id", required: true, description: "Explicit workforce tenant UUID" },
@@ -2946,11 +2948,13 @@ LEAVES.push({ path: "mail message list", description: "List message metadata, se
 }, examples: ["mg-axi mail message list --mailbox me --search 'subject:invoice' --profile soc", "mg-axi mail message list --mailbox mailbox@contoso.example --folder inbox --filter 'isRead eq false' --profile batch"] });
 LEAVES.push({ path: "mail folder list", description: "List visible folders directly under the mailbox root; requires the opt-in mail pack and Mail.ReadBasic (delegated) or scoped Exchange Application Mail.ReadBasic", operation: "GET:/users/{user-id}/mailFolders", flags: {
   ...mailFolderRead,
+  scopes: { value: "Graph-scope", description: "Delegated only: existing https://graph.microsoft.com/Mail.ReadBasic (default) or https://graph.microsoft.com/Mail.Read consent; application uses .default" },
   limit: { value: "1-1000", default: "100", description: "Maximum returned folders and requested page size; bounded by the shared request, byte and time budgets" },
   cursor: { value: "opaque-cursor|-", description: "Resume a partial list with the same mailbox and flags; - reads the cursor from stdin" },
 }, examples: ["mg-axi mail folder list --mailbox me --profile soc", "mg-axi mail folder list --mailbox mailbox@contoso.example --limit 20 --profile batch"] });
 LEAVES.push({ path: "mail folder show", description: "Read one folder's metadata; requires the opt-in mail pack and Mail.ReadBasic (delegated) or scoped Exchange Application Mail.ReadBasic", operation: "GET:/users/{user-id}/mailFolders/{mailFolder-id}", flags: {
   ...mailFolderRead,
+  scopes: { value: "Graph-scope", description: "Delegated only: existing https://graph.microsoft.com/Mail.ReadBasic (default) or https://graph.microsoft.com/Mail.Read consent; application uses .default" },
   id: { value: "folder-id", required: true, description: "Folder ID or well-known folder name such as inbox" },
 }, examples: ["mg-axi mail folder show --mailbox me --id inbox --profile soc", "mg-axi mail folder show --mailbox mailbox@contoso.example --id inbox --profile batch"] });
 

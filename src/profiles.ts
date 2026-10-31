@@ -166,14 +166,14 @@ export class Profiles {
     const explicit = flag ?? envName;
     if (explicit === undefined) {
       const profile = envProfile(process.env);
-      if (profile) { names.set(profile, "env"); return { name: "env", profile }; }
+      if (profile) { names.set(profile, "env"); return { name: "env", profile, source: "environment" as const }; }
     }
     const config = this.load();
     const configured = Object.keys(config.profiles);
     const selected = explicit ?? config.defaultProfile ?? (configured.length === 1 ? configured[0] : undefined);
     if (!selected) throw new AxiError("No configured profile selected", configured.length ? "PROFILE_AMBIGUOUS" : "PROFILE_REQUIRED", ["mg-axi profile list", "mg-axi profile create --help"]);
     if (!Object.hasOwn(config.profiles, selected)) throw new AxiError(`Profile ${selected} does not exist`, "PROFILE_NOT_FOUND", ["mg-axi profile list"]);
-    return { name: selected, profile: config.profiles[selected]! };
+    return { name: selected, profile: config.profiles[selected]!, source: "config" as const };
   }
   verifyPermissions() {
     try { this.files.check(this.path, false, true); }

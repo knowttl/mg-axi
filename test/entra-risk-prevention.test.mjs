@@ -563,7 +563,7 @@ test("malformed risk-prevention count bodies fail as unknown, not zero", async (
       const malformed = transport(() => ({ status: 200, headers: {}, body }));
       const scoped = overridesFor("delegated", malformed);
       await assert.rejects(executeArgv(["entra", "fraud-protection-provider", "count", "--profile", "soc"], scoped.overrides), error => {
-        assert.equal(error.code, "GRAPH_ERROR");
+        assert.equal(error.code, "RESPONSE_INVALID");
         return /non-numeric success body/.test(error.message);
       });
     }

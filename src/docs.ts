@@ -404,7 +404,8 @@ export function skillDocument(): string {
     "",
     "Reads run through a session that authorizes only catalogued operations before silent credential acquisition; only explicit `auth login` opens a browser or prints a device-code challenge.",
     "Writes preview before sending and need `--execute` plus a typed `--confirm` repeating the target; an already-desired value is a no-op with exit 0, never an error.",
-    "Output is TOON on stdout; diagnostics use stderr.",
+    "Structured output, errors and response diagnostics use TOON on stdout.",
+    "See [response diagnostics](https://github.com/knowttl/mg-axi/blob/main/docs/output-and-paging.md#response-diagnostics) for malformed-response evidence and handling.",
     "Text truncates at 500 characters (`--full` restores text, never redaction); row caps resume through opaque cursors.",
     "Secrets stay in credential references, never in argv, config files or output; credential fields carry expiry metadata only.",
     "Tests run offline with fixture credentials; never point tests at a real tenant.",
@@ -486,7 +487,7 @@ Profile create, auth login and setup hooks change local configuration, caches or
 Set \`MG_AXI_READ_ONLY=1\` to override write opt-in.
 Raw writes and beta writes are blocked.
 
-Output and structured errors are TOON on stdout; diagnostics go to stderr.
+See [output channels and response diagnostics](output-and-paging.md#response-diagnostics).
 Exit 0 means success/help/no-op, 1 operational failure (including incomplete hunting), 2 invalid usage.
 Read \`code\` and \`help\` before deciding the next action:
 
@@ -499,7 +500,9 @@ Read \`code\` and \`help\` before deciding the next action:
 | GRAPH_ERROR / 403 | Check consent, role, licence and policy; 403 does not say which is missing. |
 | GRAPH_ERROR / 404 | Verify the identifier and visibility; missing and inaccessible are indistinguishable. |
 | GRAPH_ERROR / 429 or 503 | Respect retry-after guidance; do not loop blindly after bounded retries. |
-| GRAPH_ERROR / budget, timeout or malformed response | Narrow the query; this is unknown/incomplete, never evidence of an empty result. |
+| GRAPH_ERROR / budget or timeout | Narrow the query; this is unknown/incomplete, never evidence of an empty result. |
+| RESPONSE_INVALID | Follow the [response diagnostics guidance](output-and-paging.md#response-diagnostics). |
+| GRAPH_ERROR / malformed command-specific data | Report the API contract mismatch; this is unknown, never empty. |
 | OUTCOME_UNKNOWN (writes) | Read back and reconcile; never replay the write blindly. |
 `;
 }

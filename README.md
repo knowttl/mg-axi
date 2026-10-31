@@ -128,7 +128,8 @@ See [configuration](docs/configuration.md) for schema, credential references and
 
 ## Output and exit codes
 
-Structured output and errors use TOON on stdout; diagnostics use stderr.
+Structured output, errors and response diagnostics use TOON on stdout.
+See [response diagnostics](docs/output-and-paging.md#response-diagnostics) for malformed-response evidence and handling.
 Strings truncate at 500 characters; `--full` removes text truncation while retaining redaction and bounds.
 Lists report completeness; use the returned cursor to resume partial results where supported.
 `--all` follows pages within budgets rather than promising an unlimited result.

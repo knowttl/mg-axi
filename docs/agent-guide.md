@@ -71,7 +71,7 @@ Profile create, auth login and setup hooks change local configuration, caches or
 Set `MG_AXI_READ_ONLY=1` to override write opt-in.
 Raw writes and beta writes are blocked.
 
-Output and structured errors are TOON on stdout; diagnostics go to stderr.
+See [output channels and response diagnostics](output-and-paging.md#response-diagnostics).
 Exit 0 means success/help/no-op, 1 operational failure (including incomplete hunting), 2 invalid usage.
 Read `code` and `help` before deciding the next action:
 
@@ -84,5 +84,7 @@ Read `code` and `help` before deciding the next action:
 | GRAPH_ERROR / 403 | Check consent, role, licence and policy; 403 does not say which is missing. |
 | GRAPH_ERROR / 404 | Verify the identifier and visibility; missing and inaccessible are indistinguishable. |
 | GRAPH_ERROR / 429 or 503 | Respect retry-after guidance; do not loop blindly after bounded retries. |
-| GRAPH_ERROR / budget, timeout or malformed response | Narrow the query; this is unknown/incomplete, never evidence of an empty result. |
+| GRAPH_ERROR / budget or timeout | Narrow the query; this is unknown/incomplete, never evidence of an empty result. |
+| RESPONSE_INVALID | Follow the [response diagnostics guidance](output-and-paging.md#response-diagnostics). |
+| GRAPH_ERROR / malformed command-specific data | Report the API contract mismatch; this is unknown, never empty. |
 | OUTCOME_UNKNOWN (writes) | Read back and reconcile; never replay the write blindly. |

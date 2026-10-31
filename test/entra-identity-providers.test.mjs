@@ -295,7 +295,7 @@ test("a non-numeric count body is malformed, never a count", async () => {
     const { overrides } = overridesFor("delegated", providerTransport({ countBody: JSON.stringify({ value: [] }) }));
     await assert.rejects(
       executeArgv(["entra", "identity-provider", "count", "--profile", "soc"], overrides),
-      error => error.code === "GRAPH_ERROR" && /non-numeric success body/.test(error.message),
+      error => error.code === "RESPONSE_INVALID" && /non-numeric success body/.test(error.message),
     );
   } finally {
     teardownProfiles(state);

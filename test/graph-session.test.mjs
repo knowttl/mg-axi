@@ -54,6 +54,53 @@ function fixture(handler) {
   return { credentialCalls, requests, session: new GraphSession({ delegated, application, transport }) };
 }
 
+for (const method of ["execute", "collect"]) {
+  for (const body of ["", "<html>synthetic-private-login</html>"]) test(`${method} reports safe diagnostics for an unreadable 2xx body (${body ? "HTML" : "empty"})`, async () => {
+    const f = fixture({ status: 200, headers: { "Content-Type": "text/html; private=synthetic-private-header" }, body });
+    await assert.rejects(f.session[method]({ profile: appProfile, operation: users }), error => {
+      assert.equal(error.code, "RESPONSE_INVALID");
+      assert.deepEqual(error.diagnostics, { status: 200, contentType: "text/html", shape: [{ path: "$", type: "string" }], shapeTruncated: false });
+      assert.doesNotMatch(JSON.stringify(error), /synthetic-private/);
+      return true;
+    });
+  });
+}
+
+for (const body of [{ wrongEnvelope: [{ id: "private-value" }] }, { value: "private-value" }]) test(`collect diagnoses an invalid collection envelope ${JSON.stringify(body)}`, async () => {
+  const f = fixture(json(200, body, { "content-type": "application/json" }));
+  await assert.rejects(f.session.collect({ profile: appProfile, operation: users }), error => {
+    assert.equal(error.code, "RESPONSE_INVALID");
+    assert.equal(error.diagnostics.status, 200);
+    assert.equal(error.diagnostics.contentType, "application/json");
+    assert.deepEqual(error.diagnostics.issues, [{ path: '$["value"]', received: Object.hasOwn(body, "value") ? "string" : "undefined", expected: "array" }]);
+    assert.doesNotMatch(JSON.stringify(error), /private-value/);
+    return true;
+  });
+});
+
+test("scalar counts report response-invalid diagnostics without echoing the body", async () => {
+  const operation = resolveSessionOperation("v1.0", "GET", "/directory/attributeSets/$count");
+  const f = fixture({ status: 200, headers: { "content-type": "text/html" }, body: "<html>private-count</html>" });
+  await assert.rejects(f.session.execute({ profile: appProfile, operation, scalar: true }), error => {
+    assert.equal(error.code, "RESPONSE_INVALID");
+    assert.deepEqual(error.diagnostics, { status: 200, contentType: "text/html", shape: [{ path: "$", type: "string" }], shapeTruncated: false });
+    assert.doesNotMatch(JSON.stringify(error), /private-count/);
+    return true;
+  });
+});
+
+test("custom-security diagnostics suppress even identifier-shaped response keys", async () => {
+  const operation = resolveSessionOperation("v1.0", "GET", "/directory/attributeSets");
+  const f = fixture(json(200, { TenantPrivateField: { NestedPrivateField: 123 } }, { "content-type": "application/json" }));
+  await assert.rejects(f.session.collect({ profile: appProfile, operation }), error => {
+    assert.equal(error.code, "RESPONSE_INVALID");
+    assert.deepEqual(error.diagnostics.shape, [{ path: "$", type: "object" }, { path: '$["<key>"]', type: "object" }, { path: '$["<key>"]["<key>"]', type: "number" }]);
+    assert.deepEqual(error.diagnostics.issuePaths, ['$["<key>"]']);
+    assert.doesNotMatch(JSON.stringify(error), /TenantPrivateField|NestedPrivateField|123/);
+    return true;
+  });
+});
+
 test("PIM reads send a supported culture through both request builders", async () => {
   const operation = resolveSessionOperation("v1.0", "GET", "/roleManagement/directory/roleEligibilityScheduleInstances");
   const f = fixture(request => request.headers["Accept-Language"] === "en-US"
@@ -575,7 +622,7 @@ test("204 returns null; empty 200 fails closed", async () => {
   const empty = fixture({ status: 204, headers: {}, body: "" });
   assert.equal(await empty.session.execute({ profile: delegatedProfile, operation: users, scopes }), null);
   const malformed = fixture({ status: 200, headers: {}, body: "" });
-  await assert.rejects(malformed.session.execute({ profile: delegatedProfile, operation: users, scopes }), { code: "GRAPH_ERROR" });
+  await assert.rejects(malformed.session.execute({ profile: delegatedProfile, operation: users, scopes }), { code: "RESPONSE_INVALID" });
 });
 
 for (const [name, target, ok] of [

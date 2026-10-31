@@ -132,6 +132,16 @@ test("application mail credentials stay opaque and are never printed", async t =
   assert.ok(!JSON.stringify(result).includes("opaque-fixture-secret"));
 });
 
+test("folder list hides all keys when Graph returns a malformed envelope", async t => {
+  const f = fixture(t, { body: { PrivateMailSubject: { PrivateMailbox: "private-content" } } });
+  await assert.rejects(f.run(), error => {
+    assert.equal(error.code, "RESPONSE_INVALID");
+    assert.deepEqual(error.diagnostics.shape, [{ path: "$", type: "object" }, { path: '$["<key>"]', type: "object" }, { path: '$["<key>"]["<key>"]', type: "string" }]);
+    assert.doesNotMatch(JSON.stringify(error), /PrivateMailSubject|PrivateMailbox|private-content/);
+    return true;
+  });
+});
+
 test("folder metadata rejects nested objects instead of displaying unreviewed mail content", async t => {
   const f = fixture(t, { body: { value: [{ ...folder, displayName: { body: "private" } }] } });
   await assert.rejects(f.run(), { code: "GRAPH_ERROR" });

@@ -1,3 +1,5 @@
+import { record, records, text, strings, authFakes, type CredentialStub, type CredentialArgs, type TransportFixture, type ResponseHandler } from "./fixtures/typed.ts";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -68,12 +70,12 @@ function setupProfiles() {
   return { dir, previous };
 }
 
-function teardownProfiles(state) {
+function teardownProfiles(state: ReturnType<typeof setupProfiles>) {
   process.env.MG_AXI_CONFIG = state.previous;
   rmSync(state.dir, { recursive: true, force: true });
 }
 
-function credentialService(mode, calls) {
+function credentialService(mode: string, calls: CredentialArgs[]): CredentialStub {
   return {
     credential: async (...args) => {
       calls.push(args);
@@ -88,9 +90,9 @@ function credentialService(mode, calls) {
   };
 }
 
-function transport(handler) {
-  const requests = [];
-  const send = async request => {
+function transport(handler: ResponseHandler): TransportFixture {
+  const requests: TransportRequest[] = [];
+  const send: GraphTransport = async request => {
     requests.push(request);
     const response = await handler(request);
     return { headers: {}, body: "", ...response };
@@ -98,7 +100,7 @@ function transport(handler) {
   return { requests, send };
 }
 
-function json(status, body, headers = {}) {
+function json(status: number, body: unknown, headers: Record<string, string> = {}): TransportResponse {
   return { status, headers, body: JSON.stringify(body) };
 }
 
@@ -119,7 +121,7 @@ function provisioningTransport() {
   });
 }
 
-function overridesFor(mode, handler, calls = []) {
+function overridesFor(mode: string, handler?: TransportFixture, calls: CredentialArgs[] = []) {
   const fixture = handler ?? provisioningTransport();
   const credential = credentialService(mode, calls);
   return {
@@ -127,13 +129,13 @@ function overridesFor(mode, handler, calls = []) {
     calls,
     overrides: {
       transport: fixture.send,
-      delegated: mode === "delegated" ? credential : credentialService("delegated", []),
-      application: mode === "application" ? credential : credentialService("application", []),
+      delegated: authFakes(mode === "delegated" ? credential : credentialService("delegated", [])).delegated,
+      application: authFakes(mode === "application" ? credential : credentialService("application", [])).application,
     },
   };
 }
 
-function runReadCli(args, state, mode, denied = false, input) {
+function runReadCli(args: readonly string[], state: ReturnType<typeof setupProfiles>, mode: string, denied = false, input?: string) {
   return spawnSync(process.execPath, [
     "--experimental-test-module-mocks", "--disable-warning=ExperimentalWarning",
     "--import", pathToFileURL(resolve("test/fixtures/read-provisioning-cli.mjs")).href, resolve("dist/bin/mg-axi.js"), ...args,
@@ -147,21 +149,21 @@ function runReadCli(args, state, mode, denied = false, input) {
   });
 }
 
-const compact = row => ({ id: row.id, activityDateTime: row.activityDateTime, provisioningAction: row.provisioningAction, provisioningStatusInfo: row.provisioningStatusInfo });
+const compact = (row: (typeof events)[number]) => ({ id: row.id, activityDateTime: row.activityDateTime, provisioningAction: row.provisioningAction, provisioningStatusInfo: row.provisioningStatusInfo });
 
-for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) {
+for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
   test(`${mode} executable lists bounded provisioning with compact rows`, () => {
     const state = setupProfiles();
     try {
       const result = runReadCli(["entra", "provisioning", "list", "--profile", profile, "--since", SINCE], state, mode);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.provisioning, [compact(p1), compact(p2)]);
       assert.deepEqual(output.count, "2 provisioning events");
       assert.equal(output.total, null);
       assert.equal(output.complete, true);
-      assert.ok(output.help.some(hint => hint.includes("entra provisioning show --id <provisioning-id>")));
+      assert.ok(strings(output.help).some(hint => hint.includes("entra provisioning show --id <provisioning-id>")));
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
   });
@@ -172,7 +174,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runReadCli(["entra", "provisioning", "show", "--id", p1.id, "--profile", profile], state, mode);
       assert.equal(result.status, 0, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.deepEqual(output.provisioning, p1);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -184,11 +186,11 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]]) 
       const result = runReadCli(["entra", "provisioning", "list", "--profile", profile, "--since", SINCE], state, mode, true);
       assert.equal(result.status, 1, result.stdout);
       assert.equal(result.stderr, "");
-      const output = decode(result.stdout);
+      const output = record(decode(result.stdout));
       assert.equal(output.code, "GRAPH_ERROR");
-      assert.match(output.error, /grant, role, licence or policy/);
-      assert.ok(output.help.some(hint => hint.includes("AuditLog.Read.All") && hint.includes("Directory.Read.All")));
-      assert.ok(output.help.some(hint => hint.includes("P1 or P2")));
+      assert.match(text(output.error), /grant, role, licence or policy/);
+      assert.ok(strings(output.help).some(hint => hint.includes("AuditLog.Read.All") && hint.includes("Directory.Read.All")));
+      assert.ok(strings(output.help).some(hint => hint.includes("P1 or P2")));
       assert.equal(output.provisioning, undefined);
       assert.ok(!result.stdout.includes(`opaque-fixture-${mode}-token`));
     } finally { teardownProfiles(state); }
@@ -199,16 +201,16 @@ test("delegated provisioning list requests both directory scopes with a bounded 
   const state = setupProfiles();
   try {
     const { requests, calls, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "provisioning", "list", "--profile", "soc",
-      "--since", SINCE, "--until", UNTIL, "--filter", "provisioningStatusInfo/status eq 'failure'", "--all"], overrides);
+    const result = record(await executeArgv(["entra", "provisioning", "list", "--profile", "soc",
+      "--since", SINCE, "--until", UNTIL, "--filter", "provisioningStatusInfo/status eq 'failure'", "--all"], overrides));
     assert.equal(requests.length, 2);
-    assert.ok(requests[0].url.startsWith("https://graph.microsoft.com/v1.0/auditLogs/provisioning"));
-    const params = new URL(requests[0].url).searchParams;
+    assert.ok(requests[0]!.url.startsWith("https://graph.microsoft.com/v1.0/auditLogs/provisioning"));
+    const params = new URL(requests[0]!.url).searchParams;
     assert.equal(params.get("$filter"),
       "activityDateTime ge 2026-09-01T00:00:00.000Z and activityDateTime le 2026-09-08T00:00:00.000Z and (provisioningStatusInfo/status eq 'failure')");
     assert.equal(params.has("$select"), false);
-    assert.deepEqual(calls[0][1], provisionScopes);
-    assert.deepEqual(result.provisioning.map(row => row.id), [p1.id, p2.id]);
+    assert.deepEqual(calls[0]![1], provisionScopes);
+    assert.deepEqual(records(result.provisioning).map(row => row.id), [p1.id, p2.id]);
     assert.deepEqual(result.count, "2 provisioning events");
     assert.equal(result.total, null);
     assert.equal(result.complete, true);
@@ -223,8 +225,8 @@ test("provisioning list requires a time bound and stops before credentials", asy
   try {
     const { requests, calls, overrides } = overridesFor("delegated");
     await assert.rejects(executeArgv(["entra", "provisioning", "list", "--profile", "soc"], overrides), error => {
-      assert.equal(error.code, "VALIDATION_ERROR");
-      assert.match(error.message, /bounded in time/);
+      assert.equal(record(error).code, "VALIDATION_ERROR");
+      assert.match(text(record(error).message), /bounded in time/);
       return true;
     });
     assert.deepEqual(requests, []);
@@ -238,9 +240,9 @@ test("explicit scopes override the dual provisioning default", async () => {
   const state = setupProfiles();
   try {
     const { calls, overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "provisioning", "list", "--profile", "soc",
-      "--since", SINCE, "--all", "--scopes", "https://graph.microsoft.com/AuditLog.Read.All"], overrides);
-    assert.deepEqual(calls[0][1], ["https://graph.microsoft.com/AuditLog.Read.All"]);
+    const result = record(await executeArgv(["entra", "provisioning", "list", "--profile", "soc",
+      "--since", SINCE, "--all", "--scopes", "https://graph.microsoft.com/AuditLog.Read.All"], overrides));
+    assert.deepEqual(calls[0]![1], ["https://graph.microsoft.com/AuditLog.Read.All"]);
     assert.deepEqual(result.count, "2 provisioning events");
   } finally {
     teardownProfiles(state);
@@ -253,8 +255,8 @@ test("application profiles reject delegated scopes", async () => {
     const { overrides } = overridesFor("application");
     await assert.rejects(executeArgv(["entra", "provisioning", "list", "--profile", "batch",
       "--since", SINCE, "--scopes", "https://graph.microsoft.com/AuditLog.Read.All"], overrides), error => {
-      assert.equal(error.code, "VALIDATION_ERROR");
-      assert.match(error.message, /delegated scopes are unavailable/);
+      assert.equal(record(error).code, "VALIDATION_ERROR");
+      assert.match(text(record(error).message), /delegated scopes are unavailable/);
       return true;
     });
   } finally {
@@ -268,8 +270,8 @@ test("unreviewed select properties fail before credentials, never as server quer
     const { requests, calls, overrides } = overridesFor("delegated");
     await assert.rejects(executeArgv(["entra", "provisioning", "show", "--profile", "soc",
       "--id", p1.id, "--select", "id,passwordProfile"], overrides), error => {
-      assert.equal(error.code, "VALIDATION_ERROR");
-      assert.match(error.message, /Unknown property passwordProfile/);
+      assert.equal(record(error).code, "VALIDATION_ERROR");
+      assert.match(text(record(error).message), /Unknown property passwordProfile/);
       return true;
     });
     assert.deepEqual(requests, []);
@@ -286,9 +288,9 @@ test("long nested status text truncates with a --full replay hint", async () => 
       provisioningStatusInfo: { status: "failure", errorInformation: "x".repeat(600) } }];
     const fixture = transport(() => json(200, { value: rows }));
     const { overrides } = overridesFor("delegated", fixture);
-    const result = await executeArgv(["entra", "provisioning", "list", "--profile", "soc", "--since", SINCE], overrides);
-    assert.match(result.provisioning[0].provisioningStatusInfo.errorInformation, /truncated/);
-    assert.ok(result.help[0].includes("--full"));
+    const result = record(await executeArgv(["entra", "provisioning", "list", "--profile", "soc", "--since", SINCE], overrides));
+    assert.match(text(record(records(result.provisioning)[0]!.provisioningStatusInfo).errorInformation), /truncated/);
+    assert.ok(strings(result.help)[0]!.includes("--full"));
   } finally {
     teardownProfiles(state);
   }
@@ -299,11 +301,11 @@ test("empty windows report absence as the answer", async () => {
   try {
     const fixture = transport(() => json(200, { value: [] }));
     const { overrides } = overridesFor("delegated", fixture);
-    const result = await executeArgv(["entra", "provisioning", "list", "--profile", "soc", "--since", SINCE], overrides);
+    const result = record(await executeArgv(["entra", "provisioning", "list", "--profile", "soc", "--since", SINCE], overrides));
     assert.deepEqual(result.provisioning, []);
     assert.deepEqual(result.count, "0 provisioning events");
     assert.equal(result.complete, true);
-    assert.ok(result.help.some(hint => hint.includes("absence of results is the answer")));
+    assert.ok(strings(result.help).some(hint => hint.includes("absence of results is the answer")));
   } finally {
     teardownProfiles(state);
   }
@@ -313,8 +315,8 @@ test("provisioning show projects --fields locally from the fetched selection", a
   const state = setupProfiles();
   try {
     const { overrides } = overridesFor("delegated");
-    const result = await executeArgv(["entra", "provisioning", "show", "--profile", "soc",
-      "--id", p1.id, "--select", "id,provisioningAction", "--fields", "provisioningAction"], overrides);
+    const result = record(await executeArgv(["entra", "provisioning", "show", "--profile", "soc",
+      "--id", p1.id, "--select", "id,provisioningAction", "--fields", "provisioningAction"], overrides));
     assert.deepEqual(result.provisioning, { provisioningAction: "create" });
   } finally {
     teardownProfiles(state);
@@ -328,8 +330,8 @@ test("provisioning executable rejects invalid stdin cursors", () => {
       state, "delegated", true, "invalid");
     assert.equal(result.status, 2, result.stdout);
     assert.equal(result.stderr, "");
-    const output = decode(result.stdout);
+    const output = record(decode(result.stdout));
     assert.equal(output.code, "VALIDATION_ERROR");
-    assert.match(output.error, /Invalid collection cursor/);
+    assert.match(text(output.error), /Invalid collection cursor/);
   } finally { teardownProfiles(state); }
 });

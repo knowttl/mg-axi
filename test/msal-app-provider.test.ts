@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
 import { test } from "node:test";
 
-const keyEncoding = { type: "pkcs8", format: "pem" };
+const keyEncoding = { type: "pkcs8", format: "pem" } as const;
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: keyEncoding, publicKeyEncoding: { type: "spki", format: "pem" } });
 const escapedKey = privateKey.replaceAll("\n", "\\n");
 const encryptedKey = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { ...keyEncoding, cipher: "aes-256-cbc", passphrase: "fixture-passphrase" }, publicKeyEncoding: { type: "spki", format: "pem" } }).privateKey;
@@ -66,7 +66,7 @@ try {
 const footer = `
 } finally { rmSync(dir, { recursive: true, force: true }); }
 `;
-function runChild(script) {
+function runChild(script: string) {
   const result = spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "--experimental-test-module-mocks", "--input-type=module", "-e", script], { encoding: "utf8", timeout: 20_000 });
   assert.equal(result.status, 0, result.stderr);
 }

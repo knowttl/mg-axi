@@ -2,11 +2,20 @@ import assert from "node:assert/strict";
 import type { Credential, CredentialProvider } from "../../dist/auth.js";
 import type { DispatchOverrides } from "../../dist/cli.js";
 import type { AnyProfile } from "../../dist/profiles.js";
+import type { GraphTransport, TransportRequest, TransportResponse } from "../../dist/graph-session.js";
 
 export type OutputRecord = Record<string, unknown>;
 export type CredentialStub = {
-  credential(profile: AnyProfile, scopes?: string[]): Promise<Pick<Credential, "token" | "tenantId" | "clientId"> & Partial<Credential>>;
+  credential(profile: AnyProfile, scopes?: string[]): Promise<Pick<Credential, "token"> & Partial<Credential>>;
 };
+export type CredentialArgs = Parameters<CredentialStub["credential"]>;
+export type TransportFixture = { requests: TransportRequest[]; send: GraphTransport };
+type FixtureResponse = Pick<TransportResponse, "status"> & Partial<Omit<TransportResponse, "status">>;
+export type ResponseHandler = (request: TransportRequest) => FixtureResponse | Promise<FixtureResponse>;
+export type ProfileConfig = { profiles: Record<string, {
+  enabledPacks: readonly string[];
+  writes: { allowWrites: boolean; operations: readonly string[] };
+}> };
 
 // These fixtures exercise command/session behavior with opaque credentials,
 // bypassing the auth service's cache and provider validation as before.

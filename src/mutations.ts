@@ -87,7 +87,7 @@ export type MutationExecuteOptions = {
 export type MutationResult =
   | { kind: "dry-run"; preview: MutationPreview }
   | { kind: "noop"; preview: MutationPreview; auditId?: string; duplicate?: boolean }
-  | { kind: "success"; preview: MutationPreview; auditId: string; status: number; response: unknown }
+  | { kind: "success"; preview: MutationPreview; auditId: string; status: number; response: unknown; responseUnreadable?: { code: "RESPONSE_INVALID"; httpStatus: number } }
   | { kind: "failed"; preview: MutationPreview; auditId: string; status: number }
   | { kind: "unknown"; preview: MutationPreview; auditId: string; httpStatus: number; guidance: string };
 
@@ -658,7 +658,7 @@ export function createMutationCoordinator(args: {
       const httpStatus = mutationHttpStatus(error);
       if (httpStatus > 0 && mutationAccepted(error)) {
         recordAudit({ ...meta, kind: "outcome", httpStatus, outcome: "SUCCESS" });
-        return { kind: "success", preview: seen, auditId: id, status: httpStatus, response: {} };
+        return { kind: "success", preview: seen, auditId: id, status: httpStatus, response: {}, responseUnreadable: { code: "RESPONSE_INVALID", httpStatus } };
       }
       // Idempotent already-applied outcome (WRITE-01 duplicate reference):
       // the desired state holds, so this is a no-op, not a failure. The

@@ -226,6 +226,16 @@ test("already-member preview is a no-op with zero sends and no journal", async (
   assert.throws(() => readFileSync(f.journalPath, "utf8"), /ENOENT/);
 });
 
+test("accepted HTML response surfaces a safe warning in group membership output", async () => {
+  const f = fixture({ post: { status: 200, headers: {}, body: "<html>synthetic-login opaque-fixture-secret</html>" } });
+  const result = await f.run({ execute: true, confirm: gid });
+  assert.equal(result.membership.status, "added");
+  assert.deepEqual(result.responseUnreadable, { code: "RESPONSE_INVALID", httpStatus: 200 });
+  assert.doesNotMatch(JSON.stringify(result), /synthetic-login|opaque-fixture-secret|<html>/);
+  assert.equal(journal(f.journalPath)[1].outcome, "SUCCESS");
+  assert.equal(f.postRequests.length, 1);
+});
+
 test("duplicate-reference 400 is a no-op with a NOOP outcome, not a failure", async () => {
   const f = fixture({ post: json(400, { error: { code: "Request_BadRequest", message: "One or more added object references already exist for the following modified properties: 'members'." } }) });
   const result = await f.run({ execute: true, confirm: gid });

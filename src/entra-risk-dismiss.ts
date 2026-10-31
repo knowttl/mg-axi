@@ -254,5 +254,6 @@ export async function dismissRiskyUser(args: {
       [`Read back '${id}' with ${showHint(id, profileName)} before doing anything else`, "Never replay this intent"],
     );
   }
-  return { dismissal: { user: verified }, auditId: result.auditId };
+  return { dismissal: { user: verified }, auditId: result.auditId,
+    ...(result.responseUnreadable ? { responseUnreadable: result.responseUnreadable } : {}) };
 }

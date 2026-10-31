@@ -429,5 +429,6 @@ export async function updateCaPolicy(args: {
   }
   // Success carries no proof: policy-update answers 204 with an empty body.
   // The coordinator outcome is the only record; verify with policy show.
-  return { policy: { id: current["id"] }, auditId: result.auditId, help: [showHint(policyId, profileName)] };
+  return { policy: { id: current["id"] }, auditId: result.auditId, help: [showHint(policyId, profileName)],
+    ...(result.responseUnreadable ? { responseUnreadable: result.responseUnreadable } : {}) };
 }

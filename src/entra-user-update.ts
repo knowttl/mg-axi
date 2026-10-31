@@ -219,5 +219,6 @@ export async function updateUserAccount(args: {
       [`Read back '${id}' with ${showHint(id, profileName)} before doing anything else`, "Never replay this intent"],
     );
   }
-  return { user: { id, accountEnabled: desired }, auditId: result.auditId };
+  return { user: { id, accountEnabled: desired }, auditId: result.auditId,
+    ...(result.responseUnreadable ? { responseUnreadable: result.responseUnreadable } : {}) };
 }

@@ -46,19 +46,15 @@ See [permissions](graph-coverage.md) and [hunting](security-hunting.md) for prer
   Default limit is 100; `--all` and `--limit` conflict.
   Check `complete`, `reason` and `cursor` before treating a partial list as exhaustive; `total: null` means unknown.
   Resume with `--cursor <returned-cursor>` under the original resource/profile/scopes, repeating query flags or omitting them; repeat local fields/full flags.
-  Log and risk reads above accept `--cursor -` from stdin (16 MB maximum); users, groups, apps and consent reads take the token argument only.
+  Log and risk lists above accept `--cursor -` from stdin (16 MB maximum); users, groups, apps and consent reads take the token argument only.
   Treat cursors as sensitive data.
 - Hunting returns results in one call, with no job polling or paging API.
   Limit is 1-10000 (default 100); timespan is one second to 30 days (default P1D); the client bounds are 30 seconds and 5 MB.
   Incomplete hunting exits 1; narrow filters/window when `complete: false`, since there is no cursor.
   Project columns in KQL; hunting has no `--fields` or `--select`.
 - Strings truncate at 500 characters; `--full` removes text truncation while retaining redaction and budgets.
-  Detection correlation carries userId and a window five minutes either side of activityDateTime into a sign-in query, within a combined 20 requests, 5 MB and 30 seconds.
-  It needs existing IdentityRiskEvent.Read.All and AuditLog.Read.All permissions, supported delegated roles and Entra ID P1/P2; it never adds consent.
-  Both matching correlationId and detection.requestId = signIn.id establish exact evidence; user/time matches alone remain candidates, even when only one is returned.
-  Multiple candidates are ambiguous; check complete and reason before interpreting matches or absence, and widen the bounded sign-in query when necessary.
-  A null detection correlationId means no associated sign-in and skips the sign-in query; missing user/time evidence reports unavailable.
-  Sign-in list/show now expose the reviewed correlationId property through --select/--fields.
+- Detection correlation has its own [evidence and partial-result contract](output-and-paging.md#risk-detection-correlation), with no cursor.
+  Check `complete` and `reason` before interpreting matches or absence.
 
 ## Help, safety and failures
 

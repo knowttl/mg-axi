@@ -198,7 +198,7 @@ test("raw resource without an id retains its array value and other properties", 
 });
 
 test("delegated raw mail refuses shared scopes and another mailbox", async () => {
-  const profile = { ...delegatedProfile, enabledPacks: ["entra", "mail"] };
+  const profile = { ...delegatedProfile, enabledPacks: ["entra", "mail"] } as const;
   const shared = read({ path: "/users/other@example.com/messages", profile, scopes: "https://graph.microsoft.com/Mail.Read.Shared" });
   await assert.rejects(shared.run({}), error => record(error).code === "VALIDATION_ERROR");
   const other = read({ path: "/users/other@example.com/messages", profile, scopes: "https://graph.microsoft.com/Mail.Read" });
@@ -287,7 +287,7 @@ test("raw query accepts an explicit skip token", async () => {
 });
 
 test("raw mail pages request only the remaining row allowance", async () => {
-  const profile = { ...delegatedProfile, enabledPacks: ["mail"] };
+  const profile = { ...delegatedProfile, enabledPacks: ["mail"] } as const;
   const f = read({ path: "/me/messages", profile, scopes: "https://graph.microsoft.com/Mail.Read", limit: 100 }, (_request, count) => count === 1
     ? json(200, { value: Array.from({ length: 60 }, (_, i) => ({ id: String(i) })), "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/messages?$skiptoken=second&$top=100" })
     : count === 2 ? json(200, { value: Array.from({ length: 40 }, (_, i) => ({ id: String(i + 60) })), "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/messages?$skiptoken=third&$top=100" })
@@ -316,7 +316,7 @@ test("raw reads allow literal braces and uncatalogued roots", async () => {
 });
 
 test("raw mail rejects oversized pages and protects attachment content", async () => {
-  const profile = { ...delegatedProfile, enabledPacks: ["entra", "mail"] };
+  const profile = { ...delegatedProfile, enabledPacks: ["entra", "mail"] } as const;
   const args = { profile, scopes: "https://graph.microsoft.com/Mail.Read" };
   const f = read({ ...args, path: "/me/messages", limit: 1 }, json(200, { value: [{ id: "a" }, { id: "b" }] }));
   await assert.rejects(f.run({}), error => record(error).code === "GRAPH_ERROR");

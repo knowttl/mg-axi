@@ -268,8 +268,14 @@ function redact(value: unknown): unknown {
   if (typeof value === "string") return SECRET_VALUE.some(pattern => pattern.test(value)) ? REDACTED : redactSecrets(value);
   if (Array.isArray(value)) return value.map(redact);
   if (value === null || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  const pairKey = Object.keys(record).find(key => key.toLowerCase() === "key");
+  const pairValue = Object.keys(record).find(key => key.toLowerCase() === "value");
+  const secretPair = pairKey !== undefined && pairValue !== undefined && typeof record[pairKey] === "string" && secretKey(record[pairKey]);
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, child]) => {
+    Object.entries(record).map(([key, child]) => {
+      if (secretPair && key === pairKey) return [key, redact(child)];
+      if (secretPair && key === pairValue) return [key, REDACTED];
       const sensitive = secretKey(key) || key === "phoneNumber" || key === "storageLocation";
       return [key, sensitive && (typeof child === "string" || key === "clientSecret" || key === "certificateData") ? REDACTED : redact(child)];
     }),
@@ -603,7 +609,7 @@ export function authorizeUrl(operation: SessionOperation, params: Record<string,
     }
   }
   if (operation.disposition === "raw") {
-    checkQueryContext(Object.fromEntries(url.searchParams), consistencyLevel, isMailOperation(operation));
+    checkQueryContext(Object.fromEntries(url.searchParams), consistencyLevel, isMailOperation(operation), true);
     url.hash = "";
     return url.toString();
   }
@@ -641,7 +647,7 @@ function faultBody(body: string): string {
   }
 }
 
-function checkQueryContext(query: Record<string, string>, consistencyLevel: "eventual" | undefined, mail = false): void {
+function checkQueryContext(query: Record<string, string>, consistencyLevel: "eventual" | undefined, mail = false, raw = false): void {
   if (consistencyLevel !== undefined && consistencyLevel !== "eventual") {
     throw new AxiError(`Unsupported consistency ${consistencyLevel}`, "VALIDATION_ERROR", [
       "Advanced queries use ConsistencyLevel eventual or no header",
@@ -649,10 +655,13 @@ function checkQueryContext(query: Record<string, string>, consistencyLevel: "eve
   }
   const needsEventual = (!mail && Object.hasOwn(query, "$search")) || String(query["$count"] ?? "").toLowerCase() === "true";
   if (Object.hasOwn(query, "$expand")) {
-    if (needsEventual) {
+    if (needsEventual && !raw) {
       throw new AxiError("Advanced queries cannot use $expand", "VALIDATION_ERROR", ["Use $expand separately from $search and $count=true"]);
     }
-    for (const relationship of query["$expand"]!.split(",")) {
+    if (raw) {
+      const identifiers = query["$expand"]!.replace(/'(?:''|[^'])*'/g, "").replace(/%([0-9a-f]{2})/gi, (_match, hex: string) => String.fromCharCode(parseInt(hex, 16))).match(/[a-zA-Z][a-zA-Z0-9.]*/g) ?? [];
+      if (identifiers.some(identifier => sensitiveArea(identifier))) throw new AxiError("Sensitive relationships cannot be expanded", "POLICY_DENIED");
+    } else for (const relationship of query["$expand"]!.split(",")) {
       const path = relationship.trim();
       if (!/^[a-zA-Z][a-zA-Z0-9]*(\/[a-zA-Z][a-zA-Z0-9]*)*$/.test(path)) {
         throw new AxiError("Unsupported $expand relationship", "VALIDATION_ERROR", ["Expand explicit relationship paths without nested query options"]);
@@ -792,7 +801,7 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   const query = record.query as Record<string, string>;
   const consistencyLevel = record.consistencyLevel ?? undefined;
   buildQuery(query, operation.disposition === "raw");
-  checkQueryContext(query, consistencyLevel, isMailOperation(operation));
+  checkQueryContext(query, consistencyLevel, isMailOperation(operation), operation.disposition === "raw");
   if (record.searchRows !== undefined && (typeof record.searchRows !== "number" || !Number.isSafeInteger(record.searchRows) || record.searchRows < 0 || record.searchRows >= 1000)) throw new AxiError("Invalid search cursor count", "VALIDATION_ERROR");
   return { next: record.next ?? undefined, buffered: record.buffered.map(redact), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity, total, searchRows: record.searchRows as number | undefined, singleResource: record.singleResource as boolean | undefined, metadata: redact(record.metadata) as Record<string, unknown> | undefined };
 }
@@ -905,7 +914,7 @@ export class GraphSession {
     }
     if (args.hunting) throw new AxiError("Hunting input is only allowed for the reviewed hunting action", "VALIDATION_ERROR");
     const query = args.query ?? {};
-    checkQueryContext(query, args.consistencyLevel, isMailOperation(operation));
+    checkQueryContext(query, args.consistencyLevel, isMailOperation(operation), operation.disposition === "raw");
     const params = args.params ?? {};
     const url = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params, args.raw)}${buildQuery(query, args.raw)}`;
     const clock = args.clock ?? systemClock;
@@ -959,7 +968,7 @@ export class GraphSession {
       checkLimit(Number(query.$top));
     }
     const consistencyLevel = args.consistencyLevel ?? resumed?.consistencyLevel;
-    checkQueryContext(query, consistencyLevel, isMailOperation(operation));
+    checkQueryContext(query, consistencyLevel, isMailOperation(operation), operation.disposition === "raw");
     if (resumed && ((args.query !== undefined && buildQuery(query, args.raw) !== buildQuery(resumed.query, args.raw)) || (args.consistencyLevel !== undefined && args.consistencyLevel !== resumed.consistencyLevel))) {
       throw new AxiError("Resume arguments conflict with collection cursor context", "VALIDATION_ERROR", ["Resume with the cursor's original query and consistency level, or omit those arguments"]);
     }

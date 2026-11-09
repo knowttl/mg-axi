@@ -112,6 +112,45 @@ test("raw credentials retain metadata while masking secrets in reads and writes"
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("secret key-value pairs stay redacted in reads, cursors and writes", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-pair-secret-"));
+  try {
+    const pair = { key: "SecretToken", value: "private-value" };
+    const f = read({ path: "/servicePrincipals/a/synchronization/secrets", limit: 1 }, json(200, { value: [{ id: "first" }, { id: "second", nested: [pair] }] }));
+    const first = await f.run({});
+    assert.doesNotMatch(JSON.stringify(first), /private-value/);
+    const resumed = await f.run({ cursor: String(first.cursor) });
+    assert.deepEqual(records(resumed.value)[0]!.nested, [{ key: "SecretToken", value: "***redacted***" }]);
+    const session = new GraphSession(f.deps);
+    const args = { profile: { ...appProfile, rawWrites: true, writes: { allowWrites: true, operations: [] } }, method: "PUT" as const, version: "v1.0", path: "/servicePrincipals/a/synchronization/secrets", payload: { value: [pair] }, transport: async () => ({ status: 200, headers: {}, body: JSON.stringify({ value: [pair] }) }), journalPath: join(dir, "writes.log") };
+    const preview = await session.rawWrite(args);
+    assert.deepEqual(JSON.parse(preview.preview.proposedChange!), { value: [{ key: "SecretToken", value: "***redacted***" }] });
+    const result = await session.rawWrite({ ...args, execute: true, confirm: args.path });
+    assert.equal(result.kind, "success");
+    if (result.kind === "success") assert.deepEqual(result.response, { value: [{ key: "SecretToken", value: "***redacted***" }] });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("raw nested expansions survive direct reads and continuation resumes", async () => {
+  const expand = "members($select=id;$expand=owners($select=id))";
+  const f = read({ path: "/groups", query: `$expand=${encodeURIComponent(expand)}`, limit: 1 }, (_request, count) => count === 1
+    ? json(200, { value: [{ id: "a" }], "@odata.nextLink": `https://graph.microsoft.com/v1.0/groups?$skiptoken=next&$expand=${encodeURIComponent(expand)}` })
+    : json(200, { value: [{ id: "b" }] }));
+  const partial = await f.run({});
+  assert.equal(new URL(f.requests[0]!.url).searchParams.get("$expand"), expand);
+  assert.deepEqual((await f.run({ cursor: String(partial.cursor) })).value, [{ id: "b" }]);
+  assert.equal(new URL(f.requests[1]!.url).searchParams.get("$expand"), expand);
+  const direct = fixture(json(200, { id: "group" }));
+  const session = new GraphSession(direct.deps);
+  assert.deepEqual(await session.execute({ profile: delegatedProfile, operation: rawReadOperation("v1.0", "/groups/a"), raw: true, scopes: [scopes], query: { $expand: expand } }), { id: "group" });
+});
+
+for (const expand of ["members($expand=messages)", "members($expand=%6dessages)", "members($expand=drive)"]) test(`raw nested expansion ${expand} respects sensitive policy`, async () => {
+  const f = read({ path: "/groups", query: `$expand=${encodeURIComponent(expand)}` });
+  await assert.rejects(f.run({}), error => record(error).code === "POLICY_DENIED");
+  assert.equal(f.requests.length, 0);
+});
+
 test("recovery keys remain redacted in singleton and buffered collection output", async () => {
   const singleton = read({ path: "/informationProtection/bitlocker/recoveryKeys/a" }, json(200, { id: "a", key: "recovery-secret" }));
   assert.deepEqual(await singleton.run({}), { id: "a", key: "***redacted***" });

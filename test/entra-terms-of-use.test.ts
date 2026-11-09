@@ -585,7 +585,7 @@ test("truncated agreement text carries a --full hint without lifting caps", asyn
   }
 });
 
-test("raw agreement reads serve delegated callers and refuse application profiles", async () => {
+test("raw agreement reads serve delegated callers", async () => {
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const { ApplicationAuth } = await import("../dist/app-auth.js");
@@ -601,20 +601,11 @@ test("raw agreement reads serve delegated callers and refuse application profile
   const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } } as const;
   const listed = await runApiGet({ path: "/agreements", apiVersion: "v1.0", profile: delegatedProfile, scopes: agreementScopes[0]! }, deps);
   assert.equal(listed.returned, 1);
-  for (const path of ["/agreements", `/agreements/${agreement1.id}`, `/agreements/${agreement1.id}/acceptances`, `/agreements/${agreement1.id}/acceptances/${acceptance1.id}`, "/agreementAcceptances", `/agreementAcceptances/${acceptance1.id}`]) {
-    await assert.rejects(
-      runApiGet({ path, apiVersion: "v1.0", profile: appProfile }, deps),
-      error => {
-        assert.equal(record(error).code, "VALIDATION_ERROR");
-        return /needs a delegated profile/.test(text(record(error).message));
-      },
-    );
-  }
   assert.equal(credentialCalls.length, 1);
   assert.equal(requests.length, 1);
 });
 
-test("raw acceptance reads project only reviewed fields with minimal defaults", async () => {
+test("raw acceptance reads return the whole row", async () => {
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const { ApplicationAuth } = await import("../dist/app-auth.js");
@@ -626,5 +617,5 @@ test("raw acceptance reads project only reviewed fields with minimal defaults", 
   };
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
   const shown = await runApiGet({ path: `/agreementAcceptances/${acceptance1.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: acceptanceScopes[0]! }, deps);
-  assert.deepEqual(shown, minimalAcceptance1);
+  assert.deepEqual(shown, { ...acceptance1, fileData: "QUJD", unknownField: true });
 });

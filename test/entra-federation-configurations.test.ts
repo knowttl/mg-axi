@@ -510,36 +510,3 @@ test("raw api serves reviewed federation list and show with the certificate blob
   assert.ok(typeof show.signingCertificate === "string");
 });
 
-test("raw api refuses the federation $count scalar before credentials", async () => {
-  const f = rawFixture(rawBody);
-  await assert.rejects(
-    runApiGet({ path: "/directory/federationConfigurations/$count", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0]! }, f.deps),
-    { code: "VALIDATION_ERROR" },
-  );
-  assert.equal(f.credentialCalls.length, 0);
-  assert.equal(f.requests.length, 0);
-});
-
-test("raw api refuses unreviewed federation $select fields before credentials", async () => {
-  const f = rawFixture(rawBody);
-  await assert.rejects(
-    runApiGet({ path: "/directory/federationConfigurations", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0]!, odata: "$select=id,domains" }, f.deps),
-    error => record(error).code === "VALIDATION_ERROR" && /Unreviewed \$select field domains/.test(text(record(error).message)),
-  );
-  assert.equal(f.credentialCalls.length, 0);
-  assert.equal(f.requests.length, 0);
-});
-
-for (const field of unsupportedFederationFields) {
-  for (const path of ["/directory/federationConfigurations", `/directory/federationConfigurations/${contoso.id}`]) {
-    test(`raw federation ${path} refuses ${field} before credentials`, async () => {
-      const f = rawFixture(rawBody);
-      await assert.rejects(
-        runApiGet({ path, apiVersion: "v1.0", profile: delegatedRawProfile, scopes: federationScopes[0]!, odata: `$select=id,${field}` }, f.deps),
-        error => record(error).code === "VALIDATION_ERROR" && text(record(error).message).includes(`Unreviewed $select field ${field}`),
-      );
-      assert.equal(f.credentialCalls.length, 0);
-      assert.equal(f.requests.length, 0);
-    });
-  }
-}

@@ -567,13 +567,10 @@ test("every catalogue leaf stays a read except the reviewed named writes", () =>
   }
 });
 
-test("reviewed raw surface never serves a mutation route", async () => {
+test("raw api sends only GET for a mutation-shaped path", async () => {
   const f = fixture({ handler: { status: 200, headers: {}, body: "{}" } });
   const delegated = new DelegatedAuth(delegatedProvider({ storage: "session-only", login: async () => { throw new Error("no login"); }, silent: async () => ({ token: "t", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "a" }) }));
   const application = new ApplicationAuth({ storage: "session-only", acquire: async () => ({ token: "t", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client }) });
-  await assert.rejects(
-    runApiGet({ path: "/groups/fixture-id/members/$ref", apiVersion: "v1.0", profile: delegatedProfile, scopes: "https://graph.microsoft.com/Group.Read.All" }, { delegated, application, transport: f.transport as unknown as GraphTransport }),
-    { code: "VALIDATION_ERROR" },
-  );
-  assert.equal(f.requests.length, 0);
+  await runApiGet({ path: "/users/fixture-id/revokeSignInSessions", apiVersion: "v1.0", profile: delegatedProfile, scopes: "https://graph.microsoft.com/User.RevokeSessions.All" }, { delegated, application, transport: f.transport as unknown as GraphTransport });
+  assert.deepEqual(f.requests.map(request => request.method), ["GET"]);
 });

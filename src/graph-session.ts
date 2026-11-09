@@ -148,6 +148,7 @@ export const systemClock: Clock = {
 export interface ExecuteArgs {
   profile: AnyProfile;
   operation: SessionOperation;
+  raw?: true;
   params?: Record<string, string>;
   query?: Record<string, string>;
   hunting?: { query: string; timespan: string; limit: number };
@@ -176,6 +177,7 @@ export interface CollectionBudget {
 export interface CollectArgs extends ExecuteArgs {
   // Investigation reads retain earlier pages when a later request fails.
   partialOnError?: boolean;
+  singleResource?: boolean;
   // Row cap: the remainder of an already fetched page is buffered into the
   // cursor, never discarded.
   limit?: number;
@@ -197,6 +199,27 @@ export interface CollectionResult {
   // fetched with an extra request; list commands render it through the
   // shared list-totals helper with an honest fallback when unknown.
   total: number | null;
+  singleResource: boolean;
+}
+
+export function rawReadOperation(version: string, path: string): SessionOperation {
+  return { id: `${version}:GET:${path}`, method: "GET", path, version, disposition: "raw", owningSlice: null };
+}
+
+function sessionOperation(args: { operation: SessionOperation; raw?: true }): SessionOperation {
+  if (args.raw === true) {
+    if (args.operation.disposition !== "raw" || args.operation.method !== "GET" || !["v1.0", "beta"].includes(args.operation.version)) {
+      throw new AxiError("Raw reads need a v1.0 or beta GET operation", "VALIDATION_ERROR");
+    }
+    return args.operation;
+  }
+  const operation = findOperation(args.operation.id);
+  if (!operation) {
+    throw new AxiError(`Unknown catalogued Graph operation ${args.operation.id}`, "VALIDATION_ERROR", [
+      "Use a shipped named command; discovery alone never grants access",
+    ]);
+  }
+  return operation;
 }
 
 export function resolveSessionOperation(version: string, method: string, route: string): SessionOperation {
@@ -756,6 +779,10 @@ function countOf(body: unknown): number | null {
   return typeof count === "number" && Number.isSafeInteger(count) && count >= 0 ? count : null;
 }
 
+function isCollectionEnvelope(body: unknown): boolean {
+  return !!body && typeof body === "object" && !Array.isArray(body) && Array.isArray((body as { value?: unknown }).value);
+}
+
 function valuesOf(operation: SessionOperation, response: TransportResponse, body: unknown): unknown[] {
   if (!body || typeof body !== "object" || Array.isArray(body) || !Object.hasOwn(body, "value")) {
     throw new ResponseShapeError(`Graph returned a malformed collection body for ${operation.id}`, operation, response, body, [{ path: ["value"], expected: "array" }]);
@@ -791,14 +818,7 @@ export class GraphSession {
 
   async execute(args: ExecuteArgs): Promise<unknown> {
     checkOperation(args.operation);
-    // The inventory is authoritative: only the id is trusted from the caller,
-    // so a fabricated disposition can never widen access.
-    const operation = findOperation(args.operation.id);
-    if (!operation) {
-      throw new AxiError(`Unknown catalogued Graph operation ${args.operation.id}`, "VALIDATION_ERROR", [
-        "Use a shipped named command or reviewed api get route; discovery alone never grants access",
-      ]);
-    }
+    const operation = sessionOperation(args);
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
     if (isMailOperation(operation)) checkMailScopes(profile, args.scopes, operation);
@@ -845,7 +865,7 @@ export class GraphSession {
     try {
       token = await beforeDeadline(async () => {
         const credential = profile.mode === "delegated"
-          ? await this.deps.delegated.credential(profile, this.readScopes(args.scopes))
+          ? await this.deps.delegated.credential(profile, this.scopesFor(args))
           : await this.deps.application.credential(profile, this.applicationScopes(args.scopes));
         if (isMailOperation(operation)) checkMailCredential(profile, credential, params["user-id"]);
         return credential.token;
@@ -870,12 +890,7 @@ export class GraphSession {
     if (args.operation.method !== "GET" || args.operation.id === HUNTING_OPERATION) {
       throw new AxiError("Graph collections require GET; hunting uses a bounded single response without a cursor", "VALIDATION_ERROR", ["mg-axi security hunting query --help"]);
     }
-    const operation = findOperation(args.operation.id);
-    if (!operation) {
-      throw new AxiError(`Unknown catalogued Graph operation ${args.operation.id}`, "VALIDATION_ERROR", [
-        "Use a shipped named command or reviewed api get route; discovery alone never grants access",
-      ]);
-    }
+    const operation = sessionOperation(args);
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
     if (isMailOperation(operation)) checkMailScopes(profile, args.scopes, operation);
@@ -926,6 +941,7 @@ export class GraphSession {
     // First known server total wins across pages and resumes; later pages
     // repeat the same query total, so disagreement keeps the first.
     let total: number | null = resumed?.total ?? null;
+    let singleResource = false;
     const partial = (reason: string, next: string | undefined, buffered: unknown[]): CollectionResult => ({
       value: results,
       query,
@@ -935,11 +951,12 @@ export class GraphSession {
       requests,
       bytes,
       total,
+      singleResource,
     });
     let token: string;
     try {
       const credential = await beforeDeadline(async () => profile.mode === "delegated"
-        ? this.deps.delegated.credential(profile, this.readScopes(args.scopes))
+        ? this.deps.delegated.credential(profile, this.scopesFor(args))
         : this.deps.application.credential(profile, this.applicationScopes(args.scopes)), clock, deadline, signal);
       if (isMailOperation(operation)) checkMailCredential(profile, credential, params["user-id"]);
       const acquiredIdentity = createHash("sha256").update(JSON.stringify([
@@ -965,13 +982,13 @@ export class GraphSession {
       signal?.throwIfAborted();
       if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
       while (pending.length > 0 && (args.limit === undefined || results.length < args.limit)) results.push(pending.shift()!);
-      if (mailSearch && searchRows + results.length >= 1000) return { value: results, query, complete: false, reason: "search-cap", requests, bytes, total };
+      if (mailSearch && searchRows + results.length >= 1000) return { value: results, query, complete: false, reason: "search-cap", requests, bytes, total, singleResource };
       if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
       if (args.limit !== undefined && results.length >= args.limit) {
-        if (pending.length === 0 && !current) return { value: results, query, complete: true, requests, bytes, total };
+        if (pending.length === 0 && !current) return { value: results, query, complete: true, requests, bytes, total, singleResource };
         return partial(isMailOperation(operation) ? "row limit reached" : "row limit reached; buffered remainder is preserved in the cursor", current, pending);
       }
-      if (!current) return { value: results, query, complete: true, requests, bytes, total };
+      if (!current) return { value: results, query, complete: true, requests, bytes, total, singleResource };
       if (requests >= budget.maxRequests) return partial(`request budget exhausted after ${requests} requests`, current, pending);
       const cycleKey = digestUrl(current);
       if (seen.has(cycleKey)) return partial("continuation cycle detected; result is partial, never complete", current, pending);
@@ -1036,7 +1053,8 @@ export class GraphSession {
             break;
           }
           const parsed = decodeReadBody(operation, response);
-          const rows = valuesOf(operation, response, parsed);
+          singleResource = args.singleResource === true && !isCollectionEnvelope(parsed);
+          const rows = singleResource ? [parsed] : valuesOf(operation, response, parsed);
           if (isMailOperation(operation) && (rows.length > Math.min(Number(query.$top), mailSearch ? 1000 - searchRows - results.length : Infinity) || bytes > budget.maxBytes)) {
             throw new AxiError("Mail page exceeds the requested row or byte budget", "GRAPH_ERROR", ["Reduce --limit; oversized mail pages are never buffered into cursors"]);
           }
@@ -1091,11 +1109,19 @@ export class GraphSession {
         "Mail and file content stay disabled unless explicitly enabled for the profile",
       ]);
     }
-    if (!EXECUTABLE_DISPOSITIONS.has(operation.disposition)) {
+    if (operation.disposition !== "raw" && !EXECUTABLE_DISPOSITIONS.has(operation.disposition)) {
       throw new AxiError(`Graph operation ${operation.id} is ${operation.disposition}; it cannot be executed`, "POLICY_DENIED", [
         "Blocked, deprecated and unavailable operations stay denied even when reached by redirect",
       ]);
     }
+  }
+
+  private scopesFor(args: ExecuteArgs): string[] {
+    if (args.raw !== true) return this.readScopes(args.scopes);
+    if (!args.scopes?.length || args.scopes.some(scope => !scope.startsWith(`https://${GRAPH_HOST}/`))) {
+      throw new AxiError("Raw reads need explicit delegated scopes as full https://graph.microsoft.com/ names", "VALIDATION_ERROR", ["mg-axi api get --help"]);
+    }
+    return args.scopes;
   }
 
   private readScopes(scopes: string[] | undefined): string[] {

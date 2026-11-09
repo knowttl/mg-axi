@@ -414,7 +414,7 @@ test("truncated contact text carries a --full hint without lifting caps", async 
   }
 });
 
-test("raw contact reads project reviewed fields and refuse unreviewed ones", async () => {
+test("raw contact reads return the whole row for each caller", async () => {
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const { ApplicationAuth } = await import("../dist/app-auth.js");
@@ -432,23 +432,12 @@ test("raw contact reads project reviewed fields and refuse unreviewed ones", asy
     const listed = await runApiGet({ path: "/contacts", apiVersion: "v1.0", profile,
       ...(profile.mode === "delegated" ? { scopes: contactScopes[0]! } : {}) }, deps);
     assert.equal(listed.returned, 2);
-    assert.deepEqual(listed.value, [
-      { id: c1.id, displayName: c1.displayName, mail: c1.mail, companyName: c1.companyName },
-      { id: c2.id, displayName: c2.displayName, mail: c2.mail, companyName: c2.companyName },
-    ]);
-    await assert.rejects(
-      runApiGet({ path: "/contacts", apiVersion: "v1.0", profile, odata: "$select=id,phones",
-        ...(profile.mode === "delegated" ? { scopes: contactScopes[0]! } : {}) }, deps),
-      error => {
-        assert.equal(record(error).code, "VALIDATION_ERROR");
-        return /Unreviewed \$select field phones/.test(outputText(record(error).message));
-      },
-    );
+    assert.deepEqual(listed.value, [c1, c2]);
   }
   assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-secret"));
 });
 
-test("raw contact show projects the minimal set without navigation", async () => {
+test("raw contact show returns the whole row", async () => {
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
@@ -459,7 +448,7 @@ test("raw contact show projects the minimal set without navigation", async () =>
   };
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
   const shown = await runApiGet({ path: `/contacts/${c1.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0]! }, deps);
-  assert.deepEqual(shown, { id: c1.id, displayName: c1.displayName, mail: c1.mail, companyName: c1.companyName });
+  assert.deepEqual(shown, c1);
 });
 
 // Navigation fixtures follow the documented v1.0 shapes: directory-object
@@ -828,7 +817,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] a
   }
 }
 
-test("raw navigation reads project reviewed fields and refuse unreviewed ones", async () => {
+test("raw navigation reads return the whole directory-object row", async () => {
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
@@ -840,20 +829,9 @@ test("raw navigation reads project reviewed fields and refuse unreviewed ones", 
   };
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
   const listed = await runApiGet({ path: `/contacts/${c1.id}/directReports`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0]! }, deps);
-  assert.deepEqual(listed.value, [{ "@odata.type": "#microsoft.graph.user", id: r1.id, displayName: r1.displayName }]);
+  assert.deepEqual(listed.value, [row]);
   const cast = await runApiGet({ path: `/contacts/${c1.id}/directReports/graph.user`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0]! }, deps);
-  assert.deepEqual(cast.value, [{ "@odata.type": "#microsoft.graph.user", id: r1.id, displayName: r1.displayName }]);
-  await assert.rejects(
-    runApiGet({ path: `/contacts/${c1.id}/directReports`, apiVersion: "v1.0", profile: delegatedProfile, odata: "$select=id,jobTitle", scopes: contactScopes[0]! }, deps),
-    error => {
-      assert.equal(record(error).code, "VALIDATION_ERROR");
-      return /Unreviewed \$select field jobTitle/.test(outputText(record(error).message));
-    },
-  );
-  await assert.rejects(
-    runApiGet({ path: `/contacts/${c1.id}/directReports/$count`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0]! }, deps),
-    error => record(error).code === "VALIDATION_ERROR",
-  );
+  assert.deepEqual(cast.value, [row]);
 });
 
 for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] as const) {
@@ -1096,7 +1074,7 @@ for (const [mode, profile] of [["delegated", "soc"], ["application", "batch"]] a
   });
 }
 
-test("raw memberOf reads project reviewed fields and refuse unreviewed ones", async () => {
+test("raw memberOf reads return the whole directory-object row", async () => {
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
@@ -1108,20 +1086,9 @@ test("raw memberOf reads project reviewed fields and refuse unreviewed ones", as
   };
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
   const listed = await runApiGet({ path: `/contacts/${c1.id}/memberOf`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0]! }, deps);
-  assert.deepEqual(listed.value, [{ "@odata.type": "#microsoft.graph.group", id: g1.id, displayName: g1.displayName }]);
+  assert.deepEqual(listed.value, [row]);
   const cast = await runApiGet({ path: `/contacts/${c1.id}/memberOf/graph.group`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0]! }, deps);
-  assert.deepEqual(cast.value, [{ "@odata.type": "#microsoft.graph.group", id: g1.id, displayName: g1.displayName }]);
+  assert.deepEqual(cast.value, [row]);
   const transitive = await runApiGet({ path: `/contacts/${c1.id}/transitiveMemberOf`, apiVersion: "v1.0", profile: delegatedProfile, scopes: transitiveScopes.join(",") }, deps);
-  assert.deepEqual(transitive.value, [{ "@odata.type": "#microsoft.graph.group", id: g1.id, displayName: g1.displayName }]);
-  await assert.rejects(
-    runApiGet({ path: `/contacts/${c1.id}/memberOf`, apiVersion: "v1.0", profile: delegatedProfile, odata: "$select=id,jobTitle", scopes: contactScopes[0]! }, deps),
-    error => {
-      assert.equal(record(error).code, "VALIDATION_ERROR");
-      return /Unreviewed \$select field jobTitle/.test(outputText(record(error).message));
-    },
-  );
-  await assert.rejects(
-    runApiGet({ path: `/contacts/${c1.id}/memberOf/$count`, apiVersion: "v1.0", profile: delegatedProfile, scopes: contactScopes[0]! }, deps),
-    error => record(error).code === "VALIDATION_ERROR",
-  );
+  assert.deepEqual(transitive.value, [row]);
 });

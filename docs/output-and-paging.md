@@ -24,15 +24,17 @@ mg-axi auth login --profile soc --scopes https://graph.microsoft.com/Policy.Read
 mg-axi entra conditional-access policy list --profile soc
 mg-axi entra conditional-access policy show --profile soc --id <policy-id>
 
-# Reviewed raw reads
+# Raw reads
 mg-axi auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All,https://graph.microsoft.com/GroupMember.Read.All
 mg-axi api get /users --profile soc --scopes https://graph.microsoft.com/User.Read.All
 mg-axi api get /groups --profile soc --odata '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All
 ```
 
-Raw access is not an unrestricted Graph client.
-Unreviewed routes, secret-returning routes, mail/file content, beta raw reads and raw writes are refused before credentials.
-Returned data is restricted to reviewed fields; completeness describes the requested collection, not full Graph property coverage.
+Raw reads accept any server-relative Graph path on the v1.0 or beta endpoint; the inventory no longer limits raw access.
+Only GET is sent. Raw writes are not yet enabled and will need the raw-write flag, `writes.allowWrites` and `--execute --confirm`.
+Beta raw reads need a preview profile, and the explicit delegated scopes must be full `https://graph.microsoft.com/` names.
+Mail and file content still require the profile's sensitive-area opt-in.
+Responses come back whole, not projected to a field list; completeness describes the requested collection.
 Secret material, authentication-method phone numbers and data-policy storage locations are redacted, including in full output, previews and audit metadata.
 
 ## Response diagnostics

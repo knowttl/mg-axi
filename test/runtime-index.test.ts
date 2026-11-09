@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { LEAVES, operationFor } from "../dist/catalogue.js";
-import { REVIEWED_ROUTES } from "../dist/api.js";
 import { resolveSessionOperation } from "../dist/graph-session.js";
 import { TRANSITIVE_OPERATION } from "../dist/entra-groups.js";
 import { MAIL_FOLDER_ALTERNATES } from "../dist/mail-folders.js";
@@ -44,7 +43,7 @@ test("generator works without compiled files and detects stale discovery policy"
 });
 
 test("runtime rows exactly cover named and raw routes including flag-selected variants", () => {
-  const reachable = new Set(REVIEWED_ROUTES.map(row => row.id));
+  const reachable = new Set([...discovery.values()].filter(row => row.disposition === "reviewed-raw-read").map(row => row.id));
   for (const leaf of LEAVES.filter((leaf): leaf is typeof leaf & { operation: string } => !!leaf.operation)) {
     reachable.add(`v1.0:${leaf.operation}`);
     const alternate = TRANSITIVE_OPERATION[leaf.operation];

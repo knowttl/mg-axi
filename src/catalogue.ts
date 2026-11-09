@@ -2816,9 +2816,9 @@ export const LEAVES: Leaf[] = [
     run: lifecycleRunReportsRead.run,
     scopes: lifecycleRunReportsRead.scopes,
   }, examples: ["mg-axi entra lifecycle run task-processing-result count --workflow <workflow-id> --run <run-id> --profile soc"] },
-  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations, branding, access reviews, entitlement catalogs and access packages, lifecycle workflows, workflow templates, task definitions, lifecycle settings, workflow runs, user/subject processing results, task reports and run user/subject/task processing results, and partner contracts; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+  { path: "api get", description: "Raw read-only Graph GET (API-01) for any server-relative path on the v1.0 or beta endpoint; responses come back whole with secret values redacted; beta needs a preview profile, mail and file content need their profile opt-in, and only GET is sent", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
-    odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
+    odata: { value: "k=v&k2=v2", description: "OData query passed to Graph ($select, $filter, $top, $orderby, $count, $expand, $search with ConsistencyLevel); $skiptoken is refused, use --all or --cursor" },
     cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --odata to reuse its query" },
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit full https://graph.microsoft.com/ scope names; application profiles use the .default audience" },
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; use --all to follow pages within budget" },

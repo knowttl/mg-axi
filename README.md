@@ -79,7 +79,7 @@ Preserve other hooks and shared settings; see [hook details](docs/agent-setup.md
 | Defender XDR | Restricted file-based KQL hunting | Read; opt-in security pack | [Hunting](docs/security-hunting.md) |
 | Mail | Messages, folders, attachments, settings, rules and categories | Read; gated writes/downloads; opt-in | [Mail](docs/mail.md) |
 | Tenant and partner configuration | Domains, policies, federation and partner relationships | Read | [Commands](docs/commands.md) |
-| Reviewed raw reads | Allowlisted v1.0 `api get <path>` routes | Read | [Output and paging](docs/output-and-paging.md) |
+| Raw reads | `api get <path>` on any Graph path, v1.0 and beta | Read | [Output and paging](docs/output-and-paging.md) |
 
 Use `mg-axi <group> --help` or leaf `--help` for exact flags without signing in.
 The full generated leaf table lives in [docs/commands.md](docs/commands.md) and [SKILL.md](skills/mg-axi/SKILL.md#orientation).

@@ -380,36 +380,6 @@ test("truncated directory-object detail carries a --full hint", async () => {
   }
 });
 
-test("raw directory-object lists refuse unsupported root queries before credentials", async () => {
-  const { runApiGet } = await import("../dist/api.js");
-  const { DelegatedAuth } = await import("../dist/auth.js");
-  const { ApplicationAuth } = await import("../dist/app-auth.js");
-  const credentialCalls = [];
-  const requests: TransportRequest[] = [];
-  const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
-  const deps = {
-    delegated: new DelegatedAuth(delegatedProvider({ storage: "session-only", login: async () => credential, silent: async (...args) => { credentialCalls.push(args); return credential; } })),
-    application: new ApplicationAuth({ storage: "session-only", acquire: async (...args) => { credentialCalls.push(args); return credential; } }),
-    transport: async (request: TransportRequest) => { requests.push(request); return { status: 200, headers: {}, body: JSON.stringify({ value: [obj1, obj2] }) }; },
-  };
-  const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
-  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } } as const;
-  for (const profile of [delegatedProfile, appProfile]) {
-    await assert.rejects(runApiGet({ path: "/directoryObjects", apiVersion: "v1.0", profile,
-      ...(profile.mode === "delegated" ? { scopes: directoryObjectScopes[0]! } : {}) }, deps), /not in the reviewed raw inventory/);
-    await assert.rejects(
-      runApiGet({ path: "/directoryObjects", apiVersion: "v1.0", profile, odata: "$select=id,displayName",
-        ...(profile.mode === "delegated" ? { scopes: directoryObjectScopes[0]! } : {}) }, deps),
-      error => {
-        assert.equal(record(error).code, "VALIDATION_ERROR");
-        return /not in the reviewed raw inventory/.test(text(record(error).message));
-      },
-    );
-  }
-  assert.equal(requests.length, 0);
-  assert.equal(credentialCalls.length, 0);
-});
-
 test("raw directory-object show keeps the discriminator without subtype secrets", async () => {
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
@@ -421,5 +391,6 @@ test("raw directory-object show keeps the discriminator without subtype secrets"
   };
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
   const shown = await runApiGet({ path: `/directoryObjects/${obj2.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: directoryObjectScopes[0]! }, deps);
-  assert.deepEqual(shown, { id: obj2.id, "@odata.type": "#microsoft.graph.servicePrincipal" });
+  assert.equal(shown.id, obj2.id);
+  assert.equal(shown["@odata.type"], "#microsoft.graph.servicePrincipal");
 });

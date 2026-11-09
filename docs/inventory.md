@@ -60,7 +60,7 @@ The existing [coverage research](graph-coverage.md) provides useful representati
 An unreviewed value is never interpreted as unsupported, unrestricted, Free or supported.
 
 This discovery schema deliberately permits only unresolved evidence.
-API-01's [implementation catalogue](../src/api.ts) owns reviewed raw routes, query keys, fields and sourced access constraints.
+API-01's [implementation](../src/api.ts) sends raw reads for any Graph path; the inventory does not gate them, and policy stays in the shared session.
 Later slices must extend the implementation catalogue's reviewed access contract explicitly, with sourced supported/unsupported auth modes, exact permission choices and role/licence constraints.
 The discovery inventory remains reproducible from the pinned metadata; shipped-operation dispositions are joined from the implementation catalogue at generation time.
 

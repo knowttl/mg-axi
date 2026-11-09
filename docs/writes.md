@@ -92,7 +92,7 @@ The [execution contract](execution.md#named-writes) describes the shared guarant
 | Group membership | `GroupMember.Read.All` |
 | Conditional Access policies | `Policy.Read.All` |
 | Defender XDR hunting | `ThreatHunting.Read.All` (admin-consented; requires the `security` pack) |
-| Reviewed raw reads | Explicit approved `--scopes` for the requested route |
+| Raw reads | Explicit delegated `--scopes` as full `https://graph.microsoft.com/` names |
 
 Use full `https://graph.microsoft.com/` scope names with `auth login`.
 Application profiles request Graph `.default`; delegated scopes cannot narrow application authorization.

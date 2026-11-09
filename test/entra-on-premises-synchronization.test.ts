@@ -402,7 +402,7 @@ test("truncated synchronization text carries a --full hint without lifting caps"
   }
 });
 
-test("raw on-premises-synchronization reads serve delegated callers and refuse application profiles", async () => {
+test("raw on-premises-synchronization reads serve delegated callers", async () => {
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const { ApplicationAuth } = await import("../dist/app-auth.js");
@@ -415,16 +415,8 @@ test("raw on-premises-synchronization reads serve delegated callers and refuse a
     transport: async (request: TransportRequest) => { requests.push(request); return { status: 200, headers: {}, body: JSON.stringify({ value: [sync1] }) }; },
   };
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
-  const appProfile = { ...delegatedProfile, mode: "application", auth: "federated", token: { env: "MG_AXI_TOKEN" } } as const;
   const listed = await runApiGet({ path: "/directory/onPremisesSynchronization", apiVersion: "v1.0", profile: delegatedProfile, scopes: syncScopes[0]! }, deps);
   assert.equal(listed.returned, 1);
-  await assert.rejects(
-    runApiGet({ path: "/directory/onPremisesSynchronization", apiVersion: "v1.0", profile: appProfile }, deps),
-    error => {
-      assert.equal(record(error).code, "VALIDATION_ERROR");
-      return /needs a delegated profile/.test(text(record(error).message));
-    },
-  );
   assert.equal(credentialCalls.length, 1);
   assert.equal(requests.length, 1);
 });

@@ -2,11 +2,12 @@
 
 Contents: [Gates](#write-gates-and-permissions) • [Read permissions](#read-permissions)
 
-Read-only by default: seventeen named mutations and two guarded mail downloads can be enabled.
-**Writes require manual profile opt-in, an operation allowlist, `--execute` and exact target confirmation.**
+Read-only by default: seventeen named mutations, raw writes and two guarded mail downloads can be enabled.
+**Named writes require manual profile opt-in, an operation allowlist, `--execute` and exact target confirmation.**
 Without `--execute`, a named write previews the change and journals nothing, but preview still requires the write-enabled profile and prerequisite read access.
 `MG_AXI_READ_ONLY=1` overrides profile opt-in.
-Raw writes and beta writes remain blocked.
+Raw writes use a separate opt-in and do not use the named operation allowlist; see the [execution contract](execution.md).
+Named beta writes remain blocked.
 
 Manually add a `writes` object to the intended profile in the configuration file:
 

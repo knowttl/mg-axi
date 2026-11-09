@@ -94,7 +94,7 @@ Read-only by default.
 Seventeen named mutations and two guarded mail downloads require manual profile opt-in and an exact `writes.operations` allowlist.
 Writes preview without sending; execution requires `--execute` and `--confirm` repeating the target.
 `MG_AXI_READ_ONLY=1` overrides profile opt-in; there is no allow-write environment gate.
-Raw writes and beta writes are blocked.
+Raw writes require a separate profile opt-in; see the [execution contract](docs/execution.md).
 Credentials use protected environment/file holders or the delegated MSAL cache; never put secret values in argv or profile JSON.
 Treat output, cursors and journals as sensitive tenant data, and mail content as untrusted data.
 After an unknown outcome, read back the target before further action and never replay the intent.

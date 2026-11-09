@@ -479,6 +479,19 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       default: return showLifecycleSettings(session, flags, selected.profile, operation, help, selected.name);
     }
   }
+  if (["api post", "api put", "api patch", "api delete"].includes(leaf.path)) {
+    const selected = profiles.resolve(flags.profile as string | undefined);
+    const { DelegatedAuth } = await import("./auth.js");
+    const { ApplicationAuth } = await import("./app-auth.js");
+    const { MsalProvider } = await import("./msal-provider.js");
+    const { MsalApplicationProvider } = await import("./msal-app-provider.js");
+    let payload: unknown;
+    if (flags.body !== undefined) {
+      try { payload = JSON.parse(String(flags.body)); } catch { throw new AxiError("Invalid JSON body", "VALIDATION_ERROR"); }
+    }
+    const session = new GraphSession({ delegated: overrides.delegated ?? new DelegatedAuth(new MsalProvider()), application: overrides.application ?? new ApplicationAuth(new MsalApplicationProvider()), transport: overrides.transport ?? fetchTransport });
+    return session.rawWrite({ profile: selected.profile, method: leaf.path.slice(4).toUpperCase() as "POST" | "PUT" | "PATCH" | "DELETE", version: String(flags["api-version"] ?? "v1.0"), path: positional!, query: flags.query === undefined ? undefined : String(flags.query), payload, execute: !!flags.execute, confirm: flags.confirm === undefined ? undefined : String(flags.confirm), scopes: flags.scopes === undefined ? undefined : String(flags.scopes).split(",").map(scope => scope.trim()).filter(Boolean), transport: overrides.mutationTransport ?? mutationFetchTransport, journalPath: overrides.journalPath });
+  }
   if (leaf.path === "api get") {
     const selected = profiles.resolve(flags.profile as string | undefined);
     const { runApiGet } = await import("./api.js");
@@ -491,6 +504,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       path: positional!,
       apiVersion: String(flags["api-version"] ?? "v1.0"),
       odata: flags.odata === undefined ? undefined : String(flags.odata),
+      query: flags.query === undefined ? undefined : String(flags.query),
       cursor,
       scopes: flags.scopes === undefined ? undefined : String(flags.scopes),
       limit: flags.all ? undefined : flags.limit === undefined ? 100 : Number(flags.limit),

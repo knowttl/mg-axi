@@ -11,6 +11,7 @@ type SharedProfile = Readonly<{
   tenantId: string; clientId: string; cloud: "commercial";
   enabledPacks: readonly ("entra" | "security" | "mail")[]; preview: boolean; sensitiveAreas: readonly string[];
   writes?: WritePolicy;
+  rawWrites?: boolean;
 }>;
 export type DelegatedProfile = SharedProfile & Readonly<{ mode: "delegated"; token: SecretRef; allowDeviceCode: boolean }>;
 export type ApplicationProfile = SharedProfile & Readonly<{ mode: "application"; allowDeviceCode: false }> & (
@@ -51,20 +52,21 @@ function shared(value: Record<string, unknown>): SharedProfile {
   const packs = value.enabledPacks === undefined ? ["entra"] : value.enabledPacks;
   const sensitive = value.sensitiveAreas === undefined ? [] : value.sensitiveAreas;
   const preview = value.preview === undefined ? false : value.preview;
+  if (value.rawWrites !== undefined && typeof value.rawWrites !== "boolean") invalid("Invalid rawWrites policy");
   if (!Array.isArray(packs) || packs.some(pack => pack !== "entra" && pack !== "security" && pack !== "mail") || new Set(packs).size !== packs.length ||
     !Array.isArray(sensitive) || sensitive.length || typeof preview !== "boolean") invalid("Invalid profile policy");
   let writes: WritePolicy | undefined;
   if (value.writes !== undefined) {
     const policy = value.writes;
     if (!object(policy) || !exact(policy, ["allowWrites", "operations"]) || typeof policy.allowWrites !== "boolean" ||
-      !Array.isArray(policy.operations) || !policy.operations.length || policy.operations.length > 64 ||
-      policy.operations.some(entry => typeof entry !== "string" || !entry.length || entry.length > 256)) invalid("Invalid write policy; use boolean allowWrites and a nonempty operations array");
-    writes = Object.freeze({ allowWrites: policy.allowWrites, operations: Object.freeze([...policy.operations] as string[]) });
+      (policy.operations === undefined && value.rawWrites !== true) || (policy.operations !== undefined && (!Array.isArray(policy.operations) || policy.operations.length > 64 ||
+      policy.operations.some(entry => typeof entry !== "string" || !entry.length || entry.length > 256)))) invalid("Invalid write policy; use boolean allowWrites and an operations array");
+    writes = Object.freeze({ allowWrites: policy.allowWrites, operations: Object.freeze([...(policy.operations as string[] | undefined ?? [])]) });
   }
   return { tenantId: value.tenantId as string, clientId: value.clientId as string, cloud: "commercial", enabledPacks: Object.freeze([...packs] as ("entra" | "security" | "mail")[]),
-    preview: preview as boolean, sensitiveAreas: Object.freeze([]), ...(writes === undefined ? {} : { writes }) };
+    preview: preview as boolean, sensitiveAreas: Object.freeze([]), ...(writes === undefined ? {} : { writes }), ...(value.rawWrites === undefined ? {} : { rawWrites: value.rawWrites as boolean }) };
 }
-const sharedKeys = ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "allowDeviceCode", "writes"];
+const sharedKeys = ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "allowDeviceCode", "writes", "rawWrites"];
 
 export function validateDelegatedProfile(value: unknown, files?: PrivateFiles): DelegatedProfile {
   if (!object(value) || value.mode !== "delegated" || !exact(value, [...sharedKeys, "token"]) ||

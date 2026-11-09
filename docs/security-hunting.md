@@ -38,4 +38,4 @@ Queries and quoted literals are never printed as error excerpts.
 Successful parsing prints no validation claim: table/column availability, types and permissions are still checked by Graph.
 Recognized hunting 400 errors expose only the semantic/syntax error class and line/column, with an opaque fallback for unknown shapes.
 The undocumented Graph error shape is covered by synthetic offline fixtures and has not been verified against a live tenant.
-Raw `api get` keeps its reviewed GET-only route list and does not expose `/security`.
+Raw access to `/security` follows the [raw API policy](output-and-paging.md).

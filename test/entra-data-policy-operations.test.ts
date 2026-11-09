@@ -485,22 +485,3 @@ test("raw api redacts storage locations without a sig sentinel in list, show and
   assert.ok(!JSON.stringify(partial).includes("contoso.blob.core.windows.net"));
 });
 
-test("raw api refuses the operation $count scalar before credentials", async () => {
-  const f = rawFixture(rawBody);
-  await assert.rejects(
-    runApiGet({ path: "/dataPolicyOperations/$count", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: rawScopes }, f.deps),
-    { code: "VALIDATION_ERROR" },
-  );
-  assert.equal(f.credentialCalls.length, 0);
-  assert.equal(f.requests.length, 0);
-});
-
-test("raw api refuses unreviewed operation $select fields before credentials", async () => {
-  const f = rawFixture(rawBody);
-  await assert.rejects(
-    runApiGet({ path: "/dataPolicyOperations", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: rawScopes, odata: "$select=id,clientSecret" }, f.deps),
-    error => record(error).code === "VALIDATION_ERROR" && /Unreviewed \$select field clientSecret/.test(text(record(error).message)),
-  );
-  assert.equal(f.credentialCalls.length, 0);
-  assert.equal(f.requests.length, 0);
-});

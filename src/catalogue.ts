@@ -2816,16 +2816,26 @@ export const LEAVES: Leaf[] = [
     run: lifecycleRunReportsRead.run,
     scopes: lifecycleRunReportsRead.scopes,
   }, examples: ["mg-axi entra lifecycle run task-processing-result count --workflow <workflow-id> --run <run-id> --profile soc"] },
-  { path: "api get", description: "Reviewed read-only raw Graph GET (API-01, v1.0 only): users, groups, conditional access, authentication methods, audit/sign-in, risk, apps, roles/PIM, devices, administrative units, domains, domain DNS records, identity providers, organizations, branding, access reviews, entitlement catalogs and access packages, lifecycle workflows, workflow templates, task definitions, lifecycle settings, workflow runs, user/subject processing results, task reports and run user/subject/task processing results, and partner contracts; unreviewed, secret-value, mail/file-content, beta and write routes are refused before credentials", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+  { path: "api get", description: "Raw Graph GET for a server-relative path; responses retain Graph fields with secrets redacted", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
-    odata: { value: "k=v&k2=v2", description: "OData query reviewed per route ($select/$filter/$top/$orderby on collections; $select on singles); defaults to reviewed fields" },
-    cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --odata to reuse its query" },
+    odata: { value: "k=v&k2=v2", description: "Graph query parameters; alias for --query" },
+    query: { value: "k=v&k2=v2", description: "Graph query parameters, including $deltatoken and $skiptoken" },
+    cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --query and --odata to reuse its query" },
     scopes: { value: "comma-separated-Graph-scopes", description: "Delegated only: explicit full https://graph.microsoft.com/ scope names; application profiles use the .default audience" },
     limit: { value: "positive-integer", default: "100", description: "Cap returned rows; use --all to follow pages within budget" },
     all: { description: "Follow @odata.nextLink pages within the request budget" },
-    full: { description: "Disable 500-character string truncation; never disables redaction or row caps" },
+    full: { description: "Accepted for compatibility; raw output already includes complete text" },
   }, examples: ["mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All", "mg-axi api get /groups --odata '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All", "mg-axi api get /users --cursor - --all --scopes https://graph.microsoft.com/User.Read.All < cursor.txt"] },
 ];
+
+for (const method of ["post", "put", "patch", "delete"]) LEAVES.push({ path: `api ${method}`, description: `Preview or execute a gated raw Graph ${method.toUpperCase()}`, positional: { name: "path", description: "Server-relative Graph path" }, flags: {
+  ...common,
+  body: { value: "json", description: "JSON request body" },
+  query: { value: "k=v&k2=v2", description: "Graph query parameters" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated Graph scopes" },
+  execute: { description: "Execute the previewed write" },
+  confirm: { value: "path", description: "Confirm the exact server-relative path" },
+}, examples: [`mg-axi api ${method} /users/example --body '{}'`] });
 
 LEAVES.push({ path: "security hunting query", description: "Run one read-only Defender XDR KQL table pipeline from a file; requires the security pack and ThreatHunting.Read.All; no paging API exists", operation: "POST:/security/microsoft.graph.security.runHuntingQuery", flags: {
   ...common,
@@ -3008,7 +3018,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
   let leaf = LEAVES.find(item => item.path === path);
   let positional: string | undefined;
   let flagStart = words.length;
-  if (!leaf && words[0] !== "api") {
+  if (!leaf) {
     const candidate = LEAVES.find(item => item.positional && item.path === words.slice(0, -1).join(" "));
     if (candidate) {
       leaf = candidate;
@@ -3036,7 +3046,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
     if (!match) fail("unexpected argument or short flag");
     const name = match![1]!;
     const flag = Object.hasOwn(leaf.flags, name) ? leaf.flags[name] : name === "help" ? { description: "Help" } : undefined;
-    if (!flag) fail(leaf.path === "api get" && name === "query" ? "--query is reserved for output queries; use --odata for server OData parameters" : `unknown flag --${name}`);
+    if (!flag) fail(`unknown flag --${name}`);
     if (Object.hasOwn(flags, name)) fail(`duplicate flag --${name}`);
     if (flag!.value) {
       const value = match![2] ?? argv[++i];

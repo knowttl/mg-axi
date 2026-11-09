@@ -478,7 +478,7 @@ function rawBody(request: TransportRequest): TransportResponse {
   return { status: 404, headers: {}, body: JSON.stringify({ error: { code: "Unknown", message: "unexpected route" } }) };
 }
 
-test("raw api serves reviewed provider list and show without secret fields", async () => {
+test("raw api serves provider list and show with secrets redacted", async () => {
   const f = rawFixture(rawBody);
   const list = await runApiGet({ path: "/identity/identityProviders", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]! }, f.deps);
   assert.equal(list.returned, 3);
@@ -487,39 +487,6 @@ test("raw api serves reviewed provider list and show without secret fields", asy
   assert.ok(record(records(list.value)[0]).clientId === "google-client-id");
   const show = await runApiGet({ path: "/identity/identityProviders/Google-OAUTH", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]! }, f.deps);
   assert.equal(show.displayName, "Google");
-  assert.ok(!("clientSecret" in show));
+  assert.equal(show.clientSecret, "***redacted***");
 });
 
-test("raw api refuses the provider $count scalar before credentials", async () => {
-  const f = rawFixture(rawBody);
-  await assert.rejects(
-    runApiGet({ path: "/identity/identityProviders/$count", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]! }, f.deps),
-    { code: "VALIDATION_ERROR" },
-  );
-  assert.equal(f.credentialCalls.length, 0);
-  assert.equal(f.requests.length, 0);
-});
-
-test("raw api refuses unreviewed provider $select fields before credentials", async () => {
-  const f = rawFixture(rawBody);
-  await assert.rejects(
-    runApiGet({ path: "/identity/identityProviders", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]!, odata: "$select=id,clientSecret" }, f.deps),
-    error => record(error).code === "VALIDATION_ERROR" && /Unreviewed \$select field clientSecret/.test(text(record(error).message)),
-  );
-  assert.equal(f.credentialCalls.length, 0);
-  assert.equal(f.requests.length, 0);
-});
-
-for (const field of unsupportedProviderFields) {
-  for (const path of ["/identity/identityProviders", "/identity/identityProviders/Google-OAUTH"]) {
-    test(`raw provider ${path} refuses ${field} before credentials`, async () => {
-      const f = rawFixture(rawBody);
-      await assert.rejects(
-        runApiGet({ path, apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]!, odata: `$select=id,${field}` }, f.deps),
-        error => record(error).code === "VALIDATION_ERROR" && text(record(error).message).includes(`Unreviewed $select field ${field}`),
-      );
-      assert.equal(f.credentialCalls.length, 0);
-      assert.equal(f.requests.length, 0);
-    });
-  }
-}

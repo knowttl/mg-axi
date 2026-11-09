@@ -546,7 +546,7 @@ test("truncated deleted-group text carries a --full hint without lifting caps", 
   }
 });
 
-test("raw deleted-user reads keep the kind discriminator and refuse unreviewed fields", async () => {
+test("raw deleted-user reads return the whole row for each caller", async () => {
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const { ApplicationAuth } = await import("../dist/app-auth.js");
@@ -564,25 +564,14 @@ test("raw deleted-user reads keep the kind discriminator and refuse unreviewed f
     const listed = await runApiGet({ path: "/directory/deletedItems/graph.user", apiVersion: "v1.0", profile,
       ...(profile.mode === "delegated" ? { scopes: userScopes[0]! } : {}) }, deps);
     assert.equal(listed.returned, 1);
-    assert.deepEqual(listed.value, [{
-      id: deletedUser.id,
-      displayName: deletedUser.displayName,
-      deletedDateTime: deletedUser.deletedDateTime,
-      "@odata.type": "#microsoft.graph.user",
-    }]);
-    await assert.rejects(
-      runApiGet({ path: "/directory/deletedItems/graph.user", apiVersion: "v1.0", profile, odata: "$select=id,passwordProfile",
-        ...(profile.mode === "delegated" ? { scopes: userScopes[0]! } : {}) }, deps),
-      error => {
-        assert.equal(record(error).code, "VALIDATION_ERROR");
-        return /Unreviewed \$select field passwordProfile/.test(text(record(error).message));
-      },
-    );
+    assert.equal(records(listed.value)[0]!["@odata.type"], "#microsoft.graph.user");
+    assert.equal(records(listed.value)[0]!.userPrincipalName, "AdeleV@contoso.com");
+    assert.equal(records(listed.value)[0]!.deletedDateTime, "2026-09-20T16:56:36Z");
   }
   assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-secret"));
 });
 
-test("raw deleted-item show keeps the discriminator without per-type detail", async () => {
+test("raw deleted-item show redacts credential values and keeps the discriminator", async () => {
   const { runApiGet } = await import("../dist/api.js");
   const { DelegatedAuth } = await import("../dist/auth.js");
   const credential = { token: "opaque-fixture-secret", expiresAt: Date.now() + 3_600_000, tenantId: tenant, clientId: client, accountId: "synthetic-account" };
@@ -593,10 +582,8 @@ test("raw deleted-item show keeps the discriminator without per-type detail", as
   };
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
   const shown = await runApiGet({ path: `/directory/deletedItems/${deletedApp.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: appScopes[0]! }, deps);
-  assert.deepEqual(shown, {
-    id: deletedApp.id,
-    displayName: deletedApp.displayName,
-    deletedDateTime: deletedApp.deletedDateTime,
-    "@odata.type": "#microsoft.graph.application",
-  });
+  assert.equal(shown["@odata.type"], "#microsoft.graph.application");
+  assert.equal(shown.publisherDomain, "contoso.com");
+  assert.equal(records(shown.passwordCredentials)[0]!.keyId, "p1");
+  assert.doesNotMatch(JSON.stringify(shown), /super-secret-value/);
 });

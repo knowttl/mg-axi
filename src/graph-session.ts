@@ -8,7 +8,7 @@ import { PrivateFiles } from "./private-file.js";
 import { validateProfile, profileName, type AnyProfile } from "./profiles.js";
 import { findOperation } from "./runtime-index.js";
 import { HUNTING_OPERATION, HUNTING_SCOPE, huntingRequest, huntingServerError } from "./security-hunting.js";
-import { checkMailCredential, checkMailScopes, isMailOperation } from "./mail-authorization.js";
+import { checkMailCredential, checkMailScopes, isMailOperation, isMailRoute } from "./mail-authorization.js";
 import { ResponseShapeError } from "./response-shape-error.js";
 
 // CORE-01: the single path that owns Graph URL construction, operation
@@ -148,6 +148,7 @@ export const systemClock: Clock = {
 export interface ExecuteArgs {
   profile: AnyProfile;
   operation: SessionOperation;
+  raw?: true;
   params?: Record<string, string>;
   query?: Record<string, string>;
   hunting?: { query: string; timespan: string; limit: number };
@@ -176,6 +177,7 @@ export interface CollectionBudget {
 export interface CollectArgs extends ExecuteArgs {
   // Investigation reads retain earlier pages when a later request fails.
   partialOnError?: boolean;
+  singleResource?: boolean;
   // Row cap: the remainder of an already fetched page is buffered into the
   // cursor, never discarded.
   limit?: number;
@@ -185,6 +187,7 @@ export interface CollectArgs extends ExecuteArgs {
 }
 
 export interface CollectionResult {
+  metadata?: Record<string, unknown>;
   value: unknown[];
   query: Record<string, string>;
   complete: boolean;
@@ -197,6 +200,33 @@ export interface CollectionResult {
   // fetched with an extra request; list commands render it through the
   // shared list-totals helper with an honest fallback when unknown.
   total: number | null;
+  singleResource: boolean;
+}
+
+export function rawReadOperation(version: string, path: string): SessionOperation {
+  return { id: `${version}:GET:${path}`, method: "GET", path, version, disposition: "raw", owningSlice: null };
+}
+
+function sessionOperation(args: { operation: SessionOperation; raw?: true }): SessionOperation {
+  if (args.raw === true) {
+    if (args.operation.disposition !== "raw" || args.operation.method !== "GET" || !["v1.0", "beta"].includes(args.operation.version)) {
+      throw new AxiError("Raw reads need a v1.0 or beta GET operation", "VALIDATION_ERROR");
+    }
+    if (/[?#\\\s\x00-\x1f\x7f]/.test(args.operation.path) || !args.operation.path.startsWith("/") || args.operation.path.slice(1).split("/").some(segment => !segment || segment === "." || segment === "..")) throw new AxiError("Invalid raw path", "VALIDATION_ERROR");
+    for (const segment of args.operation.path.slice(1).split("/")) {
+      let decoded: string;
+      try { decoded = decodeURIComponent(segment); } catch { throw new AxiError("Invalid path encoding", "VALIDATION_ERROR"); }
+      if (decoded === "." || decoded === ".." || /[\/\\\x00-\x1f\x7f]/.test(decoded)) throw new AxiError("Invalid raw path", "VALIDATION_ERROR");
+    }
+    return rawMailOperation(args.operation) ?? args.operation;
+  }
+  const operation = findOperation(args.operation.id);
+  if (!operation) {
+    throw new AxiError(`Unknown catalogued Graph operation ${args.operation.id}`, "VALIDATION_ERROR", [
+      "Use a shipped named command; discovery alone never grants access",
+    ]);
+  }
+  return operation;
 }
 
 export function resolveSessionOperation(version: string, method: string, route: string): SessionOperation {
@@ -211,7 +241,7 @@ export function resolveSessionOperation(version: string, method: string, route: 
 }
 
 const SECRET_KEY = /(password|passwd|secret|token|credential|sas|authorization|accountkey)/i;
-const KEY_SUFFIX = /[a-z0-9](key|keys)$/i;
+const KEY_SUFFIX = /(?:^|[a-z0-9])(key|keys)$/i;
 const SECRET_VALUE = [
   /AccountKey=/i,
   /SharedAccessKey/i,
@@ -224,7 +254,7 @@ const SECRET_VALUE = [
 function secretKey(key: string): boolean {
   if (key === "customAccountResetCredentialsUrl" || key === "customForgotMyPasswordText") return false;
   const name = key.toLowerCase().replace(/[-_]/g, "");
-  return name === "sas" || name === "authorization" || SECRET_KEY.test(name) || KEY_SUFFIX.test(name);
+  return name === "sas" || name === "authorization" || name === "contentbytes" || name === "certificatedata" || name === "temporaryaccesspass" || SECRET_KEY.test(name) || KEY_SUFFIX.test(name);
 }
 
 // Shared redaction for reads, mutation previews and audit metadata: secret
@@ -234,24 +264,26 @@ export function redactGraphValue(value: unknown): unknown {
   return redact(value);
 }
 
-function redact(value: unknown): unknown {
+function redact(value: unknown, projectCredentials = false): unknown {
   if (typeof value === "string") return SECRET_VALUE.some(pattern => pattern.test(value)) ? REDACTED : redactSecrets(value);
-  if (Array.isArray(value)) return value.map(redact);
+  if (Array.isArray(value)) return value.map(child => redact(child, projectCredentials));
   if (value === null || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  const pairKey = Object.keys(record).find(key => key.toLowerCase() === "key");
+  const pairValue = Object.keys(record).find(key => key.toLowerCase() === "value");
+  const secretPair = pairKey !== undefined && pairValue !== undefined && typeof record[pairKey] === "string" && secretKey(record[pairKey]);
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([key]) => key !== "clientSecret" && key !== "certificateData")
-      .map(([key, child]) => {
-        if (key === "keyCredentials" || key === "passwordCredentials") {
-          const entries = Array.isArray(child) ? child : [];
-          return [key, entries
-            .filter(entry => entry !== null && typeof entry === "object" && !Array.isArray(entry))
-            .map(entry => redact(Object.fromEntries(SAFE_CREDENTIAL_FIELDS
-              .filter(field => Object.hasOwn(entry, field))
-              .map(field => [field, entry[field]]))))];
-        }
-        return [key, typeof child === "string" && (secretKey(key) || key === "phoneNumber" || key === "storageLocation") ? REDACTED : redact(child)];
-      }),
+    Object.entries(record).map(([key, child]) => {
+      if (projectCredentials && (key === "keyCredentials" || key === "passwordCredentials")) {
+        const entries = Array.isArray(child) ? child : [];
+        return [key, entries.filter(entry => entry !== null && typeof entry === "object" && !Array.isArray(entry))
+          .map(entry => redact(Object.fromEntries(SAFE_CREDENTIAL_FIELDS.filter(field => Object.hasOwn(entry, field)).map(field => [field, entry[field]])), true))];
+      }
+      if (secretPair && key === pairKey) return [key, redact(child, projectCredentials)];
+      if (secretPair && key === pairValue) return [key, REDACTED];
+      const sensitive = secretKey(key) || key === "phoneNumber" || key === "storageLocation";
+      return [key, sensitive && (typeof child === "string" || key === "clientSecret" || key === "certificateData") ? REDACTED : redact(child, projectCredentials)];
+    }),
   );
 }
 
@@ -301,10 +333,34 @@ function matchRoute(route: string, pathname: string): Record<string, string> | n
 // profile explicitly enables the area; consent and directory metadata are not
 // content areas. Later slices refine this table with their reviewed contracts.
 function sensitiveArea(route: string): string | null {
-  const segments = splitPath(route).map(segment => segment.toLowerCase());
-  if (segments.some(segment => segment === "messages" || segment === "mailfolders")) return "mail";
+  const segments = policySegments(route);
+  if (isMailRoute(segments)) return "mail";
   if (segments.some(segment => segment === "drive" || segment === "drives" || segment === "file" || segment === "files") || segments[0] === "shares") return "files";
   return null;
+}
+
+function policySegments(route: string): string[] {
+  try {
+    return splitPath(route).flatMap(segment => decodeURIComponent(segment).toLowerCase().split("/"));
+  } catch {
+    throw new AxiError("Invalid path encoding", "VALIDATION_ERROR");
+  }
+}
+
+function rawMailOperation(operation: SessionOperation): SessionOperation | undefined {
+  if (operation.disposition !== "raw") return undefined;
+  const segments = policySegments(operation.path);
+  if (!isMailRoute(segments)) return undefined;
+  const owningSlice = segments.some(segment => segment === "mailboxsettings" || segment === "outlook") ? "MAIL-04"
+    : segments.includes("messages") && segments.indexOf("messages") < segments.length - 1 ? "MAIL-03" : "MAIL-01";
+  return { ...operation, owningSlice };
+}
+
+function rawMailbox(operation: SessionOperation): string | undefined {
+  const segments = policySegments(operation.path);
+  if (segments[0] === "me") return undefined;
+  if (segments[0] === "users" && segments[1]) return segments[1];
+  return "";
 }
 
 function checkOperation(operation: SessionOperation): void {
@@ -328,7 +384,7 @@ function checkOperation(operation: SessionOperation): void {
     "/scopedRoleMemberships": ["mg-axi entra directory-role scoped-member list --role <role-id>"],
     "/scopedRoleMemberships/{scopedRoleMembership-id}": ["mg-axi entra directory-role scoped-member show --role <role-id> --id <scoped-membership-id>"],
   };
-  const alternatives = unsupported[operation.path];
+  const alternatives = operation.disposition === "raw" ? undefined : unsupported[operation.path];
   if (alternatives) throw new AxiError(`GET ${operation.path} is not supported by Microsoft Graph v1.0`, "VALIDATION_ERROR", alternatives);
 }
 
@@ -466,7 +522,8 @@ function bindFunctionSegment(route: string, segment: string, params: Record<stri
   return `${binding.functionName}(${binding.param}=${encodeFunctionArgument(value)})`;
 }
 
-function buildPath(route: string, params: Record<string, string>): string {
+function buildPath(route: string, params: Record<string, string>, raw = false): string {
+  if (raw) return route.slice(1);
   const used = new Set<string>();
   const path = splitPath(route)
     .map(segment => {
@@ -496,20 +553,20 @@ function buildPath(route: string, params: Record<string, string>): string {
   return path;
 }
 
-function checkQueryEntry(key: string, value: string): void {
-  if (!ALLOWED_KEYS.has(key)) {
+function checkQueryEntry(key: string, value: string, raw = false): void {
+  if (!raw && !ALLOWED_KEYS.has(key)) {
     throw new AxiError(`Unsupported query key ${key}`, "VALIDATION_ERROR", [
       `Supported query keys: ${ALLOWED_QUERY_KEYS.join(", ")}`,
     ]);
   }
-  if (typeof value !== "string" || !value.length || value.length > MAX_QUERY_VALUE || /[\x00-\x1f\x7f]/.test(value)) {
+  if (!key || /[\x00-\x1f\x7f]/.test(key) || typeof value !== "string" || !value.length || (!raw && value.length > MAX_QUERY_VALUE) || /[\x00-\x1f\x7f]/.test(value)) {
     throw new AxiError(`Invalid query value for ${key}`, "VALIDATION_ERROR", ["Keep query values short printable strings"]);
   }
 }
 
-function buildQuery(query: Record<string, string>): string {
+function buildQuery(query: Record<string, string>, raw = false): string {
   const pairs = Object.entries(query).map(([key, value]) => {
-    checkQueryEntry(key, value);
+    checkQueryEntry(key, value, raw);
     return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
   });
   pairs.sort();
@@ -539,7 +596,9 @@ export function authorizeUrl(operation: SessionOperation, params: Record<string,
   }
   const prefix = `/${operation.version}/`;
   if (!url.pathname.startsWith(prefix)) throw denied(operation, `the target leaves version ${operation.version}`);
-  const bindings = matchRoute(operation.path, url.pathname.slice(prefix.length));
+  const bindings = operation.disposition === "raw"
+    ? (url.pathname === new URL(`https://${GRAPH_HOST}/${operation.version}${operation.path}`).pathname ? {} : null)
+    : matchRoute(operation.path, url.pathname.slice(prefix.length));
   if (!bindings) throw denied(operation, `the target leaves the catalogued route ${operation.path}`);
   const functionBinding = functionBindingFor(operation.path);
   for (const [name, actual] of Object.entries(bindings)) {
@@ -553,6 +612,11 @@ export function authorizeUrl(operation: SessionOperation, params: Record<string,
     if (actual.toLowerCase() !== encoded.toLowerCase()) {
       throw denied(operation, `the target changes the bound resource {${name}}`);
     }
+  }
+  if (operation.disposition === "raw") {
+    checkQueryContext(Object.fromEntries(url.searchParams), consistencyLevel, isMailOperation(operation), true);
+    url.hash = "";
+    return url.toString();
   }
   const queryKeys = new Set<string>();
   for (const [key, value] of url.searchParams) {
@@ -588,7 +652,7 @@ function faultBody(body: string): string {
   }
 }
 
-function checkQueryContext(query: Record<string, string>, consistencyLevel: "eventual" | undefined, mail = false): void {
+function checkQueryContext(query: Record<string, string>, consistencyLevel: "eventual" | undefined, mail = false, raw = false): void {
   if (consistencyLevel !== undefined && consistencyLevel !== "eventual") {
     throw new AxiError(`Unsupported consistency ${consistencyLevel}`, "VALIDATION_ERROR", [
       "Advanced queries use ConsistencyLevel eventual or no header",
@@ -596,10 +660,13 @@ function checkQueryContext(query: Record<string, string>, consistencyLevel: "eve
   }
   const needsEventual = (!mail && Object.hasOwn(query, "$search")) || String(query["$count"] ?? "").toLowerCase() === "true";
   if (Object.hasOwn(query, "$expand")) {
-    if (needsEventual) {
+    if (needsEventual && !raw) {
       throw new AxiError("Advanced queries cannot use $expand", "VALIDATION_ERROR", ["Use $expand separately from $search and $count=true"]);
     }
-    for (const relationship of query["$expand"]!.split(",")) {
+    if (raw) {
+      const identifiers = query["$expand"]!.replace(/'(?:''|[^'])*'/g, "").replace(/%([0-9a-f]{2})/gi, (_match, hex: string) => String.fromCharCode(parseInt(hex, 16))).match(/[a-zA-Z][a-zA-Z0-9.]*/g) ?? [];
+      if (identifiers.some(identifier => sensitiveArea(identifier))) throw new AxiError("Sensitive relationships cannot be expanded", "POLICY_DENIED");
+    } else for (const relationship of query["$expand"]!.split(",")) {
       const path = relationship.trim();
       if (!/^[a-zA-Z][a-zA-Z0-9]*(\/[a-zA-Z][a-zA-Z0-9]*)*$/.test(path)) {
         throw new AxiError("Unsupported $expand relationship", "VALIDATION_ERROR", ["Expand explicit relationship paths without nested query options"]);
@@ -690,6 +757,8 @@ function bodyBytes(body: string): number {
 }
 
 interface CursorState {
+  metadata?: Record<string, unknown>;
+  singleResource?: boolean;
   searchRows?: number;
   next?: string;
   buffered: unknown[];
@@ -705,7 +774,7 @@ interface CursorState {
 }
 
 function encodeCursor(operation: SessionOperation, state: CursorState): string {
-  const payload = { v: 3, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN), query: state.query, consistencyLevel: state.consistencyLevel ?? null, context: state.context, identity: state.identity, total: state.total, searchRows: state.searchRows };
+  const payload = { v: 3, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN), query: state.query, consistencyLevel: state.consistencyLevel ?? null, context: state.context, identity: state.identity, total: state.total, searchRows: state.searchRows, singleResource: state.singleResource, metadata: state.metadata };
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
@@ -719,7 +788,7 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   } catch {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
-  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown; query?: unknown; consistencyLevel?: unknown; context?: unknown; identity?: unknown; total?: unknown; searchRows?: unknown };
+  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown; query?: unknown; consistencyLevel?: unknown; context?: unknown; identity?: unknown; total?: unknown; searchRows?: unknown; singleResource?: unknown; metadata?: unknown };
   if (!record || typeof record !== "object" || record.v !== 3 || record.op !== operation.id || !(record.next === null || typeof record.next === "string") || !Array.isArray(record.buffered) || !Array.isArray(record.seen) || !record.query || typeof record.query !== "object" || Array.isArray(record.query) || !(record.consistencyLevel === null || record.consistencyLevel === "eventual") || typeof record.context !== "string" || !/^[0-9a-f]{64}$/.test(record.context) || !(record.identity === null || (typeof record.identity === "string" && /^[0-9a-f]{64}$/.test(record.identity)))) {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
@@ -727,6 +796,8 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
   if (record.buffered.length > 5000) throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["The cursor buffers at most one fetched page"]);
+  if (record.singleResource !== undefined && typeof record.singleResource !== "boolean") throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR");
+  if (record.metadata !== undefined && (!record.metadata || typeof record.metadata !== "object" || Array.isArray(record.metadata))) throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR");
   const total = record.total === undefined ? null : record.total;
   if (!(total === null || (typeof total === "number" && Number.isSafeInteger(total) && total >= 0))) {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
@@ -734,10 +805,10 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   if (record.identity === null && (record.buffered.length > 0 || record.seen.length > 0)) throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Fetched rows and consumed pages require a bound credential identity"]);
   const query = record.query as Record<string, string>;
   const consistencyLevel = record.consistencyLevel ?? undefined;
-  buildQuery(query);
-  checkQueryContext(query, consistencyLevel, isMailOperation(operation));
+  buildQuery(query, operation.disposition === "raw");
+  checkQueryContext(query, consistencyLevel, isMailOperation(operation), operation.disposition === "raw");
   if (record.searchRows !== undefined && (typeof record.searchRows !== "number" || !Number.isSafeInteger(record.searchRows) || record.searchRows < 0 || record.searchRows >= 1000)) throw new AxiError("Invalid search cursor count", "VALIDATION_ERROR");
-  return { next: record.next ?? undefined, buffered: record.buffered.map(redact), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity, total, searchRows: record.searchRows as number | undefined };
+  return { next: record.next ?? undefined, buffered: record.buffered.map(row => redact(row, operation.disposition !== "raw")), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity, total, searchRows: record.searchRows as number | undefined, singleResource: record.singleResource as boolean | undefined, metadata: redact(record.metadata) as Record<string, unknown> | undefined };
 }
 
 function nextLinkOf(body: unknown): string | undefined {
@@ -756,6 +827,14 @@ function countOf(body: unknown): number | null {
   return typeof count === "number" && Number.isSafeInteger(count) && count >= 0 ? count : null;
 }
 
+function isCollectionEnvelope(body: unknown): boolean {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const record = body as Record<string, unknown>;
+  if (!Array.isArray(record.value) || Object.hasOwn(record, "id") || (typeof record["@odata.context"] === "string" && record["@odata.context"].endsWith("/$entity"))) return false;
+  return Object.keys(record).every(key => key === "value" || key.startsWith("@odata."))
+    || ["@odata.nextLink", "@odata.deltaLink", "@odata.count"].some(key => Object.hasOwn(record, key));
+}
+
 function valuesOf(operation: SessionOperation, response: TransportResponse, body: unknown): unknown[] {
   if (!body || typeof body !== "object" || Array.isArray(body) || !Object.hasOwn(body, "value")) {
     throw new ResponseShapeError(`Graph returned a malformed collection body for ${operation.id}`, operation, response, body, [{ path: ["value"], expected: "array" }]);
@@ -768,7 +847,7 @@ function valuesOf(operation: SessionOperation, response: TransportResponse, body
 function decodeReadBody(operation: SessionOperation, response: TransportResponse): unknown {
   if (!response.body) throw new ResponseShapeError(`Graph returned an empty success body for ${operation.id}`, operation, response);
   try {
-    return redact(JSON.parse(response.body));
+    return redact(JSON.parse(response.body), operation.disposition !== "raw");
   } catch {
     throw new ResponseShapeError(`Graph returned a non-JSON success body for ${operation.id}`, operation, response);
   }
@@ -784,6 +863,17 @@ export class GraphSession {
     private files = new PrivateFiles(),
   ) {}
 
+  async rawWrite(args: { profile: AnyProfile; method: import("./mutations.js").MutationMethod; version: string; path: string; query?: string; payload?: unknown; execute?: boolean; confirm?: string; scopes?: string[]; transport: import("./mutations.js").MutationTransport; journalPath?: string }): Promise<import("./mutations.js").MutationResult> {
+    const operation = rawReadOperation(args.version, args.path);
+    const profile = validateProfile(args.profile, this.files);
+    this.authorizePolicy(profile, sessionOperation({ operation, raw: true }));
+    if (profile.mode === "delegated" && (!args.scopes?.length || args.scopes.some(scope => !scope.startsWith(`https://${GRAPH_HOST}/`)))) throw new AxiError("Raw writes need explicit Graph scopes", "VALIDATION_ERROR");
+    if (profile.mode === "application" && args.scopes !== undefined) throw new AxiError("Application profiles cannot specify delegated scopes", "VALIDATION_ERROR");
+    const { createMutationCoordinator } = await import("./mutations.js");
+    const coordinator = createMutationCoordinator({ profile, delegated: this.deps.delegated, application: this.deps.application, transport: args.transport, journalPath: args.journalPath, files: this.files });
+    return coordinator.execute({ raw: true, operation: "mg.api.raw", method: args.method, version: args.version, path: `/${args.version}${args.path}`, query: args.query, effect: "disruptive", target: args.path, payload: args.payload }, { execute: args.execute, confirm: args.confirm, scopes: args.scopes, readState: () => undefined });
+  }
+
   cursorQuery(operation: SessionOperation, cursor: string): Readonly<Record<string, string>> {
     checkOperation(operation);
     return decodeCursor(operation, cursor).query;
@@ -791,16 +881,10 @@ export class GraphSession {
 
   async execute(args: ExecuteArgs): Promise<unknown> {
     checkOperation(args.operation);
-    // The inventory is authoritative: only the id is trusted from the caller,
-    // so a fabricated disposition can never widen access.
-    const operation = findOperation(args.operation.id);
-    if (!operation) {
-      throw new AxiError(`Unknown catalogued Graph operation ${args.operation.id}`, "VALIDATION_ERROR", [
-        "Use a shipped named command or reviewed api get route; discovery alone never grants access",
-      ]);
-    }
+    const operation = sessionOperation(args);
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
+    const rawMail = rawMailOperation(operation);
     if (isMailOperation(operation)) checkMailScopes(profile, args.scopes, operation);
     if (args.mailBodyType !== undefined && (operation.owningSlice !== "MAIL-03" || !["text", "html"].includes(args.mailBodyType))) throw new AxiError("Body format is only supported for message show", "VALIDATION_ERROR");
     if (operation.id === HUNTING_OPERATION) {
@@ -835,9 +919,9 @@ export class GraphSession {
     }
     if (args.hunting) throw new AxiError("Hunting input is only allowed for the reviewed hunting action", "VALIDATION_ERROR");
     const query = args.query ?? {};
-    checkQueryContext(query, args.consistencyLevel, isMailOperation(operation));
+    checkQueryContext(query, args.consistencyLevel, isMailOperation(operation), operation.disposition === "raw");
     const params = args.params ?? {};
-    const url = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params)}${buildQuery(query)}`;
+    const url = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params, args.raw)}${buildQuery(query, args.raw)}`;
     const clock = args.clock ?? systemClock;
     const signal = args.signal;
     const deadline = clock.now() + DEFAULT_DEADLINE_MS;
@@ -845,9 +929,9 @@ export class GraphSession {
     try {
       token = await beforeDeadline(async () => {
         const credential = profile.mode === "delegated"
-          ? await this.deps.delegated.credential(profile, this.readScopes(args.scopes))
+          ? await this.deps.delegated.credential(profile, this.scopesFor(args))
           : await this.deps.application.credential(profile, this.applicationScopes(args.scopes));
-        if (isMailOperation(operation)) checkMailCredential(profile, credential, params["user-id"]);
+        if (isMailOperation(operation)) checkMailCredential(profile, credential, rawMail ? rawMailbox(operation) : params["user-id"]);
         return credential.token;
       }, clock, deadline, signal);
     } catch (error) {
@@ -870,14 +954,10 @@ export class GraphSession {
     if (args.operation.method !== "GET" || args.operation.id === HUNTING_OPERATION) {
       throw new AxiError("Graph collections require GET; hunting uses a bounded single response without a cursor", "VALIDATION_ERROR", ["mg-axi security hunting query --help"]);
     }
-    const operation = findOperation(args.operation.id);
-    if (!operation) {
-      throw new AxiError(`Unknown catalogued Graph operation ${args.operation.id}`, "VALIDATION_ERROR", [
-        "Use a shipped named command or reviewed api get route; discovery alone never grants access",
-      ]);
-    }
+    const operation = sessionOperation(args);
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
+    const rawMail = rawMailOperation(operation);
     if (isMailOperation(operation)) checkMailScopes(profile, args.scopes, operation);
     checkLimit(args.limit);
     const budget = checkBudget(args.budget);
@@ -887,21 +967,26 @@ export class GraphSession {
     const resumed = args.cursor === undefined ? undefined : decodeCursor(operation, args.cursor);
     if (isMailOperation(operation) && resumed?.buffered.length) throw new AxiError("Mail cursors cannot contain buffered rows", "VALIDATION_ERROR");
     const query = { ...resumed?.query, ...args.query };
+    if (rawMail && query.$top === undefined) query.$top = String(args.limit ?? 100);
+    if (isMailOperation(operation) && query.$top !== undefined) {
+      if (!/^[1-9]\d*$/.test(query.$top)) throw new AxiError("Invalid mail page size", "VALIDATION_ERROR");
+      checkLimit(Number(query.$top));
+    }
     const consistencyLevel = args.consistencyLevel ?? resumed?.consistencyLevel;
-    checkQueryContext(query, consistencyLevel, isMailOperation(operation));
-    if (resumed && ((args.query !== undefined && buildQuery(query) !== buildQuery(resumed.query)) || (args.consistencyLevel !== undefined && args.consistencyLevel !== resumed.consistencyLevel))) {
+    checkQueryContext(query, consistencyLevel, isMailOperation(operation), operation.disposition === "raw");
+    if (resumed && ((args.query !== undefined && buildQuery(query, args.raw) !== buildQuery(resumed.query, args.raw)) || (args.consistencyLevel !== undefined && args.consistencyLevel !== resumed.consistencyLevel))) {
       throw new AxiError("Resume arguments conflict with collection cursor context", "VALIDATION_ERROR", ["Resume with the cursor's original query and consistency level, or omit those arguments"]);
     }
     const params = args.params ?? {};
     const clock = args.clock ?? systemClock;
     const signal = args.signal;
-    const path = buildPath(operation.path, params);
+    const path = buildPath(operation.path, params, args.raw);
     const context = createHash("sha256").update(JSON.stringify([
       path, profileName(profile), profile.mode, profile.tenantId.toLowerCase(), profile.clientId.toLowerCase(), profile.cloud,
       profile.mode === "delegated" ? profile.token : profile.auth === "certificate" ? [profile.privateKey, profile.thumbprintSha256] : profile.auth === "client-secret" ? profile.clientSecret : profile.token, [...new Set(args.scopes ?? [])].sort(),
     ])).digest("hex");
     if (resumed && resumed.context !== context) throw new AxiError("Collection cursor resource or authentication context does not match", "VALIDATION_ERROR", ["Resume under the original resource bindings, profile identity, credential reference and scopes"]);
-    const startUrl = `https://${GRAPH_HOST}/${operation.version}/${path}${buildQuery(query)}`;
+    const startUrl = `https://${GRAPH_HOST}/${operation.version}/${path}${buildQuery(query, args.raw)}`;
     const resumeUrl = resumed?.next === undefined ? undefined : authorizeUrl(operation, params, resumed.next, undefined, consistencyLevel);
     const deadline = clock.now() + budget.deadlineMs;
     let pending: unknown[] = resumed ? [...resumed.buffered] : [];
@@ -926,22 +1011,27 @@ export class GraphSession {
     // First known server total wins across pages and resumes; later pages
     // repeat the same query total, so disagreement keeps the first.
     let total: number | null = resumed?.total ?? null;
+    let singleResource = resumed?.singleResource ?? false;
+    let metadata = resumed?.metadata ?? {};
+    if (operation.disposition === "raw") delete metadata["@odata.nextLink"];
     const partial = (reason: string, next: string | undefined, buffered: unknown[]): CollectionResult => ({
       value: results,
       query,
       complete: false,
       reason,
-      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel, context, identity, total, ...(mailSearch ? { searchRows: searchRows + results.length } : {}) }),
+      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel, context, identity, total, singleResource, metadata, ...(mailSearch ? { searchRows: searchRows + results.length } : {}) }),
       requests,
       bytes,
       total,
+      singleResource,
+      metadata,
     });
     let token: string;
     try {
       const credential = await beforeDeadline(async () => profile.mode === "delegated"
-        ? this.deps.delegated.credential(profile, this.readScopes(args.scopes))
+        ? this.deps.delegated.credential(profile, this.scopesFor(args))
         : this.deps.application.credential(profile, this.applicationScopes(args.scopes)), clock, deadline, signal);
-      if (isMailOperation(operation)) checkMailCredential(profile, credential, params["user-id"]);
+      if (isMailOperation(operation)) checkMailCredential(profile, credential, rawMail ? rawMailbox(operation) : params["user-id"]);
       const acquiredIdentity = createHash("sha256").update(JSON.stringify([
         profile.mode, credential.tenantId.toLowerCase(), credential.clientId.toLowerCase(),
         profile.mode === "delegated" && "accountId" in credential ? credential.accountId : null,
@@ -965,13 +1055,13 @@ export class GraphSession {
       signal?.throwIfAborted();
       if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
       while (pending.length > 0 && (args.limit === undefined || results.length < args.limit)) results.push(pending.shift()!);
-      if (mailSearch && searchRows + results.length >= 1000) return { value: results, query, complete: false, reason: "search-cap", requests, bytes, total };
+      if (mailSearch && searchRows + results.length >= 1000) return { value: results, query, complete: false, reason: "search-cap", requests, bytes, total, singleResource, metadata };
       if (clock.now() >= deadline) return partial("deadline exceeded", current, pending);
       if (args.limit !== undefined && results.length >= args.limit) {
-        if (pending.length === 0 && !current) return { value: results, query, complete: true, requests, bytes, total };
+        if (pending.length === 0 && !current) return { value: results, query, complete: true, requests, bytes, total, singleResource, metadata };
         return partial(isMailOperation(operation) ? "row limit reached" : "row limit reached; buffered remainder is preserved in the cursor", current, pending);
       }
-      if (!current) return { value: results, query, complete: true, requests, bytes, total };
+      if (!current) return { value: results, query, complete: true, requests, bytes, total, singleResource, metadata };
       if (requests >= budget.maxRequests) return partial(`request budget exhausted after ${requests} requests`, current, pending);
       const cycleKey = digestUrl(current);
       if (seen.has(cycleKey)) return partial("continuation cycle detected; result is partial, never complete", current, pending);
@@ -987,7 +1077,10 @@ export class GraphSession {
         try {
           requests += 1;
           const requestUrl = new URL(fetchUrl);
-          if (mailSearch) requestUrl.searchParams.set("$top", String(Math.min(Number(query.$top), 1000 - searchRows - results.length)));
+          if (isMailOperation(operation)) {
+            const top = Math.min(query.$top === undefined ? Infinity : Number(query.$top), args.limit === undefined ? Infinity : args.limit - results.length, mailSearch ? 1000 - searchRows - results.length : Infinity);
+            if (Number.isFinite(top)) requestUrl.searchParams.set("$top", String(top));
+          }
           if (operation.path === "/users/{user-id}/authentication/methods") requestUrl.searchParams.delete("$select");
           response = await beforeDeadline(signal => this.deps.transport({ method: "GET", url: requestUrl.toString(), headers: headersFor(), signal }), clock, deadline, signal);
         } catch (error) {
@@ -1036,13 +1129,18 @@ export class GraphSession {
             break;
           }
           const parsed = decodeReadBody(operation, response);
-          const rows = valuesOf(operation, response, parsed);
-          if (isMailOperation(operation) && (rows.length > Math.min(Number(query.$top), mailSearch ? 1000 - searchRows - results.length : Infinity) || bytes > budget.maxBytes)) {
+          singleResource = args.singleResource === true && !isCollectionEnvelope(parsed);
+          if (operation.disposition === "raw" && isCollectionEnvelope(parsed)) {
+            const { value: _value, "@odata.nextLink": _nextLink, ...fields } = parsed as Record<string, unknown>;
+            metadata = { ...metadata, ...fields };
+          }
+          const rows = singleResource ? [parsed] : valuesOf(operation, response, parsed);
+          if (isMailOperation(operation) && (rows.length > Math.min(query.$top === undefined ? Infinity : Number(query.$top), args.limit === undefined ? Infinity : args.limit - results.length, mailSearch ? 1000 - searchRows - results.length : Infinity) || bytes > budget.maxBytes)) {
             throw new AxiError("Mail page exceeds the requested row or byte budget", "GRAPH_ERROR", ["Reduce --limit; oversized mail pages are never buffered into cursors"]);
           }
           const pageTotal = countOf(parsed);
           if (total === null && pageTotal !== null) total = pageTotal;
-          const rawNext = nextLinkOf(parsed);
+          const rawNext = singleResource ? undefined : nextLinkOf(parsed);
           const nextUrl = rawNext ? authorizeUrl(operation, params, rawNext, fetchUrl, consistencyLevel) : undefined;
           remember(current);
           remember(fetchUrl);
@@ -1070,7 +1168,8 @@ export class GraphSession {
     // is both sensitive and excluded reports the sensitive denial.
     // Security is a separate explicit opt-in; existing Entra profiles do not
     // acquire Defender access merely by installing this command.
-    const pack = isMailOperation(operation) ? "mail" : operation.id === HUNTING_OPERATION ? "security" : "entra";
+    const segments = policySegments(operation.path);
+    const pack = operation.id === HUNTING_OPERATION || (operation.disposition === "raw" && segments[0] === "security") ? "security" : isMailOperation(operation) ? "mail" : "entra";
     if (!profile.enabledPacks.includes(pack)) {
       throw new AxiError(`Pack ${pack} is not enabled for this profile`, "POLICY_DENIED", ["mg-axi profile show --profile <name>"]);
     }
@@ -1079,23 +1178,34 @@ export class GraphSession {
         "Enable preview explicitly for beta reads; v1.0 stays the default with no fallback",
       ]);
     }
-    const route = operation.path.toLowerCase();
+    const route = `/${policySegments(operation.path).join("/")}`;
     if (profile.mode === "application" && (route === "/me" || route.startsWith("/me/"))) {
       throw new AxiError("Application profiles cannot use /me; bind an explicit /users/{id} route", "POLICY_DENIED", [
         "App-only calls address the resource directly; /me needs a signed-in user",
       ]);
     }
     const area = sensitiveArea(operation.path);
+    if (operation.disposition === "raw" && area === "mail" && segments.includes("$value") && (segments.includes("messages") || segments.includes("attachments"))) {
+      throw new AxiError("Mail downloads require the guarded download coordinator", "POLICY_DENIED");
+    }
     if (area && !(area === "mail" && profile.enabledPacks.includes("mail")) && !profile.sensitiveAreas.includes(area)) {
       throw new AxiError(`Sensitive area ${area} is not enabled for this profile (${operation.id})`, "POLICY_DENIED", [
         "Mail and file content stay disabled unless explicitly enabled for the profile",
       ]);
     }
-    if (!EXECUTABLE_DISPOSITIONS.has(operation.disposition)) {
+    if (operation.disposition !== "raw" && !EXECUTABLE_DISPOSITIONS.has(operation.disposition)) {
       throw new AxiError(`Graph operation ${operation.id} is ${operation.disposition}; it cannot be executed`, "POLICY_DENIED", [
         "Blocked, deprecated and unavailable operations stay denied even when reached by redirect",
       ]);
     }
+  }
+
+  private scopesFor(args: ExecuteArgs): string[] {
+    if (args.raw !== true) return this.readScopes(args.scopes);
+    if (!args.scopes?.length || args.scopes.some(scope => !scope.startsWith(`https://${GRAPH_HOST}/`))) {
+      throw new AxiError("Raw reads need explicit delegated scopes as full https://graph.microsoft.com/ names", "VALIDATION_ERROR", ["mg-axi api get --help"]);
+    }
+    return args.scopes;
   }
 
   private readScopes(scopes: string[] | undefined): string[] {

@@ -60,8 +60,7 @@ The existing [coverage research](graph-coverage.md) provides useful representati
 An unreviewed value is never interpreted as unsupported, unrestricted, Free or supported.
 
 This discovery schema deliberately permits only unresolved evidence.
-API-01's [implementation catalogue](../src/api.ts) owns reviewed raw routes, query keys, fields and sourced access constraints.
-Later slices must extend the implementation catalogue's reviewed access contract explicitly, with sourced supported/unsupported auth modes, exact permission choices and role/licence constraints.
+API-01's [implementation](../src/api.ts) sends raw reads for any Graph path; the inventory does not gate them, and policy stays in the shared session.
 The discovery inventory remains reproducible from the pinned metadata; shipped-operation dispositions are joined from the implementation catalogue at generation time.
 
 ## Dispositions and ownership
@@ -88,8 +87,10 @@ Multicloud permissions management and upstream-deprecated operations are recorde
 These route dispositions do not replace later field/query redaction or the Graph session's policy checks.
 For example, a deferred or scheduled application or user GET is not permission to project credential values from it.
 
-Rows claim `named-command` only when the row matches a shipped operation in the named-command catalogue (`src/catalogue.ts`) or an alternate route a shipped leaf reaches through cli flag routing (`--transitive`/`--as`, from the `TRANSITIVE_OPERATION`, `NAV_CASTS`, `MEMBERSHIP_TRANSITIVE` and `MEMBERSHIP_CASTS` tables, attributed to the owning leaf), and `reviewed-raw-read` only when the row matches a reviewed raw route in the raw-route catalogue (`src/api.ts`); a shipped operation or table alternate that also matches a reviewed raw route is `named-command`; the generator derives those dispositions from the catalogues and routing tables and never from a hand list. Every table alternate must resolve through table keys to a catalogue operation; one with no shipped command behind it fails generation.
-The validator rejects unbacked claims, rejects any shipped catalogue operation or table-backed alternate whose disposition is not `named-command`, rejects any reviewed raw route outside backed whose disposition is not `reviewed-raw-read`, and rejects a missing inventory row for any shipped operation, reviewed raw route or table-backed alternate.
+Rows claim `named-command` only when the row matches a shipped operation in the named-command catalogue (`src/catalogue.ts`) or an alternate route reached through CLI flag routing and attributed to its owning leaf.
+Every table alternate must resolve to a catalogue operation; one with no shipped command behind it fails generation.
+The validator rejects unbacked named-command claims, missing rows or other dispositions for shipped operations and alternates, and `reviewed-raw-read` claims.
+The legacy `reviewed-raw-read` disposition remains in the schema but has no rows: raw access is independent of the inventory.
 `unavailable` records an explicitly sourced version/cloud limitation or a reviewed decision that the selected version has no documented operation contract.
 It is never inferred merely from a missing metadata route.
 See the generated [capability report](coverage.md) for operation-level dispositions and their sourced reasons.

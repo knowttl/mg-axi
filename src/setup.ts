@@ -121,7 +121,7 @@ export function setupView(store: Profiles): Record<string, unknown> {
       reads,
       writes,
       local: implemented.length - reads - writes,
-      api: `Entra ${families.slice(0, -1).join(", ")} and ${families.at(-1)} reads plus reviewed raw api get and ${writeLabels.length} gated writes (${writeLabels.join(", ")}); every other v1.0 operation is deferred out of v1, and every other beta operation remains scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded`,
+      api: `Entra ${families.slice(0, -1).join(", ")} and ${families.at(-1)} reads plus raw api get and ${writeLabels.length} gated writes (${writeLabels.join(", ")}); every other v1.0 operation is deferred out of v1, and every other beta operation remains scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded`,
       report: "docs/coverage.md",
       hunting: "security hunting query --file <kql> --timespan P1D --limit 100; explicit security pack and admin-consented ThreatHunting.Read.All; no cursor",
       mail: "mail folder list/show --mailbox <user-id|upn|me>; explicit mail pack, delegated Mail.ReadBasic for own mailbox or scoped Exchange RBAC Application Mail.ReadBasic; no Entra mail application grants",

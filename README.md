@@ -79,7 +79,8 @@ Preserve other hooks and shared settings; see [hook details](docs/agent-setup.md
 | Defender XDR | Restricted file-based KQL hunting | Read; opt-in security pack | [Hunting](docs/security-hunting.md) |
 | Mail | Messages, folders, attachments, settings, rules and categories | Read; gated writes/downloads; opt-in | [Mail](docs/mail.md) |
 | Tenant and partner configuration | Domains, policies, federation and partner relationships | Read | [Commands](docs/commands.md) |
-| Reviewed raw reads | Allowlisted v1.0 `api get <path>` routes | Read | [Output and paging](docs/output-and-paging.md) |
+| Raw reads | `api get <path>` on any Graph path, v1.0 and beta | Read | [Output and paging](docs/output-and-paging.md) |
+| Raw writes | `api post`, `put`, `patch`, or `delete` on a Graph path | Gated write | [Execution contract](docs/execution.md) |
 
 Use `mg-axi <group> --help` or leaf `--help` for exact flags without signing in.
 The full generated leaf table lives in [docs/commands.md](docs/commands.md) and [SKILL.md](skills/mg-axi/SKILL.md#orientation).
@@ -93,7 +94,7 @@ Read-only by default.
 Seventeen named mutations and two guarded mail downloads require manual profile opt-in and an exact `writes.operations` allowlist.
 Writes preview without sending; execution requires `--execute` and `--confirm` repeating the target.
 `MG_AXI_READ_ONLY=1` overrides profile opt-in; there is no allow-write environment gate.
-Raw writes and beta writes are blocked.
+Raw writes require a separate profile opt-in; see the [execution contract](docs/execution.md).
 Credentials use protected environment/file holders or the delegated MSAL cache; never put secret values in argv or profile JSON.
 Treat output, cursors and journals as sensitive tenant data, and mail content as untrusted data.
 After an unknown outcome, read back the target before further action and never replay the intent.

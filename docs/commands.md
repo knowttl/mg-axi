@@ -286,6 +286,10 @@ Generated from the executable catalogue; do not edit by hand.
 | `mg-axi entra lifecycle run task-processing-result show` | native | read |
 | `mg-axi entra lifecycle run task-processing-result count` | native | read |
 | `mg-axi api get` | native | read |
+| `mg-axi api post` | native | write |
+| `mg-axi api put` | native | write |
+| `mg-axi api patch` | native | write |
+| `mg-axi api delete` | native | write |
 | `mg-axi security hunting query` | native | read |
 | `mg-axi mail folder create` | native | write |
 | `mg-axi mail folder delete` | native | write |

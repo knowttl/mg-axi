@@ -389,6 +389,7 @@ def shipped_operations():
             parsed += 1
             if found[0] in shipped:
                 shared = {
+                    "GET:/identityProtection/riskDetections/{riskDetection-id}": {"entra risk-detection correlate", "entra risk-detection show"},
                     "PATCH:/users/{user-id}/messages/{message-id}": {"mail message tag", "mail message flag", "mail message mark"},
                     "POST:/users/{user-id}/messages/{message-id}/move": {"mail message move", "mail message trash"},
                 }
@@ -401,17 +402,6 @@ def shipped_operations():
     if parsed != total:
         raise ValueError("Catalogue parse mismatch: every operation must pair with its leaf path")
     return shipped
-
-
-def reviewed_raw_routes():
-    """API-01 reviewed raw routes from src/api.ts."""
-    text = (ROOT / "src/api.ts").read_text()
-    routes = re.findall(r'\{ id: "(v1\.0:[A-Z]+:[^"]+)"', text)
-    if not routes:
-        raise ValueError("API-01 must own at least one reviewed raw route")
-    if len(routes) != len(set(routes)):
-        raise ValueError("Reviewed raw routes must be unique")
-    return set(routes)
 
 
 # Alternate-routing tables whose values a shipped leaf reaches through cli
@@ -560,7 +550,7 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
         reason = "Deferred entitlement-management scope to a later EXT-02 entitlement-management beta subfamily: the approved v1.0 reads cover v1.0 only; beta catalogs, access packages, assignment policies and resource-role scopes need separate review."
     if owner == "EXT-04" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path.split("/")[1] == "tenantRelationships" and path not in APPROVED_DELEGATED_ADMIN_READS and path not in APPROVED_MTO_READS and path not in APPROVED_TENANT_LOOKUP_READS:
         if path == "/tenantRelationships/multiTenantOrganization/tenants/{multiTenantOrganizationMember-id}":
-            reason = "Deferred multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for the single-member read."
+            reason = "Deferred multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes; no named command is approved for the single-member read."
         elif path.startswith("/tenantRelationships/multiTenantOrganization"):
             reason = "Deferred delegated-admin scope to a later EXT-04 multi-tenant-organization subfamily: multi-tenant-organization reads need their own MultiTenantOrganization access, Entra P1 licensing and projection review beyond the approved delegated-admin list/show reads."
         elif "findTenantInformation" in path:
@@ -574,7 +564,7 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
         elif "/accessAssignments" in path or "/operations" in path or "/requests" in path:
             reason = "Deferred delegated-admin scope to a later EXT-04 delegated-admin relationship-details subfamily: access-assignment, operation and request navigation reads need their own query, access and projection review beyond the approved relationship list/show reads."
     if owner == "EXT-04" and method == "GET" and version == "v1.0" and disposition == "scheduled" and path == "/reports/getRelyingPartyDetailedSummary(period='{period}')":
-        reason = "Deferred reports scope to a later EXT-04 reports subfamily: the period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard does not support that binding, so no named command or raw access is approved for the relying-party summary read."
+        reason = "Deferred reports scope to a later EXT-04 reports subfamily: the period function argument needs a named-command function-argument binding review."
     if owner == "EXT-02" and method == "GET" and disposition == "scheduled" and "/accessReviews/historyDefinitions" in path:
         disposition, reason = "intentionally-blocked", "Blocked: documented least privilege is the write scope AccessReview.ReadWrite.All (no read scope), and history instances return SAS download URLs in downloadUri; recording or emitting that URL needs its own redaction and output review."
         owner = "EXT-02c"
@@ -667,8 +657,6 @@ def make_row(version, path, method, operation, shipped=None, reviewed=None, alte
             disposition, reason = "named-command", f"Shipped as `mg-axi {shipped[effect]}`."
         elif alternates is not None and effect in alternates:
             disposition, reason = "named-command", f"Shipped as `mg-axi {alternates[effect]}` alternate route."
-        elif reviewed is not None and identity in reviewed:
-            disposition, reason = "reviewed-raw-read", "Reviewed raw route under API-01; see src/api.ts REVIEWED_ROUTES."
         else:
             disposition = "deferred"
             if not reason.startswith(DEFERRING_REASONS):
@@ -692,8 +680,6 @@ def build(sources, shipped=None, reviewed=None, alternates=None):
     rows, pins = [], []
     if shipped is None:
         shipped = shipped_operations()
-    if reviewed is None:
-        reviewed = reviewed_raw_routes()
     if alternates is None:
         alternates = alternate_operations(shipped)
     for version, source in sources.items():
@@ -734,7 +720,6 @@ def validate(inventory, shipped=None, reviewed=None, alternates=None):
     schema = json.loads((ROOT / "inventory/schema.json").read_text())
     Draft202012Validator(schema).validate(inventory)
     backed = {f"v1.0:{operation}" for operation in (shipped_operations() if shipped is None else shipped)}
-    raw = set(reviewed_raw_routes() if reviewed is None else reviewed)
     if alternates is None:
         alternates = alternate_operations(shipped_operations() if shipped is None else shipped)
     backed |= {f"v1.0:{operation}" for operation in alternates}
@@ -747,8 +732,8 @@ def validate(inventory, shipped=None, reviewed=None, alternates=None):
         by_id[row["id"]] = row
         if row["disposition"] == "named-command" and row["id"] not in backed:
             raise ValueError("Discovery alone cannot claim a named command")
-        if row["disposition"] == "reviewed-raw-read" and row["id"] not in raw:
-            raise ValueError("Discovery alone cannot claim reviewed raw access")
+        if row["disposition"] == "reviewed-raw-read":
+            raise ValueError("Discovery cannot claim reviewed raw access")
         if (scoped_slice(row["path"], row["method"]) is None) != (row["disposition"] == "excluded"):
             raise ValueError("Boundary mismatch: out-of-scope operations must be excluded")
     if {source["version"] for source in inventory["sources"]} != {"v1.0", "beta"}:
@@ -770,13 +755,6 @@ def validate(inventory, shipped=None, reviewed=None, alternates=None):
             raise ValueError(f"Shipped command owns {identity} but it has no inventory row")
         if row["disposition"] != "named-command":
             raise ValueError(f"Shipped command owns {identity} but its disposition is not named-command")
-    for identity in sorted(raw - backed):
-        row = by_id.get(identity)
-        if row is None:
-            raise ValueError(f"Reviewed raw route {identity} has no inventory row")
-        if row["disposition"] != "reviewed-raw-read":
-            raise ValueError(f"Reviewed raw route {identity} is not reviewed-raw-read")
-
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

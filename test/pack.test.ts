@@ -140,7 +140,7 @@ test("setup reports unconfigured state without writing configuration", () => {
     assert.ok(strings(record(output.capabilities).implemented).includes("mg-axi setup") || strings(record(output.capabilities).implemented).includes("setup"));
     assert.ok(strings(record(output.capabilities).implemented).includes("entra user list"));
     assert.equal(record(output.capabilities).reads, 279);
-    assert.equal(record(output.capabilities).writes, 17);    assert.equal(record(output.capabilities).local, 10);
+    assert.equal(record(output.capabilities).writes, 21);    assert.equal(record(output.capabilities).local, 10);
     assert.ok(!existsSync(config), "setup writes nothing");
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
@@ -149,8 +149,8 @@ test("setup capability prose lists the shipped read families from the catalogue"
   const home = dir();
   try {
     const output = record(decode(runPlain(["setup"], home).stdout));
-    assert.equal(record(output.capabilities).api,
-      "Entra user, registration, group, directory-role/PIM, device, administrative-unit, organization and branding, domain and domain DNS, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-in/directory-audit, application/service-principal and consent grants, risk, Conditional Access, identity-provider, federation configurations, deleted directory items, data policy operations, risk prevention, access-review, entitlement catalogs and access packages, entitlement assignments and requests and lifecycle workflows reads plus reviewed raw api get and 17 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update, mail folder creation, empty custom mail folder deletion, mail master category creation, inbox rule creation, inbox rule update, inbox rule deletion, message categorization, message follow-up flag, message read/unread status, message move, message copy, message soft delete to Deleted Items); every other v1.0 operation is deferred out of v1, and every other beta operation remains scheduled (never agreed for v1), blocked, deprecated, unavailable or excluded");
+    assert.match(outputText(record(output.capabilities).api), /raw api get and 21 gated writes/);
+    assert.match(outputText(record(output.capabilities).api), /raw POST, raw PUT, raw PATCH, raw DELETE/);
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 

@@ -24,15 +24,18 @@ mg-axi auth login --profile soc --scopes https://graph.microsoft.com/Policy.Read
 mg-axi entra conditional-access policy list --profile soc
 mg-axi entra conditional-access policy show --profile soc --id <policy-id>
 
-# Reviewed raw reads
+# Raw reads
 mg-axi auth login --profile soc --scopes https://graph.microsoft.com/User.Read.All,https://graph.microsoft.com/GroupMember.Read.All
 mg-axi api get /users --profile soc --scopes https://graph.microsoft.com/User.Read.All
 mg-axi api get /groups --profile soc --odata '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All
 ```
 
-Raw access is not an unrestricted Graph client.
-Unreviewed routes, secret-returning routes, mail/file content, beta raw reads and raw writes are refused before credentials.
-Returned data is restricted to reviewed fields; completeness describes the requested collection, not full Graph property coverage.
+Raw reads accept any server-relative Graph path on the v1.0 or beta endpoint; the inventory no longer limits raw access.
+For raw write gates, see the [execution contract](execution.md).
+Pass raw query parameters with `--query 'key=value&key2=value2'`; keep the path free of query strings.
+Beta raw reads need a preview profile, and the explicit delegated scopes must be full `https://graph.microsoft.com/` names.
+Raw requests remain subject to pack and sensitive-resource policy: mail routes require the mail pack and mailbox authorization, mail downloads use the guarded coordinator, and file-sensitive routes are blocked by current profile validation.
+Responses come back whole, not projected to a field list; completeness describes the requested collection.
 Secret material, authentication-method phone numbers and data-policy storage locations are redacted, including in full output, previews and audit metadata.
 
 ## Response diagnostics
@@ -75,7 +78,7 @@ A known server total uses a count such as `10 of 143 users`; totals are never in
 Partial collection results preserve buffered rows and the next page in an opaque cursor; detection correlation uses the separate contract below.
 For named reads, repeat the original query flags or omit them; conflicting queries are rejected.
 Repeat `--fields` and `--full` to retain the same local view.
-Raw reads reuse their original query when `--odata` is omitted on resume.
+Raw reads reuse their original query when `--query` and `--odata` are omitted on resume.
 For large raw cursors, save the token to a file and supply it through stdin:
 
 ```sh

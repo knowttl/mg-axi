@@ -9,7 +9,7 @@ import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-se
 import { booleanEnv, movedError, validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
 import { statePath } from "./paths.js";
 import { PrivateFiles } from "./private-file.js";
-import { checkMailCredential, MAIL_MESSAGE_SCOPE } from "./mail-authorization.js";
+import { checkMailCredential, isMailRoute, MAIL_MESSAGE_SCOPE } from "./mail-authorization.js";
 import { saveMailBytes, binaryFetchTransport, type BinaryTransport } from "./mail-download.js";
 
 // Shared mutation coordinator for reviewed named mutation families.
@@ -44,12 +44,14 @@ export type MutationEffect = "write" | "disruptive";
 // Named handlers bind reviewed mutations to this shape; the operation must
 // fall inside the profile's configured scope.
 export type MutationDefinition = {
+  raw?: boolean;
   operation: string;
   method: MutationMethod;
   /** Graph version the path is bound to; only v1.0 mutates, beta fails closed. */
   version: string;
   /** Literal server-relative path, already including the version segment. */
   path: string;
+  query?: string;
   effect: MutationEffect;
   target: string;
   payload?: unknown;
@@ -150,6 +152,7 @@ export type MutationAuthorization = {
   readonly nonce: string;
   readonly method: MutationMethod;
   readonly url: string;
+  readonly raw?: boolean;
 };
 
 export type MutationResponse = { status: number; body: unknown };
@@ -173,7 +176,7 @@ function assertMutationDestination(url: string): void {
   }
   if (destination.protocol !== "https:" || destination.hostname.toLowerCase() !== GRAPH_HOST
     || destination.port || destination.username || destination.password
-    || !destination.pathname.startsWith("/v1.0/")) {
+    || !(destination.pathname.startsWith("/v1.0/") || destination.pathname.startsWith("/beta/"))) {
     throw new AxiError("Refusing mutation destination outside the commercial Graph host", "DESTINATION_DENIED", [
       `Mutations must stay under https://${GRAPH_HOST}/v1.0/; no credential was sent`,
     ]);
@@ -266,7 +269,7 @@ function decodeMutationBody(response: MutationTransportResponse): unknown {
     ], { httpStatus: response.status, ...faultDetails });
   }
   try {
-    return response.body ? JSON.parse(response.body) as unknown : {};
+    return response.body ? redactGraphValue(JSON.parse(response.body)) : {};
   } catch {
     // The server accepted the mutation; only its response body was discarded.
     throw mutationFailure("Graph mutation response is not valid JSON", "RESPONSE_INVALID",
@@ -343,8 +346,11 @@ export function createMutationSender(args: {
       // Provider checks bind the acquired credential to the snapshotted
       // tenant and client; a credential for another identity fails here and
       // nothing is sent.
-      const mailTarget = new URL(authorization.url).pathname.match(/^\/v1\.0\/(?:users\/([^/]+)|(me))\/messages\//);
-      const token = await credential(options?.scopes, options?.signal, mailTarget ? decodeURIComponent(mailTarget[1] ?? "me") : undefined);
+      const segments = new URL(authorization.url).pathname.split("/").slice(2).map(segment => decodeURIComponent(segment));
+      const mail = isMailRoute(segments);
+      const mailbox = segments[0]?.toLowerCase() === "me" ? "me" : segments[0]?.toLowerCase() === "users" ? segments[1] ?? "" : "";
+      if (authorization.raw && mail && options?.scopes?.some(scope => /\.shared$/i.test(scope))) throw new AxiError("Shared mailbox scopes are unsupported", "POLICY_DENIED");
+      const token = await credential(options?.scopes, options?.signal, mail ? mailbox : undefined);
       options?.signal?.throwIfAborted();
       assertMutationDestination(authorization.url);
       if (readOnlyForced()) {
@@ -462,13 +468,14 @@ export function createMutationCoordinator(args: {
         "Name the exact target this mutation would change",
       ]);
     }
-    if (definition.version !== "v1.0") {
+    if (definition.raw && validated.rawWrites !== true) throw new AxiError("Raw writes are disabled for this profile", "WRITES_DISABLED");
+    if (definition.version !== "v1.0" && !(definition.raw && definition.version === "beta" && validated.preview)) {
       throw new AxiError(`Unsupported mutation version ${definition.version}`, "VALIDATION_ERROR", [
         "Mutations are bound to v1.0; beta writes stay blocked",
       ]);
     }
     // Gate 3: the operation must fall inside the profile's own configured scope.
-    if (!scope.operations.includes(definition.operation)) {
+    if (!definition.raw && !scope.operations.includes(definition.operation)) {
       throw new AxiError(
         `blocked: operation '${definition.operation}' is outside the write scope of this profile (${definition.method} request)`,
         "OPERATION_NOT_WRITABLE",
@@ -481,6 +488,22 @@ export function createMutationCoordinator(args: {
   }
 
   function boundMutationUrl(definition: MutationDefinition | DownloadDefinition): string {
+    if (definition.raw) {
+      const prefix = `/${definition.version}/`;
+      const parts = definition.path.split("/");
+      if (!definition.path.startsWith(prefix) || parts.slice(1).some(part => !part || part === "." || part === "..") || /[\s\x00-\x1f\x7f\\?#]/.test(definition.path)) throw new AxiError("Invalid raw mutation path", "VALIDATION_ERROR");
+      for (const part of parts.slice(2)) {
+        let decoded: string;
+        try { decoded = decodeURIComponent(part); } catch { throw new AxiError("Invalid mutation path encoding", "VALIDATION_ERROR"); }
+        if (decoded === "." || decoded === ".." || /[\/\\\x00-\x1f\x7f]/.test(decoded)) throw new AxiError("Invalid raw mutation path", "VALIDATION_ERROR");
+      }
+      if (parts.length === 3 && decodeURIComponent(parts[2]!).toLowerCase() === "$batch") throw new AxiError("Raw batch requests cannot be authorized", "POLICY_DENIED");
+      if (definition.query !== undefined && (!definition.query || /[\x00-\x1f\x7f]/.test(definition.query) || definition.query.split("&").some(pair => !pair.includes("=") || pair.startsWith("=")))) throw new AxiError("Invalid raw mutation query", "VALIDATION_ERROR");
+      const query = definition.query === undefined ? "" : `?${new URLSearchParams(definition.query).toString()}`;
+      const url = `https://${GRAPH_HOST}${definition.path}${query}`;
+      assertMutationDestination(url);
+      return url;
+    }
     const prefix = "/v1.0/";
     const segments = definition.path.split("/");
     if (!definition.path.startsWith(prefix) || segments[0] !== ""
@@ -511,7 +534,17 @@ export function createMutationCoordinator(args: {
 
   function preview(definition: MutationDefinition | DownloadDefinition, current?: unknown, isNoop?: (current: unknown) => boolean): MutationPreview {
     enforceWriteGates(definition);
-    const url = boundMutationUrl(definition);
+    const boundUrl = boundMutationUrl(definition);
+    const destination = new URL(boundUrl);
+    if (definition.raw && definition.query !== undefined) {
+      const safe = new URLSearchParams();
+      for (const [key, value] of destination.searchParams) {
+        const redacted = redactGraphValue({ [key]: value }) as Record<string, unknown>;
+        safe.append(key, typeof redacted[key] === "string" ? redacted[key] as string : "***redacted***");
+      }
+      destination.search = safe.toString();
+    }
+    const url = definition.raw && definition.query !== undefined ? destination.toString() : boundUrl;
     return Object.freeze({
       operation: definition.operation,
       method: definition.method,
@@ -590,7 +623,7 @@ export function createMutationCoordinator(args: {
       profile: scope.tenantId,
       operation: definition.operation,
       method: definition.method,
-      url: seen.url,
+      url: definition.raw ? `${new URL(seen.url).origin}${new URL(seen.url).pathname}` : seen.url,
       target: definition.target,
       effect: definition.effect,
       ...(ifMatch !== undefined ? { ifMatch } : {}),
@@ -641,7 +674,7 @@ export function createMutationCoordinator(args: {
       recordAudit({ ...meta, kind: "outcome", httpStatus: 0, outcome: "NOT_SENT" });
       return { kind: "noop", preview: seen };
     }
-    const authorization = Object.freeze({ nonce: randomUUID(), method: definition.method, url: seen.url });
+    const authorization = Object.freeze({ nonce: randomUUID(), method: definition.method, url: boundMutationUrl(definition), raw: definition.raw });
     authorizations.set(authorization, sender);
     let sent: MutationResponse;
     try {

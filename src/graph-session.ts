@@ -542,20 +542,20 @@ function buildPath(route: string, params: Record<string, string>, raw = false): 
   return path;
 }
 
-function checkQueryEntry(key: string, value: string): void {
-  if (!ALLOWED_KEYS.has(key)) {
+function checkQueryEntry(key: string, value: string, raw = false): void {
+  if (!raw && !ALLOWED_KEYS.has(key)) {
     throw new AxiError(`Unsupported query key ${key}`, "VALIDATION_ERROR", [
       `Supported query keys: ${ALLOWED_QUERY_KEYS.join(", ")}`,
     ]);
   }
-  if (typeof value !== "string" || !value.length || value.length > MAX_QUERY_VALUE || /[\x00-\x1f\x7f]/.test(value)) {
+  if (!key || /[\x00-\x1f\x7f]/.test(key) || typeof value !== "string" || !value.length || (!raw && value.length > MAX_QUERY_VALUE) || /[\x00-\x1f\x7f]/.test(value)) {
     throw new AxiError(`Invalid query value for ${key}`, "VALIDATION_ERROR", ["Keep query values short printable strings"]);
   }
 }
 
-function buildQuery(query: Record<string, string>): string {
+function buildQuery(query: Record<string, string>, raw = false): string {
   const pairs = Object.entries(query).map(([key, value]) => {
-    checkQueryEntry(key, value);
+    checkQueryEntry(key, value, raw);
     return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
   });
   pairs.sort();
@@ -601,6 +601,11 @@ export function authorizeUrl(operation: SessionOperation, params: Record<string,
     if (actual.toLowerCase() !== encoded.toLowerCase()) {
       throw denied(operation, `the target changes the bound resource {${name}}`);
     }
+  }
+  if (operation.disposition === "raw") {
+    checkQueryContext(Object.fromEntries(url.searchParams), consistencyLevel, isMailOperation(operation));
+    url.hash = "";
+    return url.toString();
   }
   const queryKeys = new Set<string>();
   for (const [key, value] of url.searchParams) {
@@ -786,7 +791,7 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   if (record.identity === null && (record.buffered.length > 0 || record.seen.length > 0)) throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Fetched rows and consumed pages require a bound credential identity"]);
   const query = record.query as Record<string, string>;
   const consistencyLevel = record.consistencyLevel ?? undefined;
-  buildQuery(query);
+  buildQuery(query, operation.disposition === "raw");
   checkQueryContext(query, consistencyLevel, isMailOperation(operation));
   if (record.searchRows !== undefined && (typeof record.searchRows !== "number" || !Number.isSafeInteger(record.searchRows) || record.searchRows < 0 || record.searchRows >= 1000)) throw new AxiError("Invalid search cursor count", "VALIDATION_ERROR");
   return { next: record.next ?? undefined, buffered: record.buffered.map(redact), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity, total, searchRows: record.searchRows as number | undefined, singleResource: record.singleResource as boolean | undefined, metadata: redact(record.metadata) as Record<string, unknown> | undefined };
@@ -898,7 +903,7 @@ export class GraphSession {
     const query = args.query ?? {};
     checkQueryContext(query, args.consistencyLevel, isMailOperation(operation));
     const params = args.params ?? {};
-    const url = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params, args.raw)}${buildQuery(query)}`;
+    const url = `https://${GRAPH_HOST}/${operation.version}/${buildPath(operation.path, params, args.raw)}${buildQuery(query, args.raw)}`;
     const clock = args.clock ?? systemClock;
     const signal = args.signal;
     const deadline = clock.now() + DEFAULT_DEADLINE_MS;
@@ -945,9 +950,13 @@ export class GraphSession {
     if (isMailOperation(operation) && resumed?.buffered.length) throw new AxiError("Mail cursors cannot contain buffered rows", "VALIDATION_ERROR");
     const query = { ...resumed?.query, ...args.query };
     if (rawMail && query.$top === undefined) query.$top = String(args.limit ?? 100);
+    if (isMailOperation(operation) && query.$top !== undefined) {
+      if (!/^[1-9]\d*$/.test(query.$top)) throw new AxiError("Invalid mail page size", "VALIDATION_ERROR");
+      checkLimit(Number(query.$top));
+    }
     const consistencyLevel = args.consistencyLevel ?? resumed?.consistencyLevel;
     checkQueryContext(query, consistencyLevel, isMailOperation(operation));
-    if (resumed && ((args.query !== undefined && buildQuery(query) !== buildQuery(resumed.query)) || (args.consistencyLevel !== undefined && args.consistencyLevel !== resumed.consistencyLevel))) {
+    if (resumed && ((args.query !== undefined && buildQuery(query, args.raw) !== buildQuery(resumed.query, args.raw)) || (args.consistencyLevel !== undefined && args.consistencyLevel !== resumed.consistencyLevel))) {
       throw new AxiError("Resume arguments conflict with collection cursor context", "VALIDATION_ERROR", ["Resume with the cursor's original query and consistency level, or omit those arguments"]);
     }
     const params = args.params ?? {};
@@ -959,7 +968,7 @@ export class GraphSession {
       profile.mode === "delegated" ? profile.token : profile.auth === "certificate" ? [profile.privateKey, profile.thumbprintSha256] : profile.auth === "client-secret" ? profile.clientSecret : profile.token, [...new Set(args.scopes ?? [])].sort(),
     ])).digest("hex");
     if (resumed && resumed.context !== context) throw new AxiError("Collection cursor resource or authentication context does not match", "VALIDATION_ERROR", ["Resume under the original resource bindings, profile identity, credential reference and scopes"]);
-    const startUrl = `https://${GRAPH_HOST}/${operation.version}/${path}${buildQuery(query)}`;
+    const startUrl = `https://${GRAPH_HOST}/${operation.version}/${path}${buildQuery(query, args.raw)}`;
     const resumeUrl = resumed?.next === undefined ? undefined : authorizeUrl(operation, params, resumed.next, undefined, consistencyLevel);
     const deadline = clock.now() + budget.deadlineMs;
     let pending: unknown[] = resumed ? [...resumed.buffered] : [];
@@ -1050,7 +1059,10 @@ export class GraphSession {
         try {
           requests += 1;
           const requestUrl = new URL(fetchUrl);
-          if (mailSearch) requestUrl.searchParams.set("$top", String(Math.min(Number(query.$top), 1000 - searchRows - results.length)));
+          if (isMailOperation(operation)) {
+            const top = Math.min(query.$top === undefined ? Infinity : Number(query.$top), args.limit === undefined ? Infinity : args.limit - results.length, mailSearch ? 1000 - searchRows - results.length : Infinity);
+            if (Number.isFinite(top)) requestUrl.searchParams.set("$top", String(top));
+          }
           if (operation.path === "/users/{user-id}/authentication/methods") requestUrl.searchParams.delete("$select");
           response = await beforeDeadline(signal => this.deps.transport({ method: "GET", url: requestUrl.toString(), headers: headersFor(), signal }), clock, deadline, signal);
         } catch (error) {
@@ -1105,7 +1117,7 @@ export class GraphSession {
             metadata = { ...metadata, ...fields };
           }
           const rows = singleResource ? [parsed] : valuesOf(operation, response, parsed);
-          if (isMailOperation(operation) && (rows.length > Math.min(Number(query.$top), args.limit === undefined ? Infinity : args.limit - results.length, mailSearch ? 1000 - searchRows - results.length : Infinity) || bytes > budget.maxBytes)) {
+          if (isMailOperation(operation) && (rows.length > Math.min(query.$top === undefined ? Infinity : Number(query.$top), args.limit === undefined ? Infinity : args.limit - results.length, mailSearch ? 1000 - searchRows - results.length : Infinity) || bytes > budget.maxBytes)) {
             throw new AxiError("Mail page exceeds the requested row or byte budget", "GRAPH_ERROR", ["Reduce --limit; oversized mail pages are never buffered into cursors"]);
           }
           const pageTotal = countOf(parsed);

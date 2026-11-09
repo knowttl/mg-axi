@@ -41,6 +41,7 @@ export interface ApiGetArgs {
   path: string;
   apiVersion: string;
   odata?: string;
+  query?: string;
   cursor?: string;
   scopes?: string;
   /** Row cap; undefined with --all follows pages within the session budget. */
@@ -70,10 +71,9 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
   const scopes = args.scopes === undefined ? undefined : args.scopes.split(",").map(scope => scope.trim()).filter(scope => scope.length > 0);
   const session = new GraphSession(deps);
   const request = { profile: args.profile, operation, raw: true as const, params: {}, scopes };
-  const query = args.cursor !== undefined && args.odata === undefined ? undefined : parseQuery(args.odata);
-  if (query !== undefined && Object.hasOwn(query, "$skiptoken")) {
-    throw new AxiError("Server paging state cannot be supplied; page with --all", "VALIDATION_ERROR", ["mg-axi api get --help"]);
-  }
+  if (args.odata !== undefined && args.query !== undefined) throw new AxiError("Use either --query or --odata", "VALIDATION_ERROR");
+  const rawQuery = args.query ?? args.odata;
+  const query = args.cursor !== undefined && rawQuery === undefined ? undefined : parseQuery(rawQuery);
   if (pathname.endsWith("/$count")) {
     return { count: await session.execute({ ...request, query, scalar: true, consistencyLevel: "eventual" }) as number };
   }

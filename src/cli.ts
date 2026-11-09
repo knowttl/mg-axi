@@ -504,6 +504,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       path: positional!,
       apiVersion: String(flags["api-version"] ?? "v1.0"),
       odata: flags.odata === undefined ? undefined : String(flags.odata),
+      query: flags.query === undefined ? undefined : String(flags.query),
       cursor,
       scopes: flags.scopes === undefined ? undefined : String(flags.scopes),
       limit: flags.all ? undefined : flags.limit === undefined ? 100 : Number(flags.limit),

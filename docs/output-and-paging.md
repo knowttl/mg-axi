@@ -32,7 +32,7 @@ mg-axi api get /groups --profile soc --odata '$filter=securityEnabled eq true&$t
 
 Raw reads accept any server-relative Graph path on the v1.0 or beta endpoint; the inventory no longer limits raw access.
 Raw POST, PUT, PATCH and DELETE require `rawWrites: true` and `writes.allowWrites: true` in the profile, plus `--execute --confirm <path>` to send; omitting `--execute` returns a preview.
-Pass write query parameters with `--query 'key=value&key2=value2'`; keep the path free of query strings.
+Pass raw query parameters with `--query 'key=value&key2=value2'`; keep the path free of query strings.
 Beta raw reads need a preview profile, and the explicit delegated scopes must be full `https://graph.microsoft.com/` names.
 Mail and file content still require the profile's sensitive-area opt-in.
 Responses come back whole, not projected to a field list; completeness describes the requested collection.
@@ -78,7 +78,7 @@ A known server total uses a count such as `10 of 143 users`; totals are never in
 Partial collection results preserve buffered rows and the next page in an opaque cursor; detection correlation uses the separate contract below.
 For named reads, repeat the original query flags or omit them; conflicting queries are rejected.
 Repeat `--fields` and `--full` to retain the same local view.
-Raw reads reuse their original query when `--odata` is omitted on resume.
+Raw reads reuse their original query when `--query` and `--odata` are omitted on resume.
 For large raw cursors, save the token to a file and supply it through stdin:
 
 ```sh

@@ -9,7 +9,7 @@ import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-se
 import { booleanEnv, movedError, validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
 import { statePath } from "./paths.js";
 import { PrivateFiles } from "./private-file.js";
-import { checkMailCredential, MAIL_MESSAGE_SCOPE } from "./mail-authorization.js";
+import { checkMailCredential, isMailRoute, MAIL_MESSAGE_SCOPE } from "./mail-authorization.js";
 import { saveMailBytes, binaryFetchTransport, type BinaryTransport } from "./mail-download.js";
 
 // Shared mutation coordinator for reviewed named mutation families.
@@ -346,10 +346,11 @@ export function createMutationSender(args: {
       // Provider checks bind the acquired credential to the snapshotted
       // tenant and client; a credential for another identity fails here and
       // nothing is sent.
-      const pathname = decodeURIComponent(new URL(authorization.url).pathname);
-      const mailTarget = pathname.match(/^\/(?:v1\.0|beta)\/(?:users\/([^/]+)|(me))\/(?:messages|mailFolders|mailboxSettings|outlook)(?:\/|$)/i);
-      if (authorization.raw && mailTarget && options?.scopes?.some(scope => /\.shared$/i.test(scope))) throw new AxiError("Shared mailbox scopes are unsupported", "POLICY_DENIED");
-      const token = await credential(options?.scopes, options?.signal, mailTarget ? decodeURIComponent(mailTarget[1] ?? "me") : undefined);
+      const segments = new URL(authorization.url).pathname.split("/").slice(2).map(segment => decodeURIComponent(segment));
+      const mail = isMailRoute(segments);
+      const mailbox = segments[0]?.toLowerCase() === "me" ? "me" : segments[0]?.toLowerCase() === "users" ? segments[1] ?? "" : "";
+      if (authorization.raw && mail && options?.scopes?.some(scope => /\.shared$/i.test(scope))) throw new AxiError("Shared mailbox scopes are unsupported", "POLICY_DENIED");
+      const token = await credential(options?.scopes, options?.signal, mail ? mailbox : undefined);
       options?.signal?.throwIfAborted();
       assertMutationDestination(authorization.url);
       if (readOnlyForced()) {

@@ -18,6 +18,10 @@ export function isMailOperation(operation: { owningSlice: string | null }) {
   return operation.owningSlice?.startsWith("MAIL-") === true;
 }
 
+export function isMailRoute(segments: readonly string[]): boolean {
+  return segments.some(segment => ["messages", "mailfolders", "mailboxsettings", "outlook", "sendmail", "microsoft.graph.sendmail"].includes(segment.toLowerCase()));
+}
+
 export function checkMailScopes(profile: AnyProfile, scopes: string[] | undefined, operation: { owningSlice: string | null; path: string }) {
   const scope = operation.owningSlice === "MAIL-03" || operation.path.endsWith("/attachments") ? MAIL_MESSAGE_SCOPE : operation.owningSlice === "MAIL-04" ? MAIL_SETTINGS_SCOPE : MAIL_FOLDER_SCOPE;
   if (profile.mode === "delegated" && (scopes?.length !== 1 || (scopes[0] !== scope && !(scope === MAIL_FOLDER_SCOPE && scopes[0] === MAIL_MESSAGE_SCOPE)))) {

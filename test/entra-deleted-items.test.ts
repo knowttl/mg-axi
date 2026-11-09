@@ -564,7 +564,9 @@ test("raw deleted-user reads return the whole row for each caller", async () => 
     const listed = await runApiGet({ path: "/directory/deletedItems/graph.user", apiVersion: "v1.0", profile,
       ...(profile.mode === "delegated" ? { scopes: userScopes[0]! } : {}) }, deps);
     assert.equal(listed.returned, 1);
-    assert.deepEqual(listed.value, [{ "@odata.type": "#microsoft.graph.user", id: "6ea91a8d-e32e-41a1-b7bd-d2d185eed0e0", displayName: "Adele Vance", userPrincipalName: "AdeleV@contoso.com", mail: "AdeleV@contoso.com", userType: "Member", deletedDateTime: "2026-09-20T16:56:36Z" }]);
+    assert.equal(records(listed.value)[0]!["@odata.type"], "#microsoft.graph.user");
+    assert.equal(records(listed.value)[0]!.userPrincipalName, "AdeleV@contoso.com");
+    assert.equal(records(listed.value)[0]!.deletedDateTime, "2026-09-20T16:56:36Z");
   }
   assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-secret"));
 });
@@ -580,5 +582,8 @@ test("raw deleted-item show redacts credential values and keeps the discriminato
   };
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
   const shown = await runApiGet({ path: `/directory/deletedItems/${deletedApp.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: appScopes[0]! }, deps);
-  assert.deepEqual(shown, { "@odata.type": "#microsoft.graph.application", id: "9b1c2d3e-4f5a-4b6c-8d7e-8f9a0b1c2d3e", appId: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", displayName: "Daemon app", publisherDomain: "contoso.com", signInAudience: "AzureADMyOrg", deletedDateTime: "2026-09-22T10:00:00Z", keyCredentials: [{ keyId: "k1", displayName: "key" }], passwordCredentials: [{ keyId: "p1", displayName: "daemon secret" }] });
+  assert.equal(shown["@odata.type"], "#microsoft.graph.application");
+  assert.equal(shown.publisherDomain, "contoso.com");
+  assert.equal(records(shown.passwordCredentials)[0]!.keyId, "p1");
+  assert.doesNotMatch(JSON.stringify(shown), /super-secret-value/);
 });

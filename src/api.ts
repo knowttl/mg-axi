@@ -4,9 +4,7 @@ import { DelegatedAuth } from "./auth.js";
 import { DEFAULT_MAX_BYTES, GraphSession, rawReadOperation, type GraphTransport } from "./graph-session.js";
 import type { AnyProfile } from "./profiles.js";
 
-const TRUNCATE_AT = 500;
 const RAW_VERSIONS = ["v1.0", "beta"];
-const TRUNCATED_HINT = "Strings truncated at 500 chars; re-run with --full";
 const PAGING_HINT = "Resume the same path, profile and scopes with --cursor - and supply the cursor token on stdin; use --limit <rows> or --all";
 
 function rawPath(pathname: string): string {
@@ -37,42 +35,6 @@ function parseQuery(raw: string | undefined): Record<string, string> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype;
-}
-
-// String truncation at the output boundary, matching the 500-char rule used
-// by every Entra command. --full disables truncation; redaction already ran
-// in the session and row caps are unaffected. Plain objects and arrays only.
-function truncateForOutput(value: unknown, full: boolean): { value: unknown; truncated: boolean } {
-  if (typeof value === "string") {
-    if (full || value.length <= TRUNCATE_AT) return { value, truncated: false };
-    return { value: `${value.slice(0, TRUNCATE_AT)}... (truncated, ${value.length} chars total)`, truncated: true };
-  }
-  if (Array.isArray(value)) {
-    let truncated = false;
-    const shaped = value.map(item => {
-      const child = truncateForOutput(item, full);
-      truncated = truncated || child.truncated;
-      return child.value;
-    });
-    return { value: shaped, truncated };
-  }
-  if (isRecord(value)) {
-    let truncated = false;
-    const shaped: Record<string, unknown> = {};
-    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-      const next = truncateForOutput(child, full);
-      truncated = truncated || next.truncated;
-      shaped[key] = next.value;
-    }
-    return { value: shaped, truncated };
-  }
-  return { value, truncated: false };
-}
-
-function singleOutput(body: unknown, full: boolean): Record<string, unknown> {
-  const shaped = truncateForOutput(body, full);
-  const record = isRecord(shaped.value) ? shaped.value : { value: shaped.value };
-  return shaped.truncated ? { ...record, help: [TRUNCATED_HINT] } : record;
 }
 
 export interface ApiGetArgs {
@@ -112,19 +74,18 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
   if (query !== undefined && Object.hasOwn(query, "$skiptoken")) {
     throw new AxiError("Server paging state cannot be supplied; page with --all", "VALIDATION_ERROR", ["mg-axi api get --help"]);
   }
-  const full = !!args.full;
   if (pathname.endsWith("/$count")) {
     return { count: await session.execute({ ...request, query, scalar: true, consistencyLevel: "eventual" }) as number };
   }
   const consistencyLevel = query && (Object.hasOwn(query, "$search") || String(query.$count).toLowerCase() === "true") ? "eventual" as const : undefined;
   const collected = await session.collect({ ...request, query, consistencyLevel, limit: args.limit, cursor: args.cursor, singleResource: true });
-  if (collected.singleResource && collected.complete && collected.value.length === 1) return singleOutput(collected.value[0], full);
-  const rows = truncateForOutput(collected.value, full);
-  const metadata = truncateForOutput(collected.metadata ?? {}, full);
-  const page = { ...(metadata.value as Record<string, unknown>), returned: collected.value.length, complete: collected.complete, value: rows.value };
-  if (collected.complete) return { ...page, ...(rows.truncated ? { help: [TRUNCATED_HINT] } : {}) };
-  const help = rows.truncated ? [PAGING_HINT, TRUNCATED_HINT] : [PAGING_HINT];
-  return { ...page, reason: collected.reason, cursor: collected.cursor, help };
+  if (collected.singleResource && collected.complete && collected.value.length === 1) {
+    const value = collected.value[0];
+    return isRecord(value) ? value : { value };
+  }
+  const page = { ...collected.metadata, returned: collected.value.length, complete: collected.complete, value: collected.value };
+  if (collected.complete) return page;
+  return { ...page, reason: collected.reason, cursor: collected.cursor, help: [PAGING_HINT] };
 }
 
 // Minimal HTTPS transport: sends only what the session authorized (GET on the

@@ -115,6 +115,24 @@ test("raw mail reads use the mail pack without the Entra pack", async () => {
   assert.equal((await f.run({})).complete, true);
 });
 
+for (const action of ["sendMail", "%73endMail", "microsoft.graph.sendMail"]) test(`raw ${action} uses mail authorization`, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-raw-send-"));
+  try {
+    const f = fixture();
+    const session = new GraphSession(f.deps);
+    const path = `/users/other@example.com/${action}`;
+    const profile = { ...delegatedProfile, enabledPacks: ["mail"], rawWrites: true, writes: { allowWrites: true, operations: [] } } as const;
+    let sent = false;
+    const args = { profile, method: "POST" as const, version: "v1.0", path, scopes: ["https://graph.microsoft.com/Mail.Send"], execute: true, confirm: path, transport: async () => { sent = true; return { status: 202, headers: {}, body: "" }; }, journalPath: join(dir, "writes.log") };
+    await assert.rejects(session.rawWrite({ ...args, profile: { ...profile, enabledPacks: ["entra"] } }), error => /Pack mail/.test(outputText(record(error).message)));
+    await assert.rejects(session.rawWrite({ ...args, scopes: ["https://graph.microsoft.com/Mail.Send.Shared"] }), error => record(error).code === "POLICY_DENIED");
+    await assert.rejects(session.rawWrite(args), error => record(error).code === "POLICY_DENIED");
+    const own = await session.rawWrite({ ...args, path: `/me/${action}`, confirm: `/me/${action}` });
+    assert.equal(own.kind, "success");
+    assert.equal(sent, true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("temporary access passes are redacted in raw reads and write previews", async () => {
   const path = "/users/a/authentication/temporaryAccessPassMethods";
   const f = read({ path }, json(200, { value: [{ id: "a", temporaryAccessPass: "secret-pass" }] }));
@@ -428,16 +446,22 @@ test("singleton reads refuse collection cursors before credentials", async () =>
   assert.equal(f.requests.length, 0);
 });
 
-test("long strings truncate unless --full", async () => {
+test("raw output retains long strings with or without --full", async () => {
   const long = "x".repeat(5000);
   const over = read({}, json(200, { value: [{ id: "a", displayName: long }] }));
-  const truncated = await over.run({});
-  assert.match(outputText(records(truncated.value)[0]!.displayName), /\.\.\. \(truncated, 5000 chars total\)$/);
-  assert.match(strings(truncated.help).join("\n"), /--full/);
+  const output = await over.run({});
+  assert.equal(records(output.value)[0]!.displayName, long);
+  assert.equal(output.help, undefined);
   const f = fixture(json(200, { value: [{ id: "a", displayName: long }] }));
   const full = await runApiGet({ path: "/users", apiVersion: "v1.0", profile: delegatedProfile, scopes, full: true }, f.deps);
   assert.equal(records(full.value)[0]!.displayName, long);
   assert.equal(full.help, undefined);
+  const singleton = read({ path: "/users/a" }, json(200, { id: "a", description: long }));
+  assert.equal((await singleton.run({})).description, long);
+  const metadata = read({}, json(200, { "@odata.context": long, value: [{ id: "a", nested: { description: long } }] }));
+  const result = await metadata.run({});
+  assert.equal(result["@odata.context"], long);
+  assert.equal(record(records(result.value)[0]!.nested).description, long);
 });
 
 const bin = resolve("dist/bin/mg-axi.js");
@@ -550,8 +574,7 @@ test("CLI resumes a cursor larger than the argv limit through stdin", async () =
     assert.equal(result.error, undefined);
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
-    const truncatedRows = rows.slice(1).map(row => ({ ...row, description: `${"x".repeat(500)}... (truncated, 1000 chars total)` }));
-    assert.deepEqual(record(decode(result.stdout)), { returned: 199, complete: true, value: truncatedRows, help: ["Strings truncated at 500 chars; re-run with --full"] });
+    assert.deepEqual(record(decode(result.stdout)), { returned: 199, complete: true, value: rows.slice(1) });
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 

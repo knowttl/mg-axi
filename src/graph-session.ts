@@ -8,7 +8,7 @@ import { PrivateFiles } from "./private-file.js";
 import { validateProfile, profileName, type AnyProfile } from "./profiles.js";
 import { findOperation } from "./runtime-index.js";
 import { HUNTING_OPERATION, HUNTING_SCOPE, huntingRequest, huntingServerError } from "./security-hunting.js";
-import { checkMailCredential, checkMailScopes, isMailOperation } from "./mail-authorization.js";
+import { checkMailCredential, checkMailScopes, isMailOperation, isMailRoute } from "./mail-authorization.js";
 import { ResponseShapeError } from "./response-shape-error.js";
 
 // CORE-01: the single path that owns Graph URL construction, operation
@@ -332,7 +332,7 @@ function matchRoute(route: string, pathname: string): Record<string, string> | n
 // content areas. Later slices refine this table with their reviewed contracts.
 function sensitiveArea(route: string): string | null {
   const segments = policySegments(route);
-  if (segments.some(segment => ["messages", "mailfolders", "mailboxsettings", "outlook"].includes(segment))) return "mail";
+  if (isMailRoute(segments)) return "mail";
   if (segments.some(segment => segment === "drive" || segment === "drives" || segment === "file" || segment === "files") || segments[0] === "shares") return "files";
   return null;
 }
@@ -348,7 +348,7 @@ function policySegments(route: string): string[] {
 function rawMailOperation(operation: SessionOperation): SessionOperation | undefined {
   if (operation.disposition !== "raw") return undefined;
   const segments = policySegments(operation.path);
-  if (!segments.some(segment => ["messages", "mailfolders", "mailboxsettings", "outlook"].includes(segment))) return undefined;
+  if (!isMailRoute(segments)) return undefined;
   const owningSlice = segments.some(segment => segment === "mailboxsettings" || segment === "outlook") ? "MAIL-04"
     : segments.includes("messages") && segments.indexOf("messages") < segments.length - 1 ? "MAIL-03" : "MAIL-01";
   return { ...operation, owningSlice };

@@ -17,7 +17,7 @@ Contents: [Counts](#counts) • [Commands](#commands) • [Scope decisions](#ext
 
 - implemented read leaves: 279 (276 named Graph reads plus raw api get, configured home and doctor health check)
 - implemented write leaves: 17 (named gated mutations below)
-- local leaves: 10 (profile, config, auth, login alias and setup views)
+- local leaves: 14 (profile, config, auth, login alias and setup views)
 
 Mail ships 9 read commands, 2 guarded downloads and 12 gated mutations (23 mail leaves).
 Guarded downloads count as Graph read leaves in the registry, but require write-policy opt-in, execution and exact resource confirmation because they persist sensitive content locally.
@@ -339,7 +339,7 @@ The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS
 | `mg-axi doctor` | bounded `GET:/users` health check | uses the named user-list read | PACK-01 |
 | `mg-axi home` | bounded user and delegated mail-folder samples; `--offline` skips Graph | uses reviewed collection reads | home |
 
-Graph v1.0 does not support the legacy `entra scoped-role-membership list/show`, `entra domain-dns-record list` or `entra directory-object list` routes; those commands fail locally with supported alternatives and their root routes are not available through `api get`.
+Legacy `entra scoped-role-membership list/show`, `entra domain-dns-record list` and `entra directory-object list` commands fail locally with supported alternatives; raw reads remain available.
 
 ## EXT-01 domain scope decisions
 
@@ -890,7 +890,7 @@ The access-review scope covers the ten reads above (definition, instance, decisi
 The legacy accessReviews and unified alias reads below carry the deferred disposition (out of v1) because they require a separate access and projection review; beta-only operations remain scheduled ("beta needs its own review").
 
 The history reads below are blocked: their documented least privilege is the write scope AccessReview.ReadWrite.All (no read scope), and history instances return SAS download URLs in downloadUri.
-No new commands are approved and beta raw access stays refused for any row below.
+No new named commands are approved; beta raw access requires a preview-enabled profile.
 
 | Inventory operation | Disposition | Deferral reason |
 |---|---|---|
@@ -1157,7 +1157,7 @@ Approval and subject reads carry personal data and stay deferred (out of v1) wit
 
 Supported coverage includes the thirty-three v1.0 lifecycle-workflows first-, second-, third- and fourth-part reads above (workflow, workflow-template and task-definition list/show/count reads, the tenant settings show, top-level run and user/subject processing-result list/show/count reads, task-report list/show/count reads with the task and taskDefinition singles, plus run-nested user/subject/task processing-result list/show/count reads).
 Third-level processing results, taskProcessingResults sub-reads under a user or subject result, reprocessed runs, subject sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay deferred (out of v1) with no new commands or raw access approved; so do the six summary functions (the run user/subject summaries plus the four top-level ones), which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard does not support those bindings. Every beta operation below remains scheduled (never agreed for v1) and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.
-No new commands are approved and beta raw access stays refused for any lifecycle-workflows row outside the thirty-three above.
+No new named commands are approved; beta raw access requires a preview-enabled profile.
 
 ## READ-07 application lookups scope decisions
 

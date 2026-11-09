@@ -1,7 +1,7 @@
 ---
 name: mg-axi
 description: >
-  Inspect Microsoft Graph users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, federation configurations, deleted directory items, data policy operations, risk prevention, access reviews, entitlement catalogs and access packages, entitlement assignments and requests, lifecycle workflows, templates, task definitions, settings, runs, processing results and task reports, raw reads, Defender XDR advanced hunting, guarded attachment downloads, guarded MIME export, mail attachment metadata, mailbox settings, inbox rules, mail master categories, mail message metadata, bodies, internet headers, search, filters and conversations, mailbox folders and run 17 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update, mail folder creation, empty custom mail folder deletion, mail master category creation, inbox rule creation, inbox rule update, inbox rule deletion, message categorization, message follow-up flag, message read/unread status, message move, message copy, message soft delete to Deleted Items) through token-efficient TOON output.
+  Inspect Microsoft Graph users, authentication methods, groups, roles, devices, administrative units, organization and branding, domains and DNS records, certificate authentication, commercial subscriptions, on-premises synchronization, terms-of-use agreements and acceptances, directory objects, organizational contacts, group lifecycle policies, group setting templates, attribute sets and custom security attributes, partner contracts, delegated administration, multi-tenant organization, tenant information, sign-ins and audit logs, applications and consent grants, risk, Conditional Access, identity providers, federation configurations, deleted directory items, data policy operations, risk prevention, access reviews, entitlement catalogs and access packages, entitlement assignments and requests, lifecycle workflows, templates, task definitions, settings, runs, processing results and task reports, raw reads, Defender XDR advanced hunting, guarded attachment downloads, guarded MIME export, mail attachment metadata, mailbox settings, inbox rules, mail master categories, mail message metadata, bodies, internet headers, search, filters and conversations, mailbox folders and run 21 gated writes (account enable/disable, session revocation, group-membership add, risky-user dismissal, CA policy update, raw POST, raw PUT, raw PATCH, raw DELETE, mail folder creation, empty custom mail folder deletion, mail master category creation, inbox rule creation, inbox rule update, inbox rule deletion, message categorization, message follow-up flag, message read/unread status, message move, message copy, message soft delete to Deleted Items) through token-efficient TOON output.
 user-invocable: false
 ---
 
@@ -137,7 +137,7 @@ Configured home samples at most five users and five root mail folders, with one 
 Home uses existing silent User.Read.All or Mail.Read access for delegated profiles and the existing .default audience for application profiles; unavailable consent or credentials stay unavailable without interactive sign-in. Security needs an explicit hunting query and application mail needs an explicit mailbox. Home never adds permissions or infers token claims.
 Doctor acquires credentials silently and contacts Graph; only its help view stays offline.
 The list below records current executable leaves; it makes no coverage claim for other Graph operations.
-Graph v1.0 does not support the legacy `entra scoped-role-membership list/show`, `entra domain-dns-record list` or `entra directory-object list` routes; those commands fail locally with supported alternatives and their root routes are not available through `api get`.
+Legacy `entra scoped-role-membership list/show`, `entra domain-dns-record list` and `entra directory-object list` commands fail locally with supported alternatives; raw reads remain available.
 See [coverage](https://github.com/knowttl/mg-axi/blob/main/docs/coverage.md) for the per-operation disposition records.
 `docs/coverage.md` and this file are generated from the same catalogue and inventory sources; `node tools/generate-docs.ts --check` fails when they are stale.
 
@@ -422,6 +422,10 @@ See [coverage](https://github.com/knowttl/mg-axi/blob/main/docs/coverage.md) for
 | `mg-axi entra lifecycle run task-processing-result show` | native | read |
 | `mg-axi entra lifecycle run task-processing-result count` | native | read |
 | `mg-axi api get` | native | read |
+| `mg-axi api post` | native | write |
+| `mg-axi api put` | native | write |
+| `mg-axi api patch` | native | write |
+| `mg-axi api delete` | native | write |
 | `mg-axi security hunting query` | native | read |
 | `mg-axi mail folder create` | native | write |
 | `mg-axi mail folder delete` | native | write |

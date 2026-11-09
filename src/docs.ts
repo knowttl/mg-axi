@@ -115,6 +115,10 @@ const READ_AREA_LABELS: Array<[string, string]> = [
 // Short outcome labels for the shipped gated writes, keyed by leaf path.
 // A new write leaf without an entry here throws for the same reason.
 const WRITE_LABELS: Record<string, string> = {
+  "api post": "raw POST",
+  "api put": "raw PUT",
+  "api patch": "raw PATCH",
+  "api delete": "raw DELETE",
   "entra user update": "account enable/disable",
   "entra user revoke-sessions": "session revocation",
   "entra group member add": "group-membership add",

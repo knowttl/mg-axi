@@ -1147,7 +1147,8 @@ export class GraphSession {
     // is both sensitive and excluded reports the sensitive denial.
     // Security is a separate explicit opt-in; existing Entra profiles do not
     // acquire Defender access merely by installing this command.
-    const pack = isMailOperation(operation) ? "mail" : operation.id === HUNTING_OPERATION ? "security" : "entra";
+    const segments = policySegments(operation.path);
+    const pack = operation.id === HUNTING_OPERATION || (operation.disposition === "raw" && segments[0] === "security") ? "security" : isMailOperation(operation) ? "mail" : "entra";
     if (!profile.enabledPacks.includes(pack)) {
       throw new AxiError(`Pack ${pack} is not enabled for this profile`, "POLICY_DENIED", ["mg-axi profile show --profile <name>"]);
     }
@@ -1163,7 +1164,6 @@ export class GraphSession {
       ]);
     }
     const area = sensitiveArea(operation.path);
-    const segments = policySegments(operation.path);
     if (operation.disposition === "raw" && area === "mail" && segments.includes("$value") && (segments.includes("messages") || segments.includes("attachments"))) {
       throw new AxiError("Mail downloads require the guarded download coordinator", "POLICY_DENIED");
     }

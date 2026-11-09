@@ -11,7 +11,7 @@ import { ApplicationAuth } from "../dist/app-auth.js";
 import { DelegatedAuth } from "../dist/auth.js";
 import { Profiles } from "../dist/profiles.js";
 import { fetchTransport, runApiGet } from "../dist/api.js";
-import { GraphSession, MAX_CURSOR_BYTES } from "../dist/graph-session.js";
+import { GraphSession, MAX_CURSOR_BYTES, rawReadOperation } from "../dist/graph-session.js";
 import { executeArgv } from "../dist/cli.js";
 
 // API-01 through the lowest real interface observing behavior: runApiGet with
@@ -65,6 +65,28 @@ test("beta reads go to the beta endpoint on a preview profile", async () => {
   const f = read({ path: "/users", apiVersion: "beta", profile: { ...delegatedProfile, preview: true } }, json(200, { value: [] }));
   await f.run({});
   assert.equal(new URL(f.requests[0]!.url).pathname, "/beta/users");
+});
+
+for (const path of ["/security/alerts_v2", "/%73ecurity/alerts_v2"]) test(`raw security route ${path} requires the security pack`, async () => {
+  const denied = read({ path });
+  await assert.rejects(denied.run({}), error => /Pack security/.test(outputText(record(error).message)));
+  assert.equal(denied.credentialCalls.length, 0);
+  const allowed = read({ path, profile: { ...delegatedProfile, enabledPacks: ["security"] } });
+  assert.equal((await allowed.run({})).complete, true);
+  const direct = fixture(json(200, { id: "alert" }));
+  const session = new GraphSession(direct.deps);
+  const operation = rawReadOperation("v1.0", path);
+  await assert.rejects(session.execute({ profile: delegatedProfile, operation, raw: true, scopes: [scopes] }), error => /Pack security/.test(outputText(record(error).message)));
+  assert.deepEqual(await session.execute({ profile: { ...delegatedProfile, enabledPacks: ["security"] }, operation, raw: true, scopes: [scopes] }), { id: "alert" });
+});
+
+test("raw security writes require the security pack", async () => {
+  const f = fixture();
+  const session = new GraphSession(f.deps);
+  const profile = { ...appProfile, rawWrites: true, writes: { allowWrites: true, operations: [] } } as const;
+  const args = { profile, method: "PATCH" as const, version: "v1.0", path: "/security/alerts_v2/a", transport: async () => ({ status: 204, headers: {}, body: "" }) };
+  await assert.rejects(session.rawWrite(args), error => /Pack security/.test(outputText(record(error).message)));
+  assert.equal((await session.rawWrite({ ...args, profile: { ...profile, enabledPacks: ["security"] } })).kind, "dry-run");
 });
 
 test("secret-bearing responses are redacted on the raw path", async () => {
@@ -470,7 +492,7 @@ const profileConfig = JSON.stringify({ version: 1, defaultProfile: "soc", profil
 function cli(args: readonly string[], config: string | null = null, input = "", bootstrap?: string) {
   const dir = mkdtempSync(join(tmpdir(), "mg-axi-api-"));
   try {
-    if (config) writeFileSync(join(dir, "config.json"), config);
+    if (config) writeFileSync(join(dir, "config.json"), config, { mode: 0o600 });
     return spawnSync(process.execPath, bootstrap === undefined ? [bin, ...args] : ["--input-type=module", "-e", bootstrap, ...args], {
       encoding: "utf8", input, timeout: 10000,
       env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, HOME: dir, USERPROFILE: dir, XDG_CONFIG_HOME: join(dir, ".config"), MG_AXI_CONFIG: join(dir, "config.json") },

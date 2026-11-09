@@ -490,7 +490,7 @@ export async function executeArgv(argv: string[], overrides: DispatchOverrides =
       try { payload = JSON.parse(String(flags.body)); } catch { throw new AxiError("Invalid JSON body", "VALIDATION_ERROR"); }
     }
     const session = new GraphSession({ delegated: overrides.delegated ?? new DelegatedAuth(new MsalProvider()), application: overrides.application ?? new ApplicationAuth(new MsalApplicationProvider()), transport: overrides.transport ?? fetchTransport });
-    return session.rawWrite({ profile: selected.profile, method: leaf.path.slice(4).toUpperCase() as "POST" | "PUT" | "PATCH" | "DELETE", version: String(flags["api-version"] ?? "v1.0"), path: positional!, payload, execute: !!flags.execute, confirm: flags.confirm === undefined ? undefined : String(flags.confirm), scopes: flags.scopes === undefined ? undefined : String(flags.scopes).split(",").map(scope => scope.trim()).filter(Boolean), transport: overrides.mutationTransport ?? mutationFetchTransport, journalPath: overrides.journalPath });
+    return session.rawWrite({ profile: selected.profile, method: leaf.path.slice(4).toUpperCase() as "POST" | "PUT" | "PATCH" | "DELETE", version: String(flags["api-version"] ?? "v1.0"), path: positional!, query: flags.query === undefined ? undefined : String(flags.query), payload, execute: !!flags.execute, confirm: flags.confirm === undefined ? undefined : String(flags.confirm), scopes: flags.scopes === undefined ? undefined : String(flags.scopes).split(",").map(scope => scope.trim()).filter(Boolean), transport: overrides.mutationTransport ?? mutationFetchTransport, journalPath: overrides.journalPath });
   }
   if (leaf.path === "api get") {
     const selected = profiles.resolve(flags.profile as string | undefined);

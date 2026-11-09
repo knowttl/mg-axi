@@ -12,6 +12,7 @@ import { DelegatedAuth } from "../dist/auth.js";
 import { Profiles } from "../dist/profiles.js";
 import { fetchTransport, runApiGet } from "../dist/api.js";
 import { GraphSession, MAX_CURSOR_BYTES } from "../dist/graph-session.js";
+import { executeArgv } from "../dist/cli.js";
 
 // API-01 through the lowest real interface observing behavior: runApiGet with
 // real DelegatedAuth/ApplicationAuth and a fake credential/transport boundary
@@ -109,6 +110,30 @@ test("encoded raw mail paths retain mailbox restrictions", async () => {
   assert.equal(f.requests.length, 0);
 });
 
+test("raw mail reads use the mail pack without the Entra pack", async () => {
+  const f = read({ path: "/me/messages", profile: { ...delegatedProfile, enabledPacks: ["mail"] }, scopes: "https://graph.microsoft.com/Mail.Read" });
+  assert.equal((await f.run({})).complete, true);
+});
+
+test("temporary access passes are redacted in raw reads and write previews", async () => {
+  const path = "/users/a/authentication/temporaryAccessPassMethods";
+  const f = read({ path }, json(200, { value: [{ id: "a", temporaryAccessPass: "secret-pass" }] }));
+  assert.deepEqual((await f.run({})).value, [{ id: "a", temporaryAccessPass: "***redacted***" }]);
+  const session = new GraphSession(f.deps);
+  const result = await session.rawWrite({ profile: { ...appProfile, rawWrites: true, writes: { allowWrites: true, operations: [] } }, method: "POST", version: "v1.0", path, payload: { temporaryAccessPass: "secret-pass" }, transport: async () => ({ status: 200, headers: {}, body: "{}" }) });
+  assert.equal(result.kind, "dry-run");
+  assert.doesNotMatch(JSON.stringify(result), /secret-pass/);
+});
+
+for (const path of ["/$batch", "/%24batch"]) test(`raw batch ${path} is refused before transport`, async () => {
+  const f = fixture();
+  const session = new GraphSession(f.deps);
+  let sent = false;
+  await assert.rejects(session.rawWrite({ profile: { ...delegatedProfile, rawWrites: true, writes: { allowWrites: true, operations: [] } }, method: "POST", version: "v1.0", path, scopes: ["https://graph.microsoft.com/Mail.ReadWrite.Shared"], payload: { requests: [{ id: "1", method: "PATCH", url: "/users/other/messages/a" }] }, execute: true, confirm: path, transport: async () => { sent = true; return { status: 200, headers: {}, body: "{}" }; } }), error => record(error).code === "POLICY_DENIED");
+  assert.equal(sent, false);
+  assert.equal(f.credentialCalls.length, 0);
+});
+
 test("raw collection preserves Graph metadata across pages", async () => {
   const f = read({ path: "/users/delta", limit: 1 }, json(200, { "@odata.count": 2, "@odata.deltaLink": "https://graph.microsoft.com/v1.0/users/delta?token=done", value: [{ id: "a" }, { id: "b" }] }));
   const partial = await f.run({});
@@ -118,9 +143,9 @@ test("raw collection preserves Graph metadata across pages", async () => {
   assert.deepEqual(result.value, [{ id: "b" }]);
 });
 
-test("raw advanced queries send eventual consistency", async () => {
-  const f = read({ odata: "$count=true" });
-  await f.run({});
+for (const odata of ["$count=true", '$search="displayName:x"']) test(`raw query ${odata} sends eventual consistency`, async () => {
+  const f = read({ odata });
+  assert.deepEqual(await f.run({}), { returned: 0, complete: true, value: [] });
   assert.equal(f.requests[0]!.headers.ConsistencyLevel, "eventual");
 });
 
@@ -149,13 +174,13 @@ test("raw writes require opt-in, confirmation and a journal", async () => {
     const f = fixture();
     const sent: string[] = [];
     const session = new GraphSession(f.deps);
-    const args = { profile: { ...appProfile, rawWrites: true, writes: { allowWrites: true, operations: [] } }, method: "PATCH" as const, version: "v1.0", path: "/users/a", payload: { displayName: "Adele" }, transport: async (request: { method: string }) => { sent.push(request.method); return { status: 200, headers: {}, body: '{"id":"a","key":"secret"}' }; }, journalPath: join(dir, "writes.log") };
+    const args = { profile: { ...appProfile, rawWrites: true, writes: { allowWrites: true, operations: [] } }, method: "PATCH" as const, version: "v1.0", path: "/users/a", payload: { displayName: "Adele" }, transport: async (request: { method: string }) => { sent.push(request.method); return { status: 200, headers: {}, body: '{"id":"a","key":"secret","temporaryAccessPass":"pass-value"}' }; }, journalPath: join(dir, "writes.log") };
     assert.equal((await session.rawWrite(args)).kind, "dry-run");
     await assert.rejects(session.rawWrite({ ...args, execute: true }), error => record(error).code === "CONFIRM_REQUIRED");
     await assert.rejects(session.rawWrite({ ...args, profile: { ...args.profile, rawWrites: false }, execute: true, confirm: "/users/a" }), error => record(error).code === "WRITES_DISABLED");
     const result = await session.rawWrite({ ...args, execute: true, confirm: "/users/a" });
     assert.equal(result.kind, "success");
-    if (result.kind === "success") assert.deepEqual(result.response, { id: "a", key: "***redacted***" });
+    if (result.kind === "success") assert.deepEqual(result.response, { id: "a", key: "***redacted***", temporaryAccessPass: "***redacted***" });
     assert.deepEqual(sent, ["PATCH"]);
     assert.deepEqual(readFileSync(join(dir, "writes.log"), "utf8").trim().split("\n").map(line => JSON.parse(line).kind), ["intent", "outcome"]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -163,7 +188,7 @@ test("raw writes require opt-in, confirmation and a journal", async () => {
 
 test("mail route without the mail pack is refused before credentials", async () => {
   const f = read({ path: "/me/messages" });
-  await assert.rejects(f.run({}), error => /Sensitive area mail is not enabled/.test(outputText(record(error).message)));
+  await assert.rejects(f.run({}), error => /Pack mail is not enabled/.test(outputText(record(error).message)));
   assert.equal(f.credentialCalls.length, 0);
   assert.equal(f.requests.length, 0);
 });
@@ -183,8 +208,6 @@ test("an unsupported api version is refused before credentials", async () => {
 });
 
 for (const [name, odata, pattern] of [
-  ["advanced $search", "$search=\"displayName:x\"", /ConsistencyLevel/],
-  ["$count=true", "$count=true", /ConsistencyLevel/],
   ["server $skiptoken", "$skiptoken=abc", /page with --all/],
   ["unknown key", "$foo=1", /Unsupported query key/],
 ] as const) test(`${name} is refused before credentials`, async () => {
@@ -467,13 +490,22 @@ test("api get help shows the positional path and flags", () => {
   assert.match(result.stdout, /--all/);
 });
 
-test("non-GET api verbs are refused before credentials", () => {
-  const result = cli(["api", "delete", "/users"]);
-  assert.equal(result.status, 2);
-  assert.equal(result.stderr, "");
-  const output = record(decode(result.stdout));
-  assert.equal(output.code, "VALIDATION_ERROR");
-  assert.match(outputText(output.error), /reviewed GET reads only/);
+for (const method of ["post", "put", "patch", "delete"]) test(`api ${method} accepts query parameters`, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-raw-query-"));
+  const previous = process.env.MG_AXI_CONFIG;
+  const config = join(dir, "config.json");
+  const profile = { ...appProfile, rawWrites: true, writes: { allowWrites: true, operations: [] } };
+  writeFileSync(config, JSON.stringify({ version: 1, defaultProfile: "soc", profiles: { soc: profile } }), { mode: 0o600 });
+  process.env.MG_AXI_CONFIG = config;
+  try {
+    const f = fixture();
+    const requests: { method: string; url: string }[] = [];
+    const result = await executeArgv(["api", method, "/users/a", "--query", "$select=id&custom=a%20b", "--execute", "--confirm", "/users/a"], { ...f.deps, mutationTransport: async request => { requests.push(request); return { status: 204, headers: {}, body: "" }; }, journalPath: join(dir, "writes.log") });
+    assert.equal(record(result).kind, "success");
+    assert.equal(requests[0]!.method, method.toUpperCase());
+    assert.equal(new URL(requests[0]!.url).searchParams.get("$select"), "id");
+    assert.equal(new URL(requests[0]!.url).searchParams.get("custom"), "a b");
+  } finally { process.env.MG_AXI_CONFIG = previous; rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("missing api path fails with usage output", () => {

@@ -51,6 +51,7 @@ export type MutationDefinition = {
   version: string;
   /** Literal server-relative path, already including the version segment. */
   path: string;
+  query?: string;
   effect: MutationEffect;
   target: string;
   payload?: unknown;
@@ -495,7 +496,10 @@ export function createMutationCoordinator(args: {
         try { decoded = decodeURIComponent(part); } catch { throw new AxiError("Invalid mutation path encoding", "VALIDATION_ERROR"); }
         if (decoded === "." || decoded === ".." || /[\/\\\x00-\x1f\x7f]/.test(decoded)) throw new AxiError("Invalid raw mutation path", "VALIDATION_ERROR");
       }
-      const url = `https://${GRAPH_HOST}${definition.path}`;
+      if (parts.length === 3 && decodeURIComponent(parts[2]!).toLowerCase() === "$batch") throw new AxiError("Raw batch requests cannot be authorized", "POLICY_DENIED");
+      if (definition.query !== undefined && (!definition.query || /[\x00-\x1f\x7f]/.test(definition.query) || definition.query.split("&").some(pair => !pair.includes("=") || pair.startsWith("=")))) throw new AxiError("Invalid raw mutation query", "VALIDATION_ERROR");
+      const query = definition.query === undefined ? "" : `?${new URLSearchParams(definition.query).toString()}`;
+      const url = `https://${GRAPH_HOST}${definition.path}${query}`;
       assertMutationDestination(url);
       return url;
     }
@@ -529,7 +533,17 @@ export function createMutationCoordinator(args: {
 
   function preview(definition: MutationDefinition | DownloadDefinition, current?: unknown, isNoop?: (current: unknown) => boolean): MutationPreview {
     enforceWriteGates(definition);
-    const url = boundMutationUrl(definition);
+    const boundUrl = boundMutationUrl(definition);
+    const destination = new URL(boundUrl);
+    if (definition.raw && definition.query !== undefined) {
+      const safe = new URLSearchParams();
+      for (const [key, value] of destination.searchParams) {
+        const redacted = redactGraphValue({ [key]: value }) as Record<string, unknown>;
+        safe.append(key, typeof redacted[key] === "string" ? redacted[key] as string : "***redacted***");
+      }
+      destination.search = safe.toString();
+    }
+    const url = definition.raw && definition.query !== undefined ? destination.toString() : boundUrl;
     return Object.freeze({
       operation: definition.operation,
       method: definition.method,
@@ -608,7 +622,7 @@ export function createMutationCoordinator(args: {
       profile: scope.tenantId,
       operation: definition.operation,
       method: definition.method,
-      url: seen.url,
+      url: definition.raw ? `${new URL(seen.url).origin}${new URL(seen.url).pathname}` : seen.url,
       target: definition.target,
       effect: definition.effect,
       ...(ifMatch !== undefined ? { ifMatch } : {}),
@@ -659,7 +673,7 @@ export function createMutationCoordinator(args: {
       recordAudit({ ...meta, kind: "outcome", httpStatus: 0, outcome: "NOT_SENT" });
       return { kind: "noop", preview: seen };
     }
-    const authorization = Object.freeze({ nonce: randomUUID(), method: definition.method, url: seen.url, raw: definition.raw });
+    const authorization = Object.freeze({ nonce: randomUUID(), method: definition.method, url: boundMutationUrl(definition), raw: definition.raw });
     authorizations.set(authorization, sender);
     let sent: MutationResponse;
     try {

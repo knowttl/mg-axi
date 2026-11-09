@@ -254,7 +254,7 @@ const SECRET_VALUE = [
 function secretKey(key: string): boolean {
   if (key === "customAccountResetCredentialsUrl" || key === "customForgotMyPasswordText") return false;
   const name = key.toLowerCase().replace(/[-_]/g, "");
-  return name === "sas" || name === "authorization" || name.toLowerCase() === "contentbytes" || SECRET_KEY.test(name) || KEY_SUFFIX.test(name);
+  return name === "sas" || name === "authorization" || name === "contentbytes" || name === "temporaryaccesspass" || SECRET_KEY.test(name) || KEY_SUFFIX.test(name);
 }
 
 // Shared redaction for reads, mutation previews and audit metadata: secret
@@ -849,7 +849,7 @@ export class GraphSession {
     private files = new PrivateFiles(),
   ) {}
 
-  async rawWrite(args: { profile: AnyProfile; method: import("./mutations.js").MutationMethod; version: string; path: string; payload?: unknown; execute?: boolean; confirm?: string; scopes?: string[]; transport: import("./mutations.js").MutationTransport; journalPath?: string }): Promise<import("./mutations.js").MutationResult> {
+  async rawWrite(args: { profile: AnyProfile; method: import("./mutations.js").MutationMethod; version: string; path: string; query?: string; payload?: unknown; execute?: boolean; confirm?: string; scopes?: string[]; transport: import("./mutations.js").MutationTransport; journalPath?: string }): Promise<import("./mutations.js").MutationResult> {
     const operation = rawReadOperation(args.version, args.path);
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, sessionOperation({ operation, raw: true }));
@@ -857,7 +857,7 @@ export class GraphSession {
     if (profile.mode === "application" && args.scopes !== undefined) throw new AxiError("Application profiles cannot specify delegated scopes", "VALIDATION_ERROR");
     const { createMutationCoordinator } = await import("./mutations.js");
     const coordinator = createMutationCoordinator({ profile, delegated: this.deps.delegated, application: this.deps.application, transport: args.transport, journalPath: args.journalPath, files: this.files });
-    return coordinator.execute({ raw: true, operation: "mg.api.raw", method: args.method, version: args.version, path: `/${args.version}${args.path}`, effect: "disruptive", target: args.path, payload: args.payload }, { execute: args.execute, confirm: args.confirm, scopes: args.scopes, readState: () => undefined });
+    return coordinator.execute({ raw: true, operation: "mg.api.raw", method: args.method, version: args.version, path: `/${args.version}${args.path}`, query: args.query, effect: "disruptive", target: args.path, payload: args.payload }, { execute: args.execute, confirm: args.confirm, scopes: args.scopes, readState: () => undefined });
   }
 
   cursorQuery(operation: SessionOperation, cursor: string): Readonly<Record<string, string>> {
@@ -1147,7 +1147,7 @@ export class GraphSession {
     // is both sensitive and excluded reports the sensitive denial.
     // Security is a separate explicit opt-in; existing Entra profiles do not
     // acquire Defender access merely by installing this command.
-    const pack = isMailOperation(operation) && operation.disposition !== "raw" ? "mail" : operation.id === HUNTING_OPERATION ? "security" : "entra";
+    const pack = isMailOperation(operation) ? "mail" : operation.id === HUNTING_OPERATION ? "security" : "entra";
     if (!profile.enabledPacks.includes(pack)) {
       throw new AxiError(`Pack ${pack} is not enabled for this profile`, "POLICY_DENIED", ["mg-axi profile show --profile <name>"]);
     }

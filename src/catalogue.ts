@@ -2830,6 +2830,7 @@ export const LEAVES: Leaf[] = [
 for (const method of ["post", "put", "patch", "delete"]) LEAVES.push({ path: `api ${method}`, description: `Preview or execute a gated raw Graph ${method.toUpperCase()}`, positional: { name: "path", description: "Server-relative Graph path" }, flags: {
   ...common,
   body: { value: "json", description: "JSON request body" },
+  query: { value: "k=v&k2=v2", description: "Graph query parameters" },
   scopes: { value: "comma-separated-Graph-scopes", description: "Delegated Graph scopes" },
   execute: { description: "Execute the previewed write" },
   confirm: { value: "path", description: "Confirm the exact server-relative path" },
@@ -3016,7 +3017,7 @@ export function resolveCommand(argv: string[]): { leaf: Leaf; flags: Record<stri
   let leaf = LEAVES.find(item => item.path === path);
   let positional: string | undefined;
   let flagStart = words.length;
-  if (!leaf && words[0] !== "api") {
+  if (!leaf) {
     const candidate = LEAVES.find(item => item.positional && item.path === words.slice(0, -1).join(" "));
     if (candidate) {
       leaf = candidate;

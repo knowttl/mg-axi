@@ -80,6 +80,7 @@ Preserve other hooks and shared settings; see [hook details](docs/agent-setup.md
 | Mail | Messages, folders, attachments, settings, rules and categories | Read; gated writes/downloads; opt-in | [Mail](docs/mail.md) |
 | Tenant and partner configuration | Domains, policies, federation and partner relationships | Read | [Commands](docs/commands.md) |
 | Raw reads | `api get <path>` on any Graph path, v1.0 and beta | Read | [Output and paging](docs/output-and-paging.md) |
+| Raw writes | `api post`, `put`, `patch`, or `delete` on a Graph path | Gated write | [Execution contract](docs/execution.md) |
 
 Use `mg-axi <group> --help` or leaf `--help` for exact flags without signing in.
 The full generated leaf table lives in [docs/commands.md](docs/commands.md) and [SKILL.md](skills/mg-axi/SKILL.md#orientation).

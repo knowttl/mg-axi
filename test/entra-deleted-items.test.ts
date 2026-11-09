@@ -580,7 +580,5 @@ test("raw deleted-item show redacts credential values and keeps the discriminato
   };
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
   const shown = await runApiGet({ path: `/directory/deletedItems/${deletedApp.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: appScopes[0]! }, deps);
-  assert.equal(shown["@odata.type"], "#microsoft.graph.application");
-  assert.equal(shown.displayName, deletedApp.displayName);
-  assert.doesNotMatch(JSON.stringify(shown), /super-secret-value/);
+  assert.deepEqual(shown, { "@odata.type": "#microsoft.graph.application", id: "9b1c2d3e-4f5a-4b6c-8d7e-8f9a0b1c2d3e", appId: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", displayName: "Daemon app", publisherDomain: "contoso.com", signInAudience: "AzureADMyOrg", deletedDateTime: "2026-09-22T10:00:00Z", keyCredentials: [{ keyId: "k1", displayName: "key" }], passwordCredentials: [{ keyId: "p1", displayName: "daemon secret" }] });
 });

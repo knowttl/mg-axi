@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { DESCRIPTION, HOME_HELP, LEAVES } from "./catalogue.js";
 
-const UNSUPPORTED_READ_NOTE = "Graph v1.0 does not support the legacy `entra scoped-role-membership list/show`, `entra domain-dns-record list` or `entra directory-object list` routes; those commands fail locally with supported alternatives and their root routes are not available through `api get`.";
+const UNSUPPORTED_READ_NOTE = "Legacy `entra scoped-role-membership list/show`, `entra domain-dns-record list` and `entra directory-object list` commands fail locally with supported alternatives; raw reads remain available.";
 
 // PACK-01: single source for generated release records. The committed
 // skills/mg-axi/SKILL.md, docs/commands.md and docs/coverage.md use the templates
@@ -20,6 +20,7 @@ const UNSUPPORTED_READ_NOTE = "Graph v1.0 does not support the legacy `entra sco
 // leaves carry the read effect, except reviewed named writes.
 export function leafEffect(leaf: { path: string; operation?: string }): string {
   if (leaf.path === "security hunting query") return "read";
+  if (["api post", "api put", "api patch", "api delete"].includes(leaf.path)) return "write";
   if (leaf.operation !== undefined) return leaf.operation.startsWith("GET:") ? "read" : "write";
   return ["api get", "doctor", "home"].includes(leaf.path) ? "read" : "local";
 }

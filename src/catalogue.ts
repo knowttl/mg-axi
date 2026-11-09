@@ -2816,7 +2816,7 @@ export const LEAVES: Leaf[] = [
     run: lifecycleRunReportsRead.run,
     scopes: lifecycleRunReportsRead.scopes,
   }, examples: ["mg-axi entra lifecycle run task-processing-result count --workflow <workflow-id> --run <run-id> --profile soc"] },
-  { path: "api get", description: "Raw read-only Graph GET (API-01) for any server-relative path on the v1.0 or beta endpoint; responses come back whole with secret values redacted; beta needs a preview profile, mail and file content need their profile opt-in, and only GET is sent", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
+  { path: "api get", description: "Raw Graph GET for a server-relative path; responses retain Graph fields with secrets redacted", positional: { name: "path", description: "Server-relative Graph path, e.g. /users" }, flags: {
     ...common,
     odata: { value: "k=v&k2=v2", description: "OData query passed to Graph ($select, $filter, $top, $orderby, $count, $expand, $search with ConsistencyLevel); $skiptoken is refused, use --all or --cursor" },
     cursor: { value: "token|-", description: "Resume a partial collection; - reads the token from stdin (16 MB ceiling for either input); use the same path, profile and scopes, and omit --odata to reuse its query" },
@@ -2826,6 +2826,14 @@ export const LEAVES: Leaf[] = [
     full: { description: "Disable 500-character string truncation; never disables redaction or row caps" },
   }, examples: ["mg-axi api get /users --scopes https://graph.microsoft.com/User.Read.All", "mg-axi api get /groups --odata '$filter=securityEnabled eq true&$top=5' --scopes https://graph.microsoft.com/GroupMember.Read.All", "mg-axi api get /users --cursor - --all --scopes https://graph.microsoft.com/User.Read.All < cursor.txt"] },
 ];
+
+for (const method of ["post", "put", "patch", "delete"]) LEAVES.push({ path: `api ${method}`, description: `Preview or execute a gated raw Graph ${method.toUpperCase()}`, positional: { name: "path", description: "Server-relative Graph path" }, flags: {
+  ...common,
+  body: { value: "json", description: "JSON request body" },
+  scopes: { value: "comma-separated-Graph-scopes", description: "Delegated Graph scopes" },
+  execute: { description: "Execute the previewed write" },
+  confirm: { value: "path", description: "Confirm the exact server-relative path" },
+}, examples: [`mg-axi api ${method} /users/example --body '{}'`] });
 
 LEAVES.push({ path: "security hunting query", description: "Run one read-only Defender XDR KQL table pipeline from a file; requires the security pack and ThreatHunting.Read.All; no paging API exists", operation: "POST:/security/microsoft.graph.security.runHuntingQuery", flags: {
   ...common,

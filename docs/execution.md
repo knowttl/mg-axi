@@ -2,9 +2,9 @@
 
 ## Named writes
 
-Only named, approved pack commands can mutate; raw API remains read-only until raw writes ship.
+Named writes use their configured operation allowlist.
 Captain decision (option B): raw reads accept any Graph path on v1.0 and beta through a session entrypoint, and the shipped inventory no longer limits raw reads.
-Raw writes, when they ship, need the raw-write flag, `writes.allowWrites`, and `--execute --confirm`, with preview and journaling.
+Raw writes require the profile's `rawWrites` flag and `writes.allowWrites`, with preview, exact path confirmation, and journaling.
 WRITE-00 provides the shared [mutation coordinator](../src/mutations.ts).
 WRITE-01 ships the first named command (`entra group member add`); WRITE-02 adds the named `entra user update` account-state command; WRITE-03 adds the named `entra user revoke-sessions` session-revocation action; WRITE-04 adds the named `entra conditional-access policy update` command; WRITE-05 adds the named `entra risky-user dismiss` single-user action; MAIL-05 adds the gated `mail message tag`, `mail message flag` and `mail message mark` writes; MAIL-06 adds the gated `mail message move`, `mail message copy` and `mail message trash` (soft delete to Deleted Items only) writes; MAIL-07 adds the gated `mail folder create`, `mail folder delete` (empty custom folders only) and `mail category create` writes; MAIL-08 adds the gated `mail rule create`, `mail rule update` and `mail rule delete` (inbox only) writes. Each mail ID runs as its own coordinator call with a fresh read, journal intent and single send, sequentially, stopping at the first failed or unknown outcome with later targets not attempted. MAIL-09 adds the guarded `mail attachment save` and `mail message export` downloads through the coordinator download path: exact resource confirmation, journaled intent and outcome with redacted mailbox and resource IDs, a single fetch with no retries, refused redirects, and exclusive no-follow 0600 output capped at 50 MiB with partial files removed on failure; reference attachments are refused.
 All seventeen mutation commands use the shared production [mutation transport](../src/mutations.ts); the two guarded downloads travel on the separate binary transport through the same coordinator journal. Later families still ship independently with their own contracts.
@@ -29,7 +29,7 @@ When a nonempty accepted body is not valid JSON, mutation output includes a `res
 The warning contains no response content; read back the target before continuing and never replay the intent.
 Valid JSON and empty responses, including 204 responses, do not produce this warning.
 No mutation is automatically retried or replayed; an already reserved intent ID is refused even after an outcome was recorded.
-Unknown actions, raw writes, secret-returning endpoints, and unsupported beta writes fail closed.
+Raw beta writes require a preview-enabled profile.
 
 ## Read mechanics and source contracts
 

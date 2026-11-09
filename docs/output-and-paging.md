@@ -31,7 +31,7 @@ mg-axi api get /groups --profile soc --odata '$filter=securityEnabled eq true&$t
 ```
 
 Raw reads accept any server-relative Graph path on the v1.0 or beta endpoint; the inventory no longer limits raw access.
-Only GET is sent. Raw writes are not yet enabled and will need the raw-write flag, `writes.allowWrites` and `--execute --confirm`.
+Raw POST, PUT, PATCH and DELETE require `rawWrites: true` and `writes.allowWrites: true` in the profile, plus `--execute --confirm <path>` to send; omitting `--execute` returns a preview.
 Beta raw reads need a preview profile, and the explicit delegated scopes must be full `https://graph.microsoft.com/` names.
 Mail and file content still require the profile's sensitive-area opt-in.
 Responses come back whole, not projected to a field list; completeness describes the requested collection.

@@ -116,10 +116,12 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
   if (pathname.endsWith("/$count")) {
     return { count: await session.execute({ ...request, query, scalar: true, consistencyLevel: "eventual" }) as number };
   }
-  const collected = await session.collect({ ...request, query, limit: args.limit, cursor: args.cursor, singleResource: true });
+  const consistencyLevel = query && (Object.hasOwn(query, "$search") || String(query.$count).toLowerCase() === "true") ? "eventual" as const : undefined;
+  const collected = await session.collect({ ...request, query, consistencyLevel, limit: args.limit, cursor: args.cursor, singleResource: true });
   if (collected.singleResource && collected.complete && collected.value.length === 1) return singleOutput(collected.value[0], full);
   const rows = truncateForOutput(collected.value, full);
-  const page = { returned: collected.value.length, complete: collected.complete, value: rows.value };
+  const metadata = truncateForOutput(collected.metadata ?? {}, full);
+  const page = { ...(metadata.value as Record<string, unknown>), returned: collected.value.length, complete: collected.complete, value: rows.value };
   if (collected.complete) return { ...page, ...(rows.truncated ? { help: [TRUNCATED_HINT] } : {}) };
   const help = rows.truncated ? [PAGING_HINT, TRUNCATED_HINT] : [PAGING_HINT];
   return { ...page, reason: collected.reason, cursor: collected.cursor, help };

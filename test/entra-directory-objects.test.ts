@@ -391,6 +391,5 @@ test("raw directory-object show keeps the discriminator without subtype secrets"
   };
   const delegatedProfile = { mode: "delegated", tenantId: tenant, clientId: client, cloud: "commercial", enabledPacks: ["entra"], preview: false, sensitiveAreas: [], allowDeviceCode: false, token: { stored: true } } as const;
   const shown = await runApiGet({ path: `/directoryObjects/${obj2.id}`, apiVersion: "v1.0", profile: delegatedProfile, scopes: directoryObjectScopes[0]! }, deps);
-  assert.equal(shown.id, obj2.id);
-  assert.equal(shown["@odata.type"], "#microsoft.graph.servicePrincipal");
+  assert.deepEqual(shown, { "@odata.type": "#microsoft.graph.servicePrincipal", id: "9b1c2d3e-4f5a-4b6c-8d7e-8f9a0b1c2d3e", passwordCredentials: [{ displayName: "daemon secret" }], appId: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d" });
 });

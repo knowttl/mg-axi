@@ -2,7 +2,7 @@ import { record, records, text as outputText, strings, delegatedProvider, type R
 import type { GraphTransport, TransportRequest, TransportResponse } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -11,7 +11,7 @@ import { ApplicationAuth } from "../dist/app-auth.js";
 import { DelegatedAuth } from "../dist/auth.js";
 import { Profiles } from "../dist/profiles.js";
 import { fetchTransport, runApiGet } from "../dist/api.js";
-import { MAX_CURSOR_BYTES } from "../dist/graph-session.js";
+import { GraphSession, MAX_CURSOR_BYTES } from "../dist/graph-session.js";
 
 // API-01 through the lowest real interface observing behavior: runApiGet with
 // real DelegatedAuth/ApplicationAuth and a fake credential/transport boundary
@@ -101,6 +101,64 @@ test("delegated raw mail refuses shared scopes and another mailbox", async () =>
   assert.equal(other.requests.length, 0);
   const own = read({ path: "/me/messages", profile, scopes: "https://graph.microsoft.com/Mail.Read" });
   assert.equal((await own.run({})).complete, true);
+});
+
+test("encoded raw mail paths retain mailbox restrictions", async () => {
+  const f = read({ path: "/users/other@example.com/%6dessages", profile: { ...delegatedProfile, enabledPacks: ["entra", "mail"] }, scopes: "https://graph.microsoft.com/Mail.Read" });
+  await assert.rejects(f.run({}), error => record(error).code === "POLICY_DENIED");
+  assert.equal(f.requests.length, 0);
+});
+
+test("raw collection preserves Graph metadata across pages", async () => {
+  const f = read({ path: "/users/delta", limit: 1 }, json(200, { "@odata.count": 2, "@odata.deltaLink": "https://graph.microsoft.com/v1.0/users/delta?token=done", value: [{ id: "a" }, { id: "b" }] }));
+  const partial = await f.run({});
+  assert.equal(partial["@odata.count"], 2);
+  const result = await f.run({ cursor: String(partial.cursor) });
+  assert.equal(result["@odata.deltaLink"], "https://graph.microsoft.com/v1.0/users/delta?token=done");
+  assert.deepEqual(result.value, [{ id: "b" }]);
+});
+
+test("raw advanced queries send eventual consistency", async () => {
+  const f = read({ odata: "$count=true" });
+  await f.run({});
+  assert.equal(f.requests[0]!.headers.ConsistencyLevel, "eventual");
+});
+
+test("raw reads allow literal braces and uncatalogued roots", async () => {
+  for (const path of ["/directoryObjects", "/domainDnsRecords", "/scopedRoleMemberships", "/users/{literal}"]) {
+    const f = read({ path });
+    await f.run({});
+    assert.equal(new URL(f.requests[0]!.url).pathname, new URL(`https://graph.microsoft.com/v1.0${path}`).pathname);
+  }
+});
+
+test("raw mail rejects oversized pages and protects attachment content", async () => {
+  const profile = { ...delegatedProfile, enabledPacks: ["entra", "mail"] };
+  const args = { profile, scopes: "https://graph.microsoft.com/Mail.Read" };
+  const f = read({ ...args, path: "/me/messages", limit: 1 }, json(200, { value: [{ id: "a" }, { id: "b" }] }));
+  await assert.rejects(f.run({}), error => record(error).code === "GRAPH_ERROR");
+  const attachment = read({ ...args, path: "/me/messages/a/attachments/b" }, json(200, { id: "b", contentBytes: "c2VjcmV0" }));
+  assert.deepEqual(await attachment.run({}), { id: "b", contentBytes: "***redacted***" });
+  const mime = read({ ...args, path: "/me/messages/a/$value" });
+  await assert.rejects(mime.run({}), error => record(error).code === "POLICY_DENIED");
+});
+
+test("raw writes require opt-in, confirmation and a journal", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-raw-write-"));
+  try {
+    const f = fixture();
+    const sent: string[] = [];
+    const session = new GraphSession(f.deps);
+    const args = { profile: { ...appProfile, rawWrites: true, writes: { allowWrites: true, operations: [] } }, method: "PATCH" as const, version: "v1.0", path: "/users/a", payload: { displayName: "Adele" }, transport: async (request: { method: string }) => { sent.push(request.method); return { status: 200, headers: {}, body: '{"id":"a","key":"secret"}' }; }, journalPath: join(dir, "writes.log") };
+    assert.equal((await session.rawWrite(args)).kind, "dry-run");
+    await assert.rejects(session.rawWrite({ ...args, execute: true }), error => record(error).code === "CONFIRM_REQUIRED");
+    await assert.rejects(session.rawWrite({ ...args, profile: { ...args.profile, rawWrites: false }, execute: true, confirm: "/users/a" }), error => record(error).code === "WRITES_DISABLED");
+    const result = await session.rawWrite({ ...args, execute: true, confirm: "/users/a" });
+    assert.equal(result.kind, "success");
+    if (result.kind === "success") assert.deepEqual(result.response, { id: "a", key: "***redacted***" });
+    assert.deepEqual(sent, ["PATCH"]);
+    assert.deepEqual(readFileSync(join(dir, "writes.log"), "utf8").trim().split("\n").map(line => JSON.parse(line).kind), ["intent", "outcome"]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("mail route without the mail pack is refused before credentials", async () => {

@@ -564,7 +564,7 @@ test("raw deleted-user reads return the whole row for each caller", async () => 
     const listed = await runApiGet({ path: "/directory/deletedItems/graph.user", apiVersion: "v1.0", profile,
       ...(profile.mode === "delegated" ? { scopes: userScopes[0]! } : {}) }, deps);
     assert.equal(listed.returned, 1);
-    assert.deepEqual(listed.value, [deletedUser]);
+    assert.deepEqual(listed.value, [{ "@odata.type": "#microsoft.graph.user", id: "6ea91a8d-e32e-41a1-b7bd-d2d185eed0e0", displayName: "Adele Vance", userPrincipalName: "AdeleV@contoso.com", mail: "AdeleV@contoso.com", userType: "Member", deletedDateTime: "2026-09-20T16:56:36Z" }]);
   }
   assert.ok(requests.every(request => request.headers.Authorization === "Bearer opaque-fixture-secret"));
 });

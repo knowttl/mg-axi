@@ -234,7 +234,7 @@ export function resolveSessionOperation(version: string, method: string, route: 
 }
 
 const SECRET_KEY = /(password|passwd|secret|token|credential|sas|authorization|accountkey)/i;
-const KEY_SUFFIX = /[a-z0-9](key|keys)$/i;
+const KEY_SUFFIX = /(?:^|[a-z0-9])(key|keys)$/i;
 const SECRET_VALUE = [
   /AccountKey=/i,
   /SharedAccessKey/i,
@@ -325,9 +325,25 @@ function matchRoute(route: string, pathname: string): Record<string, string> | n
 // content areas. Later slices refine this table with their reviewed contracts.
 function sensitiveArea(route: string): string | null {
   const segments = splitPath(route).map(segment => segment.toLowerCase());
-  if (segments.some(segment => segment === "messages" || segment === "mailfolders")) return "mail";
+  if (segments.some(segment => ["messages", "mailfolders", "mailboxsettings", "outlook"].includes(segment))) return "mail";
   if (segments.some(segment => segment === "drive" || segment === "drives" || segment === "file" || segment === "files") || segments[0] === "shares") return "files";
   return null;
+}
+
+function rawMailOperation(operation: SessionOperation): SessionOperation | undefined {
+  if (operation.disposition !== "raw") return undefined;
+  const segments = splitPath(operation.path).map(segment => segment.toLowerCase());
+  if (!segments.some(segment => ["messages", "mailfolders", "mailboxsettings", "outlook"].includes(segment))) return undefined;
+  const owningSlice = segments.some(segment => segment === "mailboxsettings" || segment === "outlook") ? "MAIL-04"
+    : segments.includes("messages") && segments.indexOf("messages") < segments.length - 1 ? "MAIL-03" : "MAIL-01";
+  return { ...operation, owningSlice };
+}
+
+function rawMailbox(operation: SessionOperation): string | undefined {
+  const segments = splitPath(operation.path);
+  if (segments[0]?.toLowerCase() === "me") return undefined;
+  if (segments[0]?.toLowerCase() === "users" && segments[1]) return decodeURIComponent(segments[1]);
+  return "";
 }
 
 function checkOperation(operation: SessionOperation): void {
@@ -713,6 +729,7 @@ function bodyBytes(body: string): number {
 }
 
 interface CursorState {
+  singleResource?: boolean;
   searchRows?: number;
   next?: string;
   buffered: unknown[];
@@ -728,7 +745,7 @@ interface CursorState {
 }
 
 function encodeCursor(operation: SessionOperation, state: CursorState): string {
-  const payload = { v: 3, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN), query: state.query, consistencyLevel: state.consistencyLevel ?? null, context: state.context, identity: state.identity, total: state.total, searchRows: state.searchRows };
+  const payload = { v: 3, op: operation.id, next: state.next ?? null, buffered: state.buffered, seen: state.seen.slice(-MAX_SEEN), query: state.query, consistencyLevel: state.consistencyLevel ?? null, context: state.context, identity: state.identity, total: state.total, searchRows: state.searchRows, singleResource: state.singleResource };
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
@@ -742,7 +759,7 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   } catch {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
-  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown; query?: unknown; consistencyLevel?: unknown; context?: unknown; identity?: unknown; total?: unknown; searchRows?: unknown };
+  const record = payload as { v?: unknown; op?: unknown; next?: unknown; buffered?: unknown; seen?: unknown; query?: unknown; consistencyLevel?: unknown; context?: unknown; identity?: unknown; total?: unknown; searchRows?: unknown; singleResource?: unknown };
   if (!record || typeof record !== "object" || record.v !== 3 || record.op !== operation.id || !(record.next === null || typeof record.next === "string") || !Array.isArray(record.buffered) || !Array.isArray(record.seen) || !record.query || typeof record.query !== "object" || Array.isArray(record.query) || !(record.consistencyLevel === null || record.consistencyLevel === "eventual") || typeof record.context !== "string" || !/^[0-9a-f]{64}$/.test(record.context) || !(record.identity === null || (typeof record.identity === "string" && /^[0-9a-f]{64}$/.test(record.identity)))) {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
@@ -750,6 +767,7 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
   }
   if (record.buffered.length > 5000) throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["The cursor buffers at most one fetched page"]);
+  if (record.singleResource !== undefined && typeof record.singleResource !== "boolean") throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR");
   const total = record.total === undefined ? null : record.total;
   if (!(total === null || (typeof total === "number" && Number.isSafeInteger(total) && total >= 0))) {
     throw new AxiError("Invalid collection cursor", "VALIDATION_ERROR", ["Resume with the cursor from a partial result of the same operation"]);
@@ -760,7 +778,7 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   buildQuery(query);
   checkQueryContext(query, consistencyLevel, isMailOperation(operation));
   if (record.searchRows !== undefined && (typeof record.searchRows !== "number" || !Number.isSafeInteger(record.searchRows) || record.searchRows < 0 || record.searchRows >= 1000)) throw new AxiError("Invalid search cursor count", "VALIDATION_ERROR");
-  return { next: record.next ?? undefined, buffered: record.buffered.map(redact), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity, total, searchRows: record.searchRows as number | undefined };
+  return { next: record.next ?? undefined, buffered: record.buffered.map(redact), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity, total, searchRows: record.searchRows as number | undefined, singleResource: record.singleResource as boolean | undefined };
 }
 
 function nextLinkOf(body: unknown): string | undefined {
@@ -822,6 +840,8 @@ export class GraphSession {
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
     if (isMailOperation(operation)) checkMailScopes(profile, args.scopes, operation);
+    const rawMail = rawMailOperation(operation);
+    if (rawMail) checkMailScopes(profile, args.scopes, rawMail);
     if (args.mailBodyType !== undefined && (operation.owningSlice !== "MAIL-03" || !["text", "html"].includes(args.mailBodyType))) throw new AxiError("Body format is only supported for message show", "VALIDATION_ERROR");
     if (operation.id === HUNTING_OPERATION) {
       if (!args.hunting || args.query || args.params || args.scalar || args.consistencyLevel) {
@@ -868,6 +888,7 @@ export class GraphSession {
           ? await this.deps.delegated.credential(profile, this.scopesFor(args))
           : await this.deps.application.credential(profile, this.applicationScopes(args.scopes));
         if (isMailOperation(operation)) checkMailCredential(profile, credential, params["user-id"]);
+        if (rawMail) checkMailCredential(profile, credential, rawMailbox(operation));
         return credential.token;
       }, clock, deadline, signal);
     } catch (error) {
@@ -894,6 +915,8 @@ export class GraphSession {
     const profile = validateProfile(args.profile, this.files);
     this.authorizePolicy(profile, operation);
     if (isMailOperation(operation)) checkMailScopes(profile, args.scopes, operation);
+    const rawMail = rawMailOperation(operation);
+    if (rawMail) checkMailScopes(profile, args.scopes, rawMail);
     checkLimit(args.limit);
     const budget = checkBudget(args.budget);
     if (args.cursor !== undefined && (typeof args.cursor !== "string" || !args.cursor)) {
@@ -941,13 +964,13 @@ export class GraphSession {
     // First known server total wins across pages and resumes; later pages
     // repeat the same query total, so disagreement keeps the first.
     let total: number | null = resumed?.total ?? null;
-    let singleResource = false;
+    let singleResource = resumed?.singleResource ?? false;
     const partial = (reason: string, next: string | undefined, buffered: unknown[]): CollectionResult => ({
       value: results,
       query,
       complete: false,
       reason,
-      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel, context, identity, total, ...(mailSearch ? { searchRows: searchRows + results.length } : {}) }),
+      cursor: encodeCursor(operation, { next, buffered, seen: [...seenList], query, consistencyLevel, context, identity, total, singleResource, ...(mailSearch ? { searchRows: searchRows + results.length } : {}) }),
       requests,
       bytes,
       total,
@@ -959,6 +982,7 @@ export class GraphSession {
         ? this.deps.delegated.credential(profile, this.scopesFor(args))
         : this.deps.application.credential(profile, this.applicationScopes(args.scopes)), clock, deadline, signal);
       if (isMailOperation(operation)) checkMailCredential(profile, credential, params["user-id"]);
+      if (rawMail) checkMailCredential(profile, credential, rawMailbox(operation));
       const acquiredIdentity = createHash("sha256").update(JSON.stringify([
         profile.mode, credential.tenantId.toLowerCase(), credential.clientId.toLowerCase(),
         profile.mode === "delegated" && "accountId" in credential ? credential.accountId : null,

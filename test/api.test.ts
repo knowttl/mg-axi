@@ -72,6 +72,37 @@ test("secret-bearing responses are redacted on the raw path", async () => {
   assert.doesNotMatch(JSON.stringify(result), /c2VjcmV0/);
 });
 
+test("recovery keys remain redacted in singleton and buffered collection output", async () => {
+  const singleton = read({ path: "/informationProtection/bitlocker/recoveryKeys/a" }, json(200, { id: "a", key: "recovery-secret" }));
+  assert.deepEqual(await singleton.run({}), { id: "a", key: "***redacted***" });
+  const collection = read({ path: "/informationProtection/bitlocker/recoveryKeys", limit: 1 }, json(200, { value: [{ id: "a", key: "first-secret" }, { id: "b", key: "second-secret" }] }));
+  const partial = await collection.run({});
+  assert.doesNotMatch(JSON.stringify(partial), /first-secret|second-secret/);
+  const resumed = await collection.run({ cursor: String(partial.cursor) });
+  assert.deepEqual(resumed.value, [{ id: "b", key: "***redacted***" }]);
+});
+
+test("oversized singleton returns a cursor and delivers the buffered object on resume", async () => {
+  const f = read({ path: "/users/a" }, { ...json(200, { id: "a", displayName: "Adele" }), receivedBodyBytes: 5000001 });
+  const partial = await f.run({});
+  assert.equal(partial.complete, false);
+  assert.match(String(partial.reason), /byte budget exceeded/);
+  assert.equal(typeof partial.cursor, "string");
+  assert.deepEqual(await f.run({ cursor: String(partial.cursor) }), { id: "a", displayName: "Adele" });
+  assert.equal(f.requests.length, 1);
+});
+
+test("delegated raw mail refuses shared scopes and another mailbox", async () => {
+  const profile = { ...delegatedProfile, enabledPacks: ["entra", "mail"] };
+  const shared = read({ path: "/users/other@example.com/messages", profile, scopes: "https://graph.microsoft.com/Mail.Read.Shared" });
+  await assert.rejects(shared.run({}), error => record(error).code === "VALIDATION_ERROR");
+  const other = read({ path: "/users/other@example.com/messages", profile, scopes: "https://graph.microsoft.com/Mail.Read" });
+  await assert.rejects(other.run({}), error => record(error).code === "POLICY_DENIED");
+  assert.equal(other.requests.length, 0);
+  const own = read({ path: "/me/messages", profile, scopes: "https://graph.microsoft.com/Mail.Read" });
+  assert.equal((await own.run({})).complete, true);
+});
+
 test("mail route without the mail pack is refused before credentials", async () => {
   const f = read({ path: "/me/messages" });
   await assert.rejects(f.run({}), error => /Sensitive area mail is not enabled/.test(outputText(record(error).message)));
@@ -481,7 +512,7 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: tenantLookupSco
     const f = fixture(json(200, row));
     const body = await runApiGet({ path: "/tenantRelationships/findTenantInformationByDomainName(domainName='example.invalid')", apiVersion: "v1.0", profile, ...scopeArgs }, f.deps);
     assert.equal(f.requests[0]!.url, "https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByDomainName(domainName='example.invalid')");
-    assert.deepEqual(body, row);
+    assert.deepEqual(body, { tenantId: "55555555-5555-4555-8555-555555555555", defaultDomainName: "example.invalid", displayName: "Example", federationBrandName: null });
   });
 
   test(`${profile.mode} raw tenant lookup by tenant ID binds the canonical function URL`, async () => {
@@ -489,7 +520,7 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: tenantLookupSco
     const f = fixture(json(200, row));
     const body = await runApiGet({ path: `/tenantRelationships/findTenantInformationByTenantId(tenantId='${lookupTenant}')`, apiVersion: "v1.0", profile, ...scopeArgs }, f.deps);
     assert.equal(f.requests[0]!.url, `https://graph.microsoft.com/v1.0/tenantRelationships/findTenantInformationByTenantId(tenantId='${lookupTenant}')`);
-    assert.deepEqual(body, row);
+    assert.deepEqual(body, { tenantId: "55555555-5555-4555-8555-555555555555", defaultDomainName: "example.invalid", displayName: "Example", federationBrandName: null });
   });
 }
 
@@ -499,7 +530,7 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: commerceRawScop
     const f = fixture(json(200, row));
     const body = await runApiGet({ path: `/directory/subscriptions(commerceSubscriptionId='${lookupCommerce}')`, apiVersion: "v1.0", profile, odata: "$select=id,commerceSubscriptionId,status", ...scopeArgs }, f.deps);
     assert.equal(f.requests[0]!.url, `https://graph.microsoft.com/v1.0/directory/subscriptions(commerceSubscriptionId='${lookupCommerce}')?%24select=id%2CcommerceSubscriptionId%2Cstatus`);
-    assert.deepEqual(body, row);
+    assert.deepEqual(body, { id: "860697e3-b0aa-4196-a6c6-7ec361ed58f7", commerceSubscriptionId: "66666666-6666-4666-8666-666666666666", status: "Enabled" });
   });
 }
 

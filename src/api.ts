@@ -117,7 +117,7 @@ export async function runApiGet(args: ApiGetArgs, deps: ApiDeps): Promise<Record
     return { count: await session.execute({ ...request, query, scalar: true, consistencyLevel: "eventual" }) as number };
   }
   const collected = await session.collect({ ...request, query, limit: args.limit, cursor: args.cursor, singleResource: true });
-  if (collected.singleResource) return singleOutput(collected.value[0], full);
+  if (collected.singleResource && collected.complete && collected.value.length === 1) return singleOutput(collected.value[0], full);
   const rows = truncateForOutput(collected.value, full);
   const page = { returned: collected.value.length, complete: collected.complete, value: rows.value };
   if (collected.complete) return { ...page, ...(rows.truncated ? { help: [TRUNCATED_HINT] } : {}) };

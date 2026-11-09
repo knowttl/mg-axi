@@ -814,7 +814,11 @@ function countOf(body: unknown): number | null {
 }
 
 function isCollectionEnvelope(body: unknown): boolean {
-  return !!body && typeof body === "object" && !Array.isArray(body) && Array.isArray((body as { value?: unknown }).value);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const record = body as Record<string, unknown>;
+  if (!Array.isArray(record.value) || Object.hasOwn(record, "id") || (typeof record["@odata.context"] === "string" && record["@odata.context"].endsWith("/$entity"))) return false;
+  return Object.keys(record).every(key => key === "value" || key.startsWith("@odata."))
+    || ["@odata.nextLink", "@odata.deltaLink", "@odata.count"].some(key => Object.hasOwn(record, key));
 }
 
 function valuesOf(operation: SessionOperation, response: TransportResponse, body: unknown): unknown[] {
@@ -1122,7 +1126,7 @@ export class GraphSession {
           }
           const pageTotal = countOf(parsed);
           if (total === null && pageTotal !== null) total = pageTotal;
-          const rawNext = nextLinkOf(parsed);
+          const rawNext = singleResource ? undefined : nextLinkOf(parsed);
           const nextUrl = rawNext ? authorizeUrl(operation, params, rawNext, fetchUrl, consistencyLevel) : undefined;
           remember(current);
           remember(fetchUrl);

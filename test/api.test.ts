@@ -132,6 +132,32 @@ test("oversized singleton returns a cursor and delivers the buffered object on r
   assert.equal(f.requests.length, 1);
 });
 
+for (const value of [[], ["alpha", "beta"], [{ label: "first" }, { label: "second" }]] as const) test(`raw resource retains its array value ${JSON.stringify(value)}`, async () => {
+  const f = read({ path: "/users/a/extensions/example", limit: 1 }, json(200, { id: "example", value, secretText: "hidden" }));
+  const result = await f.run({});
+  assert.equal(result.id, "example");
+  assert.deepEqual(result.value, value);
+  assert.equal(result.secretText, "***redacted***");
+  assert.equal(result.cursor, undefined);
+});
+
+test("raw resource with an array value resumes intact after its byte budget", async () => {
+  const body = { id: "example", value: ["alpha", "beta"] };
+  const f = read({ path: "/users/a/extensions/example", limit: 1 }, { ...json(200, body), receivedBodyBytes: 5000001 });
+  const partial = await f.run({});
+  assert.equal(partial.complete, false);
+  assert.equal(typeof partial.cursor, "string");
+  assert.deepEqual(await f.run({ cursor: String(partial.cursor) }), { id: "example", value: ["alpha", "beta"] });
+  assert.equal(f.requests.length, 1);
+});
+
+test("raw resource without an id retains its array value and other properties", async () => {
+  const f = read({ path: "/users/a/extensions/example", limit: 1 }, json(200, { displayName: "example", value: ["alpha", "beta"] }));
+  const result = await f.run({});
+  assert.equal(result.displayName, "example");
+  assert.deepEqual(result.value, ["alpha", "beta"]);
+});
+
 test("delegated raw mail refuses shared scopes and another mailbox", async () => {
   const profile = { ...delegatedProfile, enabledPacks: ["entra", "mail"] };
   const shared = read({ path: "/users/other@example.com/messages", profile, scopes: "https://graph.microsoft.com/Mail.Read.Shared" });

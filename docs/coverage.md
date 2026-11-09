@@ -23,9 +23,9 @@ Mail ships 9 read commands, 2 guarded downloads and 12 gated mutations (23 mail 
 Guarded downloads count as Graph read leaves in the registry, but require write-policy opt-in, execution and exact resource confirmation because they persist sensitive content locally.
 
 - inventory named-command: 336
-- inventory reviewed-raw-read: 5
+- inventory reviewed-raw-read: 0
 - inventory scheduled: 3742
-- inventory deferred: 4427
+- inventory deferred: 4432
 - inventory intentionally-blocked: 3089
 - inventory deprecated: 870
 - inventory unavailable: 14
@@ -36,10 +36,10 @@ Guarded downloads count as Graph read leaves in the registry, but require write-
 FULL-01 audit (2026-10-07): every agreed v1.0 read has a named command or an
 explicit reviewed blocked/unavailable/deprecated/deferred disposition, and no
 v1.0 row is left scheduled. The deferred tail is declared out of v1.
-- v1.0 named-command: 336, reviewed-raw-read: 5, scheduled: 0
-- v1.0 deferred (out of v1): 4427, intentionally-blocked: 57, deprecated: 16, unavailable: 14
+- v1.0 named-command: 336, reviewed-raw-read: 0, scheduled: 0
+- v1.0 deferred (out of v1): 4432, intentionally-blocked: 57, deprecated: 16, unavailable: 14
 - beta scheduled (never agreed for v1): 3742
-PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 336 named / 5 raw (341 backed).
+PR #78 (historical point-in-time) proposed 275 named / 19 raw (294 backed); the generated inventory carries 336 named / 0 raw (336 backed).
 
 ## COMPLETE-01 audit record
 
@@ -48,8 +48,8 @@ COMPLETE-01 audit (2026-10-07): the full agreed Entra capability audit including
 reviewed deferred/blocked/deprecated dispositions rather than scheduled; no agreed v1.0 operation, read or
 write, is left merely scheduled. Beta stays scheduled by definition and was never agreed for v1.
 The declined EXT-02c access-review history reads (ReadWrite least privilege, SAS URLs) stay out.
-- v1.0 named-command: 336 (313 read rows plus 23 write rows; 17 gated write leaves in Named writes below), reviewed-raw-read: 5, scheduled: 0
-- v1.0 deferred (out of v1): 4427, intentionally-blocked: 57, deprecated: 16, unavailable: 14
+- v1.0 named-command: 336 (313 read rows plus 23 write rows; 17 gated write leaves in Named writes below), reviewed-raw-read: 0, scheduled: 0
+- v1.0 deferred (out of v1): 4432, intentionally-blocked: 57, deprecated: 16, unavailable: 14
 - beta scheduled (never agreed for v1): 3742
 - shipped writes: MAIL-05 (`mg-axi mail message tag`, `mg-axi mail message flag`, `mg-axi mail message mark`), MAIL-06 (`mg-axi mail message move`, `mg-axi mail message copy`, `mg-axi mail message trash`), MAIL-07 (`mg-axi mail folder create`, `mg-axi mail folder delete`, `mg-axi mail category create`), MAIL-08 (`mg-axi mail rule create`, `mg-axi mail rule update`, `mg-axi mail rule delete`), WRITE-01 (`mg-axi entra group member add`), WRITE-02 (`mg-axi entra user update`), WRITE-03 (`mg-axi entra user revoke-sessions`), WRITE-04 (`mg-axi entra conditional-access policy update`), WRITE-05 (`mg-axi entra risky-user dismiss`).
 - WRITE-N (remaining agreed mutations): deferred 1878, intentionally-blocked 25 v1.0 plus 2937 beta, deprecated 6 v1.0 plus 398 beta, scheduled 0.
@@ -451,7 +451,7 @@ Workforce context only; no external-customer support is claimed.
 
 ## EXT-03 invitations scope decisions
 
-Invitation reads have no supported command or reviewed raw route.
+Invitation reads have no supported named command or documented GET contract.
 The eight v1.0 invitation reads below carry an explicit reviewed unavailable disposition; no new commands are approved; raw api get can read this route.
 The [v1.0 invitation resource documentation](https://github.com/microsoftgraph/microsoft-graph-docs-contrib/blob/main/api-reference/v1.0/resources/invitation.md) lists Create only in its Methods table and provides no documented GET contract for these invitation reads.
 Workforce B2B context only; no invitation creation or any mutation is claimed here.
@@ -567,7 +567,7 @@ Certificate-auth reads support v1.0 only; beta needs its own review.
 ## EXT-01 directory-subscriptions scope decisions
 
 Supported coverage includes the three v1.0 commercial-subscription reads above (subscription list, show and count).
-The show leaf additionally serves the commerceSubscriptionId alternate-key lookup via --commerce-subscription-id, and the reviewed raw surface carries the matching function route; both bind the key only through the allowlisted session function-argument contract (validated, OData-quoted and encoded).
+The show leaf additionally serves the commerceSubscriptionId alternate-key lookup via --commerce-subscription-id, bound through the named session function-argument contract (validated, OData-quoted and encoded).
 Subscription reads support v1.0 only; beta needs its own review.
 
 ## EXT-01 group lifecycle scope decisions
@@ -863,25 +863,24 @@ The tenantRelationship container root needs its own projection review; multi-ten
 ## EXT-04 multi-tenant-organization scope decisions
 
 Supported coverage includes the four v1.0 multi-tenant-organization reads above (organization show, join-request show, tenant list/count).
-The single-member read below carries the deferred disposition (out of v1): its documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for it until its own least-privilege review lands.
+The single-member read below is deferred for named commands: its documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|
-| `v1.0:GET:/tenantRelationships/multiTenantOrganization/tenants/{multiTenantOrganizationMember-id}` | deferred | EXT-04 | Deferred multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes, so no named command or raw access is approved for the single-member read. |
+| `v1.0:GET:/tenantRelationships/multiTenantOrganization/tenants/{multiTenantOrganizationMember-id}` | deferred | EXT-04 | Deferred multi-tenant-organization scope to a later EXT-04 multi-tenant-organization subfamily: documented least privilege is the write scope MultiTenantOrganization.ReadWrite.All in both delegated and application modes; no named command is approved for the single-member read. |
 
 ## EXT-04 reports scope decisions
 
-The v1.0 relying-party summary read below is deferred; no named command or raw access is supported for it.
-The relying-party summary read below carries the deferred disposition (out of v1): its period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard does not support that binding, so no named command or raw access is approved for it until its own guard review lands.
+The v1.0 relying-party summary read below is deferred for named commands pending a function-argument binding review.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|
-| `v1.0:GET:/reports/getRelyingPartyDetailedSummary(period='{period}')` | deferred | EXT-04 | Deferred reports scope to a later EXT-04 reports subfamily: the period function argument needs a new session-guard function-argument binding beyond the three allowlisted tenant-lookup/commerce routes, and the request-path guard does not support that binding, so no named command or raw access is approved for the relying-party summary read. |
+| `v1.0:GET:/reports/getRelyingPartyDetailedSummary(period='{period}')` | deferred | EXT-04 | Deferred reports scope to a later EXT-04 reports subfamily: the period function argument needs a named-command function-argument binding review. |
 
 ## EXT-04 tenant-lookup scope decisions
 
 The function-argument contract supports three v1.0 reads (tenant-information show by domain name or tenant ID, subscription show by commerce subscription ID).
-The shared session binds parenthesised function arguments only for these three allowlisted catalogue operations, each with its exact function/key name and parameter name; every other path keeps the refusal. Values arrive only as explicit CLI flags, are validated per type (DNS name, tenant GUID, commerce identifier), OData-quoted with single quotes doubled, then percent-encoded past the RFC3986 unreserved set; control characters, separators, reserved characters and overlong values fail before credentials. The reviewed raw surface carries the same three routes with the same binding.
+These named operations bind values from explicit CLI flags, validate each type, OData-quote and percent-encode them. Raw paths are supplied directly by the caller.
 Tenant-information lookups need CrossTenantInformation.ReadBasic.All with no Entra role; the commerce lookup needs Organization.Read.All plus a supported subscription role. Personal Microsoft accounts are not supported for any of the three. Tenant-information reads support v1.0 only; beta needs its own review.
 
 ## EXT-02 access-review scope decisions
@@ -1142,7 +1141,7 @@ No new named commands are approved; beta raw access requires a preview-enabled p
 ## EXT-02 entitlement-management scope decisions
 
 The entitlement-management scope covers the eighteen reads above (catalog, access-package, assignment-policy and resource-role-scope list/show/count reads plus assignment and assignment-request list/show/count reads).
-Approval and subject reads carry personal data and stay deferred (out of v1) with no new commands or raw access approved; so do assignment and request navigation sub-reads (assignment target/accessPackage/assignmentPolicy, request accessPackage/assignment/requestor), the top-level assignment-policy and resource-role-scope lists, catalog navigation reads (accessPackages, resources, resourceScopes, resourceRoles, customWorkflowExtensions), package navigation reads (catalog, incompatible sets), policy navigation reads (questions, custom-extension stages), role/scope link expansion, filterByCurrentUser and additionalAccess functions (parenthesised function segments need their own session-guard binding review), while every beta operation below remains scheduled (never agreed for v1). Raw $expand review is a separate change: the named assignment and request reads flatten one fixed documented expansion in code, and no user-supplied $expand exists on any route.
+The listed approval, subject, navigation and function reads remain deferred for named commands; beta operations remain scheduled. Named assignment and request reads flatten a fixed documented expansion.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|
@@ -1156,14 +1155,13 @@ Approval and subject reads carry personal data and stay deferred (out of v1) wit
 ## EXT-02 lifecycle-workflows scope decisions
 
 Supported coverage includes the thirty-three v1.0 lifecycle-workflows first-, second-, third- and fourth-part reads above (workflow, workflow-template and task-definition list/show/count reads, the tenant settings show, top-level run and user/subject processing-result list/show/count reads, task-report list/show/count reads with the task and taskDefinition singles, plus run-nested user/subject/task processing-result list/show/count reads).
-Third-level processing results, taskProcessingResults sub-reads under a user or subject result, reprocessed runs, subject sub-reads, workflow tasks, template tasks, versions, insights, deleted items and custom task extensions stay deferred (out of v1) with no new commands or raw access approved; so do the six summary functions (the run user/subject summaries plus the four top-level ones), which stay deferred because they need bracketed start/end arguments outside the session-guard function-binding allowlist while the request-path guard does not support those bindings. Every beta operation below remains scheduled (never agreed for v1) and every mutation (no workflow create/update/delete/activate/run, no settings update, no restore) stays out.
+The listed additional processing results, workflow resources and summary functions remain deferred for named commands; beta operations remain scheduled and named mutations remain out of scope.
 No new named commands are approved; beta raw access requires a preview-enabled profile.
 
 ## READ-07 application lookups scope decisions
 
 Supported coverage includes seven v1.0 application and service-principal reads above (application and service-principal federated-credential list/show reads with credential metadata only, service-principal app-role-assigned-to list/show reads, and the service-principal app-role-assignment show companion).
-The four parenthesised lookups below carry the deferred disposition (out of v1): the (appId='...') alternate-key forms and the federated-credential (name='...') function forms each need a new session-guard binding, and the request-path guard does not support that binding, so no named command or raw access is approved for them until their own guard review lands.
-
+The four parenthesised lookups below remain deferred for named commands pending a function-argument binding review.
 
 | Inventory operation | Disposition | Owning slice | Deferral reason |
 |---|---|---|---|

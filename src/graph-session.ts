@@ -254,7 +254,7 @@ const SECRET_VALUE = [
 function secretKey(key: string): boolean {
   if (key === "customAccountResetCredentialsUrl" || key === "customForgotMyPasswordText") return false;
   const name = key.toLowerCase().replace(/[-_]/g, "");
-  return name === "sas" || name === "authorization" || name === "contentbytes" || name === "temporaryaccesspass" || SECRET_KEY.test(name) || KEY_SUFFIX.test(name);
+  return name === "sas" || name === "authorization" || name === "contentbytes" || name === "certificatedata" || name === "temporaryaccesspass" || SECRET_KEY.test(name) || KEY_SUFFIX.test(name);
 }
 
 // Shared redaction for reads, mutation previews and audit metadata: secret
@@ -269,19 +269,10 @@ function redact(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redact);
   if (value === null || typeof value !== "object") return value;
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([key]) => key !== "clientSecret" && key !== "certificateData")
-      .map(([key, child]) => {
-        if (key === "keyCredentials" || key === "passwordCredentials") {
-          const entries = Array.isArray(child) ? child : [];
-          return [key, entries
-            .filter(entry => entry !== null && typeof entry === "object" && !Array.isArray(entry))
-            .map(entry => redact(Object.fromEntries(SAFE_CREDENTIAL_FIELDS
-              .filter(field => Object.hasOwn(entry, field))
-              .map(field => [field, entry[field]]))))];
-        }
-        return [key, typeof child === "string" && (secretKey(key) || key === "phoneNumber" || key === "storageLocation") ? REDACTED : redact(child)];
-      }),
+    Object.entries(value as Record<string, unknown>).map(([key, child]) => {
+      const sensitive = secretKey(key) || key === "phoneNumber" || key === "storageLocation";
+      return [key, sensitive && (typeof child === "string" || key === "clientSecret" || key === "certificateData") ? REDACTED : redact(child)];
+    }),
   );
 }
 
@@ -995,6 +986,7 @@ export class GraphSession {
     let total: number | null = resumed?.total ?? null;
     let singleResource = resumed?.singleResource ?? false;
     let metadata = resumed?.metadata ?? {};
+    if (operation.disposition === "raw") delete metadata["@odata.nextLink"];
     const partial = (reason: string, next: string | undefined, buffered: unknown[]): CollectionResult => ({
       value: results,
       query,
@@ -1109,8 +1101,7 @@ export class GraphSession {
           const parsed = decodeReadBody(operation, response);
           singleResource = args.singleResource === true && !isCollectionEnvelope(parsed);
           if (operation.disposition === "raw" && isCollectionEnvelope(parsed)) {
-            const { value: _value, ...fields } = parsed as Record<string, unknown>;
-            delete metadata["@odata.nextLink"];
+            const { value: _value, "@odata.nextLink": _nextLink, ...fields } = parsed as Record<string, unknown>;
             metadata = { ...metadata, ...fields };
           }
           const rows = singleResource ? [parsed] : valuesOf(operation, response, parsed);

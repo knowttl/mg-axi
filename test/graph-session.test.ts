@@ -210,7 +210,7 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes }], [appProfile,
     ["root string", "AccountKey=fixture-secret", "***redacted***"],
     ["root array", ["SharedAccessKey=fixture-secret", "ordinary", 42, null], ["***redacted***", "ordinary", 42, null]],
     ["provider secrets", { id: "provider", certificateData: "YmFzZTY0LWtleQ==", clientSecret: "ordinary-secret", nested: { certificateData: ["key-material"], clientSecret: { value: "secret" }, clientId: "provider-client" } },
-      { id: "provider", nested: { clientId: "provider-client" } }],
+      { id: "provider", certificateData: "***redacted***", clientSecret: "***redacted***", nested: { certificateData: "***redacted***", clientSecret: "***redacted***", clientId: "provider-client" } }],
     ["nested object", { value: [{ id: "a", displayName: "AccountKey=fixture-secret", details: { password: "fixture-secret", enabled: true } }] },
       { value: [{ id: "a", displayName: "***redacted***", details: { password: "***redacted***", enabled: true } }] }],
     ["public branding metadata", { customAccountResetCredentialsUrl: "https://contoso.com/reset", customForgotMyPasswordText: "Forgot your password?", password: "fixture-secret", customForgotMyPasswordTextSecret: "fixture-secret" },
@@ -240,11 +240,11 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: ["https://graph
   test(`${profile.mode} provider cursor excludes secrets from capped pages`, async () => {
     const f = fixture(json(200, { value: rows }));
     const first = await f.session.collect({ profile, operation, ...scopeArgs, limit: 1 });
-    assert.deepEqual(first.value, [{ id: "Google" }]);
+    assert.deepEqual(first.value, [{ id: "Google", clientSecret: "***redacted***" }]);
     const cursor = JSON.parse(Buffer.from(outputText(first.cursor), "base64url").toString("utf8"));
-    assert.deepEqual(cursor.buffered, [{ id: "buffered-provider", clientId: "provider-client" }, { id: "builtin" }]);
+    assert.deepEqual(cursor.buffered, [{ id: "buffered-provider", certificateData: "***redacted***", clientId: "provider-client" }, { id: "builtin" }]);
     const resumed = await f.session.collect({ profile, operation, ...scopeArgs, cursor: first.cursor });
-    assert.deepEqual(resumed.value, [{ id: "buffered-provider", clientId: "provider-client" }, { id: "builtin" }]);
+    assert.deepEqual(resumed.value, [{ id: "buffered-provider", certificateData: "***redacted***", clientId: "provider-client" }, { id: "builtin" }]);
     assert.equal(resumed.complete, true);
     assert.equal(f.requests.length, 1);
   });
@@ -256,9 +256,9 @@ for (const [profile, scopeArgs] of [[delegatedProfile, { scopes: ["https://graph
     cursor.buffered = [rows[1], rows[0]];
     const legacyCursor = Buffer.from(JSON.stringify(cursor)).toString("base64url");
     const resumed = await f.session.collect({ profile, operation, ...scopeArgs, cursor: legacyCursor, limit: 1 });
-    assert.deepEqual(resumed.value, [{ id: "buffered-provider", clientId: "provider-client" }]);
+    assert.deepEqual(resumed.value, [{ id: "buffered-provider", certificateData: "***redacted***", clientId: "provider-client" }]);
     const next = JSON.parse(Buffer.from(outputText(resumed.cursor), "base64url").toString("utf8"));
-    assert.deepEqual(next.buffered, [{ id: "Google" }]);
+    assert.deepEqual(next.buffered, [{ id: "Google", clientSecret: "***redacted***" }]);
     assert.equal(f.requests.length, 1);
   });
 }

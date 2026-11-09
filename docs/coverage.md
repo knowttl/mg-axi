@@ -16,8 +16,8 @@ Contents: [Counts](#counts) • [Commands](#commands) • [Scope decisions](#ext
 ## Counts
 
 - implemented read leaves: 279 (276 named Graph reads plus raw api get, configured home and doctor health check)
-- implemented write leaves: 17 (named gated mutations below)
-- local leaves: 14 (profile, config, auth, login alias and setup views)
+- implemented write leaves: 21 (17 named gated mutations below, 4 raw write methods)
+- local leaves: 10 (profile, config, auth, login alias and setup views)
 
 Mail ships 9 read commands, 2 guarded downloads and 12 gated mutations (23 mail leaves).
 Guarded downloads count as Graph read leaves in the registry, but require write-policy opt-in, execution and exact resource confirmation because they persist sensitive content locally.

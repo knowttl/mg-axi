@@ -95,6 +95,23 @@ test("secret-bearing responses are redacted on the raw path", async () => {
   assert.doesNotMatch(JSON.stringify(result), /c2VjcmV0/);
 });
 
+test("raw credentials retain metadata while masking secrets in reads and writes", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-raw-credentials-"));
+  try {
+    const body = { keyCredentials: [{ keyId: "key-1", type: "AsymmetricX509Cert", usage: "Verify", key: "key-material" }], passwordCredentials: [{ keyId: "password-1", hint: "abc", secretText: "secret-value" }] };
+    const expected = { keyCredentials: [{ keyId: "key-1", type: "AsymmetricX509Cert", usage: "Verify", key: "***redacted***" }], passwordCredentials: [{ keyId: "password-1", hint: "abc", secretText: "***redacted***" }] };
+    const f = read({ path: "/applications/a" }, json(200, body));
+    assert.deepEqual(await f.run({}), expected);
+    const session = new GraphSession(f.deps);
+    const args = { profile: { ...appProfile, rawWrites: true, writes: { allowWrites: true, operations: [] } }, method: "PATCH" as const, version: "v1.0", path: "/applications/a", payload: body, transport: async () => ({ status: 200, headers: {}, body: JSON.stringify(body) }), journalPath: join(dir, "writes.log") };
+    const preview = await session.rawWrite(args);
+    assert.deepEqual(JSON.parse(preview.preview.proposedChange!), expected);
+    const result = await session.rawWrite({ ...args, execute: true, confirm: "/applications/a" });
+    assert.equal(result.kind, "success");
+    if (result.kind === "success") assert.deepEqual(result.response, expected);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("recovery keys remain redacted in singleton and buffered collection output", async () => {
   const singleton = read({ path: "/informationProtection/bitlocker/recoveryKeys/a" }, json(200, { id: "a", key: "recovery-secret" }));
   assert.deepEqual(await singleton.run({}), { id: "a", key: "***redacted***" });
@@ -395,6 +412,7 @@ test("cursor resumes buffered rows and the next page with its original query", a
     : json(200, { value: [{ id: "d" }] }));
   const first = await f.run({});
   assert.equal(first.complete, false);
+  assert.equal(first["@odata.nextLink"], undefined);
   assert.deepEqual(first.value, [{ id: "a" }, { id: "b" }]);
   assert.deepEqual(JSON.parse(Buffer.from(outputText(first.cursor), "base64url").toString("utf8")).buffered, [{ id: "c" }]);
   assert.deepEqual(await f.run({ cursor: outputText(first.cursor), limit: undefined }), { returned: 2, complete: true, value: [{ id: "c" }, { id: "d" }] });

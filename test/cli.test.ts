@@ -286,7 +286,6 @@ for (const [name, args, error] of [
   ["duplicate flag", ["entra", "user", "list", "--all", "--all"], /duplicate/],
   ["boolean value", ["entra", "user", "list", "--all=false"], /does not take a value/],
   ["literal help after delimiter", ["home", "--", "--help"], /unexpected/],
-  ["non-GET api verb", ["api", "delete", "/users"], /reviewed GET reads only/],
   ["prototype name", ["constructor"], /unknown/],
   ["trailing version", ["home", "--version"], /unknown flag/],
 ] as const) test(`${name} fails with usage output`, () => {
@@ -297,6 +296,14 @@ for (const [name, args, error] of [
   assert.match(outputText(output.error), error);
   assert.equal(output.code, "VALIDATION_ERROR");
   assert.ok(strings(output.help).length);
+});
+
+test("raw delete resolves its profile before execution", () => {
+  const result = run(["api", "delete", "/users"]);
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, "");
+  const output = record(decode(result.stdout));
+  assert.equal(output.code, "PROFILE_REQUIRED");
 });
 
 for (const version of ["v1.0", "beta"] as const) test(`valid ${version} leaf resolves its profile before execution`, () => {

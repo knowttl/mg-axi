@@ -264,9 +264,9 @@ export function redactGraphValue(value: unknown): unknown {
   return redact(value);
 }
 
-function redact(value: unknown): unknown {
+function redact(value: unknown, projectCredentials = false): unknown {
   if (typeof value === "string") return SECRET_VALUE.some(pattern => pattern.test(value)) ? REDACTED : redactSecrets(value);
-  if (Array.isArray(value)) return value.map(redact);
+  if (Array.isArray(value)) return value.map(child => redact(child, projectCredentials));
   if (value === null || typeof value !== "object") return value;
   const record = value as Record<string, unknown>;
   const pairKey = Object.keys(record).find(key => key.toLowerCase() === "key");
@@ -274,10 +274,15 @@ function redact(value: unknown): unknown {
   const secretPair = pairKey !== undefined && pairValue !== undefined && typeof record[pairKey] === "string" && secretKey(record[pairKey]);
   return Object.fromEntries(
     Object.entries(record).map(([key, child]) => {
-      if (secretPair && key === pairKey) return [key, redact(child)];
+      if (projectCredentials && (key === "keyCredentials" || key === "passwordCredentials")) {
+        const entries = Array.isArray(child) ? child : [];
+        return [key, entries.filter(entry => entry !== null && typeof entry === "object" && !Array.isArray(entry))
+          .map(entry => redact(Object.fromEntries(SAFE_CREDENTIAL_FIELDS.filter(field => Object.hasOwn(entry, field)).map(field => [field, entry[field]])), true))];
+      }
+      if (secretPair && key === pairKey) return [key, redact(child, projectCredentials)];
       if (secretPair && key === pairValue) return [key, REDACTED];
       const sensitive = secretKey(key) || key === "phoneNumber" || key === "storageLocation";
-      return [key, sensitive && (typeof child === "string" || key === "clientSecret" || key === "certificateData") ? REDACTED : redact(child)];
+      return [key, sensitive && (typeof child === "string" || key === "clientSecret" || key === "certificateData") ? REDACTED : redact(child, projectCredentials)];
     }),
   );
 }
@@ -803,7 +808,7 @@ function decodeCursor(operation: SessionOperation, cursor: string): CursorState 
   buildQuery(query, operation.disposition === "raw");
   checkQueryContext(query, consistencyLevel, isMailOperation(operation), operation.disposition === "raw");
   if (record.searchRows !== undefined && (typeof record.searchRows !== "number" || !Number.isSafeInteger(record.searchRows) || record.searchRows < 0 || record.searchRows >= 1000)) throw new AxiError("Invalid search cursor count", "VALIDATION_ERROR");
-  return { next: record.next ?? undefined, buffered: record.buffered.map(redact), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity, total, searchRows: record.searchRows as number | undefined, singleResource: record.singleResource as boolean | undefined, metadata: redact(record.metadata) as Record<string, unknown> | undefined };
+  return { next: record.next ?? undefined, buffered: record.buffered.map(row => redact(row, operation.disposition !== "raw")), seen: [...record.seen], query, consistencyLevel, context: record.context, identity: record.identity, total, searchRows: record.searchRows as number | undefined, singleResource: record.singleResource as boolean | undefined, metadata: redact(record.metadata) as Record<string, unknown> | undefined };
 }
 
 function nextLinkOf(body: unknown): string | undefined {
@@ -842,7 +847,7 @@ function valuesOf(operation: SessionOperation, response: TransportResponse, body
 function decodeReadBody(operation: SessionOperation, response: TransportResponse): unknown {
   if (!response.body) throw new ResponseShapeError(`Graph returned an empty success body for ${operation.id}`, operation, response);
   try {
-    return redact(JSON.parse(response.body));
+    return redact(JSON.parse(response.body), operation.disposition !== "raw");
   } catch {
     throw new ResponseShapeError(`Graph returned a non-JSON success body for ${operation.id}`, operation, response);
   }

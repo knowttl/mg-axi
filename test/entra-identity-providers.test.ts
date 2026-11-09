@@ -478,7 +478,7 @@ function rawBody(request: TransportRequest): TransportResponse {
   return { status: 404, headers: {}, body: JSON.stringify({ error: { code: "Unknown", message: "unexpected route" } }) };
 }
 
-test("raw api serves reviewed provider list and show without secret fields", async () => {
+test("raw api serves provider list and show with secrets redacted", async () => {
   const f = rawFixture(rawBody);
   const list = await runApiGet({ path: "/identity/identityProviders", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]! }, f.deps);
   assert.equal(list.returned, 3);
@@ -487,6 +487,6 @@ test("raw api serves reviewed provider list and show without secret fields", asy
   assert.ok(record(records(list.value)[0]).clientId === "google-client-id");
   const show = await runApiGet({ path: "/identity/identityProviders/Google-OAUTH", apiVersion: "v1.0", profile: delegatedRawProfile, scopes: providerScopes[0]! }, f.deps);
   assert.equal(show.displayName, "Google");
-  assert.ok(!("clientSecret" in show));
+  assert.equal(show.clientSecret, "***redacted***");
 });
 

@@ -225,9 +225,9 @@ for (const body of [{}, { schema, results: null }, { schema: [{}], results: [] }
   await assert.rejects(f.run(), { code: "GRAPH_ERROR" });
 });
 
-test("raw api still rejects security before credentials", async t => {
-  const f = fixture(t);
-  await assert.rejects(executeArgv(["api", "get", "/security/runHuntingQuery", "--config", f.config, "--profile", "soc"], f.overrides), { code: "POLICY_DENIED" });
+test("raw api rejects security without the security pack before credentials", async t => {
+  const f = fixture(t, { enabled: false });
+  await assert.rejects(executeArgv(["api", "get", "/security/runHuntingQuery", "--config", f.config, "--profile", "soc", "--scopes", HUNTING_SCOPE], f.overrides), { code: "POLICY_DENIED" });
   assert.equal(f.credentials.length, 0);
   assert.equal(f.requests.length, 0);
 });

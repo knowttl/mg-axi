@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.20](https://github.com/knowttl/mg-axi/compare/v0.1.19...v0.1.20) (2026-11-09)
+
+
+### Features
+
+* expand raw Graph API access ([#144](https://github.com/knowttl/mg-axi/issues/144)) ([9398b5b](https://github.com/knowttl/mg-axi/commit/9398b5be4448272f02cddc10adceb38cb5b28af1))
+
 ## [0.1.19](https://github.com/knowttl/mg-axi/compare/v0.1.18...v0.1.19) (2026-10-31)
 
 

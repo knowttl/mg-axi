@@ -90,8 +90,8 @@ export type MutationResult =
   | { kind: "dry-run"; preview: MutationPreview }
   | { kind: "noop"; preview: MutationPreview; auditId?: string; duplicate?: boolean }
   | { kind: "success"; preview: MutationPreview; auditId: string; status: number; response: unknown; responseUnreadable?: { code: "RESPONSE_INVALID"; httpStatus: number } }
-  | { kind: "failed"; preview: MutationPreview; auditId: string; status: number }
-  | { kind: "unknown"; preview: MutationPreview; auditId: string; httpStatus: number; guidance: string };
+  | { kind: "failed"; preview: MutationPreview; auditId: string; status: number; response?: unknown }
+  | { kind: "unknown"; preview: MutationPreview; auditId: string; httpStatus: number; guidance: string; response?: unknown };
 
 // The immutable tenant and operation scope: copied from the hand-edited
 // profile when the coordinator is created. Read flags, environment profile
@@ -635,6 +635,8 @@ export function createMutationCoordinator(args: {
     definition = { ...definition, ...(body === undefined ? {} : { payload: JSON.parse(body) as unknown }) };
     options = { ...options };
     const seen = preview(definition, await options.readState(), options.isNoop);
+    const parts = definition.path.split("/");
+    const batch = definition.raw === true && parts.length === 3 && decodeURIComponent(parts[2]!).toLowerCase() === "$batch";
     // Gate 4: without --execute the caller runs the dry run instead.
     if (options.execute !== true) return { kind: "dry-run", preview: seen };
     // Verified already-desired state is a no-op: nothing is sent.
@@ -689,7 +691,7 @@ export function createMutationCoordinator(args: {
         throw error;
       }
       const httpStatus = mutationHttpStatus(error);
-      if (httpStatus > 0 && mutationAccepted(error)) {
+      if (httpStatus > 0 && mutationAccepted(error) && !batch) {
         recordAudit({ ...meta, kind: "outcome", httpStatus, outcome: "SUCCESS" });
         return { kind: "success", preview: seen, auditId: id, status: httpStatus, response: {}, responseUnreadable: { code: "RESPONSE_INVALID", httpStatus } };
       }
@@ -712,6 +714,26 @@ export function createMutationCoordinator(args: {
         httpStatus,
         guidance: `Mutation ${definition.operation} may or may not have been applied (audit ${id}); read back target '${definition.target}' before doing anything else; never replay this intent`,
       };
+    }
+    if (batch) {
+      const requests = (definition.payload as { requests?: unknown } | undefined)?.requests;
+      const rawResponses = (sent.body as { responses?: unknown } | null)?.responses;
+      const responses = Array.isArray(rawResponses) ? rawResponses : [];
+      const ids = Array.isArray(requests) ? requests.map(request => typeof request?.id === "string" ? request.id.toLowerCase() : "") : [];
+      const responseIds = responses.map(response => typeof response?.id === "string" ? response.id.toLowerCase() : "");
+      const complete = ids.length > 0 && ids.every(Boolean) && new Set(ids).size === ids.length
+        && responseIds.length === ids.length && new Set(responseIds).size === ids.length
+        && responseIds.every(id => ids.includes(id))
+        && responses.every(response => Number.isInteger(response?.status) && response.status >= 100 && response.status <= 599);
+      if (!complete || responses.some(response => response.status < 200 || response.status >= 300)) {
+        if (complete && responses.every(response => response.status >= 400 && response.status < 500 && response.status !== 408)) {
+          recordAudit({ ...meta, kind: "outcome", httpStatus: sent.status, outcome: "FAILED" });
+          return { kind: "failed", preview: seen, auditId: id, status: responses[0].status, response: sent.body };
+        }
+        recordAudit({ ...meta, kind: "outcome", httpStatus: sent.status, outcome: "OUTCOME_UNKNOWN" });
+        return { kind: "unknown", preview: seen, auditId: id, httpStatus: sent.status, response: sent.body,
+          guidance: `Batch ${definition.operation} may be partially applied (audit ${id}); inspect the responses and read back targets before doing anything else; never replay this intent` };
+      }
     }
     recordAudit({ ...meta, kind: "outcome", httpStatus: sent.status, outcome: "SUCCESS" });
     return { kind: "success", preview: seen, auditId: id, status: sent.status, response: sent.body };

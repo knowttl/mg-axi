@@ -84,6 +84,24 @@ async function withEnv<T>(key: string, value: string | undefined, action: () => 
 
 const readState = (current: unknown = { notes: ["previous synthetic note"] }) => async () => current;
 
+for (const scenario of [
+  { name: "successful", body: { responses: [{ id: "2", status: 204 }, { id: "1", status: 200 }] }, kind: "success", outcome: "SUCCESS" },
+  { name: "failed", body: { responses: [{ id: "1", status: 403 }, { id: "2", status: 424 }] }, kind: "failed", outcome: "FAILED" },
+  { name: "partially successful", body: { responses: [{ id: "1", status: 204 }, { id: "2", status: 403 }] }, kind: "unknown", outcome: "OUTCOME_UNKNOWN" },
+  { name: "incomplete", body: { responses: [{ id: "1", status: 204 }] }, kind: "unknown", outcome: "OUTCOME_UNKNOWN" },
+  { name: "unreadable", body: "invalid", kind: "unknown", outcome: "OUTCOME_UNKNOWN" },
+] as const) {
+  test(`raw batch records ${scenario.name} outcomes`, async () => {
+    const f = fixture({ handler: { status: 200, headers: {}, body: scenario.body === "invalid" ? "{" : JSON.stringify(scenario.body) } });
+    const profile = { ...enabledApp, rawWrites: true, rawBatch: true };
+    const result = await f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/%24batch", effect: "write", target: "$batch", payload: { requests: [{ id: "1" }, { id: "2" }] } }, { readState: readState(), execute: true });
+    assert.equal(result.kind, scenario.kind);
+    assert.equal(journal(f.journalPath)[1]!.outcome, scenario.outcome);
+    assert.equal(f.requests.length, 1);
+    if (scenario.body !== "invalid") assert.deepEqual("response" in result && result.response, scenario.body);
+  });
+}
+
 test("the audit journal honors the coordinator files instead of host defaults", async () => {
   const f = fixture();
   const files = new PrivateFiles("win32", () => { throw new Error("fixture ACL failure"); });

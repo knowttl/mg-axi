@@ -1,5 +1,5 @@
 import type { MutationTransport, MutationTransportRequest, MutationTransportResponse } from "../dist/mutations.js";
-import type { AnyProfile } from "../dist/profiles.js";
+import type { AnyProfile, DelegatedProfile } from "../dist/profiles.js";
 import { record, text as outputText, authFakes, delegatedProvider, type OutputRecord } from "./fixtures/typed.ts";
 import type { GraphTransport } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
@@ -135,7 +135,7 @@ for (const request of [
 
 test("raw batch rejects a delegated request for another mailbox", async () => {
   const f = fixture();
-  const profile = { ...enabledDelegated, enabledPacks: ["entra", "mail"], rawWrites: true, rawBatch: true };
+  const profile: DelegatedProfile = { ...enabledDelegated, enabledPacks: ["entra", "mail"], rawWrites: true, rawBatch: true };
   await assert.rejects(f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/$batch", effect: "write", target: "$batch", payload: { requests: [{ id: "1", method: "GET", url: "/users/other/messages" }] } }, { readState: readState(), execute: true, scopes: ["https://graph.microsoft.com/Mail.ReadBasic"] }), { code: "POLICY_DENIED" });
   assert.equal(f.requests.length, 0);
   assert.equal(journal(f.journalPath)[1]!.outcome, "POLICY_DENIED");

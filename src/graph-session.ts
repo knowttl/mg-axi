@@ -5,7 +5,7 @@ import { redactSecrets } from "./redact.js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { PrivateFiles } from "./private-file.js";
-import { validateProfile, profileName, type AnyProfile } from "./profiles.js";
+import { validateProfile, profileName, type AnyProfile, type SensitiveArea } from "./profiles.js";
 import { findOperation } from "./runtime-index.js";
 import { HUNTING_OPERATION, HUNTING_SCOPE, huntingRequest, huntingServerError } from "./security-hunting.js";
 import { checkMailCredential, checkMailScopes, isMailOperation, isMailRoute } from "./mail-authorization.js";
@@ -332,7 +332,7 @@ function matchRoute(route: string, pathname: string): Record<string, string> | n
 // Initial sensitive-area map. Mail and file content stay denied unless the
 // profile explicitly enables the area; consent and directory metadata are not
 // content areas. Later slices refine this table with their reviewed contracts.
-function sensitiveArea(route: string): string | null {
+function sensitiveArea(route: string): SensitiveArea | "mail" | null {
   const segments = policySegments(route);
   if (isMailRoute(segments)) return "mail";
   if (segments.some(segment => segment === "drive" || segment === "drives" || segment === "file" || segment === "files") || segments[0] === "shares") return "files";
@@ -635,7 +635,7 @@ export function authorizeUrl(operation: SessionOperation, params: Record<string,
 }
 
 function header(headers: Record<string, string>, name: string): string | undefined {
-  for (const [key, value] of Object.entries(headers)) if (key.toLowerCase() === name) return value;
+  for (const [key, value] of Object.entries(headers)) if (key.toLowerCase() === name.toLowerCase()) return value;
   return undefined;
 }
 
@@ -863,10 +863,46 @@ export class GraphSession {
     private files = new PrivateFiles(),
   ) {}
 
+  authorizeBatch(profile: AnyProfile, version: string, payload: unknown, scopes: string[] | undefined): string[] {
+    const requests = (payload as { requests?: unknown } | null)?.requests;
+    if (!Array.isArray(requests) || requests.length < 1 || requests.length > 20) throw new AxiError("Invalid batch requests", "POLICY_DENIED");
+    const ids = new Set<string>();
+    const mailboxes: string[] = [];
+    for (const request of requests) {
+      if (!request || typeof request !== "object" || typeof request.id !== "string" || !request.id || ids.has(request.id.toLowerCase())
+        || typeof request.method !== "string" || !["GET", "POST", "PUT", "PATCH", "DELETE"].includes(request.method)
+        || typeof request.url !== "string" || !request.url.startsWith("/") || request.url.startsWith("//") || request.url.includes("#")
+        || (request.headers && (typeof request.headers !== "object" || Array.isArray(request.headers) || Object.keys(request.headers).some(key => /^(authorization|host)$/i.test(key))))) {
+        throw new AxiError("Invalid batch request", "POLICY_DENIED");
+      }
+      ids.add(request.id.toLowerCase());
+      const [path, ...queryParts] = request.url.split("?");
+      if (queryParts.length > 1) throw new AxiError("Invalid batch query", "POLICY_DENIED");
+      let operation: SessionOperation;
+      try {
+        operation = sessionOperation({ operation: rawReadOperation(version, path!), raw: true });
+        if (policySegments(path!).includes("$batch")) throw new AxiError("Nested batches are unsupported", "POLICY_DENIED");
+        const query = Object.fromEntries(new URLSearchParams(queryParts[0] ?? ""));
+        checkQueryContext(query, request.headers && header(request.headers, "ConsistencyLevel") === "eventual" ? "eventual" : undefined, isMailOperation(operation), true);
+        this.authorizePolicy(profile, operation);
+        if (isMailOperation(operation)) {
+          if (request.method === "GET") checkMailScopes(profile, scopes, operation);
+          else if (scopes?.some(scope => /\.shared$/i.test(scope))) throw new AxiError("Shared mailbox scopes are unsupported", "POLICY_DENIED");
+          mailboxes.push(rawMailbox(operation) ?? "me");
+        }
+      } catch (error) {
+        throw new AxiError(error instanceof Error ? error.message : "Batch request denied", "POLICY_DENIED");
+      }
+    }
+    return mailboxes;
+  }
+
   async rawWrite(args: { profile: AnyProfile; method: import("./mutations.js").MutationMethod; version: string; path: string; query?: string; payload?: unknown; execute?: boolean; confirm?: string; scopes?: string[]; transport: import("./mutations.js").MutationTransport; journalPath?: string }): Promise<import("./mutations.js").MutationResult> {
     const operation = rawReadOperation(args.version, args.path);
     const profile = validateProfile(args.profile, this.files);
-    this.authorizePolicy(profile, sessionOperation({ operation, raw: true }));
+    const checked = sessionOperation({ operation, raw: true });
+    const segments = policySegments(checked.path);
+    this.authorizePolicy(profile, checked, segments.length === 1 && segments[0] === "$batch");
     if (profile.mode === "delegated" && (!args.scopes?.length || args.scopes.some(scope => !scope.startsWith(`https://${GRAPH_HOST}/`)))) throw new AxiError("Raw writes need explicit Graph scopes", "VALIDATION_ERROR");
     if (profile.mode === "application" && args.scopes !== undefined) throw new AxiError("Application profiles cannot specify delegated scopes", "VALIDATION_ERROR");
     const { createMutationCoordinator } = await import("./mutations.js");
@@ -1157,7 +1193,7 @@ export class GraphSession {
     }
   }
 
-  private authorizePolicy(profile: AnyProfile, operation: SessionOperation): void {
+  private authorizePolicy(profile: AnyProfile, operation: SessionOperation, batchEnvelope = false): void {
     if (operation.owningSlice === "MAIL-09") throw new AxiError("Mail downloads require the guarded download coordinator", "POLICY_DENIED");
     if (operation.method !== "GET" && operation.id !== HUNTING_OPERATION) {
       throw new AxiError(`Graph session executes reads; ${operation.id} is not a read`, "VALIDATION_ERROR", [
@@ -1170,7 +1206,7 @@ export class GraphSession {
     // acquire Defender access merely by installing this command.
     const segments = policySegments(operation.path);
     const pack = operation.id === HUNTING_OPERATION || (operation.disposition === "raw" && segments[0] === "security") ? "security" : isMailOperation(operation) ? "mail" : "entra";
-    if (!profile.enabledPacks.includes(pack)) {
+    if (!batchEnvelope && !profile.enabledPacks.includes(pack)) {
       throw new AxiError(`Pack ${pack} is not enabled for this profile`, "POLICY_DENIED", ["mg-axi profile show --profile <name>"]);
     }
     if (operation.version === "beta" && !profile.preview) {
@@ -1188,7 +1224,7 @@ export class GraphSession {
     if (operation.disposition === "raw" && area === "mail" && segments.includes("$value") && (segments.includes("messages") || segments.includes("attachments"))) {
       throw new AxiError("Mail downloads require the guarded download coordinator", "POLICY_DENIED");
     }
-    if (area && !(area === "mail" && profile.enabledPacks.includes("mail")) && !profile.sensitiveAreas.includes(area)) {
+    if (area === "files" && !profile.sensitiveAreas.includes(area)) {
       throw new AxiError(`Sensitive area ${area} is not enabled for this profile (${operation.id})`, "POLICY_DENIED", [
         "Mail and file content stay disabled unless explicitly enabled for the profile",
       ]);

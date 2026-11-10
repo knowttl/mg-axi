@@ -55,7 +55,8 @@ Tag preserves unrelated categories, flag sets follow-up status and mark sets rea
 Move/copy take `--destination` within the same mailbox and return the old and new IDs; trash always moves to `deleteditems`.
 Folder deletion refuses nonempty and well-known folders.
 Rule create/update take a regular UTF-8 JSON `--file` of at most 64 KiB, with reviewed fields only; forwarding, redirect and permanent-delete actions are refused.
-Mailbox settings are read-only; shared delegated mailbox scopes, delta sync, `$batch` and the Search API are outside this pack.
+The named mail commands provide read-only mailbox settings; shared delegated mailbox scopes, delta sync, `$batch` and the Search API are outside those commands.
+For raw `$batch` access, see the [execution contract](execution.md).
 See the [generated skill](../skills/mg-axi/SKILL.md) and leaf `--help` for exact flags, no-op behavior and concurrency limits.
 
 Guarded downloads require `allowWrites` and their exact `writes.operations` entry, even though Graph access is a GET.

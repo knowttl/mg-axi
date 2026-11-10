@@ -122,7 +122,7 @@ See [configuration](docs/configuration.md) for schema, credential references and
 | `MG_AXI_CLIENT_SECRET`, `MG_AXI_PRIVATE_KEY`, `MG_AXI_TOKEN` | Credential holders | Unset |
 | `MG_AXI_THUMBPRINT_SHA256` | Certificate thumbprint | Required for certificate env profiles |
 | `MG_AXI_ENABLED_PACKS` | JSON pack array | `["entra"]` |
-| `MG_AXI_SENSITIVE_AREAS` | JSON array; only empty is supported | `[]` |
+| `MG_AXI_SENSITIVE_AREAS` | JSON array of `files` areas that raw routes may reach | `[]` |
 | `MG_AXI_WRITES` | JSON write policy | Disabled |
 | `MG_AXI_PREVIEW`, `MG_AXI_ALLOW_DEVICE_CODE` | Profile booleans | `false` |
 | `AZURE_FEDERATED_TOKEN_FILE` | Deprecated assertion-file fallback | Unset |

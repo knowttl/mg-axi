@@ -1,5 +1,5 @@
 import type { MutationTransport, MutationTransportRequest, MutationTransportResponse } from "../dist/mutations.js";
-import type { AnyProfile } from "../dist/profiles.js";
+import type { AnyProfile, DelegatedProfile } from "../dist/profiles.js";
 import { record, text as outputText, authFakes, delegatedProvider, type OutputRecord } from "./fixtures/typed.ts";
 import type { GraphTransport } from "../dist/graph-session.js";
 import assert from "node:assert/strict";
@@ -83,6 +83,63 @@ async function withEnv<T>(key: string, value: string | undefined, action: () => 
 }
 
 const readState = (current: unknown = { notes: ["previous synthetic note"] }) => async () => current;
+
+for (const scenario of [
+  { name: "successful", body: { responses: [{ id: "2", status: 200, body: { id: "two" } }, { id: "1", status: 204 }] }, kind: "success", outcome: "SUCCESS" },
+  { name: "failed", body: { responses: [{ id: "1", status: 403, body: { error: { code: "Authorization_RequestDenied", message: "Access denied" } } }, { id: "2", status: 404, body: { error: { code: "Request_ResourceNotFound", message: "Resource not found" } } }] }, kind: "failed", outcome: "FAILED" },
+  { name: "partially successful", body: { responses: [{ id: "1", status: 204 }, { id: "2", status: 403, body: { error: { code: "Authorization_RequestDenied", message: "Access denied" } } }] }, kind: "unknown", outcome: "OUTCOME_UNKNOWN" },
+  { name: "incomplete", body: { responses: [{ id: "1", status: 204 }] }, kind: "unknown", outcome: "OUTCOME_UNKNOWN" },
+  { name: "unreadable", body: "invalid", kind: "unknown", outcome: "OUTCOME_UNKNOWN" },
+] as const) {
+  test(`raw batch records ${scenario.name} outcomes`, async () => {
+    const f = fixture({ handler: { status: 200, headers: {}, body: scenario.body === "invalid" ? "{" : JSON.stringify(scenario.body) } });
+    const profile = { ...enabledApp, rawWrites: true, rawBatch: true };
+    const result = await f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/%24batch", effect: "write", target: "$batch", payload: { requests: [{ id: "1", method: "PATCH", url: "/users/one", body: { displayName: "One" }, headers: { "Content-Type": "application/json" } }, { id: "2", method: "GET", url: "/users/two" }] } }, { readState: readState(), execute: true });
+    assert.equal(result.kind, scenario.kind);
+    assert.equal(journal(f.journalPath)[1]!.outcome, scenario.outcome);
+    assert.equal(f.requests.length, 1);
+    if (scenario.body !== "invalid") assert.deepEqual("response" in result && result.response, scenario.body);
+  });
+}
+
+for (const [name, secondStatus, kind] of [["success", 200, "success"], ["mixed", 503, "unknown"]] as const) {
+  test(`raw batch ${name} indicates omitted continuations`, async () => {
+    const secondBody = secondStatus === 200 ? { id: "b" } : { error: { code: "ServiceUnavailable", message: "Service unavailable" } };
+    const body = { responses: [{ id: "1", status: 200, body: { value: [{ id: "a", members: [], "members@odata.nextLink": "https://graph.microsoft.com/v1.0/groups/a/members?$skiptoken=nested-secret" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/groups?$skiptoken=opaque-secret" } }, { id: "2", status: secondStatus, body: secondBody }] };
+    const f = fixture({ handler: { status: 200, headers: {}, body: JSON.stringify(body) } });
+    const profile = { ...enabledApp, rawWrites: true, rawBatch: true };
+    const result = await f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/$batch", effect: "write", target: "$batch", payload: { requests: [{ id: "1", method: "GET", url: "/groups?$expand=members" }, { id: "2", method: "GET", url: "/users/b" }] } }, { readState: readState(), execute: true });
+    assert.equal(result.kind, kind);
+    assert.deepEqual("response" in result && result.response, { responses: [{ id: "1", status: 200, body: { value: [{ id: "a", members: [], "members@odata.nextLink": "More results available; continuation omitted" }], "@odata.nextLink": "More results available; continuation omitted" } }, { id: "2", status: secondStatus, body: secondBody }] });
+    assert.doesNotMatch(JSON.stringify(result), /opaque-secret|nested-secret/);
+  });
+}
+
+for (const request of [
+  { id: "1", method: "GET", url: "/users/other/messages" },
+  { id: "1", method: "PATCH", url: "/security/alerts_v2/a", body: {} },
+  { id: "1", method: "GET", url: "/drives/a/root" },
+  { id: "1", method: "GET", url: "/users/../messages" },
+  { id: "1", method: "GET", url: "/%24batch" },
+  { id: "1", method: "GET", url: "https://graph.microsoft.com/v1.0/users" },
+  { id: "1", url: "/users" },
+]) {
+  test(`raw batch denies ${JSON.stringify(request)} before transport`, async () => {
+    const f = fixture();
+    const profile = { ...enabledApp, rawWrites: true, rawBatch: true };
+    await assert.rejects(f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/$batch", effect: "write", target: "$batch", payload: { requests: [request] } }, { readState: readState(), execute: true }), { code: "POLICY_DENIED" });
+    assert.equal(f.requests.length, 0);
+    assert.equal(journal(f.journalPath)[1]!.outcome, "POLICY_DENIED");
+  });
+}
+
+test("raw batch rejects a delegated request for another mailbox", async () => {
+  const f = fixture();
+  const profile: DelegatedProfile = { ...enabledDelegated, enabledPacks: ["entra", "mail"], rawWrites: true, rawBatch: true };
+  await assert.rejects(f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/$batch", effect: "write", target: "$batch", payload: { requests: [{ id: "1", method: "GET", url: "/users/other/messages" }] } }, { readState: readState(), execute: true, scopes: ["https://graph.microsoft.com/Mail.ReadBasic"] }), { code: "POLICY_DENIED" });
+  assert.equal(f.requests.length, 0);
+  assert.equal(journal(f.journalPath)[1]!.outcome, "POLICY_DENIED");
+});
 
 test("the audit journal honors the coordinator files instead of host defaults", async () => {
   const f = fixture();

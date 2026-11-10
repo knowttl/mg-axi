@@ -256,6 +256,94 @@ for (const path of ["/$batch", "/%24batch"]) test(`raw batch ${path} is refused 
   assert.equal(f.credentialCalls.length, 0);
 });
 
+for (const path of ["/$batch", "/%24batch"]) test(`raw batch ${path} reaches the preview when the profile sets rawBatch`, async () => {
+  const f = fixture();
+  const session = new GraphSession(f.deps);
+  const profile = { ...appProfile, rawWrites: true, rawBatch: true, writes: { allowWrites: true, operations: [] } } as const;
+  const preview = await session.rawWrite({ profile, method: "POST", version: "v1.0", path, payload: { requests: [{ id: "1", method: "GET", url: "/users" }] }, transport: async () => { throw new Error("preview must not send"); } });
+  assert.equal(preview.kind, "dry-run");
+  await assert.rejects(session.rawWrite({ profile: { ...profile, rawWrites: false }, method: "POST", version: "v1.0", path, transport: async () => ({ status: 200, headers: {}, body: "{}" }) }), error => record(error).code === "WRITES_DISABLED");
+});
+
+for (const path of ["/$batch", "/%24batch"]) test(`raw batch ${path} redacts member query secrets in previews`, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-batch-query-"));
+  try {
+    const f = fixture();
+    const session = new GraphSession(f.deps);
+    const profile = { ...appProfile, rawWrites: true, rawBatch: true, writes: { allowWrites: true, operations: [] } };
+    const payload = { requests: [{ id: "1", method: "GET", url: "/users?$skiptoken=opaque-value&$top=5" }] };
+    let sent = "";
+    const args = { profile, method: "POST" as const, version: "v1.0", path, payload, journalPath: join(dir, "writes.log"), transport: async (request: { body?: string }) => { sent = request.body ?? ""; return { status: 200, headers: {}, body: JSON.stringify({ responses: [{ id: "1", status: 200 }] }) }; } };
+    const preview = await session.rawWrite(args);
+    assert.doesNotMatch(preview.preview.proposedChange!, /opaque-value/);
+    const member = records(record(JSON.parse(preview.preview.proposedChange!)).requests)[0]!;
+    assert.equal(new URL(outputText(member.url), "https://graph.microsoft.com").searchParams.get("$top"), "5");
+    assert.equal((await session.rawWrite({ ...args, execute: true, confirm: path })).kind, "success");
+    assert.deepEqual(JSON.parse(sent), payload);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const [pack, path, otherPath] of [["mail", "/users/a/messages", "/security/alerts_v2"], ["security", "/security/alerts_v2", "/users/a/messages"]] as const) {
+  for (const batchPath of ["/$batch", "/%24batch"]) test(`${pack} profile authorizes batch members independently for ${batchPath}`, async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mg-axi-batch-pack-"));
+    try {
+      const f = fixture();
+      const session = new GraphSession(f.deps);
+      const profile = { ...appProfile, enabledPacks: [pack], rawWrites: true, rawBatch: true, writes: { allowWrites: true, operations: [] } };
+      let sends = 0;
+      const args = { profile, method: "POST" as const, version: "v1.0", path: batchPath, execute: true, confirm: batchPath, journalPath: join(dir, "writes.log"), transport: async () => { sends++; return { status: 200, headers: {}, body: JSON.stringify({ responses: [{ id: "1", status: 200 }] }) }; } };
+      assert.equal((await session.rawWrite({ ...args, payload: { requests: [{ id: "1", method: "GET", url: path }] } })).kind, "success");
+      await assert.rejects(session.rawWrite({ ...args, payload: { requests: [{ id: "1", method: "GET", url: otherPath }] } }), { code: "POLICY_DENIED" });
+      assert.equal(sends, 1);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+for (const name of ["ConsistencyLevel", "consistencylevel", "CONSISTENCYLEVEL"]) test(`batch accepts ${name} header for advanced queries`, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-batch-header-"));
+  try {
+    const f = fixture();
+    const session = new GraphSession(f.deps);
+    const profile = { ...appProfile, rawWrites: true, rawBatch: true, writes: { allowWrites: true, operations: [] } };
+    const result = await session.rawWrite({ profile, method: "POST", version: "v1.0", path: "/$batch", execute: true, confirm: "/$batch", journalPath: join(dir, "writes.log"), payload: { requests: [{ id: "1", method: "GET", url: "/users?$count=true", headers: { [name]: "eventual" } }] }, transport: async () => ({ status: 200, headers: {}, body: JSON.stringify({ responses: [{ id: "1", status: 200 }] }) }) });
+    assert.equal(result.kind, "success");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("batch rejects advanced queries without a consistency header", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-batch-header-"));
+  try {
+    const f = fixture();
+    const session = new GraphSession(f.deps);
+    const profile = { ...appProfile, rawWrites: true, rawBatch: true, writes: { allowWrites: true, operations: [] } };
+    let sends = 0;
+    await assert.rejects(session.rawWrite({ profile, method: "POST", version: "v1.0", path: "/$batch", execute: true, confirm: "/$batch", journalPath: join(dir, "writes.log"), payload: { requests: [{ id: "1", method: "GET", url: "/users?$count=true" }] }, transport: async () => { sends++; return { status: 200, headers: {}, body: "{}" }; } }), { code: "POLICY_DENIED" });
+    assert.equal(sends, 0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+for (const path of ["/drives/d/root", "/%64rives/d/root", "/shares/s/driveItem"]) test(`raw file route ${path} needs the files sensitive area`, async () => {
+  const denied = read({ path });
+  await assert.rejects(denied.run({}), error => record(error).code === "POLICY_DENIED" && /Sensitive area files/.test(outputText(record(error).message)));
+  assert.equal(denied.credentialCalls.length, 0);
+  const allowed = read({ path, profile: { ...delegatedProfile, sensitiveAreas: ["files"] } });
+  assert.equal((await allowed.run({})).complete, true);
+});
+
+test("the files sensitive area does not admit raw mail routes", async () => {
+  const f = read({ path: "/users/a/messages", profile: { ...delegatedProfile, sensitiveAreas: ["files"] } });
+  await assert.rejects(f.run({}), error => /Pack mail/.test(outputText(record(error).message)));
+  assert.equal(f.credentialCalls.length, 0);
+});
+
+for (const sensitiveAreas of [[], ["files"]] as const) test(`raw mail routes require the mail pack with sensitive areas ${sensitiveAreas.join(",")}`, async () => {
+  const path = "/users/a/messages";
+  const denied = read({ path, profile: { ...appProfile, sensitiveAreas }, scopes: undefined });
+  await assert.rejects(denied.run({}), error => record(error).code === "POLICY_DENIED");
+  const allowed = read({ path, profile: { ...appProfile, sensitiveAreas, enabledPacks: ["mail"] }, scopes: undefined });
+  assert.equal((await allowed.run({})).complete, true);
+});
+
 test("raw collection preserves Graph metadata across pages", async () => {
   const f = read({ path: "/users/delta", limit: 1 }, json(200, { "@odata.count": 2, "@odata.deltaLink": "https://graph.microsoft.com/v1.0/users/delta?token=done", value: [{ id: "a" }, { id: "b" }] }));
   const partial = await f.run({});

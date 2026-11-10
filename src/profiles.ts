@@ -7,11 +7,14 @@ import { PrivateFiles } from "./private-file.js";
 import { validateSecretRef, type SecretRef } from "./secrets.js";
 
 export type WritePolicy = Readonly<{ allowWrites: boolean; operations: readonly string[] }>;
+export type SensitiveArea = "files";
+const sensitiveAreaNames: readonly string[] = ["files"];
 type SharedProfile = Readonly<{
   tenantId: string; clientId: string; cloud: "commercial";
-  enabledPacks: readonly ("entra" | "security" | "mail")[]; preview: boolean; sensitiveAreas: readonly string[];
+  enabledPacks: readonly ("entra" | "security" | "mail")[]; preview: boolean; sensitiveAreas: readonly SensitiveArea[];
   writes?: WritePolicy;
   rawWrites?: boolean;
+  rawBatch?: boolean;
 }>;
 export type DelegatedProfile = SharedProfile & Readonly<{ mode: "delegated"; token: SecretRef; allowDeviceCode: boolean }>;
 export type ApplicationProfile = SharedProfile & Readonly<{ mode: "application"; allowDeviceCode: false }> & (
@@ -53,8 +56,10 @@ function shared(value: Record<string, unknown>): SharedProfile {
   const sensitive = value.sensitiveAreas === undefined ? [] : value.sensitiveAreas;
   const preview = value.preview === undefined ? false : value.preview;
   if (value.rawWrites !== undefined && typeof value.rawWrites !== "boolean") invalid("Invalid rawWrites policy");
+  if (value.rawBatch !== undefined && typeof value.rawBatch !== "boolean") invalid("Invalid rawBatch policy");
   if (!Array.isArray(packs) || packs.some(pack => pack !== "entra" && pack !== "security" && pack !== "mail") || new Set(packs).size !== packs.length ||
-    !Array.isArray(sensitive) || sensitive.length || typeof preview !== "boolean") invalid("Invalid profile policy");
+    !Array.isArray(sensitive) || sensitive.some(area => !sensitiveAreaNames.includes(area)) || new Set(sensitive).size !== sensitive.length ||
+    typeof preview !== "boolean") invalid("Invalid profile policy");
   let writes: WritePolicy | undefined;
   if (value.writes !== undefined) {
     const policy = value.writes;
@@ -64,9 +69,10 @@ function shared(value: Record<string, unknown>): SharedProfile {
     writes = Object.freeze({ allowWrites: policy.allowWrites, operations: Object.freeze([...(policy.operations as string[] | undefined ?? [])]) });
   }
   return { tenantId: value.tenantId as string, clientId: value.clientId as string, cloud: "commercial", enabledPacks: Object.freeze([...packs] as ("entra" | "security" | "mail")[]),
-    preview: preview as boolean, sensitiveAreas: Object.freeze([]), ...(writes === undefined ? {} : { writes }), ...(value.rawWrites === undefined ? {} : { rawWrites: value.rawWrites as boolean }) };
+    preview: preview as boolean, sensitiveAreas: Object.freeze([...sensitive] as SensitiveArea[]), ...(writes === undefined ? {} : { writes }),
+    ...(value.rawWrites === undefined ? {} : { rawWrites: value.rawWrites as boolean }), ...(value.rawBatch === undefined ? {} : { rawBatch: value.rawBatch as boolean }) };
 }
-const sharedKeys = ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "allowDeviceCode", "writes", "rawWrites"];
+const sharedKeys = ["mode", "tenantId", "clientId", "cloud", "enabledPacks", "preview", "sensitiveAreas", "allowDeviceCode", "writes", "rawWrites", "rawBatch"];
 
 export function validateDelegatedProfile(value: unknown, files?: PrivateFiles): DelegatedProfile {
   if (!object(value) || value.mode !== "delegated" || !exact(value, [...sharedKeys, "token"]) ||

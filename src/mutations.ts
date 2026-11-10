@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
-import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-session.js";
+import { encodeGraphPathSegment, GRAPH_HOST, GraphSession, redactGraphValue } from "./graph-session.js";
 import { booleanEnv, movedError, validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
 import { statePath } from "./paths.js";
 import { PrivateFiles } from "./private-file.js";
@@ -90,8 +90,8 @@ export type MutationResult =
   | { kind: "dry-run"; preview: MutationPreview }
   | { kind: "noop"; preview: MutationPreview; auditId?: string; duplicate?: boolean }
   | { kind: "success"; preview: MutationPreview; auditId: string; status: number; response: unknown; responseUnreadable?: { code: "RESPONSE_INVALID"; httpStatus: number } }
-  | { kind: "failed"; preview: MutationPreview; auditId: string; status: number }
-  | { kind: "unknown"; preview: MutationPreview; auditId: string; httpStatus: number; guidance: string };
+  | { kind: "failed"; preview: MutationPreview; auditId: string; status: number; response?: unknown }
+  | { kind: "unknown"; preview: MutationPreview; auditId: string; httpStatus: number; guidance: string; response?: unknown };
 
 // The immutable tenant and operation scope: copied from the hand-edited
 // profile when the coordinator is created. Read flags, environment profile
@@ -153,6 +153,7 @@ export type MutationAuthorization = {
   readonly method: MutationMethod;
   readonly url: string;
   readonly raw?: boolean;
+  readonly mailboxes?: readonly string[];
 };
 
 export type MutationResponse = { status: number; body: unknown };
@@ -294,7 +295,7 @@ export function createMutationSender(args: {
   const { delegated, application, transport, files = new PrivateFiles() } = args;
   const bound = args.profile.mode === "application" ? validateApplicationProfile(args.profile, files) : validateDelegatedProfile(args.profile, files);
 
-  async function credential(scopes: string[] | undefined, signal?: AbortSignal, mailbox?: string): Promise<string> {
+  async function credential(scopes: string[] | undefined, signal?: AbortSignal, mailboxes: readonly string[] = []): Promise<string> {
     signal?.throwIfAborted();
     if (bound.mode === "delegated") {
       if (scopes === undefined) {
@@ -303,7 +304,7 @@ export function createMutationSender(args: {
         ]);
       }
       const acquired = await delegated.credential(bound, scopes);
-      if (mailbox !== undefined) checkMailCredential(bound, acquired, mailbox === "me" ? undefined : mailbox);
+      for (const mailbox of mailboxes) checkMailCredential(bound, acquired, mailbox === "me" ? undefined : mailbox);
       return acquired.token;
     }
     if (scopes !== undefined) {
@@ -350,7 +351,7 @@ export function createMutationSender(args: {
       const mail = isMailRoute(segments);
       const mailbox = segments[0]?.toLowerCase() === "me" ? "me" : segments[0]?.toLowerCase() === "users" ? segments[1] ?? "" : "";
       if (authorization.raw && mail && options?.scopes?.some(scope => /\.shared$/i.test(scope))) throw new AxiError("Shared mailbox scopes are unsupported", "POLICY_DENIED");
-      const token = await credential(options?.scopes, options?.signal, mail ? mailbox : undefined);
+      const token = await credential(options?.scopes, options?.signal, [...(mail ? [mailbox] : []), ...(authorization.mailboxes ?? [])]);
       options?.signal?.throwIfAborted();
       assertMutationDestination(authorization.url);
       if (readOnlyForced()) {
@@ -422,6 +423,22 @@ function serialize(value: unknown): string | undefined {
   }
 }
 
+function redactQuery(query: string): string {
+  const safe = new URLSearchParams();
+  for (const [key, value] of new URLSearchParams(query)) {
+    const redacted = redactGraphValue({ [key]: value }) as Record<string, unknown>;
+    safe.append(key, typeof redacted[key] === "string" ? redacted[key] as string : "***redacted***");
+  }
+  return safe.toString();
+}
+
+function removeBatchContinuations(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(removeBatchContinuations);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => [key,
+    key.toLowerCase().endsWith("@odata.nextlink") ? "More results available; continuation omitted" : removeBatchContinuations(child)]));
+}
+
 export function createMutationCoordinator(args: {
   binaryTransport?: BinaryTransport;
   profile: AnyProfile;
@@ -442,6 +459,7 @@ export function createMutationCoordinator(args: {
     operations: Object.freeze([...(validated.writes?.operations ?? [])]),
   });
   const sender = createMutationSender({ profile: validated, delegated, application, transport, files });
+  const session = new GraphSession({ delegated, application, transport: async () => { throw new Error("Unexpected read"); } }, files);
 
   function enforceWriteGates(definition: MutationDefinition | DownloadDefinition): void {
     // Gate 1: forced read-only overrides every profile.
@@ -497,7 +515,7 @@ export function createMutationCoordinator(args: {
         try { decoded = decodeURIComponent(part); } catch { throw new AxiError("Invalid mutation path encoding", "VALIDATION_ERROR"); }
         if (decoded === "." || decoded === ".." || /[\/\\\x00-\x1f\x7f]/.test(decoded)) throw new AxiError("Invalid raw mutation path", "VALIDATION_ERROR");
       }
-      if (parts.length === 3 && decodeURIComponent(parts[2]!).toLowerCase() === "$batch") throw new AxiError("Raw batch requests cannot be authorized", "POLICY_DENIED");
+      if (parts.length === 3 && decodeURIComponent(parts[2]!).toLowerCase() === "$batch" && validated.rawBatch !== true) throw new AxiError("Raw batch requests cannot be authorized", "POLICY_DENIED");
       if (definition.query !== undefined && (!definition.query || /[\x00-\x1f\x7f]/.test(definition.query) || definition.query.split("&").some(pair => !pair.includes("=") || pair.startsWith("=")))) throw new AxiError("Invalid raw mutation query", "VALIDATION_ERROR");
       const query = definition.query === undefined ? "" : `?${new URLSearchParams(definition.query).toString()}`;
       const url = `https://${GRAPH_HOST}${definition.path}${query}`;
@@ -537,14 +555,20 @@ export function createMutationCoordinator(args: {
     const boundUrl = boundMutationUrl(definition);
     const destination = new URL(boundUrl);
     if (definition.raw && definition.query !== undefined) {
-      const safe = new URLSearchParams();
-      for (const [key, value] of destination.searchParams) {
-        const redacted = redactGraphValue({ [key]: value }) as Record<string, unknown>;
-        safe.append(key, typeof redacted[key] === "string" ? redacted[key] as string : "***redacted***");
-      }
-      destination.search = safe.toString();
+      destination.search = redactQuery(destination.search);
     }
     const url = definition.raw && definition.query !== undefined ? destination.toString() : boundUrl;
+    const payload = redactGraphValue(definition.payload);
+    const parts = definition.path.split("/");
+    if (definition.raw && parts.length === 3 && decodeURIComponent(parts[2]!).toLowerCase() === "$batch"
+      && payload && typeof payload === "object" && "requests" in payload && Array.isArray(payload.requests)) {
+      for (const request of payload.requests) {
+        if (request && typeof request === "object" && typeof request.url === "string") {
+          const index = request.url.indexOf("?");
+          if (index !== -1) request.url = `${request.url.slice(0, index)}?${redactQuery(request.url.slice(index + 1))}`;
+        }
+      }
+    }
     return Object.freeze({
       operation: definition.operation,
       method: definition.method,
@@ -553,7 +577,7 @@ export function createMutationCoordinator(args: {
       target: definition.target,
       noop: current === undefined || isNoop === undefined ? false : isNoop(current),
       currentState: current === undefined ? null : serialize(redactGraphValue(current))!,
-      proposedChange: definition.payload === undefined ? null : serialize(redactGraphValue(definition.payload))!,
+      proposedChange: definition.payload === undefined ? null : serialize(payload)!,
     });
   }
 
@@ -635,6 +659,22 @@ export function createMutationCoordinator(args: {
     definition = { ...definition, ...(body === undefined ? {} : { payload: JSON.parse(body) as unknown }) };
     options = { ...options };
     const seen = preview(definition, await options.readState(), options.isNoop);
+    const parts = definition.path.split("/");
+    const batch = definition.raw === true && parts.length === 3 && decodeURIComponent(parts[2]!).toLowerCase() === "$batch";
+    let mailboxes: string[] = [];
+    if (batch) {
+      try {
+        if (definition.method !== "POST") throw new AxiError("Batch requests require POST", "POLICY_DENIED");
+        mailboxes = session.authorizeBatch(validated, definition.version, definition.payload, options.scopes);
+      } catch (error) {
+        if (options.execute === true) {
+          const meta = metadata(definition, seen, options.intentId ?? randomUUID(), options.ifMatch);
+          recordAudit({ ...meta, kind: "intent" });
+          recordAudit({ ...meta, kind: "outcome", httpStatus: 0, outcome: "POLICY_DENIED" });
+        }
+        throw error;
+      }
+    }
     // Gate 4: without --execute the caller runs the dry run instead.
     if (options.execute !== true) return { kind: "dry-run", preview: seen };
     // Verified already-desired state is a no-op: nothing is sent.
@@ -674,7 +714,7 @@ export function createMutationCoordinator(args: {
       recordAudit({ ...meta, kind: "outcome", httpStatus: 0, outcome: "NOT_SENT" });
       return { kind: "noop", preview: seen };
     }
-    const authorization = Object.freeze({ nonce: randomUUID(), method: definition.method, url: boundMutationUrl(definition), raw: definition.raw });
+    const authorization = Object.freeze({ nonce: randomUUID(), method: definition.method, url: boundMutationUrl(definition), raw: definition.raw, mailboxes });
     authorizations.set(authorization, sender);
     let sent: MutationResponse;
     try {
@@ -685,11 +725,11 @@ export function createMutationCoordinator(args: {
       });
     } catch (error) {
       if (mutationNotSent(error)) {
-        recordAudit({ ...meta, kind: "outcome", httpStatus: 0, outcome: "NOT_SENT" });
+        recordAudit({ ...meta, kind: "outcome", httpStatus: 0, outcome: batch && error instanceof AxiError && error.code === "POLICY_DENIED" ? "POLICY_DENIED" : "NOT_SENT" });
         throw error;
       }
       const httpStatus = mutationHttpStatus(error);
-      if (httpStatus > 0 && mutationAccepted(error)) {
+      if (httpStatus > 0 && mutationAccepted(error) && !batch) {
         recordAudit({ ...meta, kind: "outcome", httpStatus, outcome: "SUCCESS" });
         return { kind: "success", preview: seen, auditId: id, status: httpStatus, response: {}, responseUnreadable: { code: "RESPONSE_INVALID", httpStatus } };
       }
@@ -712,6 +752,27 @@ export function createMutationCoordinator(args: {
         httpStatus,
         guidance: `Mutation ${definition.operation} may or may not have been applied (audit ${id}); read back target '${definition.target}' before doing anything else; never replay this intent`,
       };
+    }
+    if (batch) {
+      sent = { ...sent, body: removeBatchContinuations(sent.body) };
+      const requests = (definition.payload as { requests?: unknown } | undefined)?.requests;
+      const rawResponses = (sent.body as { responses?: unknown } | null)?.responses;
+      const responses = Array.isArray(rawResponses) ? rawResponses : [];
+      const ids = Array.isArray(requests) ? requests.map(request => typeof request?.id === "string" ? request.id.toLowerCase() : "") : [];
+      const responseIds = responses.map(response => typeof response?.id === "string" ? response.id.toLowerCase() : "");
+      const complete = ids.length > 0 && ids.every(Boolean) && new Set(ids).size === ids.length
+        && responseIds.length === ids.length && new Set(responseIds).size === ids.length
+        && responseIds.every(id => ids.includes(id))
+        && responses.every(response => Number.isInteger(response?.status) && response.status >= 100 && response.status <= 599);
+      if (!complete || responses.some(response => response.status < 200 || response.status >= 300)) {
+        if (complete && responses.every(response => response.status >= 400 && response.status < 500 && response.status !== 408)) {
+          recordAudit({ ...meta, kind: "outcome", httpStatus: sent.status, outcome: "FAILED" });
+          return { kind: "failed", preview: seen, auditId: id, status: responses[0].status, response: sent.body };
+        }
+        recordAudit({ ...meta, kind: "outcome", httpStatus: sent.status, outcome: "OUTCOME_UNKNOWN" });
+        return { kind: "unknown", preview: seen, auditId: id, httpStatus: sent.status, response: sent.body,
+          guidance: `Batch ${definition.operation} may be partially applied (audit ${id}); inspect the responses and read back targets before doing anything else; never replay this intent` };
+      }
     }
     recordAudit({ ...meta, kind: "outcome", httpStatus: sent.status, outcome: "SUCCESS" });
     return { kind: "success", preview: seen, auditId: id, status: sent.status, response: sent.body };

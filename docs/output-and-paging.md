@@ -34,7 +34,7 @@ Raw reads accept any server-relative Graph path on the v1.0 or beta endpoint; th
 For raw write gates, see the [execution contract](execution.md).
 Pass raw query parameters with `--query 'key=value&key2=value2'`; keep the path free of query strings.
 Beta raw reads need a preview profile, and the explicit delegated scopes must be full `https://graph.microsoft.com/` names.
-Raw requests remain subject to pack and sensitive-resource policy: mail routes require the mail pack and mailbox authorization, mail downloads use the guarded coordinator, and file-sensitive routes are blocked by current profile validation.
+Raw requests remain subject to pack and sensitive-resource policy: mail routes require the mail pack and mailbox authorization, mail downloads use the guarded coordinator, and file-sensitive routes are blocked unless the profile lists `files` in `sensitiveAreas`.
 Responses come back whole, not projected to a field list; completeness describes the requested collection.
 Secret material, authentication-method phone numbers and data-policy storage locations are redacted, including in full output, previews and audit metadata.
 

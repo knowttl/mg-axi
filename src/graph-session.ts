@@ -5,7 +5,7 @@ import { redactSecrets } from "./redact.js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
 import { PrivateFiles } from "./private-file.js";
-import { validateProfile, profileName, type AnyProfile } from "./profiles.js";
+import { validateProfile, profileName, type AnyProfile, type SensitiveArea } from "./profiles.js";
 import { findOperation } from "./runtime-index.js";
 import { HUNTING_OPERATION, HUNTING_SCOPE, huntingRequest, huntingServerError } from "./security-hunting.js";
 import { checkMailCredential, checkMailScopes, isMailOperation, isMailRoute } from "./mail-authorization.js";
@@ -332,7 +332,7 @@ function matchRoute(route: string, pathname: string): Record<string, string> | n
 // Initial sensitive-area map. Mail and file content stay denied unless the
 // profile explicitly enables the area; consent and directory metadata are not
 // content areas. Later slices refine this table with their reviewed contracts.
-function sensitiveArea(route: string): string | null {
+function sensitiveArea(route: string): SensitiveArea | null {
   const segments = policySegments(route);
   if (isMailRoute(segments)) return "mail";
   if (segments.some(segment => segment === "drive" || segment === "drives" || segment === "file" || segment === "files") || segments[0] === "shares") return "files";

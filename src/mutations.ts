@@ -497,7 +497,7 @@ export function createMutationCoordinator(args: {
         try { decoded = decodeURIComponent(part); } catch { throw new AxiError("Invalid mutation path encoding", "VALIDATION_ERROR"); }
         if (decoded === "." || decoded === ".." || /[\/\\\x00-\x1f\x7f]/.test(decoded)) throw new AxiError("Invalid raw mutation path", "VALIDATION_ERROR");
       }
-      if (parts.length === 3 && decodeURIComponent(parts[2]!).toLowerCase() === "$batch") throw new AxiError("Raw batch requests cannot be authorized", "POLICY_DENIED");
+      if (parts.length === 3 && decodeURIComponent(parts[2]!).toLowerCase() === "$batch" && validated.rawBatch !== true) throw new AxiError("Raw batch requests cannot be authorized", "POLICY_DENIED");
       if (definition.query !== undefined && (!definition.query || /[\x00-\x1f\x7f]/.test(definition.query) || definition.query.split("&").some(pair => !pair.includes("=") || pair.startsWith("=")))) throw new AxiError("Invalid raw mutation query", "VALIDATION_ERROR");
       const query = definition.query === undefined ? "" : `?${new URLSearchParams(definition.query).toString()}`;
       const url = `https://${GRAPH_HOST}${definition.path}${query}`;

@@ -256,6 +256,29 @@ for (const path of ["/$batch", "/%24batch"]) test(`raw batch ${path} is refused 
   assert.equal(f.credentialCalls.length, 0);
 });
 
+for (const path of ["/$batch", "/%24batch"]) test(`raw batch ${path} reaches the preview when the profile sets rawBatch`, async () => {
+  const f = fixture();
+  const session = new GraphSession(f.deps);
+  const profile = { ...appProfile, rawWrites: true, rawBatch: true, writes: { allowWrites: true, operations: [] } } as const;
+  const preview = await session.rawWrite({ profile, method: "POST", version: "v1.0", path, payload: { requests: [] }, transport: async () => { throw new Error("preview must not send"); } });
+  assert.equal(preview.kind, "dry-run");
+  await assert.rejects(session.rawWrite({ profile: { ...profile, rawWrites: false }, method: "POST", version: "v1.0", path, transport: async () => ({ status: 200, headers: {}, body: "{}" }) }), error => record(error).code === "WRITES_DISABLED");
+});
+
+for (const path of ["/drives/d/root", "/%64rives/d/root", "/shares/s/driveItem"]) test(`raw file route ${path} needs the files sensitive area`, async () => {
+  const denied = read({ path });
+  await assert.rejects(denied.run({}), error => record(error).code === "POLICY_DENIED" && /Sensitive area files/.test(outputText(record(error).message)));
+  assert.equal(denied.credentialCalls.length, 0);
+  const allowed = read({ path, profile: { ...delegatedProfile, sensitiveAreas: ["files"] } });
+  assert.equal((await allowed.run({})).complete, true);
+});
+
+test("the files sensitive area does not admit raw mail routes", async () => {
+  const f = read({ path: "/users/a/messages", profile: { ...delegatedProfile, sensitiveAreas: ["files"] } });
+  await assert.rejects(f.run({}), error => /Pack mail/.test(outputText(record(error).message)));
+  assert.equal(f.credentialCalls.length, 0);
+});
+
 test("raw collection preserves Graph metadata across pages", async () => {
   const f = read({ path: "/users/delta", limit: 1 }, json(200, { "@odata.count": 2, "@odata.deltaLink": "https://graph.microsoft.com/v1.0/users/delta?token=done", value: [{ id: "a" }, { id: "b" }] }));
   const partial = await f.run({});

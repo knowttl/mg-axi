@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.21](https://github.com/knowttl/mg-axi/compare/v0.1.20...v0.1.21) (2026-11-10)
+
+
+### Features
+
+* make file and batch access configurable ([#147](https://github.com/knowttl/mg-axi/issues/147)) ([2dffaa0](https://github.com/knowttl/mg-axi/commit/2dffaa0d6a6d006adf4d892d4dc2a3e506725226))
+
 ## [0.1.20](https://github.com/knowttl/mg-axi/compare/v0.1.19...v0.1.20) (2026-11-09)
 
 

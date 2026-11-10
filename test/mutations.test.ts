@@ -94,13 +94,39 @@ for (const scenario of [
   test(`raw batch records ${scenario.name} outcomes`, async () => {
     const f = fixture({ handler: { status: 200, headers: {}, body: scenario.body === "invalid" ? "{" : JSON.stringify(scenario.body) } });
     const profile = { ...enabledApp, rawWrites: true, rawBatch: true };
-    const result = await f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/%24batch", effect: "write", target: "$batch", payload: { requests: [{ id: "1" }, { id: "2" }] } }, { readState: readState(), execute: true });
+    const result = await f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/%24batch", effect: "write", target: "$batch", payload: { requests: [{ id: "1", method: "PATCH", url: "/users/one", body: { displayName: "One" }, headers: { "Content-Type": "application/json" } }, { id: "2", method: "GET", url: "/users/two" }] } }, { readState: readState(), execute: true });
     assert.equal(result.kind, scenario.kind);
     assert.equal(journal(f.journalPath)[1]!.outcome, scenario.outcome);
     assert.equal(f.requests.length, 1);
     if (scenario.body !== "invalid") assert.deepEqual("response" in result && result.response, scenario.body);
   });
 }
+
+for (const request of [
+  { id: "1", method: "GET", url: "/users/other/messages" },
+  { id: "1", method: "PATCH", url: "/security/alerts_v2/a", body: {} },
+  { id: "1", method: "GET", url: "/drives/a/root" },
+  { id: "1", method: "GET", url: "/users/../messages" },
+  { id: "1", method: "GET", url: "/%24batch" },
+  { id: "1", method: "GET", url: "https://graph.microsoft.com/v1.0/users" },
+  { id: "1", url: "/users" },
+]) {
+  test(`raw batch denies ${JSON.stringify(request)} before transport`, async () => {
+    const f = fixture();
+    const profile = { ...enabledApp, rawWrites: true, rawBatch: true };
+    await assert.rejects(f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/$batch", effect: "write", target: "$batch", payload: { requests: [request] } }, { readState: readState(), execute: true }), { code: "POLICY_DENIED" });
+    assert.equal(f.requests.length, 0);
+    assert.equal(journal(f.journalPath)[1]!.outcome, "POLICY_DENIED");
+  });
+}
+
+test("raw batch rejects a delegated request for another mailbox", async () => {
+  const f = fixture();
+  const profile = { ...enabledDelegated, enabledPacks: ["entra", "mail"], rawWrites: true, rawBatch: true };
+  await assert.rejects(f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/$batch", effect: "write", target: "$batch", payload: { requests: [{ id: "1", method: "GET", url: "/users/other/messages" }] } }, { readState: readState(), execute: true, scopes: ["https://graph.microsoft.com/Mail.ReadBasic"] }), { code: "POLICY_DENIED" });
+  assert.equal(f.requests.length, 0);
+  assert.equal(journal(f.journalPath)[1]!.outcome, "POLICY_DENIED");
+});
 
 test("the audit journal honors the coordinator files instead of host defaults", async () => {
   const f = fixture();

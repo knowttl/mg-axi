@@ -863,6 +863,40 @@ export class GraphSession {
     private files = new PrivateFiles(),
   ) {}
 
+  authorizeBatch(profile: AnyProfile, version: string, payload: unknown, scopes: string[] | undefined): string[] {
+    const requests = (payload as { requests?: unknown } | null)?.requests;
+    if (!Array.isArray(requests) || requests.length < 1 || requests.length > 20) throw new AxiError("Invalid batch requests", "POLICY_DENIED");
+    const ids = new Set<string>();
+    const mailboxes: string[] = [];
+    for (const request of requests) {
+      if (!request || typeof request !== "object" || typeof request.id !== "string" || !request.id || ids.has(request.id.toLowerCase())
+        || typeof request.method !== "string" || !["GET", "POST", "PUT", "PATCH", "DELETE"].includes(request.method)
+        || typeof request.url !== "string" || !request.url.startsWith("/") || request.url.startsWith("//") || request.url.includes("#")
+        || (request.headers && (typeof request.headers !== "object" || Array.isArray(request.headers) || Object.keys(request.headers).some(key => /^(authorization|host)$/i.test(key))))) {
+        throw new AxiError("Invalid batch request", "POLICY_DENIED");
+      }
+      ids.add(request.id.toLowerCase());
+      const [path, ...queryParts] = request.url.split("?");
+      if (queryParts.length > 1) throw new AxiError("Invalid batch query", "POLICY_DENIED");
+      let operation: SessionOperation;
+      try {
+        operation = sessionOperation({ operation: rawReadOperation(version, path!), raw: true });
+        if (policySegments(path!).includes("$batch")) throw new AxiError("Nested batches are unsupported", "POLICY_DENIED");
+        const query = Object.fromEntries(new URLSearchParams(queryParts[0] ?? ""));
+        checkQueryContext(query, request.headers?.ConsistencyLevel === "eventual" ? "eventual" : undefined, isMailOperation(operation), true);
+        this.authorizePolicy(profile, operation);
+        if (isMailOperation(operation)) {
+          if (request.method === "GET") checkMailScopes(profile, scopes, operation);
+          else if (scopes?.some(scope => /\.shared$/i.test(scope))) throw new AxiError("Shared mailbox scopes are unsupported", "POLICY_DENIED");
+          mailboxes.push(rawMailbox(operation) ?? "me");
+        }
+      } catch (error) {
+        throw new AxiError(error instanceof Error ? error.message : "Batch request denied", "POLICY_DENIED");
+      }
+    }
+    return mailboxes;
+  }
+
   async rawWrite(args: { profile: AnyProfile; method: import("./mutations.js").MutationMethod; version: string; path: string; query?: string; payload?: unknown; execute?: boolean; confirm?: string; scopes?: string[]; transport: import("./mutations.js").MutationTransport; journalPath?: string }): Promise<import("./mutations.js").MutationResult> {
     const operation = rawReadOperation(args.version, args.path);
     const profile = validateProfile(args.profile, this.files);

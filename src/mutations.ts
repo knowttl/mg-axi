@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { AxiError } from "axi-sdk-js";
 import { ApplicationAuth } from "./app-auth.js";
 import { DelegatedAuth } from "./auth.js";
-import { encodeGraphPathSegment, GRAPH_HOST, redactGraphValue } from "./graph-session.js";
+import { encodeGraphPathSegment, GRAPH_HOST, GraphSession, redactGraphValue } from "./graph-session.js";
 import { booleanEnv, movedError, validateApplicationProfile, validateDelegatedProfile, type AnyProfile } from "./profiles.js";
 import { statePath } from "./paths.js";
 import { PrivateFiles } from "./private-file.js";
@@ -153,6 +153,7 @@ export type MutationAuthorization = {
   readonly method: MutationMethod;
   readonly url: string;
   readonly raw?: boolean;
+  readonly mailboxes?: readonly string[];
 };
 
 export type MutationResponse = { status: number; body: unknown };
@@ -294,7 +295,7 @@ export function createMutationSender(args: {
   const { delegated, application, transport, files = new PrivateFiles() } = args;
   const bound = args.profile.mode === "application" ? validateApplicationProfile(args.profile, files) : validateDelegatedProfile(args.profile, files);
 
-  async function credential(scopes: string[] | undefined, signal?: AbortSignal, mailbox?: string): Promise<string> {
+  async function credential(scopes: string[] | undefined, signal?: AbortSignal, mailboxes: readonly string[] = []): Promise<string> {
     signal?.throwIfAborted();
     if (bound.mode === "delegated") {
       if (scopes === undefined) {
@@ -303,7 +304,7 @@ export function createMutationSender(args: {
         ]);
       }
       const acquired = await delegated.credential(bound, scopes);
-      if (mailbox !== undefined) checkMailCredential(bound, acquired, mailbox === "me" ? undefined : mailbox);
+      for (const mailbox of mailboxes) checkMailCredential(bound, acquired, mailbox === "me" ? undefined : mailbox);
       return acquired.token;
     }
     if (scopes !== undefined) {
@@ -350,7 +351,7 @@ export function createMutationSender(args: {
       const mail = isMailRoute(segments);
       const mailbox = segments[0]?.toLowerCase() === "me" ? "me" : segments[0]?.toLowerCase() === "users" ? segments[1] ?? "" : "";
       if (authorization.raw && mail && options?.scopes?.some(scope => /\.shared$/i.test(scope))) throw new AxiError("Shared mailbox scopes are unsupported", "POLICY_DENIED");
-      const token = await credential(options?.scopes, options?.signal, mail ? mailbox : undefined);
+      const token = await credential(options?.scopes, options?.signal, [...(mail ? [mailbox] : []), ...(authorization.mailboxes ?? [])]);
       options?.signal?.throwIfAborted();
       assertMutationDestination(authorization.url);
       if (readOnlyForced()) {
@@ -442,6 +443,7 @@ export function createMutationCoordinator(args: {
     operations: Object.freeze([...(validated.writes?.operations ?? [])]),
   });
   const sender = createMutationSender({ profile: validated, delegated, application, transport, files });
+  const session = new GraphSession({ delegated, application, transport: async () => { throw new Error("Unexpected read"); } }, files);
 
   function enforceWriteGates(definition: MutationDefinition | DownloadDefinition): void {
     // Gate 1: forced read-only overrides every profile.
@@ -637,6 +639,20 @@ export function createMutationCoordinator(args: {
     const seen = preview(definition, await options.readState(), options.isNoop);
     const parts = definition.path.split("/");
     const batch = definition.raw === true && parts.length === 3 && decodeURIComponent(parts[2]!).toLowerCase() === "$batch";
+    let mailboxes: string[] = [];
+    if (batch) {
+      try {
+        if (definition.method !== "POST") throw new AxiError("Batch requests require POST", "POLICY_DENIED");
+        mailboxes = session.authorizeBatch(validated, definition.version, definition.payload, options.scopes);
+      } catch (error) {
+        if (options.execute === true) {
+          const meta = metadata(definition, seen, options.intentId ?? randomUUID(), options.ifMatch);
+          recordAudit({ ...meta, kind: "intent" });
+          recordAudit({ ...meta, kind: "outcome", httpStatus: 0, outcome: "POLICY_DENIED" });
+        }
+        throw error;
+      }
+    }
     // Gate 4: without --execute the caller runs the dry run instead.
     if (options.execute !== true) return { kind: "dry-run", preview: seen };
     // Verified already-desired state is a no-op: nothing is sent.
@@ -676,7 +692,7 @@ export function createMutationCoordinator(args: {
       recordAudit({ ...meta, kind: "outcome", httpStatus: 0, outcome: "NOT_SENT" });
       return { kind: "noop", preview: seen };
     }
-    const authorization = Object.freeze({ nonce: randomUUID(), method: definition.method, url: boundMutationUrl(definition), raw: definition.raw });
+    const authorization = Object.freeze({ nonce: randomUUID(), method: definition.method, url: boundMutationUrl(definition), raw: definition.raw, mailboxes });
     authorizations.set(authorization, sender);
     let sent: MutationResponse;
     try {
@@ -687,7 +703,7 @@ export function createMutationCoordinator(args: {
       });
     } catch (error) {
       if (mutationNotSent(error)) {
-        recordAudit({ ...meta, kind: "outcome", httpStatus: 0, outcome: "NOT_SENT" });
+        recordAudit({ ...meta, kind: "outcome", httpStatus: 0, outcome: batch && error instanceof AxiError && error.code === "POLICY_DENIED" ? "POLICY_DENIED" : "NOT_SENT" });
         throw error;
       }
       const httpStatus = mutationHttpStatus(error);

@@ -260,7 +260,7 @@ for (const path of ["/$batch", "/%24batch"]) test(`raw batch ${path} reaches the
   const f = fixture();
   const session = new GraphSession(f.deps);
   const profile = { ...appProfile, rawWrites: true, rawBatch: true, writes: { allowWrites: true, operations: [] } } as const;
-  const preview = await session.rawWrite({ profile, method: "POST", version: "v1.0", path, payload: { requests: [] }, transport: async () => { throw new Error("preview must not send"); } });
+  const preview = await session.rawWrite({ profile, method: "POST", version: "v1.0", path, payload: { requests: [{ id: "1", method: "GET", url: "/users" }] }, transport: async () => { throw new Error("preview must not send"); } });
   assert.equal(preview.kind, "dry-run");
   await assert.rejects(session.rawWrite({ profile: { ...profile, rawWrites: false }, method: "POST", version: "v1.0", path, transport: async () => ({ status: 200, headers: {}, body: "{}" }) }), error => record(error).code === "WRITES_DISABLED");
 });

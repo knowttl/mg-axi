@@ -85,9 +85,9 @@ async function withEnv<T>(key: string, value: string | undefined, action: () => 
 const readState = (current: unknown = { notes: ["previous synthetic note"] }) => async () => current;
 
 for (const scenario of [
-  { name: "successful", body: { responses: [{ id: "2", status: 204 }, { id: "1", status: 200 }] }, kind: "success", outcome: "SUCCESS" },
-  { name: "failed", body: { responses: [{ id: "1", status: 403 }, { id: "2", status: 424 }] }, kind: "failed", outcome: "FAILED" },
-  { name: "partially successful", body: { responses: [{ id: "1", status: 204 }, { id: "2", status: 403 }] }, kind: "unknown", outcome: "OUTCOME_UNKNOWN" },
+  { name: "successful", body: { responses: [{ id: "2", status: 200, body: { id: "two" } }, { id: "1", status: 204 }] }, kind: "success", outcome: "SUCCESS" },
+  { name: "failed", body: { responses: [{ id: "1", status: 403, body: { error: { code: "Authorization_RequestDenied", message: "Access denied" } } }, { id: "2", status: 404, body: { error: { code: "Request_ResourceNotFound", message: "Resource not found" } } }] }, kind: "failed", outcome: "FAILED" },
+  { name: "partially successful", body: { responses: [{ id: "1", status: 204 }, { id: "2", status: 403, body: { error: { code: "Authorization_RequestDenied", message: "Access denied" } } }] }, kind: "unknown", outcome: "OUTCOME_UNKNOWN" },
   { name: "incomplete", body: { responses: [{ id: "1", status: 204 }] }, kind: "unknown", outcome: "OUTCOME_UNKNOWN" },
   { name: "unreadable", body: "invalid", kind: "unknown", outcome: "OUTCOME_UNKNOWN" },
 ] as const) {
@@ -102,18 +102,15 @@ for (const scenario of [
   });
 }
 
-for (const [name, responses, kind] of [
-  ["success", [{ id: "1", status: 200 }], "success"],
-  ["failure", [{ id: "1", status: 403 }], "failed"],
-  ["unknown", [{ id: "1", status: 503 }], "unknown"],
-] as const) {
+for (const [name, secondStatus, kind] of [["success", 200, "success"], ["mixed", 503, "unknown"]] as const) {
   test(`raw batch ${name} indicates omitted continuations`, async () => {
-    const body = { responses: responses.map(response => ({ ...response, body: { value: [{ id: "a", "members@odata.nextLink": "https://graph.microsoft.com/v1.0/groups/a/members?$skiptoken=nested-secret" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$skiptoken=opaque-secret", "@odata.count": 1 } })) };
+    const secondBody = secondStatus === 200 ? { id: "b" } : { error: { code: "ServiceUnavailable", message: "Service unavailable" } };
+    const body = { responses: [{ id: "1", status: 200, body: { value: [{ id: "a", members: [], "members@odata.nextLink": "https://graph.microsoft.com/v1.0/groups/a/members?$skiptoken=nested-secret" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/groups?$skiptoken=opaque-secret" } }, { id: "2", status: secondStatus, body: secondBody }] };
     const f = fixture({ handler: { status: 200, headers: {}, body: JSON.stringify(body) } });
     const profile = { ...enabledApp, rawWrites: true, rawBatch: true };
-    const result = await f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/$batch", effect: "write", target: "$batch", payload: { requests: [{ id: "1", method: "GET", url: "/users" }] } }, { readState: readState(), execute: true });
+    const result = await f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/$batch", effect: "write", target: "$batch", payload: { requests: [{ id: "1", method: "GET", url: "/groups?$expand=members" }, { id: "2", method: "GET", url: "/users/b" }] } }, { readState: readState(), execute: true });
     assert.equal(result.kind, kind);
-    assert.deepEqual("response" in result && result.response, { responses: responses.map(response => ({ ...response, body: { value: [{ id: "a", "members@odata.nextLink": "More results available; continuation omitted" }], "@odata.nextLink": "More results available; continuation omitted", "@odata.count": 1 } })) });
+    assert.deepEqual("response" in result && result.response, { responses: [{ id: "1", status: 200, body: { value: [{ id: "a", members: [], "members@odata.nextLink": "More results available; continuation omitted" }], "@odata.nextLink": "More results available; continuation omitted" } }, { id: "2", status: secondStatus, body: secondBody }] });
     assert.doesNotMatch(JSON.stringify(result), /opaque-secret|nested-secret/);
   });
 }

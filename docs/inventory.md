@@ -79,7 +79,8 @@ Operation-level ownership does not authorize all writable properties on a PATCH 
 Credential values, secret minting, LAPS credential detail and BitLocker recovery-key detail are intentionally blocked.
 Metadata collection/count routes carry the deferred disposition in v1.0 (out of v1) and remain scheduled in beta (never agreed for v1) for a future reviewed safe projection.
 Trust-framework key-set surfaces remain blocked because keys and secret-bearing operations require explicit safety contracts.
-Beta writes and external-customer-only user-flow surfaces remain intentionally blocked.
+Beta writes and external-customer-only user-flow surfaces retain intentionally blocked inventory dispositions.
+Raw API access is independent of those dispositions; see the [execution contract](execution.md).
 Documented lookup, membership-check, evaluation and validation POST actions keep their family owner and are not denied as beta writes.
 `READ_ACTION_SOURCES` records their operation-effect evidence, shared across route aliases and both disposition and ownership decisions.
 Only explicitly listed POST actions are classified as reads; unknown POST actions remain writes, regardless of name prefixes.

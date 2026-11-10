@@ -102,6 +102,22 @@ for (const scenario of [
   });
 }
 
+for (const [name, responses, kind] of [
+  ["success", [{ id: "1", status: 200 }], "success"],
+  ["failure", [{ id: "1", status: 403 }], "failed"],
+  ["unknown", [{ id: "1", status: 503 }], "unknown"],
+] as const) {
+  test(`raw batch ${name} omits continuation links`, async () => {
+    const body = { responses: responses.map(response => ({ ...response, body: { value: [{ id: "a", "members@odata.nextLink": "https://graph.microsoft.com/v1.0/groups/a/members?$skiptoken=nested-secret" }], "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$skiptoken=opaque-secret", "@odata.count": 1 } })) };
+    const f = fixture({ handler: { status: 200, headers: {}, body: JSON.stringify(body) } });
+    const profile = { ...enabledApp, rawWrites: true, rawBatch: true };
+    const result = await f.coordinator(profile).execute({ raw: true, operation: "mg.api.raw", method: "POST", version: "v1.0", path: "/v1.0/$batch", effect: "write", target: "$batch", payload: { requests: [{ id: "1", method: "GET", url: "/users" }] } }, { readState: readState(), execute: true });
+    assert.equal(result.kind, kind);
+    assert.deepEqual("response" in result && result.response, { responses: responses.map(response => ({ ...response, body: { value: [{ id: "a" }], "@odata.count": 1 } })) });
+    assert.doesNotMatch(JSON.stringify(result), /opaque-secret|nested-secret/);
+  });
+}
+
 for (const request of [
   { id: "1", method: "GET", url: "/users/other/messages" },
   { id: "1", method: "PATCH", url: "/security/alerts_v2/a", body: {} },

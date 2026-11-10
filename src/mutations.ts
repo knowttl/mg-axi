@@ -432,6 +432,13 @@ function redactQuery(query: string): string {
   return safe.toString();
 }
 
+function removeBatchContinuations(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(removeBatchContinuations);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !key.toLowerCase().endsWith("@odata.nextlink"))
+    .map(([key, child]) => [key, removeBatchContinuations(child)]));
+}
+
 export function createMutationCoordinator(args: {
   binaryTransport?: BinaryTransport;
   profile: AnyProfile;
@@ -747,6 +754,7 @@ export function createMutationCoordinator(args: {
       };
     }
     if (batch) {
+      sent = { ...sent, body: removeBatchContinuations(sent.body) };
       const requests = (definition.payload as { requests?: unknown } | undefined)?.requests;
       const rawResponses = (sent.body as { responses?: unknown } | null)?.responses;
       const responses = Array.isArray(rawResponses) ? rawResponses : [];

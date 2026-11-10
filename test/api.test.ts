@@ -310,6 +310,18 @@ for (const name of ["ConsistencyLevel", "consistencylevel", "CONSISTENCYLEVEL"])
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("batch rejects advanced queries without a consistency header", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-batch-header-"));
+  try {
+    const f = fixture();
+    const session = new GraphSession(f.deps);
+    const profile = { ...appProfile, rawWrites: true, rawBatch: true, writes: { allowWrites: true, operations: [] } };
+    let sends = 0;
+    await assert.rejects(session.rawWrite({ profile, method: "POST", version: "v1.0", path: "/$batch", execute: true, confirm: "/$batch", journalPath: join(dir, "writes.log"), payload: { requests: [{ id: "1", method: "GET", url: "/users?$count=true" }] }, transport: async () => { sends++; return { status: 200, headers: {}, body: "{}" }; } }), { code: "POLICY_DENIED" });
+    assert.equal(sends, 0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 for (const path of ["/drives/d/root", "/%64rives/d/root", "/shares/s/driveItem"]) test(`raw file route ${path} needs the files sensitive area`, async () => {
   const denied = read({ path });
   await assert.rejects(denied.run({}), error => record(error).code === "POLICY_DENIED" && /Sensitive area files/.test(outputText(record(error).message)));

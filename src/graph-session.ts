@@ -635,7 +635,7 @@ export function authorizeUrl(operation: SessionOperation, params: Record<string,
 }
 
 function header(headers: Record<string, string>, name: string): string | undefined {
-  for (const [key, value] of Object.entries(headers)) if (key.toLowerCase() === name) return value;
+  for (const [key, value] of Object.entries(headers)) if (key.toLowerCase() === name.toLowerCase()) return value;
   return undefined;
 }
 

@@ -435,8 +435,8 @@ function redactQuery(query: string): string {
 function removeBatchContinuations(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(removeBatchContinuations);
   if (value === null || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value).filter(([key]) => !key.toLowerCase().endsWith("@odata.nextlink"))
-    .map(([key, child]) => [key, removeBatchContinuations(child)]));
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => [key,
+    key.toLowerCase().endsWith("@odata.nextlink") ? "More results available; continuation omitted" : removeBatchContinuations(child)]));
 }
 
 export function createMutationCoordinator(args: {

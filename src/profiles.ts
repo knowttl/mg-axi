@@ -7,8 +7,8 @@ import { PrivateFiles } from "./private-file.js";
 import { validateSecretRef, type SecretRef } from "./secrets.js";
 
 export type WritePolicy = Readonly<{ allowWrites: boolean; operations: readonly string[] }>;
-export type SensitiveArea = "mail" | "files";
-const sensitiveAreaNames: readonly string[] = ["mail", "files"];
+export type SensitiveArea = "files";
+const sensitiveAreaNames: readonly string[] = ["files"];
 type SharedProfile = Readonly<{
   tenantId: string; clientId: string; cloud: "commercial";
   enabledPacks: readonly ("entra" | "security" | "mail")[]; preview: boolean; sensitiveAreas: readonly SensitiveArea[];

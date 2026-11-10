@@ -332,7 +332,7 @@ function matchRoute(route: string, pathname: string): Record<string, string> | n
 // Initial sensitive-area map. Mail and file content stay denied unless the
 // profile explicitly enables the area; consent and directory metadata are not
 // content areas. Later slices refine this table with their reviewed contracts.
-function sensitiveArea(route: string): SensitiveArea | null {
+function sensitiveArea(route: string): SensitiveArea | "mail" | null {
   const segments = policySegments(route);
   if (isMailRoute(segments)) return "mail";
   if (segments.some(segment => segment === "drive" || segment === "drives" || segment === "file" || segment === "files") || segments[0] === "shares") return "files";
@@ -1224,7 +1224,7 @@ export class GraphSession {
     if (operation.disposition === "raw" && area === "mail" && segments.includes("$value") && (segments.includes("messages") || segments.includes("attachments"))) {
       throw new AxiError("Mail downloads require the guarded download coordinator", "POLICY_DENIED");
     }
-    if (area && !(area === "mail" && profile.enabledPacks.includes("mail")) && !profile.sensitiveAreas.includes(area)) {
+    if (area === "files" && !profile.sensitiveAreas.includes(area)) {
       throw new AxiError(`Sensitive area ${area} is not enabled for this profile (${operation.id})`, "POLICY_DENIED", [
         "Mail and file content stay disabled unless explicitly enabled for the profile",
       ]);

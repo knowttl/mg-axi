@@ -265,6 +265,24 @@ for (const path of ["/$batch", "/%24batch"]) test(`raw batch ${path} reaches the
   await assert.rejects(session.rawWrite({ profile: { ...profile, rawWrites: false }, method: "POST", version: "v1.0", path, transport: async () => ({ status: 200, headers: {}, body: "{}" }) }), error => record(error).code === "WRITES_DISABLED");
 });
 
+for (const path of ["/$batch", "/%24batch"]) test(`raw batch ${path} redacts member query secrets in previews`, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-batch-query-"));
+  try {
+    const f = fixture();
+    const session = new GraphSession(f.deps);
+    const profile = { ...appProfile, rawWrites: true, rawBatch: true, writes: { allowWrites: true, operations: [] } };
+    const payload = { requests: [{ id: "1", method: "GET", url: "/users?$skiptoken=opaque-value&$top=5" }] };
+    let sent = "";
+    const args = { profile, method: "POST" as const, version: "v1.0", path, payload, journalPath: join(dir, "writes.log"), transport: async (request: { body?: string }) => { sent = request.body ?? ""; return { status: 200, headers: {}, body: JSON.stringify({ responses: [{ id: "1", status: 200 }] }) }; } };
+    const preview = await session.rawWrite(args);
+    assert.doesNotMatch(preview.preview.proposedChange!, /opaque-value/);
+    const member = records(record(JSON.parse(preview.preview.proposedChange!)).requests)[0]!;
+    assert.equal(new URL(outputText(member.url), "https://graph.microsoft.com").searchParams.get("$top"), "5");
+    assert.equal((await session.rawWrite({ ...args, execute: true, confirm: path })).kind, "success");
+    assert.deepEqual(JSON.parse(sent), payload);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 for (const [pack, path, otherPath] of [["mail", "/users/a/messages", "/security/alerts_v2"], ["security", "/security/alerts_v2", "/users/a/messages"]] as const) {
   for (const batchPath of ["/$batch", "/%24batch"]) test(`${pack} profile authorizes batch members independently for ${batchPath}`, async () => {
     const dir = mkdtempSync(join(tmpdir(), "mg-axi-batch-pack-"));
@@ -304,6 +322,14 @@ test("the files sensitive area does not admit raw mail routes", async () => {
   const f = read({ path: "/users/a/messages", profile: { ...delegatedProfile, sensitiveAreas: ["files"] } });
   await assert.rejects(f.run({}), error => /Pack mail/.test(outputText(record(error).message)));
   assert.equal(f.credentialCalls.length, 0);
+});
+
+for (const sensitiveAreas of [[], ["files"]] as const) test(`raw mail routes require the mail pack with sensitive areas ${sensitiveAreas.join(",")}`, async () => {
+  const path = "/users/a/messages";
+  const denied = read({ path, profile: { ...appProfile, sensitiveAreas }, scopes: undefined });
+  await assert.rejects(denied.run({}), error => record(error).code === "POLICY_DENIED");
+  const allowed = read({ path, profile: { ...appProfile, sensitiveAreas, enabledPacks: ["mail"] }, scopes: undefined });
+  assert.equal((await allowed.run({})).complete, true);
 });
 
 test("raw collection preserves Graph metadata across pages", async () => {

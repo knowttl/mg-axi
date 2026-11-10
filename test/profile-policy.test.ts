@@ -17,9 +17,9 @@ test("denials stay closed when the profile omits them", () => {
 });
 
 test("a host-injected profile carries sensitive areas and rawBatch", () => {
-  const injected = { sensitiveAreas: ["files", "mail"], rawBatch: true };
+  const injected = { sensitiveAreas: ["files"], rawBatch: true };
   for (const profile of [validateDelegatedProfile({ ...delegated, ...injected }), validateApplicationProfile({ ...application, ...injected })]) {
-    assert.deepEqual(profile.sensitiveAreas, ["files", "mail"]);
+    assert.deepEqual(profile.sensitiveAreas, ["files"]);
     assert.equal(profile.rawBatch, true);
     assert.throws(() => (profile.sensitiveAreas as string[]).push("x"), TypeError);
   }
@@ -27,9 +27,13 @@ test("a host-injected profile carries sensitive areas and rawBatch", () => {
 
 for (const [name, policy] of Object.entries({
   "unknown sensitive area": { sensitiveAreas: ["calendar"] },
+  "mail sensitive area": { sensitiveAreas: ["mail"] },
   "duplicate sensitive area": { sensitiveAreas: ["files", "files"] },
   "non-array sensitive areas": { sensitiveAreas: "files" },
   "non-boolean rawBatch": { rawBatch: "true" },
 })) test(`profile validation rejects ${name}`, () => {
-  assert.throws(() => validateDelegatedProfile({ ...delegated, ...policy }), error => record(error).code === "CONFIG_INVALID");
+  for (const profile of [delegated, application]) {
+    const validate = profile.mode === "delegated" ? validateDelegatedProfile : validateApplicationProfile;
+    assert.throws(() => validate({ ...profile, ...policy }), error => record(error).code === "CONFIG_INVALID");
+  }
 });

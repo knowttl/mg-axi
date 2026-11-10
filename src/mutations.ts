@@ -423,6 +423,15 @@ function serialize(value: unknown): string | undefined {
   }
 }
 
+function redactQuery(query: string): string {
+  const safe = new URLSearchParams();
+  for (const [key, value] of new URLSearchParams(query)) {
+    const redacted = redactGraphValue({ [key]: value }) as Record<string, unknown>;
+    safe.append(key, typeof redacted[key] === "string" ? redacted[key] as string : "***redacted***");
+  }
+  return safe.toString();
+}
+
 export function createMutationCoordinator(args: {
   binaryTransport?: BinaryTransport;
   profile: AnyProfile;
@@ -539,14 +548,20 @@ export function createMutationCoordinator(args: {
     const boundUrl = boundMutationUrl(definition);
     const destination = new URL(boundUrl);
     if (definition.raw && definition.query !== undefined) {
-      const safe = new URLSearchParams();
-      for (const [key, value] of destination.searchParams) {
-        const redacted = redactGraphValue({ [key]: value }) as Record<string, unknown>;
-        safe.append(key, typeof redacted[key] === "string" ? redacted[key] as string : "***redacted***");
-      }
-      destination.search = safe.toString();
+      destination.search = redactQuery(destination.search);
     }
     const url = definition.raw && definition.query !== undefined ? destination.toString() : boundUrl;
+    const payload = redactGraphValue(definition.payload);
+    const parts = definition.path.split("/");
+    if (definition.raw && parts.length === 3 && decodeURIComponent(parts[2]!).toLowerCase() === "$batch"
+      && payload && typeof payload === "object" && "requests" in payload && Array.isArray(payload.requests)) {
+      for (const request of payload.requests) {
+        if (request && typeof request === "object" && typeof request.url === "string") {
+          const index = request.url.indexOf("?");
+          if (index !== -1) request.url = `${request.url.slice(0, index)}?${redactQuery(request.url.slice(index + 1))}`;
+        }
+      }
+    }
     return Object.freeze({
       operation: definition.operation,
       method: definition.method,
@@ -555,7 +570,7 @@ export function createMutationCoordinator(args: {
       target: definition.target,
       noop: current === undefined || isNoop === undefined ? false : isNoop(current),
       currentState: current === undefined ? null : serialize(redactGraphValue(current))!,
-      proposedChange: definition.payload === undefined ? null : serialize(redactGraphValue(definition.payload))!,
+      proposedChange: definition.payload === undefined ? null : serialize(payload)!,
     });
   }
 

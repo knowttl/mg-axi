@@ -419,6 +419,8 @@ ALTERNATE_TABLES = (
     ("NAV_CASTS", "src/entra-contacts.ts"),
     ("MEMBERSHIP_TRANSITIVE", "src/entra-contacts.ts"),
     ("MEMBERSHIP_CASTS", "src/entra-contacts.ts"),
+    ("SUBSCRIPTION_ALTERNATES", "src/entra-subscriptions.ts"),
+    ("TENANT_INFORMATION_ALTERNATES", "src/entra-tenant-information.ts"),
 )
 
 

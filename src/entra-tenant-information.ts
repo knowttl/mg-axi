@@ -128,6 +128,10 @@ const TENANT_INFORMATION_DENIAL_HINTS = [
 // validated by the allowlisted session binding before credentials. The
 // domain operation arrives catalogue-resolved; the tenant-ID route resolves
 // from the same inventory authority beside its command.
+export const TENANT_INFORMATION_ALTERNATES: Record<string, string> = {
+  "GET:/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')": "GET:/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')",
+};
+
 function lookupTarget(flags: TenantInformationFlags, domainOperation: SessionOperation, help: string): { operation: SessionOperation; params: Record<string, string> } {
   const domain = flags["domain-name"];
   const tenantId = flags["tenant-id"];
@@ -141,7 +145,7 @@ function lookupTarget(flags: TenantInformationFlags, domainOperation: SessionOpe
   if (tenantId !== undefined) {
     if (!String(tenantId).trim()) throw new AxiError("--tenant-id needs the tenant GUID", "VALIDATION_ERROR", [help]);
     return {
-      operation: resolveSessionOperation("v1.0", "GET", "/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')"),
+      operation: resolveSessionOperation("v1.0", "GET", TENANT_INFORMATION_ALTERNATES["GET:/tenantRelationships/findTenantInformationByDomainName(domainName='{domainName}')"]!.slice(4)),
       params: { tenantId: String(tenantId) },
     };
   }

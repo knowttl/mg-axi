@@ -16,6 +16,8 @@ import { MAIL_FOLDER_WRITE_ALTERNATES } from "../dist/mail-folder-writes.js";
 import { MAIL_RULE_WRITE_ALTERNATES } from "../dist/mail-rule-writes.js";
 import { MAIL_DOWNLOAD_ALTERNATES } from "../dist/mail-download.js";
 import { castDirectReports, castMembership, transitMembership, NAV_CAST_VALUES, MEMBERSHIP_CAST_VALUES } from "../dist/entra-contacts.js";
+import { SUBSCRIPTION_ALTERNATES } from "../dist/entra-subscriptions.js";
+import { TENANT_INFORMATION_ALTERNATES } from "../dist/entra-tenant-information.js";
 import type { SessionOperation } from "../dist/graph-session.js";
 
 const runtime = (JSON.parse(readFileSync(new URL("../inventory/runtime.json", import.meta.url), "utf8")) as { operations: SessionOperation[] }).operations;
@@ -46,6 +48,9 @@ test("runtime rows cover named routes including flag-selected variants", () => {
   const reachable = new Set<string>();
   for (const leaf of LEAVES.filter((leaf): leaf is typeof leaf & { operation: string } => !!leaf.operation)) {
     reachable.add(`v1.0:${leaf.operation}`);
+    for (const alternate of [SUBSCRIPTION_ALTERNATES[leaf.operation], TENANT_INFORMATION_ALTERNATES[leaf.operation]]) {
+      if (alternate) reachable.add(`v1.0:${alternate}`);
+    }
     const alternate = TRANSITIVE_OPERATION[leaf.operation];
     if (alternate) reachable.add(`v1.0:${alternate}`);
     const mailAlternate = MAIL_FOLDER_ALTERNATES[leaf.operation];

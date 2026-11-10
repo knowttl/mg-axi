@@ -789,7 +789,7 @@
       "method": "GET",
       "path": "/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')",
       "version": "v1.0",
-      "disposition": "reviewed-raw-read",
+      "disposition": "named-command",
       "owningSlice": "EXT-01"
     },
     {
@@ -2057,22 +2057,6 @@
       "owningSlice": "MAIL-04"
     },
     {
-      "id": "v1.0:GET:/oauth2PermissionGrants",
-      "method": "GET",
-      "path": "/oauth2PermissionGrants",
-      "version": "v1.0",
-      "disposition": "reviewed-raw-read",
-      "owningSlice": "READ-08"
-    },
-    {
-      "id": "v1.0:GET:/oauth2PermissionGrants/{oAuth2PermissionGrant-id}",
-      "method": "GET",
-      "path": "/oauth2PermissionGrants/{oAuth2PermissionGrant-id}",
-      "version": "v1.0",
-      "disposition": "reviewed-raw-read",
-      "owningSlice": "READ-08"
-    },
-    {
       "id": "v1.0:GET:/organization",
       "method": "GET",
       "path": "/organization",
@@ -2397,7 +2381,7 @@
       "method": "GET",
       "path": "/tenantRelationships/findTenantInformationByTenantId(tenantId='{tenantId}')",
       "version": "v1.0",
-      "disposition": "reviewed-raw-read",
+      "disposition": "named-command",
       "owningSlice": "EXT-04"
     },
     {
@@ -2454,14 +2438,6 @@
       "path": "/users/{user-id}/authentication/methods",
       "version": "v1.0",
       "disposition": "named-command",
-      "owningSlice": "READ-04"
-    },
-    {
-      "id": "v1.0:GET:/users/{user-id}/authentication/methods/{authenticationMethod-id}",
-      "method": "GET",
-      "path": "/users/{user-id}/authentication/methods/{authenticationMethod-id}",
-      "version": "v1.0",
-      "disposition": "reviewed-raw-read",
       "owningSlice": "READ-04"
     },
     {

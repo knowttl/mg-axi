@@ -7,7 +7,8 @@ Captain decision (option B): raw reads accept any Graph path on v1.0 and beta th
 Raw writes require `rawWrites: true` and `writes.allowWrites: true` in the profile, with preview, `--execute`, exact path confirmation via `--confirm`, and journaling.
 They do not require an entry in `writes.operations`.
 Raw `$batch` requests are refused unless the profile also sets `rawBatch: true`.
-Each request is checked against the same resource, scope, mailbox, and write policies before the batch is sent.
+The raw write gates apply to the batch envelope.
+Each member is checked against resource, pack, preview and sensitive-area policies; mail members also receive mailbox checks, and delegated mail reads receive scope checks.
 Malformed requests and nested batches are refused, and failed or incomplete batch responses are not reported as successful.
 Batch response continuation links are replaced with `More results available; continuation omitted`, including links on nested collections.
 `MG_AXI_READ_ONLY=1` overrides both write opt-ins.

@@ -244,6 +244,10 @@ function subscriptionId(flags: SubscriptionFlags, help: string): string {
 // the catalogue-resolved operation, or the commerce-system alternate key
 // from the allowlisted function route. The key value itself is validated by
 // the session binding before credentials.
+export const SUBSCRIPTION_ALTERNATES: Record<string, string> = {
+  "GET:/directory/subscriptions/{companySubscription-id}": "GET:/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')",
+};
+
 function subscriptionTarget(flags: SubscriptionFlags, operation: SessionOperation, help: string): { operation: SessionOperation; params: Record<string, string> } {
   const id = flags.id;
   const commerceId = flags["commerce-subscription-id"];
@@ -253,7 +257,7 @@ function subscriptionTarget(flags: SubscriptionFlags, operation: SessionOperatio
   if (commerceId !== undefined) {
     if (!String(commerceId).trim()) throw new AxiError("--commerce-subscription-id needs the commerce-system subscription ID", "VALIDATION_ERROR", [help]);
     return {
-      operation: resolveSessionOperation("v1.0", "GET", "/directory/subscriptions(commerceSubscriptionId='{commerceSubscriptionId}')"),
+      operation: resolveSessionOperation("v1.0", "GET", SUBSCRIPTION_ALTERNATES["GET:/directory/subscriptions/{companySubscription-id}"]!.slice(4)),
       params: { commerceSubscriptionId: String(commerceId) },
     };
   }

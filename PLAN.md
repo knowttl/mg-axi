@@ -158,7 +158,7 @@ Use bounded safe-read retries, Retry-After, cancellation and truthful partial-re
 See [paging](https://learn.microsoft.com/en-us/graph/paging), [throttling](https://learn.microsoft.com/en-us/graph/throttling) and the detailed [execution contract](docs/execution.md).
 
 Reads remain the default even after named writes ship.
-Writes require a manually enabled profile, immutable configured tenant/operation allowlist, preview, explicit `--execute`, target confirmation and durable audit intent before sending.
+Named writes require a manually enabled profile, immutable configured tenant/operation allowlist, preview, explicit `--execute`, target confirmation and durable audit intent before sending.
 A forced read-only environment override always wins.
 CLI read overrides cannot broaden write scope.
 Graph has no universal dry-run, what-if, ETag or rollback; each operation declares what it can actually prove.
@@ -167,7 +167,8 @@ Unknown outcomes never trigger blind mutation retries.
 The first later writes are user membership addition, account enabled state, session revocation, CA policy update and risky-user dismissal.
 Additional agreed Entra mutations come from the full inventory, each with an operation-specific contract.
 Read success does not qualify a corresponding write.
-Raw API writes, unreviewed actions, secret-returning operations and beta writes remain blocked.
+Raw API writes follow the [execution contract](docs/execution.md); named beta writes remain blocked.
+Unreviewed named actions and secret-returning named operations remain blocked.
 
 ## Maintainability and extension procedure
 

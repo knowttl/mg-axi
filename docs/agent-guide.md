@@ -70,7 +70,9 @@ They preview by default but execution requires profile write opt-in, an exact op
 Mail attachment save and message export persist sensitive files and require write gates despite reading Graph.
 Profile create, auth login and setup hooks change local configuration, caches or integrations; keep provisioning outside the read allowlist.
 Set `MG_AXI_READ_ONLY=1` to override write opt-in.
-Raw writes and beta writes are blocked.
+`api post`, `api put`, `api patch` and `api delete` are admitted on v1.0 and beta paths when the profile sets `rawWrites: true` and `writes.allowWrites: true`.
+They preview by default, then need `--execute`, exact path `--confirm` and the write journal; they do not need a `writes.operations` entry.
+Raw beta writes also need a preview-enabled profile; named beta writes stay blocked.
 
 See [output channels and response diagnostics](output-and-paging.md#response-diagnostics).
 Exit 0 means success/help/no-op, 1 operational failure (including incomplete hunting), 2 invalid usage.

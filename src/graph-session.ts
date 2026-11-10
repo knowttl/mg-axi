@@ -883,7 +883,7 @@ export class GraphSession {
         operation = sessionOperation({ operation: rawReadOperation(version, path!), raw: true });
         if (policySegments(path!).includes("$batch")) throw new AxiError("Nested batches are unsupported", "POLICY_DENIED");
         const query = Object.fromEntries(new URLSearchParams(queryParts[0] ?? ""));
-        checkQueryContext(query, request.headers?.ConsistencyLevel === "eventual" ? "eventual" : undefined, isMailOperation(operation), true);
+        checkQueryContext(query, request.headers && header(request.headers, "ConsistencyLevel") === "eventual" ? "eventual" : undefined, isMailOperation(operation), true);
         this.authorizePolicy(profile, operation);
         if (isMailOperation(operation)) {
           if (request.method === "GET") checkMailScopes(profile, scopes, operation);
@@ -900,7 +900,9 @@ export class GraphSession {
   async rawWrite(args: { profile: AnyProfile; method: import("./mutations.js").MutationMethod; version: string; path: string; query?: string; payload?: unknown; execute?: boolean; confirm?: string; scopes?: string[]; transport: import("./mutations.js").MutationTransport; journalPath?: string }): Promise<import("./mutations.js").MutationResult> {
     const operation = rawReadOperation(args.version, args.path);
     const profile = validateProfile(args.profile, this.files);
-    this.authorizePolicy(profile, sessionOperation({ operation, raw: true }));
+    const checked = sessionOperation({ operation, raw: true });
+    const segments = policySegments(checked.path);
+    this.authorizePolicy(profile, checked, segments.length === 1 && segments[0] === "$batch");
     if (profile.mode === "delegated" && (!args.scopes?.length || args.scopes.some(scope => !scope.startsWith(`https://${GRAPH_HOST}/`)))) throw new AxiError("Raw writes need explicit Graph scopes", "VALIDATION_ERROR");
     if (profile.mode === "application" && args.scopes !== undefined) throw new AxiError("Application profiles cannot specify delegated scopes", "VALIDATION_ERROR");
     const { createMutationCoordinator } = await import("./mutations.js");
@@ -1191,7 +1193,7 @@ export class GraphSession {
     }
   }
 
-  private authorizePolicy(profile: AnyProfile, operation: SessionOperation): void {
+  private authorizePolicy(profile: AnyProfile, operation: SessionOperation, batchEnvelope = false): void {
     if (operation.owningSlice === "MAIL-09") throw new AxiError("Mail downloads require the guarded download coordinator", "POLICY_DENIED");
     if (operation.method !== "GET" && operation.id !== HUNTING_OPERATION) {
       throw new AxiError(`Graph session executes reads; ${operation.id} is not a read`, "VALIDATION_ERROR", [
@@ -1204,7 +1206,7 @@ export class GraphSession {
     // acquire Defender access merely by installing this command.
     const segments = policySegments(operation.path);
     const pack = operation.id === HUNTING_OPERATION || (operation.disposition === "raw" && segments[0] === "security") ? "security" : isMailOperation(operation) ? "mail" : "entra";
-    if (!profile.enabledPacks.includes(pack)) {
+    if (!batchEnvelope && !profile.enabledPacks.includes(pack)) {
       throw new AxiError(`Pack ${pack} is not enabled for this profile`, "POLICY_DENIED", ["mg-axi profile show --profile <name>"]);
     }
     if (operation.version === "beta" && !profile.preview) {

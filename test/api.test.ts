@@ -265,6 +265,33 @@ for (const path of ["/$batch", "/%24batch"]) test(`raw batch ${path} reaches the
   await assert.rejects(session.rawWrite({ profile: { ...profile, rawWrites: false }, method: "POST", version: "v1.0", path, transport: async () => ({ status: 200, headers: {}, body: "{}" }) }), error => record(error).code === "WRITES_DISABLED");
 });
 
+for (const [pack, path, otherPath] of [["mail", "/users/a/messages", "/security/alerts_v2"], ["security", "/security/alerts_v2", "/users/a/messages"]] as const) {
+  for (const batchPath of ["/$batch", "/%24batch"]) test(`${pack} profile authorizes batch members independently for ${batchPath}`, async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mg-axi-batch-pack-"));
+    try {
+      const f = fixture();
+      const session = new GraphSession(f.deps);
+      const profile = { ...appProfile, enabledPacks: [pack], rawWrites: true, rawBatch: true, writes: { allowWrites: true, operations: [] } };
+      let sends = 0;
+      const args = { profile, method: "POST" as const, version: "v1.0", path: batchPath, execute: true, confirm: batchPath, journalPath: join(dir, "writes.log"), transport: async () => { sends++; return { status: 200, headers: {}, body: JSON.stringify({ responses: [{ id: "1", status: 200 }] }) }; } };
+      assert.equal((await session.rawWrite({ ...args, payload: { requests: [{ id: "1", method: "GET", url: path }] } })).kind, "success");
+      await assert.rejects(session.rawWrite({ ...args, payload: { requests: [{ id: "1", method: "GET", url: otherPath }] } }), { code: "POLICY_DENIED" });
+      assert.equal(sends, 1);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+for (const name of ["ConsistencyLevel", "consistencylevel", "CONSISTENCYLEVEL"]) test(`batch accepts ${name} header for advanced queries`, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "mg-axi-batch-header-"));
+  try {
+    const f = fixture();
+    const session = new GraphSession(f.deps);
+    const profile = { ...appProfile, rawWrites: true, rawBatch: true, writes: { allowWrites: true, operations: [] } };
+    const result = await session.rawWrite({ profile, method: "POST", version: "v1.0", path: "/$batch", execute: true, confirm: "/$batch", journalPath: join(dir, "writes.log"), payload: { requests: [{ id: "1", method: "GET", url: "/users?$count=true", headers: { [name]: "eventual" } }] }, transport: async () => ({ status: 200, headers: {}, body: JSON.stringify({ responses: [{ id: "1", status: 200 }] }) }) });
+    assert.equal(result.kind, "success");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 for (const path of ["/drives/d/root", "/%64rives/d/root", "/shares/s/driveItem"]) test(`raw file route ${path} needs the files sensitive area`, async () => {
   const denied = read({ path });
   await assert.rejects(denied.run({}), error => record(error).code === "POLICY_DENIED" && /Sensitive area files/.test(outputText(record(error).message)));
